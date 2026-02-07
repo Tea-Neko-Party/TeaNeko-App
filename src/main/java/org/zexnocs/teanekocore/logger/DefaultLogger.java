@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.logger;
+package org.zexnocs.teanekocore.logger;
 
 /**
  * @author zExNocs

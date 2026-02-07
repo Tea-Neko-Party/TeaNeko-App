@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.actuator.task;
+package org.zexnocs.teanekocore.actuator.task;
 
 /**
  *

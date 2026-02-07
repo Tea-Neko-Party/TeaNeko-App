@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.actuator.exception;
+package org.zexnocs.teanekocore.actuator.exception;
 
 /**
  * 主函数执行异常。

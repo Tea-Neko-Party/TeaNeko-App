@@ -7,7 +7,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 public class TeaNekoAppApplication {
 
 	public static void main(String[] args) {
-		SpringApplication.run(TeaNekoAppApplication.class, args);
+		var ctx = SpringApplication.run(TeaNekoAppApplication.class, args);
+		Runtime.getRuntime().addShutdownHook(new Thread(ctx::close));
 	}
 
 }

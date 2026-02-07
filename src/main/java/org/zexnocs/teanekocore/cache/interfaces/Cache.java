@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.cache.interfaces;
+package org.zexnocs.teanekocore.cache.interfaces;
 
 /**
  * 缓存类接口：如果长时间没有被访问，则会被自动清理

@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.cache.interfaces;
+package org.zexnocs.teanekocore.cache.interfaces;
 
 /**
  * 用于自动管理缓存的服务类接口。

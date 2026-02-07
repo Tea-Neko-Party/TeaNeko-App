@@ -101,9 +101,9 @@ tasks.register<BumpVersionTask>("bumpPatch") {
 
 tasks {
     // ========= bootRun 配置 =========
-    // 使用 dev
+    // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
     withType<BootRun> {
-        systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "dev")
+        systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
     }
 
     // ========= bootJar 配置 =========

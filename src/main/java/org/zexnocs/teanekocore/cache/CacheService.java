@@ -1,11 +1,11 @@
-package org.zexnocs.teanekocore.framework.cache;
+package org.zexnocs.teanekocore.cache;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekocore.framework.cache.interfaces.Cache;
-import org.zexnocs.teanekocore.framework.cache.interfaces.ICacheService;
+import org.zexnocs.teanekocore.cache.interfaces.Cache;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;

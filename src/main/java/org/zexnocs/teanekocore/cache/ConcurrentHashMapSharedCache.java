@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.cache;
+package org.zexnocs.teanekocore.cache;
 
 import com.zExNocs.teanekoonebot.framework.cache.interfaces.Cache;
 import com.zExNocs.teanekoonebot.framework.cache.interfaces.ICacheService;
