@@ -6,7 +6,7 @@ package org.zexnocs.teanekocore.cache.interfaces;
  * @author zExNocs
  * @date 2026/02/06
  */
-public interface ICache {
+public interface ICacheContainer {
     /**
      * 用于在特定情况下手动清理缓存
      */

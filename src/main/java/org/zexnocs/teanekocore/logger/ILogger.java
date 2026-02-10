@@ -16,23 +16,35 @@ public interface ILogger {
     void info(String namespace, String message);
 
     /**
-     * 记录错误日志。
+     * 记录错误日志并报告给默认监护人。
      *
      * @param namespace 日志命名空间
      * @param message   错误信息
      */
     default void errorWithReport(String namespace, String message) {
-        errorWithReport(namespace, message, null);
+        errorWithReport(namespace, message, null, null);
     }
 
     /**
-     * 记录异常日志。
+     * 记录错误日志并报告给默认监护人。
      *
      * @param namespace 日志命名空间
      * @param message   错误信息
      * @param throwable 异常
      */
-    void errorWithReport(String namespace, String message, Throwable throwable);
+    default void errorWithReport(String namespace, String message, Throwable throwable) {
+        errorWithReport(namespace, message, throwable, null);
+    }
+
+    /**
+     * 记录错误日志并报告给指定监护人。
+     *
+     * @param namespace 日志命名空间
+     * @param message   错误信息
+     * @param throwable 异常
+     * @param reportRecipients 报告接收者；如果为 null 则报告给默认监护人
+     */
+    void errorWithReport(String namespace, String message, Throwable throwable, String reportRecipients);
 
     /**
      * 记录错误日志。

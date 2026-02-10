@@ -46,7 +46,7 @@ public class DefaultLogger implements ILogger {
      * @param message   错误信息
      */
     @Override
-    public void errorWithReport(String namespace, String message, Throwable throwable) {
+    public void errorWithReport(String namespace, String message, Throwable throwable, String reportRecipients) {
         this.error(namespace, message, throwable);
     }
 

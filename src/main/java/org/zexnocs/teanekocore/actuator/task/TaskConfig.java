@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.actuator.task;
 
 import lombok.Builder;
 import lombok.Getter;
+import lombok.Setter;
 
 import java.time.Duration;
 import java.util.function.Supplier;
@@ -70,4 +71,19 @@ public class TaskConfig<T> {
      */
     @Builder.Default
     private final Duration expireDuration = Duration.ofMinutes(10);
+
+    /**
+     * 任务执行阶段链的命名空间
+     * 如果 taskStages 为空，则会使用命名空间自动注入
+     */
+    @Builder.Default
+    private final String taskStageNamespace = "default";
+
+    /**
+     * 订阅的 key
+     * 由 TaskService 生成并设置，用于关联 result 和 task
+     * builder 设置无效，会被无视
+     */
+    @Setter
+    private String key;
 }

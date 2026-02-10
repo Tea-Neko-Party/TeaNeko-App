@@ -7,6 +7,9 @@ import java.lang.annotation.Target;
 
 /**
  * 忽略注解，用于标记不希望包含在描述中的类、方法或字段
+ *
+ * @author zExNocs
+ * @date 2026/02/11
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})

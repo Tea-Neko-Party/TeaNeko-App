@@ -1,6 +1,6 @@
 package org.zexnocs.teanekocore.cache;
 
-import org.zexnocs.teanekocore.cache.interfaces.ICache;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.util.Map;
@@ -16,43 +16,43 @@ import java.util.function.Function;
  * @author zExNocs
  * @date 2026/02/10
  */
-public class ConcurrentHashMapSharedCache<K, V> implements ICache {
+public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     /// 默认创建实例方法
-    public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService) {
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService) {
         // 默认过期时间为 1 小时，清理间隔为 1 分钟，参与手动清理
         return of(cacheService, 3600_000L, 60_000L);
     }
 
     /// 指定过期时间的创建实例方法
     /// 使用 1 / 60 的过期时间作为清理间隔时间，参与手动清理
-    public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService,
-                                                               long expireTimeMs) {
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
+                                                              long expireTimeMs) {
         return of(cacheService, expireTimeMs, expireTimeMs / 60);
     }
 
     /// 指定过期时间和清理间隔时间的创建实例方法
     /// 参与手动清理
-    public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService,
-                                                               long expireTimeMs,
-                                                               long cleanIntervalMs) {
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
+                                                              long expireTimeMs,
+                                                              long cleanIntervalMs) {
         return of(cacheService, expireTimeMs, cleanIntervalMs, true);
     }
 
     /// 指定过期时间
     /// 使用 1 / 60 的过期时间作为清理间隔时间
     /// 和是否参与手动清理的创建实例方法
-    public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService,
-                                                               long expireTimeMs,
-                                                               boolean participateInManualClean) {
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
+                                                              long expireTimeMs,
+                                                              boolean participateInManualClean) {
         return of(cacheService, expireTimeMs, expireTimeMs / 60, participateInManualClean);
     }
 
     /// 指定过期时间、清理间隔时间、和是否参与手动清理的创建实例方法
-    public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService,
-                                                               long expireTimeMs,
-                                                               long cleanIntervalMs,
-                                                               boolean participateInManualClean) {
-        var instance = new ConcurrentHashMapSharedCache<K, V>(
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
+                                                              long expireTimeMs,
+                                                              long cleanIntervalMs,
+                                                              boolean participateInManualClean) {
+        var instance = new ConcurrentMapCacheContainer<K, V>(
                 participateInManualClean,
                 expireTimeMs,
                 cleanIntervalMs);
@@ -77,9 +77,9 @@ public class ConcurrentHashMapSharedCache<K, V> implements ICache {
     /// 缓存存储
     private final Map<K, CacheData<V>> cache = new ConcurrentHashMap<>();
 
-    private ConcurrentHashMapSharedCache(boolean participateInManualClean,
-                                         long expireTimeMs,
-                                         long cleanIntervalMs) {
+    private ConcurrentMapCacheContainer(boolean participateInManualClean,
+                                        long expireTimeMs,
+                                        long cleanIntervalMs) {
         this.expireTimeMs = expireTimeMs;
         this.cleanIntervalMs = cleanIntervalMs;
         this.participateInManualClean = participateInManualClean;
