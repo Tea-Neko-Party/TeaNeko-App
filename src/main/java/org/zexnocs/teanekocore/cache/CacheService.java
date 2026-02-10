@@ -4,7 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekocore.cache.interfaces.Cache;
+import org.zexnocs.teanekocore.cache.interfaces.ICache;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.util.Set;
@@ -13,6 +13,9 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 用于自动管理缓存的服务类。
  * 主要用于清理长时间未被访问的缓存资源。
+ *
+ * @author zExNocs
+ * @date 2026/02/10
  */
 @Service
 public class CacheService implements ICacheService {
@@ -21,7 +24,7 @@ public class CacheService implements ICacheService {
     private final long cleanCacheIntervalMs;
 
     /// 缓存列表
-    private final Set<Cache> cacheMap = ConcurrentHashMap.newKeySet();
+    private final Set<ICache> cacheMap = ConcurrentHashMap.newKeySet();
 
     @Autowired
     public CacheService(ITimerService iTimerService,
@@ -48,7 +51,7 @@ public class CacheService implements ICacheService {
      */
     public Void cleanCacheTask() {
         long currentTimeMs = System.currentTimeMillis();
-        for (Cache cache : cacheMap) {
+        for (ICache cache : cacheMap) {
             cache.autoClean(currentTimeMs);
         }
         return null;
@@ -59,7 +62,7 @@ public class CacheService implements ICacheService {
      * @param cache 缓存对象
      */
     @Override
-    public void addCache(Cache cache) {
+    public void addCache(ICache cache) {
         cacheMap.add(cache);
     }
 
@@ -69,7 +72,7 @@ public class CacheService implements ICacheService {
      */
     @Override
     public void manualCleanAll() {
-        for (Cache cache : cacheMap) {
+        for (ICache cache : cacheMap) {
             cache.manualClean();
         }
     }

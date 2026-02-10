@@ -1,10 +1,33 @@
 package org.zexnocs.teanekocore.logger;
 
+import org.zexnocs.teanekocore.utils.ExceptionUtils;
+
+import java.util.logging.Logger;
+
 /**
+ * 默认日志记录器实现，提供基本的日志记录功能。
+ *
  * @author zExNocs
  * @date 2026/02/07
  */
 public class DefaultLogger implements ILogger {
+    private final Logger logger;
+
+    /**
+     * 构造函数，初始化默认日志记录器。
+     */
+    public DefaultLogger() {
+        this.logger = Logger.getLogger("默认日志");
+    }
+
+    /**
+     * 或者注入一个自定义的日志记录器。
+     * @param logger 自定义日志记录器
+     */
+    public DefaultLogger(Logger logger) {
+        this.logger = logger;
+    }
+
     /**
      * 记录一般日志。
      *
@@ -13,7 +36,7 @@ public class DefaultLogger implements ILogger {
      */
     @Override
     public void info(String namespace, String message) {
-
+        logger.info(namespace + ": " + message);
     }
 
     /**
@@ -24,7 +47,7 @@ public class DefaultLogger implements ILogger {
      */
     @Override
     public void errorWithReport(String namespace, String message, Throwable throwable) {
-
+        this.error(namespace, message, throwable);
     }
 
     /**
@@ -36,7 +59,7 @@ public class DefaultLogger implements ILogger {
      */
     @Override
     public void error(String namespace, String message, Throwable throwable) {
-
+        logger.severe(namespace + ": " + message + "\n" + ExceptionUtils.instance.buildExceptionMessage(throwable));
     }
 
     /**
@@ -48,7 +71,7 @@ public class DefaultLogger implements ILogger {
      */
     @Override
     public void warn(String namespace, String message, Throwable throwable) {
-
+        logger.warning(namespace + ": " + message + "\n" + ExceptionUtils.instance.buildExceptionMessage(throwable));
     }
 
     /**
@@ -59,6 +82,6 @@ public class DefaultLogger implements ILogger {
      */
     @Override
     public void debug(String namespace, String message, Throwable throwable) {
-
+        logger.fine(namespace + ": " + message + "\n" + ExceptionUtils.instance.buildExceptionMessage(throwable));
     }
 }

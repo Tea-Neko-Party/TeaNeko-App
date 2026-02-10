@@ -1,7 +1,7 @@
 package org.zexnocs.teanekocore.cache;
 
-import com.zExNocs.teanekoonebot.framework.cache.interfaces.Cache;
-import com.zExNocs.teanekoonebot.framework.cache.interfaces.ICacheService;
+import org.zexnocs.teanekocore.cache.interfaces.ICache;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -12,8 +12,11 @@ import java.util.function.Function;
  * 基于 ConcurrentHashMap 实现的缓存类，所有缓存资源的清理时间是共享的。
  * <param K> 键类型
  * <param V> 值类型
+ *
+ * @author zExNocs
+ * @date 2026/02/10
  */
-public class ConcurrentHashMapSharedCache<K, V> implements Cache {
+public class ConcurrentHashMapSharedCache<K, V> implements ICache {
     /// 默认创建实例方法
     public static <K, V> ConcurrentHashMapSharedCache<K, V> of(ICacheService cacheService) {
         // 默认过期时间为 1 小时，清理间隔为 1 分钟，参与手动清理

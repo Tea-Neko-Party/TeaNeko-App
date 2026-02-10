@@ -13,7 +13,7 @@ public interface ICacheService {
      *
      * @param cache 缓存对象
      */
-    void addCache(Cache cache);
+    void addCache(ICache cache);
 
     /**
      * 尝试手动清理所有缓存
