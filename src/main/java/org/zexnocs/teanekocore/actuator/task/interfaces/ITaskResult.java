@@ -25,5 +25,5 @@ public interface ITaskResult<T> {
      * @return 任务的结果数据。
      */
     @Nullable
-    T result();
+    T getResult();
 }

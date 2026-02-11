@@ -23,7 +23,7 @@ public class EmptyTaskResult implements ITaskResult<Void> {
      * @return null
      */
     @Override
-    public @Nullable Void result() {
+    public @Nullable Void getResult() {
         return null;
     }
 }
