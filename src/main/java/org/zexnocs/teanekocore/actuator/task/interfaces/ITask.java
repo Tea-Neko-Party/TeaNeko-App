@@ -6,5 +6,10 @@ package org.zexnocs.teanekocore.actuator.task.interfaces;
  * @author zExNocs
  * @date 2026/02/10
  */
-public interface ITask {
+public interface ITask<T> {
+    /**
+     * 获取任务配置
+     * @return 任务配置对象
+     */
+    ITaskConfig<T> getConfig();
 }

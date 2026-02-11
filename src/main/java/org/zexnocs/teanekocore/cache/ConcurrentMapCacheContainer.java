@@ -87,8 +87,20 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     }
 
     /**
-     * 添加一个缓存项
-     * @param key 键
+     * 添加一个手动定义的缓存项
+     *
+     * @param key   键
+     * @param cache 缓存数据，包含值和过期时间
+     */
+    public void put(K key, CacheData<V> cache) {
+        cache.updateAccessTime(System.currentTimeMillis());
+        this.cache.put(key, cache);
+    }
+
+    /**
+     * 添加一个使用默认过期时间的缓存项
+     *
+     * @param key   键
      * @param value 值
      */
     public void put(K key, V value) {
@@ -97,39 +109,42 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
 
     /**
      * 访问一个缓存项，并更新其最后访问时间
+     *
      * @param key 键
      * @return 值，如果不存在则返回 null
      */
     public V get(K key) {
         var data = cache.get(key);
         if (data != null) {
-            data.update();
-            return data.value;
+            data.updateAccessTime(System.currentTimeMillis());
+            return data.getValue();
         }
         return null;
     }
 
     /**
      * computeIfAbsent 方法
-     * @param key 键
+     *
+     * @param key             键
      * @param mappingFunction 映射函数
      * @return 值
      */
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
         var data = cache.computeIfAbsent(key, k -> new CacheData<>(mappingFunction.apply(k), expireTimeMs));
-        data.update();
-        return data.value;
+        data.updateAccessTime(System.currentTimeMillis());
+        return data.getValue();
     }
 
     /**
      * computeIfPresent 方法
-     * @param key 键
+     *
+     * @param key               键
      * @param remappingFunction 重映射函数
      * @return 值，如果不存在则返回 null
      */
     public V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
         var data = cache.computeIfPresent(key, (k, v) -> {
-            var newValue = remappingFunction.apply(k, v.value);
+            var newValue = remappingFunction.apply(k, v.getValue());
             if (newValue != null) {
                 return new CacheData<>(newValue, expireTimeMs);
             } else {
@@ -137,21 +152,22 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
             }
         });
         if (data != null) {
-            data.update();
-            return data.value;
+            data.updateAccessTime(System.currentTimeMillis());
+            return data.getValue();
         }
         return null;
     }
 
     /**
      * compute 方法
-     * @param key 键
+     *
+     * @param key               键
      * @param remappingFunction 重映射函数.
      * @return 值，如果不存在则返回 null
      */
     public V compute(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
         var data = cache.compute(key, (k, v) -> {
-            V oldValue = (v != null) ? v.value : null;
+            V oldValue = (v != null) ? v.getValue() : null;
             var newValue = remappingFunction.apply(k, oldValue);
             if (newValue != null) {
                 return new CacheData<>(newValue, expireTimeMs);
@@ -160,14 +176,15 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
             }
         });
         if (data != null) {
-            data.update();
-            return data.value;
+            data.updateAccessTime(System.currentTimeMillis());
+            return data.getValue();
         }
         return null;
     }
 
     /**
      * 删除某个键
+     *
      * @param key 键
      */
     public void remove(K key) {
@@ -176,6 +193,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
 
     /**
      * 是否包含某个键
+     *
      * @param key 键
      * @return true 如果包含，否则 false
      */
@@ -195,49 +213,25 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
 
     /**
      * 自动清理缓存
+     *
      * @param currentTimeMs 当前时间，单位毫秒
      */
     @Override
     public void autoClean(long currentTimeMs) {
         // 如果距离上次清理时间未到达清理间隔时间，则跳过清理
-        if(currentTimeMs - lastCleanTimeMs <= cleanIntervalMs) {
+        if (currentTimeMs - lastCleanTimeMs <= cleanIntervalMs) {
             return;
         }
         lastCleanTimeMs = currentTimeMs;
         // 清理过期缓存
-        cache.entrySet().removeIf(entry -> entry.getValue().isExpired(currentTimeMs));
-    }
-
-    /**
-     * 缓存值类，用于存储缓存的值和其上次更新时间
-     */
-    private static class CacheData<V> {
-        private final V value;
-
-        private volatile long lastUpdate;
-
-        private final long expireTimeMs;
-
-        public CacheData(V value, long expireTimeMs) {
-            this.value = value;
-            this.lastUpdate = System.currentTimeMillis();
-            this.expireTimeMs = expireTimeMs;
-        }
-
-        /**
-         * 更新最后更新时间
-         */
-        public void update() {
-            this.lastUpdate = System.currentTimeMillis();
-        }
-
-        /**
-         * 是否过期
-         * @param currentTimeMs 当前时间，单位毫秒
-         * @return true 如果过期，否则 false
-         */
-        public boolean isExpired(long currentTimeMs) {
-            return currentTimeMs - lastUpdate > expireTimeMs;
-        }
+        cache.entrySet().removeIf(entry -> {
+            var value = entry.getValue();
+            if(value.isExpired(currentTimeMs)) {
+                // 执行过期后的处理方法
+                value.onExpire(currentTimeMs, value.getValue());
+                return true;
+            }
+            return false;
+        });
     }
 }

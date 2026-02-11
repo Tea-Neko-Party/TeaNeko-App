@@ -40,14 +40,15 @@ public class DefaultLogger implements ILogger {
     }
 
     /**
-     * 记录错误日志 + 汇报。
+     * 使用 report 数据记录错误日志并报告给监护人。
      *
-     * @param namespace 日志命名空间
-     * @param message   错误信息
+     * @param data 日志报告数据
      */
     @Override
-    public void errorWithReport(String namespace, String message, Throwable throwable, String reportRecipients) {
-        this.error(namespace, message, throwable);
+    public void errorWithReport(LoggerReportData data) {
+        this.error(data.getNamespace(),
+                data.getMessage(),
+                data.getThrowable());
     }
 
     /**

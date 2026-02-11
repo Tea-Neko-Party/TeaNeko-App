@@ -3,8 +3,10 @@ package org.zexnocs.teanekocore.actuator.task;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
+import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.function.Supplier;
 
 /**
@@ -34,8 +36,8 @@ import java.util.function.Supplier;
  * @author zExNocs
  * @date 2026/02/10
  */
-@Builder
 @Getter
+@Builder
 public class TaskConfig<T> {
     /**
      * 订阅任务的名称
@@ -78,6 +80,23 @@ public class TaskConfig<T> {
      */
     @Builder.Default
     private final String taskStageNamespace = "default";
+
+    /**
+     * 任务阶段链的缓存/手动注入。
+     * 优先使用该字段，如果该字段不为 null，则会使用该字段作为任务阶段链，不再使用 taskStageNamespace 进行自动注入。
+     * 如果为 null，则使用命名空间自动注入。
+     */
+    @Setter
+    @Builder.Default
+    private List<ITaskStage> taskStages = null;
+
+    /**
+     * 任务执行的 delay 时间
+     * 只有当 delayDuration 过后，任务才会被执行
+     * 默认 0，即立即执行
+     */
+    @Builder.Default
+    private final Duration delayDuration = Duration.ZERO;
 
     /**
      * 订阅的 key

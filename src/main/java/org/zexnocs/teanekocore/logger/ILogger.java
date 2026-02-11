@@ -44,7 +44,20 @@ public interface ILogger {
      * @param throwable 异常
      * @param reportRecipients 报告接收者；如果为 null 则报告给默认监护人
      */
-    void errorWithReport(String namespace, String message, Throwable throwable, String reportRecipients);
+    default void errorWithReport(String namespace, String message, Throwable throwable, String reportRecipients) {
+        errorWithReport(LoggerReportData.builder().
+                namespace(namespace).
+                message(message).
+                throwable(throwable).
+                reportRecipients(reportRecipients).
+                build());
+    }
+
+    /**
+     * 使用 report 数据记录错误日志并报告给监护人。
+     * @param data 日志报告数据
+     */
+    void errorWithReport(LoggerReportData data);
 
     /**
      * 记录错误日志。

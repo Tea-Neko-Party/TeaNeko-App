@@ -6,5 +6,5 @@ package org.zexnocs.teanekocore.actuator.task.interfaces;
  * @author zExNocs
  * @date 2026/02/10
  */
-public class ITaskConfig<T> {
+public interface ITaskConfig<T> {
 }
