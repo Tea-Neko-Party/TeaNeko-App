@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.Setter;
@@ -7,13 +8,14 @@ import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
  * 任务配置
  * 其定义：
  * 1. 创建：TaskConfig 定义并生成 Task
- * 2. 存储：TaskStorageService 存储
+ * 2. 存储：TaskService 以 cache 形式进行存储
  * 3. 执行：TaskExecuteService 执行 Supplier，并返回 TaskResult
  * 4. 结果：TaskResult 存储结果
  * 5. 调度：TaskService 调度整个过程
@@ -59,20 +61,40 @@ public class TaskConfig<T> {
     private final Supplier<TaskResult<T>> supplier;
 
     /**
-     * 最大重试的次数
+     * 任务执行的 delay 时间
+     * 只有当 delayDuration 过后，任务才会被执行
+     * 重试的 interval 由 retryInterval 决定，与 delayDuration 无关
+     * 默认 0，即立即执行
+     */
+    @Builder.Default
+    private final Duration delayDuration = Duration.ZERO;
+
+    // ----------- retry related -----------
+
+    /**
+     * 自动重试的次数
      * 默认不重试
      */
     @Builder.Default
     private final int maxRetries = 0;
 
     /**
-     * 最大保存时间
-     * 超过这个延迟时间的任务将被丢弃并且以异常方式完成
-     * null 表示不限制延迟时间
-     * 默认 10min
+     * 重试的策略
+     * 什么情况才会进行重试
+     * 默认 success = false 或者抛出异常时重试
      */
     @Builder.Default
-    private final Duration expireDuration = Duration.ofMinutes(10);
+    private final TaskRetryStrategy retryStrategy = TaskRetryStrategy.ALWAYS_RETRY;
+
+    /**
+     * 自动重试的间隔时间
+     * 每次重试之间的间隔时间
+     * 默认立刻重试，即 0
+     */
+    @Builder.Default
+    private final Duration retryInterval = Duration.ZERO;
+
+    // ----------- task stage related -----------
 
     /**
      * 任务执行阶段链的命名空间
@@ -90,13 +112,17 @@ public class TaskConfig<T> {
     @Builder.Default
     private List<ITaskStage> taskStages = null;
 
+    // ------------- indirect use -------------------
     /**
-     * 任务执行的 delay 时间
-     * 只有当 delayDuration 过后，任务才会被执行
-     * 默认 0，即立即执行
+     * 最大保存时间
+     * 超过这个延迟时间的任务将会视为异常完成，首先会尝试进行自动重试。
+     * null 表示不限制延迟时间
+     * 默认 10min
      */
     @Builder.Default
-    private final Duration delayDuration = Duration.ZERO;
+    private final Duration expireDuration = Duration.ofMinutes(10);
+
+    // ------------- internal use -------------
 
     /**
      * 订阅的 key
@@ -105,4 +131,12 @@ public class TaskConfig<T> {
      */
     @Setter
     private String key;
+
+    /**
+     * 根据该 config 创建的 Task 次数。
+     * 不包括 retry 的次数。
+     * 用于手动进行重试。
+     */
+    @Setter(AccessLevel.NONE)
+    private final AtomicLong counter = new AtomicLong(0);
 }

@@ -46,15 +46,15 @@ public class Task<T> implements ITask<T>, Delayed {
 
     /**
      * 构造函数，外部不可见。
-     * @param currentTimeInMillis 当前时间的毫秒数，用于计算 executeTimeInMillis
+     * @param executeTimeInMillis 任务的执行时间，单位为毫秒
      * @param config 任务的配置
      */
-    protected Task(long currentTimeInMillis,
+    protected Task(long executeTimeInMillis,
                    TaskConfig<T> config,
                    TaskFuture<T> future,
                    Class<? extends T> clazz) {
         this.config = config;
-        this.executeTimeInMillis = currentTimeInMillis + config.getDelayDuration().toMillis();
+        this.executeTimeInMillis = executeTimeInMillis;
         this.future = future;
         this.clazz = clazz;
     }
@@ -65,6 +65,7 @@ public class Task<T> implements ITask<T>, Delayed {
      * 是否已经超过了最大重试次数
      * @return 是否超过了最大重试次数
      */
+    @Override
     public boolean isMaxRetryCountExceeded() {
         return retryCount >= config.getMaxRetries();
     }
@@ -74,6 +75,7 @@ public class Task<T> implements ITask<T>, Delayed {
      * 如果没有执行过，则不允许重试
      * @return 是否允许重试。true表示允许重试，false 表示不允许重试
      */
+    @Override
     public boolean safeUpdateRetry() {
         // 如果上一次的没有执行完毕，则不允许重试
         // 如果 executed 为 true，则 submitted 一定为 true
@@ -88,9 +90,10 @@ public class Task<T> implements ITask<T>, Delayed {
     }
 
     /**
-     * 设置并标记为已提交执行
+     * 原子性地设置并标记为已提交执行
      * @return 在这次提交执行之前是否已经提交过
      */
+    @Override
     public boolean getAndSetSubmitted() {
         return isSubmitted.getAndSet(true);
     }
@@ -99,6 +102,7 @@ public class Task<T> implements ITask<T>, Delayed {
      * 是否彻底完成任务
      * @return 是否彻底完成任务
      */
+    @Override
     public boolean isDone() {
         return future.isDone();
     }

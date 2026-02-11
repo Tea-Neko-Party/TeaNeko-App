@@ -7,7 +7,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * 任务执行阶段。
- *
+ * 实现该接口必须要加上注解 @TaskStage 才可以被扫描到。
+ * @see TaskStage
  * @author zExNocs
  * @date 2026/02/11
  */
