@@ -6,13 +6,13 @@ package org.zexnocs.teanekocore.actuator.task.exception;
  * @author zExNocs
  * @date 2026/02/12
  */
-public class TaskNoRetryException extends RuntimeException {
+public class TaskNoRetryRuntimeException extends RuntimeException {
     /**
      * 构造一个新的 TaskNoRetryException。
      *
      * @param message 异常消息
      */
-    public TaskNoRetryException(String message) {
+    public TaskNoRetryRuntimeException(String message) {
         super(message);
     }
 
@@ -22,7 +22,7 @@ public class TaskNoRetryException extends RuntimeException {
      * @param message 异常消息
      * @param cause   导致此异常的原因
      */
-    public TaskNoRetryException(String message, Throwable cause) {
+    public TaskNoRetryRuntimeException(String message, Throwable cause) {
         super(message, cause);
     }
 
@@ -31,8 +31,8 @@ public class TaskNoRetryException extends RuntimeException {
      */
     public Throwable unwrap() {
         Throwable cause = this.getCause();
-        if(cause instanceof TaskNoRetryException) {
-            return ((TaskNoRetryException) cause).unwrap();
+        if(cause instanceof TaskNoRetryRuntimeException) {
+            return ((TaskNoRetryRuntimeException) cause).unwrap();
         }
         return cause != null ? cause : this;
     }

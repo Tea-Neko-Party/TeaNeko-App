@@ -4,6 +4,8 @@ import lombok.Getter;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -132,5 +134,22 @@ public class TaskFuture<T> {
     /// 包装的 whenComplete 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
     public TaskFuture<T> whenComplete(BiConsumer<? super T, ? super Throwable> action) {
         return new TaskFuture<>(future.whenComplete(action), state);
+    }
+
+    // ----------- 其他方法 ---------------
+    /**
+     * 将异常从 CompletionException 或 ExecutionException 中解包。
+     * @param t 需要解包的异常。
+     * @return 解包后的异常
+     */
+    public static Throwable unwrapException(Throwable t) {
+        while((t instanceof CompletionException || t instanceof ExecutionException)) {
+            if(t.getCause() == null) {
+                // 如果没有可用的异常，则直接返回当前异常
+                return t;
+            }
+            t = t.getCause();
+        }
+        return t;
     }
 }

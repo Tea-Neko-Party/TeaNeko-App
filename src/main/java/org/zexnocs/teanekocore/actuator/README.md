@@ -11,10 +11,10 @@ Task 模块的核心类是：
 
 |       类        | 介绍                                                                                               |
 |:--------------:|--------------------------------------------------------------------------------------------------|
-|     Task<>     | 异步执行 Supplier 的包装器<br>目标是执行 Supplier 直接或者间接获取 result 来提交给 future，从而执行 future 的执行链 <br>是一次性的      |
-|  TaskConfig<>  | 用于定义一个 Task 执行的形式，快速创建一个 Task <br> 是可以重复使用的                                                      |
-|  TaskResult<>  | 由 Task 执行后可以直接或者间接获取的 result <br> 可以表示执行失败或者成功                                                   |
-|  TaskFuture<>  | 包装一个 CompletableFuture<TaskResult<>><br>用于管理获取 result 后执行的 future 链<br> 提供快速记录异常日志的方法            |
+|    Task<T>     | 异步执行 Supplier 的包装器<br>目标是执行 Supplier 直接或者间接获取 result 来提交给 future，从而执行 future 的执行链 <br>是一次性的      |
+| TaskConfig<T>  | 用于定义一个 Task 执行的形式，快速创建一个 Task <br> 是可以重复使用的                                                      |
+| TaskResult<T>  | 由 Task 执行后可以直接或者间接获取的 result <br> 可以表示执行失败或者成功                                                   |
+| TaskFuture<T>  | 包装一个 CompletableFuture<TaskResult<T>><br>用于管理获取 result 后执行的 future 链<br> 提供快速记录异常日志的方法           |
 | TaskStageChain | 执行主函数 Supplier 的执行链，在提交 task 前可以通过 AOP 形式修改 supplier 执行前、执行后结果的执行链<br>可以使用 namespace 自动注入也可以手动注入 |
 
 其核心功能包含：
@@ -23,6 +23,16 @@ Task 模块的核心类是：
 |:---------:|------------------------------------------------------------------------------------|
 |   Retry   | 当一个 Task 的 Supplier 执行失败时，进行重新执行的操作<br>当 retry 失败时才会提交失败 result 或者以异常形式结束一个 future |
 | TaskStage | 以 AOP 形式在 Task 执行前、执行后结果的执行链中插入一个 Stage<br>可以通过 namespace 自动注入也可以手动注入              |
+
+一个 Task 可能存在的状态为：
+|   状态   | 说明 |
+|:-------:|-----|
+| Created | 已经由 TaskConfig 创建并注册到 TaskService 中，但没有到达执行时间 (取决于 `delayDuration` 字段) |
+| Submitted | 已经提交给 TaskExecuteService 执行，但还没有执行完成 |
+| Executed | 已经执行完成，正在等待是否提交给 future 链还是等待重新执行 |
+| Retrying | 达到重试决策条件，正在等待重新执行<br>状态同 Created，还没达到执行时间 (取决于 `retryInterval` 字段)<br>其接下来的状态为 Submitted 流程 |
+| Waiting | supplier 执行完成，但是是通过间接提交的方式来提交 result 给 future 链<br>正在等待 result 被提交给 future 链来执行 future 链 |
+| Done | 执行完成，成功将结果提交给 future 链或者以异常形式结束 future 链 |
 
 其流程如下：
 ```markdown

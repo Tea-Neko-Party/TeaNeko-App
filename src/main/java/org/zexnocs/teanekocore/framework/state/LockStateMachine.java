@@ -10,7 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * @author zExNocs
  * @date 2026/02/12
  */
-public class ConcurrentStateMachine<T extends IState> implements IStateMachine<T> {
+public class LockStateMachine<T extends IState> implements IStateMachine<T> {
     /// 任务状态锁
     protected final ReentrantLock lock = new ReentrantLock();
 
@@ -18,7 +18,7 @@ public class ConcurrentStateMachine<T extends IState> implements IStateMachine<T
     private T currentState;
 
     /// 构造函数，接受初始状态
-    public ConcurrentStateMachine(@NonNull T initialState) {
+    public LockStateMachine(@NonNull T initialState) {
         this.currentState = initialState;
         initialState.onEnter();
     }

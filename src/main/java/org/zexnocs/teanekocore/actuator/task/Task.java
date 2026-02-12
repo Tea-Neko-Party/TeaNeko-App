@@ -2,10 +2,17 @@ package org.zexnocs.teanekocore.actuator.task;
 
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
+import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
+import org.zexnocs.teanekocore.actuator.task.state.ITaskState;
+import org.zexnocs.teanekocore.actuator.task.state.TaskCreatedState;
+import org.zexnocs.teanekocore.actuator.task.state.TaskExecutedState;
+import org.zexnocs.teanekocore.framework.state.LockStateMachine;
+
+import java.util.UUID;
 import java.util.concurrent.Delayed;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 由 TaskService 管理的异步 Supplier 任务，只能执行一次的任务。
@@ -16,99 +23,93 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author zExNocs
  * @date 2026/02/10
  */
-public class Task<T> implements ITask<T>, Delayed {
+public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T>, Delayed {
     /// 任务执行的 config
     @Getter
     private final TaskConfig<T> config;
 
-    /// 执行的时间，单位为毫秒
-    private final long executeTimeInMillis;
+    /// 任务的执行 key
+    @Getter
+    private final UUID key;
 
     /// 上次重试的时间，用于判断任务是否过期
     @Getter
-    private long lastRetryTime;
+    private volatile long lastRetryTime;
 
     /// 重新尝试次数
-    private int retryCount;
+    private final AtomicInteger retryCount = new AtomicInteger(0);
 
     /// 被订阅的 future
     private final TaskFuture<T> future;
 
-    /// 是否被提交到 TaskService 中进行排队执行
-    private final AtomicBoolean isSubmitted = new AtomicBoolean(false);
-
-    /// 是否已经到达过时间来执行过一次 Supplier
-    private final AtomicBoolean isExecuted = new AtomicBoolean(false);
-
-    /// 类型
+    /// 类型，用于判断 result 是否符合预期
     @Getter
     private final Class<? extends T> clazz;
 
     /**
      * 构造函数，外部不可见。
-     * @param executeTimeInMillis 任务的执行时间，单位为毫秒
+     * @param key 任务的唯一标识符
      * @param config 任务的配置
      */
-    protected Task(long executeTimeInMillis,
+    protected Task(UUID key,
                    TaskConfig<T> config,
                    TaskFuture<T> future,
                    Class<? extends T> clazz) {
+        super(new TaskCreatedState(System.currentTimeMillis() + config.getDelayDuration().toMillis()));
         this.config = config;
-        this.executeTimeInMillis = executeTimeInMillis;
         this.future = future;
         this.clazz = clazz;
+        this.key = key;
     }
 
     // ------- ITask 接口实现 -------
-
     /**
-     * 是否已经超过了最大重试次数
-     * @return 是否超过了最大重试次数
+     * 原子性地修改成 Retry 的状态。
+     * 前提是当前任务处于 Executed 状态。
+     *
+     * @return true 表示修改成功；false 表示重试次数达到上限
+     * @throws TaskIllegalStateException 如果当前任务不处于 Created 状态
      */
     @Override
-    public boolean isMaxRetryCountExceeded() {
-        return retryCount >= config.getMaxRetries();
-    }
-
-    /**
-     * 线程安全的更新重试状态。
-     * 如果没有执行过，则不允许重试
-     * @return 是否允许重试。true表示允许重试，false 表示不允许重试
-     */
-    @Override
-    public boolean safeUpdateRetry() {
-        // 如果上一次的没有执行完毕，则不允许重试
-        // 如果 executed 为 true，则 submitted 一定为 true
-        // 因此不用判断 submit 是否为 true
-        if(!isExecuted.getAndSet(false)) {
+    public boolean switchToRetryState() throws TaskIllegalStateException {
+        // 首先判断是不是已经达到了最大重试次数
+        if (retryCount.incrementAndGet() > config.getMaxRetries()) {
+            // 达到上限，不能重试了
             return false;
         }
-        isSubmitted.set(false);
-        retryCount++;
+
+        // 如果当前状态不是 Created，则抛出异常
+        if (!switchStateUnderExpected(TaskExecutedState.class,
+                new TaskCreatedState(System.currentTimeMillis() + config.getRetryInterval().toMillis()))) {
+            throw new TaskIllegalStateException("任务在非 Created 状态下尝试重试",
+                    getCurrentState().getClass(), TaskExecutedState.class);
+        }
+
+        // 更新上次重试的时间
         lastRetryTime = System.currentTimeMillis();
         return true;
     }
 
     /**
-     * 原子性地设置并标记为已提交执行
-     * @return 在这次提交执行之前是否已经提交过
+     * 获取当前的执行时间，前提是任务处于 Created 状态。
+     * @return 当前的执行时间
      */
-    @Override
-    public boolean getAndSetSubmitted() {
-        return isSubmitted.getAndSet(true);
-    }
-
-    /**
-     * 是否彻底完成任务
-     * @return 是否彻底完成任务
-     */
-    @Override
-    public boolean isDone() {
-        return future.isDone();
+    public long getExecuteTimeInMillis() throws TaskIllegalStateException {
+        lock.lock();
+        try {
+            var state = getCurrentState();
+            if (state instanceof TaskCreatedState createdState) {
+                return createdState.getExecuteTimeInMillis();
+            } else {
+                throw new TaskIllegalStateException("任务在非 Created 状态下尝试获取执行时间",
+                        state.getClass(), TaskCreatedState.class);
+            }
+        } finally {
+            lock.unlock();
+        }
     }
 
     // ------- Delayed 接口实现 -------
-
     /**
      * 任务的执行时间
      * @param unit 时间单位
@@ -117,7 +118,7 @@ public class Task<T> implements ITask<T>, Delayed {
     @Override
     public long getDelay(TimeUnit unit) {
         return unit.convert(
-                executeTimeInMillis - System.currentTimeMillis(),
+                getExecuteTimeInMillis() - System.currentTimeMillis(),
                 TimeUnit.MILLISECONDS);
     }
 
@@ -131,8 +132,8 @@ public class Task<T> implements ITask<T>, Delayed {
         if (o == this) {
             return 0;
         }
-        if (o instanceof Task<?> other) {
-            return Long.compare(this.executeTimeInMillis, other.executeTimeInMillis);
+        if (o instanceof ITask<?> other) {
+            return Long.compare(this.getExecuteTimeInMillis(), other.getExecuteTimeInMillis());
         }
         long diff = this.getDelay(TimeUnit.MILLISECONDS) - o.getDelay(TimeUnit.MILLISECONDS);
         return Long.compare(diff, 0);

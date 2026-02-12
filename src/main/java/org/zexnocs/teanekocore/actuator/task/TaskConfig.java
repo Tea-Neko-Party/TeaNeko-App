@@ -1,10 +1,9 @@
 package org.zexnocs.teanekocore.actuator.task;
 
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 import java.time.Duration;
 import java.util.List;
@@ -25,13 +24,13 @@ import java.util.function.Supplier;
  * 关于 Supplier 返回：
  * - 直接提交：返回非 null，会直接作为 result 提交。
  * - 间接提交：返回 null，那么 TaskService 将会等待异步主动提交结果；
+ * 请不要在 Supplier 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
  * <p>
  * 关于提交结果 success 字段：
  * - true：表示任务成功完成，TaskService 将会将 Task 标记为完成并在 TaskStorageService 中删除；
  * - false：表示任务执行失败，TaskService 将会根据 TaskConfig 中的重试策略进行重试；
  * 如果重试次数用尽将会将 Task 标记为失败并在 TaskStorageService 中删除。
- * <p>
- * 关于重复执行：如果允许重复执行，那么只有当上一个 Task 已经完成（无论成功还是失败）后，才会执行下一个 Task；
+ * 策略取决于 RetryStrategy。
  * <p>
  * 注意：每一个 Task 默认等待时间为 10min (可以在 TaskConfig 中修改)，超过等待时间后将会报错并删除 Task。
  * @param <T> 任务结果的类型
@@ -40,11 +39,12 @@ import java.util.function.Supplier;
  */
 @Getter
 @Builder
-public class TaskConfig<T> {
+public class TaskConfig<T> implements ITaskConfig<T> {
     /**
      * 订阅任务的名称
      * 用于日志记录和调试
      */
+    @NonNull
     private final String name;
 
     /**
@@ -58,7 +58,8 @@ public class TaskConfig<T> {
      * 2. 如果要求任务是可中断的，请定时使用 Thread.currentThread().isInterrupted() 检查
      *    并且在堵塞的地方 catch InterruptedException，
      */
-    private final Supplier<TaskResult<T>> supplier;
+    @NonNull
+    private final Supplier<ITaskResult<T>> supplier;
 
     /**
      * 任务执行的 delay 时间
@@ -123,14 +124,6 @@ public class TaskConfig<T> {
     private final Duration expireDuration = Duration.ofMinutes(10);
 
     // ------------- internal use -------------
-
-    /**
-     * 订阅的 key
-     * 由 TaskService 生成并设置，用于关联 result 和 task
-     * builder 设置无效，会被无视
-     */
-    @Setter
-    private String key;
 
     /**
      * 根据该 config 创建的 Task 次数。

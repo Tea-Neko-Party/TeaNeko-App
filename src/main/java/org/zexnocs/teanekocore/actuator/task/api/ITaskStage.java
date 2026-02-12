@@ -1,9 +1,7 @@
 package org.zexnocs.teanekocore.actuator.task.api;
 
 import org.zexnocs.teanekocore.actuator.task.TaskStageChain;
-import org.zexnocs.teanekocore.framework.pair.Pair;
-
-import java.util.concurrent.CompletableFuture;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 /**
  * 任务执行阶段。
@@ -22,5 +20,5 @@ public interface ITaskStage {
      * @param chain 该任务的阶段链
      * @return 返回主运行任务的 CompletableFuture 对，分别表示 future 链的 头和尾
      */
-    Pair<CompletableFuture<?>, CompletableFuture<?>> process(TaskStageChain chain);
+    ITaskResult<?> process(TaskStageChain chain);
 }

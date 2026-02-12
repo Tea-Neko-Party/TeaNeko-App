@@ -1,13 +1,16 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+import org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException;
+import org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException;
+
 /**
  * 任务重试策略枚举类。
  * 结果 false 指的是当 result.isSuccess() 返回 false
  * 异常 指的是抛出任何异常是否进行重试
  * 此外，如果抛出 RetryException 则一定重试，如果抛出 NoRetryException 则一定不重试。
  * @see org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult
- * @see org.zexnocs.teanekocore.actuator.task.exception.TaskRetryException
- * @see org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryException
+ * @see TaskRetryRuntimeException
+ * @see TaskNoRetryRuntimeException
  * @author zExNocs
  * @date 2026/02/12
  */
