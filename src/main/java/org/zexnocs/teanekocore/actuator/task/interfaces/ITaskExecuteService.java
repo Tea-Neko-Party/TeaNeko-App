@@ -8,8 +8,14 @@ package org.zexnocs.teanekocore.actuator.task.interfaces;
  */
 public interface ITaskExecuteService {
     /**
-     * 将任务交给线程池执行。
+     * 将任务交给线程池执行。由 TaskService 调用。
      * @param task 任务
      */
-    void executeSubscriptionTask(ITask<?> task);
+    void executeTask(ITask<?> task);
+
+    /**
+     * 重试任务。由 RetryTaskService 调用。
+     * @param task 任务
+     */
+    void executeTaskRetry(ITask<?> task);
 }

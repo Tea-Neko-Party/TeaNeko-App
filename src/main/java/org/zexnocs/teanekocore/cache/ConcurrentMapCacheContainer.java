@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.cache;
 
 import org.zexnocs.teanekocore.cache.interfaces.ICacheContainer;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheData;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheDataFactory;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.util.Map;
@@ -20,14 +22,14 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     /// 默认创建实例方法
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService) {
         // 默认过期时间为 1 小时，清理间隔为 1 分钟，参与手动清理
-        return of(cacheService, 3600_000L, 60_000L);
+        return of(cacheService, 3600_000L, 60_000L, true);
     }
 
     /// 指定过期时间的创建实例方法
     /// 使用 1 / 60 的过期时间作为清理间隔时间，参与手动清理
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs) {
-        return of(cacheService, expireTimeMs, expireTimeMs / 60);
+        return of(cacheService, expireTimeMs, expireTimeMs / 60, true);
     }
 
     /// 指定过期时间和清理间隔时间的创建实例方法
@@ -47,15 +49,46 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
         return of(cacheService, expireTimeMs, expireTimeMs / 60, participateInManualClean);
     }
 
-    /// 指定过期时间、清理间隔时间、和是否参与手动清理的创建实例方法
+    /**
+     * 完整的创建实例方法
+     * @param cacheService 缓存服务实例
+     * @param expireTimeMs 单个数据的过期时间，单位毫秒
+     * @param cleanIntervalMs 清理间隔时间，单位毫秒
+     * @param participateInManualClean 是否参与手动清理
+     * @return 创建好的 ConcurrentMapCacheContainer 实例
+     * @param <K> 键类型
+     * @param <V> 值类型
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs,
                                                               long cleanIntervalMs,
                                                               boolean participateInManualClean) {
         var instance = new ConcurrentMapCacheContainer<K, V>(
                 participateInManualClean,
-                expireTimeMs,
-                cleanIntervalMs);
+                cleanIntervalMs,
+                new CacheDataFactory<>(expireTimeMs));
+        cacheService.addCache(instance);
+        return instance;
+    }
+
+    /**
+     * 使用一个 ICacheDataFactory 来创建 ConcurrentMapCacheContainer 实例
+     * @param cacheService 缓存服务实例
+     * @param cleanIntervalMs 清理间隔时间，单位毫秒
+     * @param iCacheDataFactory 创建 CacheData 的工厂类
+     * @param participateInManualClean 是否参与手动清理
+     * @return 创建好的 ConcurrentMapCacheContainer 实例
+     * @param <K> 键类型
+     * @param <V> 值类型
+     */
+    public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
+                                                              long cleanIntervalMs,
+                                                              ICacheDataFactory<V> iCacheDataFactory,
+                                                              boolean participateInManualClean) {
+        var instance = new ConcurrentMapCacheContainer<K, V>(
+                participateInManualClean,
+                cleanIntervalMs,
+                iCacheDataFactory);
         cacheService.addCache(instance);
         return instance;
     }
@@ -68,22 +101,22 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     /// 上次清理的时间，单位毫秒
     private volatile long lastCleanTimeMs;
 
-    /// 单个数据的过期时间，单位毫秒
-    private final long expireTimeMs;
-
     /// 是否参与手动清理
     private final boolean participateInManualClean;
 
     /// 缓存存储
-    private final Map<K, CacheData<V>> cache = new ConcurrentHashMap<>();
+    private final Map<K, ICacheData<V>> cache = new ConcurrentHashMap<>();
+
+    /// 创建 CacheData 的工厂类
+    private final ICacheDataFactory<V> iCacheDataFactory;
 
     private ConcurrentMapCacheContainer(boolean participateInManualClean,
-                                        long expireTimeMs,
-                                        long cleanIntervalMs) {
-        this.expireTimeMs = expireTimeMs;
+                                        long cleanIntervalMs,
+                                        ICacheDataFactory<V> iCacheDataFactory) {
         this.cleanIntervalMs = cleanIntervalMs;
         this.participateInManualClean = participateInManualClean;
         this.lastCleanTimeMs = System.currentTimeMillis();
+        this.iCacheDataFactory = iCacheDataFactory;
     }
 
     /**
@@ -92,7 +125,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
      * @param key   键
      * @param cache 缓存数据，包含值和过期时间
      */
-    public void put(K key, CacheData<V> cache) {
+    public void put(K key, ICacheData<V> cache) {
         cache.updateAccessTime(System.currentTimeMillis());
         this.cache.put(key, cache);
     }
@@ -104,7 +137,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
      * @param value 值
      */
     public void put(K key, V value) {
-        cache.put(key, new CacheData<>(value, expireTimeMs));
+        cache.put(key, iCacheDataFactory.createCacheData(value));
     }
 
     /**
@@ -130,7 +163,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
      * @return 值
      */
     public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-        var data = cache.computeIfAbsent(key, k -> new CacheData<>(mappingFunction.apply(k), expireTimeMs));
+        var data = cache.computeIfAbsent(key, k -> iCacheDataFactory.createCacheData(mappingFunction.apply(k)));
         data.updateAccessTime(System.currentTimeMillis());
         return data.getValue();
     }
@@ -146,7 +179,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
         var data = cache.computeIfPresent(key, (k, v) -> {
             var newValue = remappingFunction.apply(k, v.getValue());
             if (newValue != null) {
-                return new CacheData<>(newValue, expireTimeMs);
+                return iCacheDataFactory.createCacheData(newValue);
             } else {
                 return null;
             }
@@ -170,7 +203,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
             V oldValue = (v != null) ? v.getValue() : null;
             var newValue = remappingFunction.apply(k, oldValue);
             if (newValue != null) {
-                return new CacheData<>(newValue, expireTimeMs);
+                return iCacheDataFactory.createCacheData(newValue);
             } else {
                 return null;
             }
@@ -217,9 +250,9 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
      * @param currentTimeMs 当前时间，单位毫秒
      */
     @Override
-    public void autoClean(long currentTimeMs) {
+    public synchronized void autoClean(long currentTimeMs) {
         // 如果距离上次清理时间未到达清理间隔时间，则跳过清理
-        if (currentTimeMs - lastCleanTimeMs <= cleanIntervalMs) {
+        if (currentTimeMs - lastCleanTimeMs < cleanIntervalMs) {
             return;
         }
         lastCleanTimeMs = currentTimeMs;
@@ -228,8 +261,7 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
             var value = entry.getValue();
             if(value.isExpired(currentTimeMs)) {
                 // 执行过期后的处理方法
-                value.onExpire(currentTimeMs, value.getValue());
-                return true;
+                return value.onExpire(currentTimeMs, value.getValue());
             }
             return false;
         });

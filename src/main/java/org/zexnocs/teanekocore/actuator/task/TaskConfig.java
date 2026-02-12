@@ -7,24 +7,24 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.Supplier;
 
 /**
  * 任务配置
  * 其定义：
  * 1. 创建：TaskConfig 定义并生成 Task
  * 2. 存储：TaskService 以 cache 形式进行存储
- * 3. 执行：TaskExecuteService 执行 Supplier，并返回 TaskResult
+ * 3. 执行：TaskExecuteService 执行 Callable，并返回 TaskResult
  * 4. 结果：TaskResult 存储结果
  * 5. 调度：TaskService 调度整个过程
- * 结果可能由 Supplier 直接返回，也可以异步获取 并在 TaskService 中执行 TaskResult。
+ * 结果可能由 Callable 直接返回，也可以异步获取 并在 TaskService 中执行 TaskResult。
  * 如果异步提交结果，需要自行指定 key 值以便于关联 result 和 task。
  * <p>
- * 关于 Supplier 返回：
+ * 关于 Callable 返回：
  * - 直接提交：返回非 null，会直接作为 result 提交。
  * - 间接提交：返回 null，那么 TaskService 将会等待异步主动提交结果；
- * 请不要在 Supplier 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
+ * 请不要在 Callable 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
  * <p>
  * 关于提交结果 success 字段：
  * - true：表示任务成功完成，TaskService 将会将 Task 标记为完成并在 TaskStorageService 中删除；
@@ -48,18 +48,18 @@ public class TaskConfig<T> implements ITaskConfig<T> {
     private final String name;
 
     /**
-     * 被订阅任务的 supplier
+     * 被订阅任务的 Callable
      * 执行一定是异步的
      * 要求该订阅任务 直接 / 间接 提交 result
-     * 直接：supplier 直接返回 result
-     * 间接：supplier 返回 null，在 TaskService 中提交 result
+     * 直接：Callable 直接返回 result
+     * 间接：Callable 返回 null，在 TaskService 中提交 result
      * 1. 如果 "异步" 获取结果，请使用 "间接"；如果 "同步" 获取结果，请使用 "直接"。
      *    请勿在 "同步获取结果" 时使用 "间接" 方式，会在 complete 函数中 retry 失败并抛出 TaskRetryCollisionException
      * 2. 如果要求任务是可中断的，请定时使用 Thread.currentThread().isInterrupted() 检查
      *    并且在堵塞的地方 catch InterruptedException，
      */
     @NonNull
-    private final Supplier<ITaskResult<T>> supplier;
+    private final Callable<ITaskResult<T>> callable;
 
     /**
      * 任务执行的 delay 时间
@@ -67,6 +67,7 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      * 重试的 interval 由 retryInterval 决定，与 delayDuration 无关
      * 默认 0，即立即执行
      */
+    @NonNull
     @Builder.Default
     private final Duration delayDuration = Duration.ZERO;
 
@@ -121,7 +122,7 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      * 默认 10min
      */
     @Builder.Default
-    private final Duration expireDuration = Duration.ofMinutes(10);
+    private final Duration expirationDuration = Duration.ofMinutes(10);
 
     // ------------- internal use -------------
 
@@ -132,4 +133,12 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      */
     @Setter(AccessLevel.NONE)
     private final AtomicLong counter = new AtomicLong(0);
+
+    /**
+     * 生成了一个 task，让 counter 加 1。
+     */
+    @Override
+    public void addCounter() {
+        counter.incrementAndGet();
+    }
 }

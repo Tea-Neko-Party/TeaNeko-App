@@ -35,15 +35,16 @@ public class TaskStageChain {
     /**
      * 处理下一个阶段。
      * @return 返回的最终 result
+     * @throws Exception 如果处理阶段出现异常。
      */
     @Nullable
-    public ITaskResult<?> next() {
+    public ITaskResult<?> next() throws Exception {
         if(index < stages.size()) {
             var stage = stages.get(index++);
             return stage.process(this);
         } else {
             // 执行最终的任务
-            return task.getConfig().getSupplier().get();
+            return task.getConfig().getCallable().call();
         }
     }
 }

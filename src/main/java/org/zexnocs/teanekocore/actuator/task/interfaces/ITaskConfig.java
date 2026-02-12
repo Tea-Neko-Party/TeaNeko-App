@@ -1,9 +1,12 @@
 package org.zexnocs.teanekocore.actuator.task.interfaces;
 
+import lombok.NonNull;
+import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 
+import java.time.Duration;
 import java.util.List;
-import java.util.function.Supplier;
+import java.util.concurrent.Callable;
 
 /**
  * 用于定义一个任务的基本配置，从而来组装一个 Task 实例。
@@ -19,10 +22,10 @@ public interface ITaskConfig<T> {
     String getName();
 
     /**
-     * 获取任务 supplier
-     * @return 任务 supplier，用于生成任务实例
+     * 获取任务 callable
+     * @return 任务 callable，用于生成任务实例
      */
-    Supplier<ITaskResult<T>> getSupplier();
+    Callable<ITaskResult<T>> getCallable();
 
     /**
      * 获取任务执行阶段列表
@@ -32,14 +35,50 @@ public interface ITaskConfig<T> {
     List<ITaskStage> getTaskStages();
 
     /**
+     * 获取任务阶段连命名空间
+     * 用于注入阶段链列表
+     */
+    String getTaskStageNamespace();
+
+    /**
+     * 获取执行延迟
+     * @return 执行延迟 duration
+     */
+    @NonNull
+    Duration getDelayDuration();
+
+    /**
+     * 获取最大重试次数
+     * @return 最大重试次数
+     */
+    int getMaxRetries();
+
+    /**
+     * 获取重试策略
+     * @return 重试策略
+     */
+    TaskRetryStrategy getRetryStrategy();
+
+    /**
+     * 获取重试间隔
+     * @return 重试间隔 duration
+     */
+    Duration getRetryInterval();
+
+    /**
+     * 获取最大保存时间
+     * @return 最大保存时间 duration，超过这个时间的任务将被丢弃
+     */
+    Duration getExpirationDuration();
+
+    /**
      * 设置任务执行阶段列表
      * @param taskStages 任务执行阶段列表，按照执行顺序排列
      */
     void setTaskStages(List<ITaskStage> taskStages);
 
     /**
-     * 获取任务阶段连命名空间
-     * 用于注入阶段链列表
+     * 生成了一个 task，让 counter 加 1。
      */
-    String getTaskStageNamespace();
+    void addCounter();
 }

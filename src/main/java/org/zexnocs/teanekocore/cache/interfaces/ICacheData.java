@@ -32,8 +32,10 @@ public interface ICacheData<V> {
      * 该方法将在与自动清理在同一个线程中调用，注意：
      * 1. 请使用轻量化的操作，避免堵塞清理操作；例如日志记录、简单的资源释放等。
      * 2. 如果需要较重的操作，请在函数里另外在 taskService 中请求一个新的线程来执行。
+     * 3. 请不要在该方法里尝试访问、修改缓存，否则会抛出 ConcurrentModificationException；如果要删除请让其返回 true 清理
      * @param currentTimeMs 用于传递当前的时间，单位毫秒
      * @param value 当前缓存的值，过期后可能需要进行一些清理或其他操作
+     * @return true 表示会正常删除该缓存；false 表示暂时不删除该缓存。如果没有更新 access time 则会在下次清理时再次调用 onExpire 方法。
      */
-    void onExpire(long currentTimeMs, V value);
+    boolean onExpire(long currentTimeMs, V value);
 }

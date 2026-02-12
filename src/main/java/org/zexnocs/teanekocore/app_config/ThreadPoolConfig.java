@@ -2,11 +2,12 @@ package org.zexnocs.teanekocore.app_config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 
 /**
  * 线程池配置类，负责配置应用程序中使用的线程池。
@@ -17,35 +18,44 @@ import java.util.concurrent.RejectedExecutionException;
 @Configuration
 public class ThreadPoolConfig {
     /**
-     * 配置一个 ThreadPoolTaskExecutor 线程池，
+     * 任务执行线程池，用于执行任务。
      * 核心线程数为 CPU 核心数，最大线程数为 CPU 核心数的两倍，队列大小为 CPU 核心数的 200 倍。
      *
-     * @return {@link ThreadPoolTaskExecutor }
+     * @return 任务线程池
      */
     @Bean
-    public ThreadPoolTaskExecutor threadPoolTaskExecutor() {
-        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    public ScheduledThreadPoolExecutor taskExecutor() {
+        // 获取 cpu 核心数
+        int cpu = Runtime.getRuntime().availableProcessors();
 
-        var availableProcessors = Runtime.getRuntime().availableProcessors();
+        // 创建 ScheduledThreadPoolExecutor，核心线程数为 cpu 核心数
+        ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(cpu);
 
-        // 核心线程数
-        executor.setCorePoolSize(availableProcessors);
+        // 设置最大线程数为 cpu 核心数的两倍
+        executor.setMaximumPoolSize(cpu * 2);
 
-        // 最大线程数
-        executor.setMaxPoolSize(availableProcessors * 2);
+        // 取消任务时会从队列中移除任务
+        executor.setRemoveOnCancelPolicy(true);
 
-        // 队列大小
-        executor.setQueueCapacity(availableProcessors * 200);
-
-        // 拒绝策略
-        executor.setRejectedExecutionHandler(((r, executor1) -> {
+        executor.setRejectedExecutionHandler((r, e) -> {
             // 保存被拒绝的任务
             // todo: 通知手动处理
-            throw new RejectedExecutionException("Thread pool is full");
-        }));
+            throw new RejectedExecutionException("Task executor is full");
+        });
 
-        executor.initialize();
         return executor;
+    }
+
+    /**
+     * 一般的 Scheduler，用于处理一些简单的定时任务，例如为定时器分发任务。
+     * @return 一般的 Scheduler
+     */
+    @Bean
+    public ThreadPoolTaskScheduler normalScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("normal-schedule-");
+        return scheduler;
     }
 
     /**
@@ -54,7 +64,6 @@ public class ThreadPoolConfig {
     @Bean
     public Scheduler apiScheduler() {
         var availableProcessors = Runtime.getRuntime().availableProcessors();
-
         return Schedulers.newBoundedElastic(
                 availableProcessors * 2,
                 availableProcessors * 50,

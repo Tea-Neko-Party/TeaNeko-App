@@ -35,8 +35,8 @@ public class TaskFuture<T> {
      * 构造函数，用于初始化 Future 对象。
      * 是 root Future
      */
-    protected TaskFuture(ILogger logger, String taskName) {
-        this.future = new CompletableFuture<>();
+    protected TaskFuture(ILogger logger, String taskName, CompletableFuture<T> future) {
+        this.future = future;
         this.state = new SharedState(logger, taskName);
     }
 
@@ -69,6 +69,8 @@ public class TaskFuture<T> {
 
         future.whenComplete((r, t) -> {
             if(t != null) {
+                // 解包异常，获取实际的异常信息
+                t = unwrapException(t);
                 state.logger.errorWithReport(
                         TaskFuture.class.getSimpleName(),
                         "执行任务：%s 时发生未处理的异常。".formatted(state.taskName),

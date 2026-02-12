@@ -72,6 +72,18 @@ dependencyManagement {
 // 测试配置
 tasks.withType<Test> {
     useJUnitPlatform()
+
+    // 添加 Mockito agent 以支持 inline mock
+    doFirst {
+        val byteBuddyAgent = configurations.testRuntimeClasspath.get()
+            .files
+            .find { it.name.contains("byte-buddy-agent") }
+            ?.absolutePath
+
+        if (byteBuddyAgent != null) {
+            jvmArgs("-javaagent:$byteBuddyAgent")
+        }
+    }
 }
 
 // ========== 注册任务 ==========
