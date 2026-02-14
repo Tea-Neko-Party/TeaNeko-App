@@ -47,14 +47,15 @@ public class ThreadPoolConfig {
     }
 
     /**
-     * 一般的 Scheduler，用于处理一些简单的定时任务，例如为定时器分发任务。
-     * @return 一般的 Scheduler
+     * 用于定时器的单线程 Scheduler。
+     * @return 定时器 Scheduler
      */
     @Bean
-    public ThreadPoolTaskScheduler normalScheduler() {
+    public ThreadPoolTaskScheduler timerScheduler() {
+        // 创建一个单线程的 ThreadPoolTaskScheduler
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(1);
-        scheduler.setThreadNamePrefix("normal-schedule-");
+        scheduler.setThreadNamePrefix("timer-schedule-");
         return scheduler;
     }
 

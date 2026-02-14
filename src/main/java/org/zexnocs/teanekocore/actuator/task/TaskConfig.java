@@ -25,6 +25,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * - 直接提交：返回非 null，会直接作为 result 提交。
  * - 间接提交：返回 null，那么 TaskService 将会等待异步主动提交结果；
  * 请不要在 Callable 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
+ * 如果没有 result，请返回 new EmptyTaskResult()。
  * <p>
  * 关于提交结果 success 字段：
  * - true：表示任务成功完成，TaskService 将会将 Task 标记为完成并在 TaskStorageService 中删除；
@@ -67,9 +68,10 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      * 重试的 interval 由 retryInterval 决定，与 delayDuration 无关
      * 默认 0，即立即执行
      */
+    @Setter
     @NonNull
     @Builder.Default
-    private final Duration delayDuration = Duration.ZERO;
+    private Duration delayDuration = Duration.ZERO;
 
     // ----------- retry related -----------
 

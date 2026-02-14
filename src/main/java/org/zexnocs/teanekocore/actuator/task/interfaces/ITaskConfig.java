@@ -10,7 +10,13 @@ import java.util.concurrent.Callable;
 
 /**
  * 用于定义一个任务的基本配置，从而来组装一个 Task 实例。
- *
+ * <p>
+ * 关于 Callable 返回：
+ * - 直接提交：返回非 null，会直接作为 result 提交。
+ * - 间接提交：返回 null，那么 TaskService 将会等待异步主动提交结果；
+ * 请不要在 Callable 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
+ * 如果没有 result，请返回 new EmptyTaskResult()。
+ * <p>
  * @author zExNocs
  * @date 2026/02/10
  */

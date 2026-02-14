@@ -81,6 +81,28 @@ public class TaskFuture<T> {
         return future;
     }
 
+    /**
+     * 手动指定异常处理的 finish 方法，用于自定义异常处理逻辑。
+     * 如果 Future 以异常结束，则会调用 exceptionHandler 来处理异常。
+     * @param exceptionHandler 异常处理函数，接受一个 Throwable 参数。
+     * @return Future 对象
+     */
+    public CompletableFuture<T> finishWithExceptionHandler(Consumer<Throwable> exceptionHandler) {
+        // 判断是否已经完成，防止重复调用 finish() 方法。
+        if (!finished.compareAndSet(false, true)) {
+            return future;
+        }
+
+        future.whenComplete((r, t) -> {
+            if (t != null) {
+                // 解包异常，获取实际的异常信息
+                t = unwrapException(t);
+                exceptionHandler.accept(t);
+            }
+        });
+        return future;
+    }
+
     // --------- Future 管理部分 ---------
     /**
      * 是否已经完成 Future 的执行。

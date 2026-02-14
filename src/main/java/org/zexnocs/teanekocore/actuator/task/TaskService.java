@@ -38,9 +38,9 @@ public class TaskService implements ITaskService {
     @Autowired
     public TaskService(ICacheService iCacheService, ILogger logger, ITaskExecuteService iTaskExecuteService, ITaskRetryService iTaskRetryService) {
         this.taskMap = ConcurrentMapCacheContainer.of(iCacheService,
-                1000L,                      // 清理间隔，1s
+                1000L,             // 清理间隔，1s
                 new TaskCacheFactory(),         // CacheData 工厂
-                false);                     // 不参与自动清理
+                false);                         // 不参与自动清理
         this.logger = logger;
         this.iTaskExecuteService = iTaskExecuteService;
         this.iTaskRetryService = iTaskRetryService;
@@ -112,14 +112,13 @@ public class TaskService implements ITaskService {
         }
         // 否则，完成任务并返回 true
         taskMap.remove(key);
-        _forceComplete((ITask<Object>) task, (ITaskResult<Object>) result);
-        return true;
+        task.switchState(new TaskFinishedState());
+        return _forceComplete((ITask<Object>) task, (ITaskResult<Object>) result);
     }
 
     /// 强制进行类型转化使得 task 与 result 的类型一致
-    private <T> void _forceComplete(ITask<T> task, ITaskResult<T> result) {
-        task.getFuture().complete(result);
-        task.switchState(new TaskFinishedState());
+    private <T> boolean _forceComplete(ITask<T> task, ITaskResult<T> result) {
+        return task.getFuture().complete(result);
     }
 
     /**
@@ -146,9 +145,8 @@ public class TaskService implements ITaskService {
         }
         // 否则，完成任务并返回 true
         taskMap.remove(key);
-        task.getFuture().completeExceptionally(exception);
         task.switchState(new TaskFinishedState());
-        return true;
+        return task.getFuture().completeExceptionally(exception);
     }
 
     // ---------- Task 专用的 TaskCache -------------
