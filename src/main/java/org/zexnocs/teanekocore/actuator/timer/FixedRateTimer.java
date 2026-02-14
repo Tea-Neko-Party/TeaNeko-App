@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.actuator.timer;
 
-import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import lombok.Getter;
+import org.jspecify.annotations.NonNull;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 
@@ -21,14 +23,23 @@ public class FixedRateTimer<T> implements ITimer<T> {
     /// 任务 rate
     private final Duration rate;
 
+    /// 上次执行的时间
+    private long lastExecutionTime;
+
+    /// result type
+    @Getter
+    private final Class<T> resultType;
+
     /**
      * 构造函数。
      * @param timerTaskConfig 任务配置
      * @param rate 任务 rate
      */
-    public FixedRateTimer(ITimerTaskConfig<T> timerTaskConfig, Duration rate) {
+    public FixedRateTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig, @NonNull Duration rate, @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;
         this.rate = rate;
+        this.lastExecutionTime = System.currentTimeMillis();
+        this.resultType = resultType;
     }
 
     /**
@@ -37,20 +48,8 @@ public class FixedRateTimer<T> implements ITimer<T> {
      * @return 任务配置。
      */
     @Override
-    public ITimerTaskConfig<T> getTimerTaskConfig() {
-        return null;
-    }
-
-    /**
-     * 每次执行成功时更新定时器的状态 或者对任务的 future 链进行配置。
-     * 比如说使用 timerTaskConfig 中的 TaskFutureChain 来配置任务的 future 链。
-     *
-     * @param currentTime 当前时间戳（毫秒）。
-     * @param taskFuture  当前执行的任务的 future 对象，可以通过它来配置任务的 future 链。
-     */
-    @Override
-    public void update(long currentTime, TaskFuture<T> taskFuture) {
-
+    public @NonNull ITimerTaskConfig<T> getTimerTaskConfig() {
+        return timerTaskConfig;
     }
 
     /**
@@ -61,6 +60,35 @@ public class FixedRateTimer<T> implements ITimer<T> {
      */
     @Override
     public boolean isTime(long currentTime) {
-        return false;
+        return currentTime - lastExecutionTime >= rate.toMillis();
+    }
+
+    /**
+     * 每次执行成功时更新定时器的状态
+     *
+     * @param currentTime 当前时间戳（毫秒）。
+     */
+    @Override
+    public void update(long currentTime) {
+        this.lastExecutionTime = currentTime;
+    }
+
+    /**
+     * 使用 iTaskService 来执行任务。
+     * 同时使用 timerTaskConfig 中的 TaskFutureChain 来配置任务的 future 链
+     *
+     * @param iTaskService 任务服务。
+     */
+    @Override
+    public void execute(ITaskService iTaskService) {
+        var taskFuture = iTaskService.subscribe(timerTaskConfig.getTaskConfig(), resultType);
+        // 配置任务的 future 链。
+        var chain = timerTaskConfig.getTaskFutureChain();
+        if(chain != null) {
+            var finalFuture = chain.apply(taskFuture);
+            finalFuture.finish();
+        } else {
+            taskFuture.finish();
+        }
     }
 }

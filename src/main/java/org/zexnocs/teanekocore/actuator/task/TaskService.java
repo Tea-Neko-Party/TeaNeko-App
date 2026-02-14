@@ -36,7 +36,10 @@ public class TaskService implements ITaskService {
 
     @Lazy
     @Autowired
-    public TaskService(ICacheService iCacheService, ILogger logger, ITaskExecuteService iTaskExecuteService, ITaskRetryService iTaskRetryService) {
+    public TaskService(ICacheService iCacheService,
+                       ILogger logger,
+                       ITaskExecuteService iTaskExecuteService,
+                       ITaskRetryService iTaskRetryService) {
         this.taskMap = ConcurrentMapCacheContainer.of(iCacheService,
                 1000L,             // 清理间隔，1s
                 new TaskCacheFactory(),         // CacheData 工厂
@@ -207,11 +210,9 @@ public class TaskService implements ITaskService {
             } catch (TaskIllegalStateException e) {
                 // 说明该任务没有执行完却过期了，任务执行时间过长，可能发生了死锁或者死循环
                 task.getExecutingFuture().cancel(true);
-                task.getFuture().completeExceptionally(e);
+                task.getFuture().completeExceptionally(new TaskExpirationException(
+                        "任务执行时间过长，可能出现了死锁或死循环，已取消任务并完成异常：" + task.getConfig().getName()));
                 task.switchState(new TaskFinishedState());
-                logger.errorWithReport(TaskService.class.getName(),
-                        "任务执行时间过长，可能出现了死锁或死循环，已取消任务并完成异常：%s"
-                                .formatted(task.getConfig().getName()), e);
                 return true;
             }
         }

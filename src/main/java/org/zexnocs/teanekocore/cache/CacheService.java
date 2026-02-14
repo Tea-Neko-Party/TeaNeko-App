@@ -4,9 +4,12 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
+import java.time.Duration;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,45 +22,49 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 public class CacheService implements ICacheService {
+    /// 清理缓存任务的命名空间
     public static final String CLEAN_CACHE_TASK_NAMESPACE = "one-bot-cache-service-clean-cache-task";
-    // private final ITimerService iTimerService;
+
+    /// 定时器服务
+    private final ITimerService iTimerService;
+
+    /// 清理缓存的时间间隔（毫秒）
     private final long cleanCacheIntervalMs;
 
     /// 缓存列表
     private final Set<ICacheContainer> cacheMap = ConcurrentHashMap.newKeySet();
 
+    /// 防止重复建造的 EmptyTaskResult 对象
+    private final EmptyTaskResult emptyTaskResult = new EmptyTaskResult();
+
     @Autowired
-    public CacheService(// ITimerService iTimerService,
-                        @Value("${tea-neko.cache.general-clean-interval-ms}") long cleanCacheIntervalMs) {
+    public CacheService(ITimerService iTimerService,
+                        @Value("${tea-neko.cache.general-clean-rate-ms}") long cleanCacheIntervalMs) {
         this.cleanCacheIntervalMs = cleanCacheIntervalMs;
-        // this.iTimerService = iTimerService;
+        this.iTimerService = iTimerService;
     }
 
     @PostConstruct
     public void init() {
-        // 注册定期清理缓存任务
-        /*
-        iTimerService.registerNonOnceAsync(
+        iTimerService.registerBySmartRate(
                 "CacheService-清理缓存任务",
                 CLEAN_CACHE_TASK_NAMESPACE,
                 this::cleanCacheTask,
-                cleanCacheIntervalMs
-        );
-
-         */
+                Duration.ofMillis(cleanCacheIntervalMs),
+                EmptyTaskResult.getResultType());
     }
 
     /**
      * 清理缓存任务。
      * 具体清理逻辑交给各个缓存对象自行处理。
-     * @return null
+     * @return emptyTaskResult
      */
-    public Void cleanCacheTask() {
+    public EmptyTaskResult cleanCacheTask() {
         long currentTimeMs = System.currentTimeMillis();
         for (ICacheContainer cache : cacheMap) {
             cache.autoClean(currentTimeMs);
         }
-        return null;
+        return emptyTaskResult;
     }
 
     /**

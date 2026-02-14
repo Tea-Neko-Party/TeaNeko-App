@@ -26,4 +26,13 @@ public class EmptyTaskResult implements ITaskResult<Void> {
     public @Nullable Void getResult() {
         return null;
     }
+
+    /**
+     * 获取结果类型，始终返回 Void.class。
+     *
+     * @return Void.class
+     */
+    public static Class<Void> getResultType() {
+        return Void.class;
+    }
 }

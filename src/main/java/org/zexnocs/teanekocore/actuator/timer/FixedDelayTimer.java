@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.actuator.timer;
 
-import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import lombok.Getter;
+import org.jspecify.annotations.NonNull;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 
@@ -32,16 +34,21 @@ public class FixedDelayTimer<T> implements ITimer<T> {
     /// 上次执行时间
     private final AtomicLong lastExecutionTime;
 
+    /// result type
+    @Getter
+    private final Class<T> resultType;
+
     /**
      * 构造函数。
      *
      * @param config 任务配置
      * @param delay 任务 delay
      */
-    public FixedDelayTimer(ITimerTaskConfig<T> config, Duration delay) {
+    public FixedDelayTimer(@NonNull ITimerTaskConfig<T> config, @NonNull Duration delay, @NonNull Class<T> resultType) {
         this.delay = delay;
         this.timerTaskConfig = config;
         this.lastExecutionTime = new AtomicLong(System.currentTimeMillis());
+        this.resultType = resultType;
     }
 
     /**
@@ -50,34 +57,8 @@ public class FixedDelayTimer<T> implements ITimer<T> {
      * @return 任务配置。
      */
     @Override
-    public ITimerTaskConfig<T> getTimerTaskConfig() {
+    public @NonNull ITimerTaskConfig<T> getTimerTaskConfig() {
         return timerTaskConfig;
-    }
-
-    /**
-     * 每次执行成功时更新定时器的状态 或者对任务的 future 链进行配置。
-     * 比如说使用 timerTaskConfig 中的 TaskFutureChain 来配置任务的 future 链。
-     *
-     * @param currentTime 当前时间戳（毫秒）。
-     * @param taskFuture  当前执行的任务的 future 对象，可以通过它来配置任务的 future 链。
-     */
-    @Override
-    public void update(long currentTime, TaskFuture<T> taskFuture) {
-        // 临时将 lastExecutionTime 设置为无穷大，防止在任务执行过程中定时器被重复触发。
-        lastExecutionTime.set(EXECUTING);
-        // 让任务更新定时器状态。
-        var future = taskFuture.whenComplete((v, t) -> {
-            // 无论任务成功与否都更新 lastExecutionTime，保证定时器能够继续执行。
-            lastExecutionTime.set(System.currentTimeMillis());
-        });
-        // 配置任务的 future 链。
-        var chain = timerTaskConfig.getTaskFutureChain();
-        if(chain != null) {
-            var finalFuture = chain.apply(future);
-            finalFuture.finish();
-        } else {
-            future.finish();
-        }
     }
 
     /**
@@ -94,5 +75,37 @@ public class FixedDelayTimer<T> implements ITimer<T> {
             return false;
         }
         return currentTime - lastTime >= delay.toMillis();
+    }
+
+    /**
+     * 每次执行成功时更新定时器的状态
+     *
+     * @param currentTime 当前时间戳（毫秒）。
+     */
+    @Override
+    public void update(long currentTime) {
+        // 临时将 lastExecutionTime 设置为无穷大，防止在任务执行过程中定时器被重复触发。
+        lastExecutionTime.set(EXECUTING);
+    }
+
+    /**
+     * 使用 iTaskService 来执行任务。
+     * 同时使用 timerTaskConfig 中的 TaskFutureChain 来配置任务的 future 链
+     *
+     * @param iTaskService 任务服务。
+     */
+    @Override
+    public void execute(ITaskService iTaskService) {
+        // 让任务更新定时器状态。
+        var future = iTaskService.subscribe(timerTaskConfig.getTaskConfig(), resultType)
+                .whenComplete((v, t) -> lastExecutionTime.set(System.currentTimeMillis()));
+        // 配置任务的 future 链。
+        var chain = timerTaskConfig.getTaskFutureChain();
+        if(chain != null) {
+            var finalFuture = chain.apply(future);
+            finalFuture.finish();
+        } else {
+            future.finish();
+        }
     }
 }

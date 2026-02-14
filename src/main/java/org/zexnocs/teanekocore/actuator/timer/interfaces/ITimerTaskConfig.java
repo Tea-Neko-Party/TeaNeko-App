@@ -1,8 +1,10 @@
 package org.zexnocs.teanekocore.actuator.timer.interfaces;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.framework.lifescycle.interfaces.ILivable;
 import org.zexnocs.teanekocore.framework.lifescycle.interfaces.IPausable;
 
@@ -25,6 +27,7 @@ public interface ITimerTaskConfig<T> {
      * 获取任务配置。
      * @return 任务配置。
      */
+    @NonNull
     ITaskConfig<T> getTaskConfig();
 
     /**
@@ -33,7 +36,7 @@ public interface ITimerTaskConfig<T> {
      * 该 Future 会自动在后面使用 finish() 函数，无需在该函数中调用。
      * @return Future 配置函数。
      */
-    Function<TaskFuture<T>, TaskFuture<?>> getTaskFutureChain();
+    Function<TaskFuture<ITaskResult<T>>, TaskFuture<?>> getTaskFutureChain();
 
     /**
      * 用于设置 Future 执行链的函数。
@@ -41,10 +44,11 @@ public interface ITimerTaskConfig<T> {
      * 该 Future 会自动在后面使用 finish() 函数，无需在该函数中调用。
      * @param taskFutureChain Future 配置函数。
      */
-    void setTaskFutureChain(Function<TaskFuture<T>, TaskFuture<?>> taskFutureChain);
+    void setTaskFutureChain(Function<TaskFuture<ITaskResult<T>>, TaskFuture<?>> taskFutureChain);
 
     /**
      * 获取计时器的生命周期。
+     * 如果为 null 则表示没有生命周期限制，也就是不会被删除。
      * @return 生命周期。
      */
     @Nullable
@@ -52,6 +56,7 @@ public interface ITimerTaskConfig<T> {
 
     /**
      * 获取暂停周期。
+     * 如果为 null 则表示没有暂停周期限制，也就是不会被暂停。
      * @return 暂停周期。
      */
     @Nullable

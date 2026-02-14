@@ -68,6 +68,8 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
         this.future = future;
         this.resultType = resultType;
         this.key = key;
+        // 第一次尝试时间应该等于 当前时间 + 执行时间
+        this.lastRetryTime = System.currentTimeMillis() + config.getDelayDuration().toMillis();
 
         // config 创建 task 增加其创建计数器
         this.config.addCounter();
@@ -96,7 +98,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
         }
 
         // 更新上次重试的时间
-        lastRetryTime = System.currentTimeMillis();
+        lastRetryTime = System.currentTimeMillis() + config.getRetryInterval().toMillis();
         return true;
     }
 

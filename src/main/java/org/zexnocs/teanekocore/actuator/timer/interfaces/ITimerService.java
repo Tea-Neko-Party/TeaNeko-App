@@ -28,16 +28,19 @@ public interface ITimerService {
      * 1. 不进行重试和错误处理
      * 2. 10min 没有返回结果会过期
      *
+     * @see org.zexnocs.teanekocore.actuator.timer.FixedRateTimer
      * @param taskName 任务名称
      * @param taskStage 任务阶段
      * @param callable 任务执行的 Callable
      * @param rate 定时器的周期
+     * @param resultType 任务结果类型
      * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerByRate(String taskName,
                                            String taskStage,
                                            Callable<ITaskResult<T>> callable,
-                                           Duration rate);
+                                           Duration rate,
+                                           Class<T> resultType);
 
     /**
      * 使用一个 delay 和一个 callable 注册一个默认规则的定时器。
@@ -48,16 +51,19 @@ public interface ITimerService {
      * 1. 不进行重试和错误处理
      * 2. 10min 没有返回结果会过期
      *
+     * @see org.zexnocs.teanekocore.actuator.timer.FixedDelayTimer
      * @param taskName 任务名称
      * @param taskStage 任务阶段
      * @param callable 任务执行的 Callable
      * @param delay 定时器的周期
+     * @param resultType 任务结果类型
      * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerByDelay(String taskName,
                                             String taskStage,
                                             Callable<ITaskResult<T>> callable,
-                                            Duration delay);
+                                            Duration delay,
+                                            Class<T> resultType);
 
     /**
      * 使用一个 rate 和一个 callable 注册一个默认规则的智能定时器。
@@ -68,14 +74,34 @@ public interface ITimerService {
      * 1. 不进行重试和错误处理
      * 2. 10min 没有返回结果会过期
      *
+     * @see org.zexnocs.teanekocore.actuator.timer.SmartRateTimer
      * @param taskName 任务名称
      * @param taskStage 任务阶段
      * @param callable 任务执行的 Callable
      * @param rate 定时器的周期
+     * @param resultType 任务结果类型
      * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
                                                 String taskStage,
                                                 Callable<ITaskResult<T>> callable,
-                                                Duration rate);
+                                                Duration rate,
+                                                Class<T> resultType);
+
+    /**
+     * 使用一个 cron 表达式和一个 callable 注册一个默认规则的定时器。
+     *
+     * @see org.zexnocs.teanekocore.actuator.timer.FixedPointTimer
+     * @param taskName 任务名称
+     * @param taskStage 任务阶段
+     * @param callable 任务执行的 Callable
+     * @param cronExpression 定时器的 cron 表达式
+     * @param resultType 任务结果类型
+     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     */
+    <T> ITimerTaskConfig<T> registerByCron(String taskName,
+                                           String taskStage,
+                                           Callable<ITaskResult<T>> callable,
+                                           String cronExpression,
+                                           Class<T> resultType);
 }
