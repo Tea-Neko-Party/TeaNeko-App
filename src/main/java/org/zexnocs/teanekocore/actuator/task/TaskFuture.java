@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.actuator.task;
 
 import lombok.Getter;
+import org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException;
+import org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.concurrent.CompletableFuture;
@@ -167,7 +169,10 @@ public class TaskFuture<T> {
      * @return 解包后的异常
      */
     public static Throwable unwrapException(Throwable t) {
-        while((t instanceof CompletionException || t instanceof ExecutionException)) {
+        while(     t instanceof CompletionException
+                || t instanceof ExecutionException
+                || t instanceof TaskNoRetryRuntimeException
+                || t instanceof TaskRetryRuntimeException) {
             if(t.getCause() == null) {
                 // 如果没有可用的异常，则直接返回当前异常
                 return t;

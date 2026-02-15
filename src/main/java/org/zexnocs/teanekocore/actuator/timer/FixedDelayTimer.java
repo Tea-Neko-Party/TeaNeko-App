@@ -44,7 +44,9 @@ public class FixedDelayTimer<T> implements ITimer<T> {
      * @param config 任务配置
      * @param delay 任务 delay
      */
-    public FixedDelayTimer(@NonNull ITimerTaskConfig<T> config, @NonNull Duration delay, @NonNull Class<T> resultType) {
+    public FixedDelayTimer(@NonNull ITimerTaskConfig<T> config,
+                           @NonNull Duration delay,
+                           @NonNull Class<T> resultType) {
         this.delay = delay;
         this.timerTaskConfig = config;
         this.lastExecutionTime = new AtomicLong(System.currentTimeMillis());
