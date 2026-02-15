@@ -1,9 +1,11 @@
+import com.sun.management.OperatingSystemMXBean
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 import org.springframework.boot.gradle.tasks.run.BootRun
+import java.lang.management.ManagementFactory
 
 // 插件
 plugins {
-    java    // 基础插件
+    java                                                    // 基础插件
     id("org.springframework.boot") version "4.0.2"          // spring boot 插件
     id("io.spring.dependency-management") version "1.1.7"   // spring 依赖管理插件
 }
@@ -35,17 +37,14 @@ repositories {
     mavenCentral()
 }
 
-// spring shell 版本
-extra["springShellVersion"] = "4.0.1"
-
 // 依赖
 dependencies {
     // framework
+    // implementation("org.springframework.boot:spring-boot-starter-data-redis")
     implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-    implementation("org.springframework.boot:spring-boot-starter-data-redis")
-    implementation("org.springframework.boot:spring-boot-starter-webflux")
-    implementation("org.springframework.shell:spring-shell-starter")
     implementation("org.springframework.boot:spring-boot-starter-websocket")
+    implementation("org.springframework.boot:spring-boot-starter-webclient")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
@@ -55,18 +54,9 @@ dependencies {
     developmentOnly("org.springframework.boot:spring-boot-devtools")
 
     // ====== test ======
+    // testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
-    testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
-    testImplementation("org.springframework.shell:spring-shell-starter-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
-
-// 依赖管理
-dependencyManagement {
-    imports {
-        mavenBom("org.springframework.shell:spring-shell-dependencies:${property("springShellVersion")}")
-    }
 }
 
 // 测试配置
@@ -114,17 +104,42 @@ tasks.register<BumpVersionTask>("bumpPatch") {
 
 tasks {
     // ========= bootRun 配置 =========
-    // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
+
     withType<BootRun> {
+        // 自动配置内存:
+        // 4G: -Xms512m -Xmx3072m
+        // 8G: -Xms1024m -Xmx6144m
+        // 16G: -Xms2048m -Xmx12,288m
+        // max: 12,288m
+        doFirst {
+            val osBean = ManagementFactory.getOperatingSystemMXBean() as? OperatingSystemMXBean
+            val totalMemMb: Long = if (osBean != null) {
+                osBean.totalMemorySize / 1024 / 1024
+            } else {
+                println("Warning: cannot detect total memory via MXBean, defaulting to 8G")
+                8192L
+            }
+
+            // 分配策略
+            val (xms, xmx) = when {
+                totalMemMb <= 2048 -> 256 to 1536
+                totalMemMb <= 4096 -> 512 to 3072
+                totalMemMb <= 8192 -> 1024 to 6144
+                totalMemMb <= 16384 -> 2048 to 12288
+                else -> 2048 to 8192
+            }
+
+            println("Detected total memory: ${totalMemMb}MB, setting JVM -Xms=${xms}m -Xmx=${xmx}m")
+
+            jvmArgs("-Xms${xms}m", "-Xmx${xmx}m")
+        }
+
+        // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
         systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
     }
 
     // ========= bootJar 配置 =========
     named<BootJar>("bootJar") {
-        doFirst {
-            println("Building JAR with Spring profile: prod")
-        }
-
         manifest {
             attributes(
                 "Implementation-Title" to project.name,
