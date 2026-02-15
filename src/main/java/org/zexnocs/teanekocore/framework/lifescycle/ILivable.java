@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.lifescycle.interfaces;
+package org.zexnocs.teanekocore.framework.lifescycle;
 
 /**
  * 生命周期接口。
@@ -9,6 +9,7 @@ package org.zexnocs.teanekocore.framework.lifescycle.interfaces;
  * @author zExNocs
  * @date 2026/02/10
  */
+@FunctionalInterface
 public interface ILivable {
     /**
      * 检测是否存活。

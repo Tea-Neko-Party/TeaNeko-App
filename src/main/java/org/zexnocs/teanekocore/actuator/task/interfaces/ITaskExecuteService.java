@@ -11,11 +11,11 @@ public interface ITaskExecuteService {
      * 将任务交给线程池执行。由 TaskService 调用。
      * @param task 任务
      */
-    void executeTask(ITask<?> task);
+    void __executeTask(ITask<?> task);
 
     /**
      * 重试任务。由 RetryTaskService 调用。
      * @param task 任务
      */
-    void executeTaskRetry(ITask<?> task);
+    void __executeTaskRetry(ITask<?> task);
 }

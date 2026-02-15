@@ -87,7 +87,7 @@ public class TaskFuture<T> {
      * @param exceptionHandler 异常处理函数，接受一个 Throwable 参数。
      * @return Future 对象
      */
-    public CompletableFuture<T> finishWithExceptionHandler(Consumer<Throwable> exceptionHandler) {
+    public CompletableFuture<T> finish(Consumer<Throwable> exceptionHandler) {
         // 判断是否已经完成，防止重复调用 finish() 方法。
         if (!finished.compareAndSet(false, true)) {
             return future;

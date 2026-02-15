@@ -5,8 +5,8 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
-import org.zexnocs.teanekocore.framework.lifescycle.interfaces.ILivable;
-import org.zexnocs.teanekocore.framework.lifescycle.interfaces.IPausable;
+import org.zexnocs.teanekocore.framework.lifescycle.ILivable;
+import org.zexnocs.teanekocore.framework.lifescycle.IPausable;
 
 import java.util.function.Function;
 

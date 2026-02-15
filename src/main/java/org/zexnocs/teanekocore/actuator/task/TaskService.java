@@ -70,7 +70,7 @@ public class TaskService implements ITaskService {
         var task = new Task<>(key, config, future, clazz);
         taskMap.put(key, task);
         // 执行任务
-        iTaskExecuteService.executeTask(task);
+        iTaskExecuteService.__executeTask(task);
         return future;
     }
 
@@ -109,7 +109,7 @@ public class TaskService implements ITaskService {
                             resultValue.getClass().getName()));
         }
         // 尝试 retry 任务，是否符合由 retry service 判断
-        if(iTaskRetryService.retryTaskWithResult(task, result)) {
+        if(iTaskRetryService.__retryTaskWithResult(task, result)) {
             // 如果 retry 成功，则返回 false
             return false;
         }
@@ -142,7 +142,7 @@ public class TaskService implements ITaskService {
             throw new TaskNotFoundException(key);
         }
         // 尝试 retry 任务，是否符合由 retry service 判断
-        if(iTaskRetryService.retryTaskWithException(task, exception)) {
+        if(iTaskRetryService.__retryTaskWithException(task, exception)) {
             // 如果 retry 成功，则返回 false
             return false;
         }
@@ -198,7 +198,7 @@ public class TaskService implements ITaskService {
             try {
                 var e = new TaskExpirationException("任务过期：" + task.getConfig().getName());
                 // 尝试使用过期异常 retry 任务，是否符合由 retry service 判断
-                if(iTaskRetryService.retryTaskWithException(task, e)) {
+                if(iTaskRetryService.__retryTaskWithException(task, e)) {
                     // 如果 retry 成功，则返回 false，暂时不进行删除
                     return false;
                 } else {

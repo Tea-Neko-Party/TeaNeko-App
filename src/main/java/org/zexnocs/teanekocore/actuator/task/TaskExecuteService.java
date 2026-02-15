@@ -51,7 +51,7 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @throws TaskIllegalStateException 如果该任务已经执行过，则不允许再次执行
      */
     @Override
-    public void executeTask(ITask<?> task) {
+    public void __executeTask(ITask<?> task) {
         logger.debug(this.getClass().getSimpleName(),
                 "尝试执行任务：%s".formatted(task.getConfig().getName()));
         // 任务处于 Created 状态才允许执行
@@ -75,7 +75,7 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @param task 任务
      */
     @Override
-    public void executeTaskRetry(ITask<?> task) {
+    public void __executeTaskRetry(ITask<?> task) {
         logger.warn(this.getClass().getSimpleName(),
                 "尝试重试任务：%s，当前重试次数：%d".formatted(task.getConfig().getName(), task.getCurrentRetryCount()));
         // 任务处于 Created 状态才允许执行

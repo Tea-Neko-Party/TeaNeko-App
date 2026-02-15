@@ -17,7 +17,8 @@ public interface ITaskRetryService {
      * @return true 表示已经成功将任务进行重试；false 表示重试失败，可能是 result 符合要求或者重试达到上限
      * @throws TaskIllegalStateException 如果任务不处于 Executed 状态，则抛出该异常
      */
-    boolean retryTaskWithResult(@NonNull ITask<?> task, @NonNull ITaskResult<?> result) throws TaskIllegalStateException;
+    boolean __retryTaskWithResult(@NonNull ITask<?> task, @NonNull ITaskResult<?> result)
+            throws TaskIllegalStateException;
 
     /**
      * 尝试以一个 异常 进行 retry
@@ -26,5 +27,6 @@ public interface ITaskRetryService {
      * @return true 表示已经成功将任务进行重试；false 表示重试失败，可能是异常符合要求或者重试达到上限
      * @throws TaskIllegalStateException 如果任务不处于 Executed 状态，则抛出该异常
      */
-    boolean retryTaskWithException(@NonNull ITask<?> task, @NonNull Throwable exception) throws TaskIllegalStateException;
+    boolean __retryTaskWithException(@NonNull ITask<?> task, @NonNull Throwable exception)
+            throws TaskIllegalStateException;
 }

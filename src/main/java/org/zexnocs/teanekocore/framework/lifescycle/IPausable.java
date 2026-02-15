@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.framework.lifescycle.interfaces;
+package org.zexnocs.teanekocore.framework.lifescycle;
 
 /**
  * 可暂停的对象。

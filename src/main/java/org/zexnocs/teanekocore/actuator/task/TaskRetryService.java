@@ -34,8 +34,8 @@ public class TaskRetryService implements ITaskRetryService {
      * @throws TaskIllegalStateException 如果任务不处于 Executed 状态，则抛出该异常
      */
     @Override
-    public boolean retryTaskWithResult(@NonNull ITask<?> task,
-                                       @NonNull ITaskResult<?> result) throws TaskIllegalStateException {
+    public boolean __retryTaskWithResult(@NonNull ITask<?> task,
+                                         @NonNull ITaskResult<?> result) throws TaskIllegalStateException {
         // 条件判断，如果 success 则不需要重试
         if(result.isSuccess()) {
             return false;
@@ -48,7 +48,7 @@ public class TaskRetryService implements ITaskRetryService {
 
         // 条件达成，尝试重试
         if(task.switchToRetryState()) {
-            iTaskExecuteService.executeTaskRetry(task);
+            iTaskExecuteService.__executeTaskRetry(task);
             return true;
         }
 
@@ -65,8 +65,8 @@ public class TaskRetryService implements ITaskRetryService {
      * @throws TaskIllegalStateException 如果任务不处于 Executed 状态，则抛出该异常
      */
     @Override
-    public boolean retryTaskWithException(@NonNull ITask<?> task,
-                                          @NonNull Throwable exception) throws TaskIllegalStateException {
+    public boolean __retryTaskWithException(@NonNull ITask<?> task,
+                                            @NonNull Throwable exception) throws TaskIllegalStateException {
         // 如果是 NoRetry 异常，则不允许重试
         if(exception instanceof TaskNoRetryRuntimeException) {
             return false;
@@ -79,7 +79,7 @@ public class TaskRetryService implements ITaskRetryService {
         }
         // 条件达成，尝试重试
         if(task.switchToRetryState()) {
-            iTaskExecuteService.executeTaskRetry(task);
+            iTaskExecuteService.__executeTaskRetry(task);
             return true;
         }
         // 达到重试上限 无法重试
