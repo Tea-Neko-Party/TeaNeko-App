@@ -8,12 +8,23 @@ import java.util.Objects;
  * first 和 second 的位置没有区别的 Pair。
  * 例如 ("a", "b") 和 ("b", "a") 的 HashCode 和 equals 都相同。
  *
- * @param <T> first 和 second 的类型。
  * @author zExNocs
  * @date 2026/02/11
  */
 @AllArgsConstructor
 public class UnorderedPair<T> implements Pair<T, T> {
+    /**
+     * 创建一个 UnorderedPair 实例。
+     *
+     * @param first  第一个元素。
+     * @param second 第二个元素。
+     * @return 一个 UnorderedPair 实例。
+     */
+    public static <T> UnorderedPair<T> of(T first, T second) {
+        return new UnorderedPair<>(first, second);
+    }
+
+    // ----------------------
     private final T first;
     private final T second;
 

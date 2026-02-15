@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.actuator.task.api.TaskStage;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.database.base.DatabaseService;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseRetryException;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -23,7 +24,7 @@ import java.sql.SQLIntegrityConstraintViolationException;
  * @author zExNocs
  * @date 2026/02/15
  */
-@TaskStage(value = {"general_database"}, priority = 50)
+@TaskStage(value = DatabaseService.TASK_STAGE_NAMESPACE, priority = 50)
 public class DatabaseRetryHandlingTaskStage implements ITaskStage {
     /// 日志
     private final ILogger logger;
