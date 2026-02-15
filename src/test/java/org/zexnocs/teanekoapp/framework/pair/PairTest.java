@@ -6,6 +6,9 @@ import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.framework.pair.UnorderedPair;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+
 /**
  * Pair 测试类，用于测试 Pair 相关的功能。
  *
@@ -25,8 +28,8 @@ public class PairTest {
     public void testHashPair() {
         var a = HashPair.of("a", "b");
         var b = HashPair.of("a", "b");
-        assert a.equals(b);
-        assert a.hashCode() == b.hashCode();
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
     }
 
     /**
@@ -46,8 +49,8 @@ public class PairTest {
         for (int i = 0; i < pairs.length; i++) {
             for (int j = 0; j < pairs.length; j++) {
                 if (i != j) {
-                    assert !pairs[i].equals(pairs[j]);
-                    assert pairs[i].hashCode() != pairs[j].hashCode();
+                    assertNotEquals(pairs[i], pairs[j]);
+                    assertNotEquals(pairs[i].hashCode(), pairs[j].hashCode());
                 }
             }
         }
@@ -62,7 +65,7 @@ public class PairTest {
     public void testUnorderedPair() {
         var a = UnorderedPair.of("a", "b");
         var b = UnorderedPair.of("b", "a");
-        assert a.equals(b);
-        assert a.hashCode() == b.hashCode();
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
     }
 }

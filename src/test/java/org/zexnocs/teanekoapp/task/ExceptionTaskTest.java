@@ -9,6 +9,8 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 
 import java.time.Duration;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
 /**
  * 异常任务测试
  *
@@ -38,6 +40,6 @@ public class ExceptionTaskTest {
 
         // 理应每 4s 执行一次， 2s 过期 + 2s 重试间隔
         var future = iTaskService.subscribe(config, Void.class);
-        future.finish().join();
+        assertThrows(RuntimeException.class, () -> future.finish().join());
     }
 }
