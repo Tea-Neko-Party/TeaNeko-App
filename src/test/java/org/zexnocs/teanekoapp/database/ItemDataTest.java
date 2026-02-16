@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -34,7 +35,7 @@ public class ItemDataTest {
     @Test
     public void testInsufficiency() {
         int initialCount = 4;
-        boolean[] flag = {false};
+        AtomicBoolean flag = new AtomicBoolean(false);
         iItemDataService.getOrCreate(owner, "test", "test", 0, null).thenComposeTask(
                         iItemData -> iItemData.getDatabaseTaskConfig("设置数量")
                                 .setCount(initialCount)
@@ -51,11 +52,13 @@ public class ItemDataTest {
                 .exceptionally(t -> {
                     var unwrapped = TaskFuture.unwrapException(t);
                     Assertions.assertInstanceOf(InsufficientItemCountException.class, unwrapped);
+                    flag.set(true);
                     return null;
                 })
                 .finish()
                 .join();
         // assert 数量没有被修改
+        Assertions.assertTrue(flag.get());
         iItemDataService.getOrCreate(owner, "test", "test", 0, null)
                 .thenAccept(iItemData -> Assertions.assertEquals(initialCount, iItemData.getCount())).finish().join();
     }
