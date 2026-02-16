@@ -26,7 +26,6 @@ public class TestConsoleFormatter {
     private final List<String> logLines;
     private final AtomicInteger stepCounter;
     private long testStartTime;
-    private String testName;
 
     private TestConsoleFormatter() {
         this.logLines = new ArrayList<>();
@@ -44,7 +43,6 @@ public class TestConsoleFormatter {
      * 开始测试
      */
     public TestConsoleFormatter startTest(String testName) {
-        this.testName = testName;
         this.testStartTime = System.currentTimeMillis();
 
         String currentTime = LocalDateTime.now().format(TIME_FORMATTER);

@@ -11,6 +11,12 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 
 import java.time.Duration;
 
+/**
+ * 任务测试
+ *
+ * @author zExNocs
+ * @date 2026/02/13
+ */
 @SpringBootTest
 public class TaskTest {
     @Autowired
