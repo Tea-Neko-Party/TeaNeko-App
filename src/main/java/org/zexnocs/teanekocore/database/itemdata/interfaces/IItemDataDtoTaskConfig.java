@@ -6,7 +6,7 @@ import tools.jackson.core.JacksonException;
 
 /**
  * 数据库任务配置接口
- * 注意，在使用 subtractCount 方法减少物品数量时，
+ * 注意，在使用 reduceCount 方法减少物品数量时，应确保传入的数量为非负数，并在需要时通过 setExceptionHandler 处理可能抛出的 InsufficientItemCountException。
  *
  * @author zExNocs
  * @date 2026/02/16

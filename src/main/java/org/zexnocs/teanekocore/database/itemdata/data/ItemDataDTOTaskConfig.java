@@ -64,7 +64,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
 
     /**
      * 减少物品数量
-     * 如果减少失败，即数量，则会抛出异常让事务回滚。
+     * 如果减少失败，即数量不足时，则会抛出异常让事务回滚。
      * 如果想要添加成功的 callback，调用后该方法后直接使用 addCacheTask() 和 addTransactionTask() 方法添加普通和数据库任务。
      * 如果想要添加失败的callback，则 setExceptionHandler 来处理 InsufficientItemCountException 异常。
      * 处理后的异常不会被 report，但依然会回滚事务。

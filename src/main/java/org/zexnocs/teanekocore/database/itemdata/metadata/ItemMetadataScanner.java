@@ -54,7 +54,7 @@ public class ItemMetadataScanner implements IScanner {
     }
 
     /**
-     * 扫描带有 ItemData 注解的类
+     * 扫描带有 ItemMetadata 注解的类
      */
     private synchronized void __scan() {
         type2Class.clear();

@@ -91,7 +91,7 @@ public interface ItemDataRepository extends JpaRepository<ItemDataObject, UUID> 
      * 安全地设置物品数量
      * @param uuid 物品 ID
      * @param newCount 新的物品数量
-     * @throws IllegalArgumentException 如果用户不存在
+     * @throws IllegalArgumentException 如果物品数据不存在
      * @throws ObjectOptimisticLockingFailureException 如果乐观锁更新失败
      */
     @Transactional

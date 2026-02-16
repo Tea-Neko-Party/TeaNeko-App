@@ -9,9 +9,9 @@ package org.zexnocs.teanekocore.framework.function;
 @FunctionalInterface
 public interface VoidCallable {
     /**
-     * Computes a result, or throws an exception if unable to do so.
+     * Performs an operation, or throws an exception if unable to do so.
      *
-     * @throws Exception if unable to compute a result
+     * @throws Exception if unable to perform the operation
      */
     void call() throws Exception;
 }
