@@ -30,14 +30,14 @@ public class ItemDataTest {
 
     /**
      * 测试减少数量不足的情况，应该抛出 InsufficientItemCountException 异常。
-     * 如果数据库回溯成功，应该数据库数据应该为 0。懒得写了。
      */
     @Test
     public void testInsufficiency() {
+        int initialCount = 4;
         boolean[] flag = {false};
         iItemDataService.getOrCreate(owner, "test", "test", 0, null).thenComposeTask(
                         iItemData -> iItemData.getDatabaseTaskConfig("设置数量")
-                                .setCount(4)
+                                .setCount(initialCount)
                                 .pushWithFuture())
                 .finish().join();
 
@@ -55,6 +55,9 @@ public class ItemDataTest {
                 })
                 .finish()
                 .join();
+        // assert 数量没有被修改
+        iItemDataService.getOrCreate(owner, "test", "test", 0, null)
+                .thenAccept(iItemData -> Assertions.assertEquals(initialCount, iItemData.getCount())).finish().join();
     }
 
     /**
