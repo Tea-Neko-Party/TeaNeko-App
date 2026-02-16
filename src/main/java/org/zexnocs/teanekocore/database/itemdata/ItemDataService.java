@@ -5,12 +5,14 @@ import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jmx.export.metadata.InvalidMetadataException;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataObject;
 import org.zexnocs.teanekocore.database.itemdata.exception.InvalidMetadataTypeException;
 import org.zexnocs.teanekocore.database.itemdata.exception.ItemDataNotFoundException;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.*;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
+import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.core.JacksonException;
 
 import java.util.Map;
@@ -31,18 +33,20 @@ public class ItemDataService implements IItemDataService {
     private final IDatabaseService databaseService;
     private final IItemDataCreateService iItemDataCreateService;
     private final IItemDataDtoService iItemDataDtoService;
+    private final ILogger logger;
 
     @Autowired
     public ItemDataService(ItemDataRepository itemDataRepository,
                            IItemDataCacheService iItemDataCacheService,
                            IDatabaseService databaseService,
                            IItemDataCreateService
-                           iItemDataCreateService, IItemDataDtoService iItemDataDtoService) {
+                           iItemDataCreateService, IItemDataDtoService iItemDataDtoService, ILogger logger) {
         this.itemDataRepository = itemDataRepository;
         this.iItemDataCacheService = iItemDataCacheService;
         this.databaseService = databaseService;
         this.iItemDataCreateService = iItemDataCreateService;
         this.iItemDataDtoService = iItemDataDtoService;
+        this.logger = logger;
     }
 
     /**
@@ -81,11 +85,11 @@ public class ItemDataService implements IItemDataService {
      */
     @SuppressWarnings("unchecked")
     @Override
-    public <T extends IItemMetadata> CompletableFuture<IItemDataDTO<T>> getOrCreate(UUID ownerId,
-                                                                                    String namespace,
-                                                                                    String type,
-                                                                                    int count,
-                                                                                    @Nullable T metadata) {
+    public <T extends IItemMetadata> TaskFuture<IItemDataDTO<T>> getOrCreate(UUID ownerId,
+                                                                             String namespace,
+                                                                             String type,
+                                                                             int count,
+                                                                             @Nullable T metadata) {
         String className;
         if(metadata == null) {
             className = "null";
@@ -93,7 +97,8 @@ public class ItemDataService implements IItemDataService {
             className = metadata.getClass().getName();
         }
 
-        var future = new CompletableFuture<IItemDataDTO<T>>();
+        var future = new TaskFuture<IItemDataDTO<T>>(logger, "创建或获取物品 (ownerId: %s, namespace: %s, type: %s)"
+                .formatted(ownerId, namespace, type), new CompletableFuture<>());
         // 先从已有的缓存或数据库中获取
         var cache = getByOwnerNamespaceType(ownerId, namespace, type);
         if(cache != null) {

@@ -8,6 +8,20 @@ import tools.jackson.core.JacksonException;
  * 数据库任务配置接口
  * 注意，在使用 reduceCount 方法减少物品数量时，应确保传入的数量为非负数。
  * 在需要时通过 pushWithFuture 来获取 Future 对象，并在 Future 中捕获异常 InsufficientItemCountException。
+ * 例子：
+ * iItemDataService.getOrCreate(owner, "test", "test", 0, null)
+ *         .thenComposeTask(iItemData ->
+ *               iItemData.getDatabaseTaskConfig("test: reduce count")
+ *               .reduceCount(20)
+ *               .pushWithFuture())
+ *       .exceptionally(t -> {
+ *           var unwrapped = TaskFuture.unwrapException(t);
+ *           if (unwrapped instanceof InsufficientItemCountException) {
+ *              // do something...
+ *           }
+ *           return null;
+ *       })
+ *       .finish();
  *
  * @author zExNocs
  * @date 2026/02/16
@@ -24,7 +38,7 @@ public interface IItemDataDtoTaskConfig<T extends IItemMetadata> extends IDataba
     /**
      * 减少物品数量
      * 此外会在数据库线程中二次验证物品数量是否足够，如果不足够会在 Future 中抛出 InsufficientItemCountException 异常。
-     * 如果要处理该异常，请使用 pushWithFuture 来获取 Future 对象，并在 Future 中捕获该异常。
+     * 如果要处理该异常，请使用 pushWithFuture 来获取 Future 对象，并在 Future 中捕获该异常 (需要 TaskFuture.unwrap() 来解包)
      * @param amount 减少的数量
      * @return 当前任务配置对象
      * @throws IllegalArgumentException 如果减少的数量为负数

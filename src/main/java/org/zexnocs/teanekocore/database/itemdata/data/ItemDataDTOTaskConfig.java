@@ -82,7 +82,8 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
 
         // 数据库写入
         addTransactionTask(() -> {
-            if(itemDataRepository.decrementItemCount(itemDataDTO.getUuid(), amount) <= 0) {
+            var number = itemDataRepository.decrementItemCount(itemDataDTO.getUuid(), amount);
+            if(number <= 0) {
                 throw new InsufficientItemCountException(String.format("""
                         数量不足，当前数量：%d，尝试减少数量：%d""",
                         itemDataDTO.getCount(), amount));

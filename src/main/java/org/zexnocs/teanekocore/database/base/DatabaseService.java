@@ -52,6 +52,7 @@ public class DatabaseService implements IDatabaseService {
                                @NonNull VoidCallable transactionCallback,
                                @Nullable VoidCallable cacheCallback) {
         var config = new DatabaseTaskConfig(this, taskName);
+        config.addTransactionTask(transactionCallback);
         if(cacheCallback != null) {
             config.addCacheTask(cacheCallback);
         }
@@ -80,7 +81,7 @@ public class DatabaseService implements IDatabaseService {
      * @param tasks 事务任务
      */
     @Override
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public void __executeTaskWithTransaction(Collection<VoidCallable> tasks) throws Exception {
         for (var task : tasks) {
             task.call();

@@ -6,7 +6,7 @@ package org.zexnocs.teanekocore.database.itemdata.exception;
  * @author zExNocs
  * @date 2026/02/16
  */
-public class InsufficientItemCountException extends Exception {
+public class InsufficientItemCountException extends RuntimeException {
     /**
      * 构造函数。
      * @param message 异常消息。

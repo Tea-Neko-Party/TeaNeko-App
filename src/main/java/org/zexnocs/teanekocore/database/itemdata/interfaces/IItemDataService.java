@@ -2,13 +2,13 @@ package org.zexnocs.teanekocore.database.itemdata.interfaces;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.itemdata.exception.InvalidMetadataTypeException;
 import org.zexnocs.teanekocore.database.itemdata.exception.ItemDataNotFoundException;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * 物品数据服务接口，提供获取和创建物品数据传输对象的方法。
@@ -36,10 +36,13 @@ public interface IItemDataService {
      * @param type 物品类型
      * @param count 初始数量
      * @param metadata 物品元数据
-     * @return 新创建的物品数据传输对象
      * @param <T> 物品元数据类型
+     * @return 新创建的物品数据传输对象的 Future：
+     *      1. 如果要减少数量，请使用 .thenComposeTask 来链式调用 .reduceCount()，并 return .pushWithFuture() 来提交更改。
+     *      2. 抛出的异常会被 Future 捕获并传递到 exceptionally 块中，请在 exceptionally 块中使用 TaskFuture.unwrapException 来获取原始异常。
+     *      3. 请结尾使用 .finish() 来记录异常。
      */
-    <T extends IItemMetadata> CompletableFuture<IItemDataDTO<T>> getOrCreate(
+    <T extends IItemMetadata> TaskFuture<IItemDataDTO<T>> getOrCreate(
             UUID ownerId,
             String namespace,
             String type,

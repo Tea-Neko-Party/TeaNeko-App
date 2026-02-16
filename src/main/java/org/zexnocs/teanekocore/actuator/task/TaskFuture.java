@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException;
@@ -27,7 +28,7 @@ public class TaskFuture<T> {
     private final SharedState state;
 
     /// Future 对象
-    @Getter
+    @Getter(AccessLevel.PACKAGE)
     private final CompletableFuture<T> future;
 
     /// 标记 Future 是否已经完成，防止重复调用 finish() 方法。
@@ -37,7 +38,7 @@ public class TaskFuture<T> {
      * 构造函数，用于初始化 Future 对象。
      * 是 root Future
      */
-    protected TaskFuture(ILogger logger, String taskName, CompletableFuture<T> future) {
+    public TaskFuture(ILogger logger, String taskName, CompletableFuture<T> future) {
         this.future = future;
         this.state = new SharedState(logger, taskName);
     }
@@ -119,7 +120,7 @@ public class TaskFuture<T> {
      * @param result Task 的执行结果
      * @return 是否成功提交结果，若 Task 已经完成或以异常结束，则返回 false
      */
-    boolean complete(T result) {
+    public boolean complete(T result) {
         return future.complete(result);
     }
 
@@ -128,7 +129,7 @@ public class TaskFuture<T> {
      * @param ex 结束 Task 的异常
      * @return 是否成功以异常结束 Task 的执行，若 Task 已经完成或以异常结束，则返回 false
      */
-    boolean completeExceptionally(Throwable ex) {
+    public boolean completeExceptionally(Throwable ex) {
         return future.completeExceptionally(ex);
     }
 
@@ -140,6 +141,11 @@ public class TaskFuture<T> {
     /// 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
     public <U> TaskFuture<U> thenCompose(Function<? super T, ? extends CompletableFuture<U>> fn) {
         return new TaskFuture<>(future.thenCompose(fn), state);
+    }
+
+    /// 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    public <U> TaskFuture<U> thenComposeTask(Function<? super T, ? extends TaskFuture<U>> fn) {
+        return new TaskFuture<>(future.thenCompose(t -> fn.apply(t).getFuture()), state);
     }
 
     /// 包装的 thenAccept 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
