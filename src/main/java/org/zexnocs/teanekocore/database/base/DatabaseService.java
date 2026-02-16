@@ -45,17 +45,16 @@ public class DatabaseService implements IDatabaseService {
      * @param taskName            任务名称。
      * @param transactionCallback 事务回调，必须提供。
      * @param cacheCallback       缓存回调，可选提供。
-     * @return 数据库任务的 Future 对象，可用于获取任务执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      */
     @Override
-    public TaskFuture<ITaskResult<Void>> pushQuickTask(String taskName,
-                                                       @NonNull Runnable transactionCallback,
-                                                       @Nullable Runnable cacheCallback) {
+    public void pushQuickTask(String taskName,
+                               @NonNull Runnable transactionCallback,
+                               @Nullable Runnable cacheCallback) {
         var config = new DatabaseTaskConfig(this, taskName);
         if(cacheCallback != null) {
             config.addCacheTask(cacheCallback);
         }
-        return config.push();
+        config.push();
     }
 
     /**

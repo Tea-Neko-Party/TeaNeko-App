@@ -26,11 +26,10 @@ public interface IDatabaseService {
      * @param taskName            任务名称。
      * @param transactionCallback 事务回调，必须提供。
      * @param cacheCallback       缓存回调，可选提供。
-     * @return 数据库任务的 Future 对象，可用于获取任务执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      */
-    TaskFuture<ITaskResult<Void>> pushQuickTask(String taskName,
-                                                @NonNull Runnable transactionCallback,
-                                                @Nullable Runnable cacheCallback);
+    void pushQuickTask(String taskName,
+                        @NonNull Runnable transactionCallback,
+                        @Nullable Runnable cacheCallback);
 
     /**
      * 直接执行数据库任务。

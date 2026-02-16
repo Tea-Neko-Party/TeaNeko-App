@@ -25,31 +25,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @date 2026/02/15
  */
 public class DatabaseTaskConfig implements IDatabaseTaskConfig {
-    /**
-     * 任务名称
-     */
+    /// 任务名称
     @Getter
     private final String name;
 
-    /**
-     * 数据库服务。
-     */
+    /// 数据库服务。
     private final IDatabaseService databaseService;
 
-    /**
-     * 是否已经提交任务。
-     * 以防止任务提交给服务后再次更改该任务的状态。
-     */
+    /// 是否已经提交任务。以防止任务提交给服务后再次更改该任务的状态。
     private final AtomicBoolean isPushed = new AtomicBoolean(false);
 
-    /**
-     * 事务任务队列。
-     */
+    /// 事务任务队列。
     private final Queue<Runnable> transactionQueue = new ConcurrentLinkedQueue<>();
 
-    /**
-     * 缓存任务队列。
-     */
+    /// 缓存任务队列。
     private final Queue<Runnable> cacheQueue = new ConcurrentLinkedQueue<>();
 
     /**
@@ -67,11 +56,28 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * 将任务推送给任务服务队列。
      * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
      *
-     * @return 数据库任务的 Future 对象，用于获取任务执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public TaskFuture<ITaskResult<Void>> push() throws DatabaseTaskRepeatedSubmissionException {
+    public void push() throws DatabaseTaskRepeatedSubmissionException {
+        // 如果已经提交则抛出冲突提交异常
+        if (isPushed.getAndSet(true)) {
+            throw new DatabaseTaskRepeatedSubmissionException("""
+                    数据库任务 {%s} 已经提交，但是尝试再次提交。""".formatted(name));
+        }
+        databaseService.__pushTask(this).finish();
+    }
+
+    /**
+     * 将任务推送给任务服务队列。
+     * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
+     * 此外，会获取 TaskFuture 对象来获取执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
+     *
+     * @return {@link TaskFuture }<{@link ITaskResult }<{@link Void }>> 任务执行结果的 future 对象。
+     * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
+     */
+    @Override
+    public TaskFuture<ITaskResult<Void>> pushWithFuture() throws DatabaseTaskRepeatedSubmissionException {
         // 如果已经提交则抛出冲突提交异常
         if (isPushed.getAndSet(true)) {
             throw new DatabaseTaskRepeatedSubmissionException("""

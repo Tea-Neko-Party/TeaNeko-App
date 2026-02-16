@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.database.configdata.interfaces;
 
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
+import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigManagerNamespaceMismatchException;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 
@@ -47,7 +48,7 @@ public interface IConfigDataQueryService<T> {
      * @throws IllegalAccessException 如果配置类的字段无法访问。
      */
     String queryOneConfigManagerDetailInObject(ConfigManager configManager, String key)
-            throws IllegalAccessException, ConfigManagerNamespaceMismatchException;
+            throws IllegalAccessException, ConfigManagerNamespaceMismatchException, ConfigDataNotFoundException;
 
     /**
      * 查看指定对象开启的单个规则的具体配置。
@@ -58,7 +59,7 @@ public interface IConfigDataQueryService<T> {
      * @throws ConfigManagerNamespaceMismatchException 如果配置管理器的命名空间与查询服务不匹配。
      */
     default String queryOneConfigManagerDetailInObject(ConfigManager configManager, IConfigKey key)
-            throws IllegalAccessException, ConfigManagerNamespaceMismatchException {
+            throws IllegalAccessException, ConfigManagerNamespaceMismatchException, ConfigDataNotFoundException {
         return queryOneConfigManagerDetailInObject(configManager, key.getKey());
     }
 
@@ -71,7 +72,7 @@ public interface IConfigDataQueryService<T> {
      * @throws ConfigManagerNamespaceMismatchException 如果配置管理器的命名空间与查询服务不匹配。
      */
     default String queryOneConfigManagerDetailInObject(ConfigManager configManager, T t)
-            throws IllegalAccessException, ConfigManagerNamespaceMismatchException {
+            throws IllegalAccessException, ConfigManagerNamespaceMismatchException, ConfigDataNotFoundException {
         return queryOneConfigManagerDetailInObject(configManager, getConfigKey(t));
     }
 

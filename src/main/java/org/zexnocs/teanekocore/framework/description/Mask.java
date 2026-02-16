@@ -16,8 +16,8 @@ import java.lang.annotation.Target;
 @Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})
 public @interface Mask {
     /**
-    * 掩码符，默认为 "*"
+    * 掩码符，默认为 "*************"
     * @return 掩码符
     */
-    String value() default "*";
+    String value() default "*************";
 }

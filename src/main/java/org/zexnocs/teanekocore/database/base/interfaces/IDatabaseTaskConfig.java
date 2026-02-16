@@ -26,10 +26,19 @@ public interface IDatabaseTaskConfig {
      * 将任务推送给任务服务队列。
      * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
      *
-     * @return 数据库任务的 Future 对象，用于获取任务执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    TaskFuture<ITaskResult<Void>> push() throws DatabaseTaskRepeatedSubmissionException;
+    void push() throws DatabaseTaskRepeatedSubmissionException;
+
+    /**
+     * 将任务推送给任务服务队列。
+     * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
+     * 此外，会获取 TaskFuture 对象来获取执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
+     *
+     * @return {@link TaskFuture }<{@link ITaskResult }<{@link Void }>> 任务结果的 future 对象
+     * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
+     */
+    TaskFuture<ITaskResult<Void>> pushWithFuture() throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 添加数据库事务任务。
