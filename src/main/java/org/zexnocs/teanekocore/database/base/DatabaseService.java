@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
+import org.zexnocs.teanekocore.framework.function.VoidCallable;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Collection;
@@ -48,8 +49,8 @@ public class DatabaseService implements IDatabaseService {
      */
     @Override
     public void pushQuickTask(String taskName,
-                               @NonNull Runnable transactionCallback,
-                               @Nullable Runnable cacheCallback) {
+                               @NonNull VoidCallable transactionCallback,
+                               @Nullable VoidCallable cacheCallback) {
         var config = new DatabaseTaskConfig(this, taskName);
         if(cacheCallback != null) {
             config.addCacheTask(cacheCallback);
@@ -80,9 +81,9 @@ public class DatabaseService implements IDatabaseService {
      */
     @Override
     @Transactional
-    public void __executeTaskWithTransaction(Collection<Runnable> tasks) {
+    public void __executeTaskWithTransaction(Collection<VoidCallable> tasks) throws Exception {
         for (var task : tasks) {
-            task.run();
+            task.call();
         }
     }
 
@@ -92,9 +93,9 @@ public class DatabaseService implements IDatabaseService {
      * @param tasks 缓存任务
      */
     @Override
-    public void __executeTaskWithCache(Collection<Runnable> tasks) {
+    public void __executeTaskWithCache(Collection<VoidCallable> tasks) throws Exception {
         for (var task : tasks) {
-            task.run();
+            task.call();
         }
     }
 

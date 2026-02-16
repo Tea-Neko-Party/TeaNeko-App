@@ -5,6 +5,7 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseTaskRepeatedSubmissionException;
+import org.zexnocs.teanekocore.framework.function.VoidCallable;
 
 import java.util.Collection;
 
@@ -46,7 +47,7 @@ public interface IDatabaseTaskConfig {
      * @param task 任务
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    void addTransactionTask(@NonNull Runnable task) throws DatabaseTaskRepeatedSubmissionException;
+    void addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 添加缓存任务。
@@ -54,7 +55,7 @@ public interface IDatabaseTaskConfig {
      * @param task 缓存任务
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    void addCacheTask(@NonNull Runnable task) throws DatabaseTaskRepeatedSubmissionException;
+    void addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 合并任务。
@@ -80,14 +81,14 @@ public interface IDatabaseTaskConfig {
      *
      * @return 事务任务集合
      */
-    Collection<Runnable> __getTasksWithTransaction();
+    Collection<VoidCallable> __getTasksWithTransaction();
 
     /**
      * 获取缓存任务集合。
      *
      * @return 缓存任务集合
      */
-    Collection<Runnable> __getTasksWithCache();
+    Collection<VoidCallable> __getTasksWithCache();
 
     /**
      * 获取 TaskConfig。

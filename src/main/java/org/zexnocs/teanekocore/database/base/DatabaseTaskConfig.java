@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseTaskRepeatedSubmissionException;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
+import org.zexnocs.teanekocore.framework.function.VoidCallable;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -36,10 +37,10 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
     private final AtomicBoolean isPushed = new AtomicBoolean(false);
 
     /// 事务任务队列。
-    private final Queue<Runnable> transactionQueue = new ConcurrentLinkedQueue<>();
+    private final Queue<VoidCallable> transactionQueue = new ConcurrentLinkedQueue<>();
 
     /// 缓存任务队列。
-    private final Queue<Runnable> cacheQueue = new ConcurrentLinkedQueue<>();
+    private final Queue<VoidCallable> cacheQueue = new ConcurrentLinkedQueue<>();
 
     /**
      * 使用默认的任务阶段链创建数据库任务配置。
@@ -93,7 +94,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public void addTransactionTask(@NonNull Runnable task) throws DatabaseTaskRepeatedSubmissionException {
+    public void addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -111,7 +112,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public void addCacheTask(@NonNull Runnable task) throws DatabaseTaskRepeatedSubmissionException {
+    public void addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -166,7 +167,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @return 事务任务集合
      */
     @Override
-    public Collection<Runnable> __getTasksWithTransaction() {
+    public Collection<VoidCallable> __getTasksWithTransaction() {
         return transactionQueue;
     }
 
@@ -176,7 +177,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @return 缓存任务集合
      */
     @Override
-    public Collection<Runnable> __getTasksWithCache() {
+    public Collection<VoidCallable> __getTasksWithCache() {
         return cacheQueue;
     }
 
