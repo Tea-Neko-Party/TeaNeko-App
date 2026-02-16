@@ -6,6 +6,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.lang.annotation.Annotation;
 import java.util.HashMap;
@@ -21,10 +22,12 @@ import java.util.Map;
 public class BeanScanner implements IBeanScanner {
     /// Spring 的 ApplicationContext 对象，用于获取所有的 Bean。
     private final ApplicationContext applicationContext;
+    private final ILogger logger;
 
     @Autowired
-    public BeanScanner(ApplicationContext applicationContext) {
+    public BeanScanner(ApplicationContext applicationContext, ILogger logger) {
         this.applicationContext = applicationContext;
+        this.logger = logger;
     }
 
     /**
@@ -53,8 +56,23 @@ public class BeanScanner implements IBeanScanner {
      * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为 Bean 的实例
      */
     @Override
-    public Map<String, Object> getBeansWithAnnotation(Class<? extends Annotation> annotationType) {
-        return applicationContext.getBeansWithAnnotation(annotationType);
+    public <A extends Annotation> Map<String, Pair<A, Object>> getBeansWithAnnotation(Class<A> annotationType) {
+        var map = applicationContext.getBeansWithAnnotation(annotationType);
+        var result = new HashMap<String, Pair<A, Object>>();
+        for(var entry: map.entrySet()) {
+            var bean = entry.getValue();
+            var clazz = getBeanClass(bean);
+            var annotation = clazz.getAnnotation(annotationType);
+            if (annotation == null) {
+                // 无法获得注解实例，报告错误并跳过
+                logger.errorWithReport(this.getClass().getSimpleName(), """
+                        Bean %s 带有注解 %s 但因为未知原因无法获取注解实例，可能是由于 Spring AOP 代理导致的 Class 对象不准确问题。"""
+                        .formatted(clazz.getName(), annotationType.getName()));
+                continue;
+            }
+            result.put(entry.getKey(), IndependentPair.of(annotation, bean));
+        }
+        return result;
     }
 
     /**

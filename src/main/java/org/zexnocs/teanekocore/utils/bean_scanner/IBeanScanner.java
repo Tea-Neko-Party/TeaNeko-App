@@ -29,9 +29,9 @@ public interface IBeanScanner {
     /**
      * 获取所有带有指定注解的 Bean
      * @param annotationType 需要扫描的注解类型
-     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为 Bean 的实例
+     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为一个 Pair 对象，包含注解实例和 Bean 实例
      */
-    Map<String, Object> getBeansWithAnnotation(Class<? extends Annotation> annotationType);
+    <A extends Annotation> Map<String, Pair<A, Object>> getBeansWithAnnotation(Class<A> annotationType);
 
     /**
      * 获取所有带有指定注解的 Bean，并且要求带有该注解的 Bean 都实现了指定接口
