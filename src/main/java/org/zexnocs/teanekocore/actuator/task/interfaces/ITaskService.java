@@ -54,21 +54,25 @@ public interface ITaskService {
      * 默认：
      * 1. 不重试
      * 2. 过期时间 10 分钟
-     * @param key 任务的唯一标识符
-     * @param name 任务名称
-     * @param callable 任务
-     * @param clazz 任务结果的类型
+     *
+     * @param key       任务的唯一标识符
+     * @param name      任务名称
+     * @param taskStage 任务阶段命名空间
+     * @param callable  任务
+     * @param clazz     任务结果的类型
      * @param <T> 任务结果的类型
      * @return TaskFuture，用于获取任务结果；TaskFuture 务必调用 .finish() 函数来保证处理异常。
-     * @throws TaskDuplicateKeyException 如果指定的 key 已经被使用
+     * @throws TaskDuplicateKeyException 任务重复键异常。当尝试注册一个已经存在的任务键时抛出。
      */
     default <T> TaskFuture<ITaskResult<T>> subscribe(
             UUID key,
             String name,
+            String taskStage,
             Callable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         var config = TaskConfig.<T>builder()
                 .name(name)
+                .taskStageNamespace(taskStage)
                 .callable(callable)
                 .build();
         return subscribe(key, config, clazz);
@@ -88,9 +92,10 @@ public interface ITaskService {
      */
     default <T> TaskFuture<ITaskResult<T>> subscribe(
             String name,
+            String taskStage,
             Callable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
-        return subscribe(UUID.randomUUID(), name, callable, clazz);
+        return subscribe(UUID.randomUUID(), name, taskStage, callable, clazz);
     }
 
     // -------------- 提交任务结果 --------------

@@ -9,7 +9,9 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
  * @author zExNocs
  * @date 2026/02/10
  */
-public class EmptyTaskResult implements ITaskResult<Void> {
+public enum EmptyTaskResult implements ITaskResult<Void> {
+    INSTANCE;
+
     /**
      * @return 始终返回 true，表示任务成功完成。
      */

@@ -34,9 +34,6 @@ public class CacheService implements ICacheService {
     /// 缓存列表
     private final Set<ICacheContainer> cacheMap = ConcurrentHashMap.newKeySet();
 
-    /// 防止重复建造的 EmptyTaskResult 对象
-    private final EmptyTaskResult emptyTaskResult = new EmptyTaskResult();
-
     @Autowired
     public CacheService(ITimerService iTimerService,
                         @Value("${tea-neko.cache.general-clean-rate-ms}") long cleanCacheIntervalMs) {
@@ -64,7 +61,7 @@ public class CacheService implements ICacheService {
         for (ICacheContainer cache : cacheMap) {
             cache.autoClean(currentTimeMs);
         }
-        return emptyTaskResult;
+        return EmptyTaskResult.INSTANCE;
     }
 
     /**

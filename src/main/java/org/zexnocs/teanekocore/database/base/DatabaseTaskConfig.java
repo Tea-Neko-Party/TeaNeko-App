@@ -199,7 +199,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
                     databaseService.__executeTaskWithTransaction(transactionQueue);
                     // 如果事务没有抛出异常，则执行 Cache 任务。
                     databaseService.__executeTaskWithCache(cacheQueue);
-                    return new EmptyTaskResult();
+                    return EmptyTaskResult.INSTANCE;
                 })
                 .build();
     }
