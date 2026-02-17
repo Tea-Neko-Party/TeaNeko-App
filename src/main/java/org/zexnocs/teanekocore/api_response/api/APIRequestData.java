@@ -6,7 +6,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * api 请求数据的配置注解
+ * API 请求数据的配置注解
  * 指定运行时所需的请求数据
  *
  * @author zExNocs
