@@ -7,6 +7,12 @@ import org.zexnocs.teanekocore.api_response.exception.APIURLErrorException;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * API 响应服务接口
+ *
+ * @author zExNocs
+ * @date 2026/02/17
+ */
 public interface IAPIResponseService {
     /**
      * 默认使用缓存添加一个 API 请求任务

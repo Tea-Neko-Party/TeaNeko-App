@@ -30,6 +30,13 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * APIResponseService 是一个用于处理 API 请求和响应的服务类。
+ * 它使用 Spring WebClient 来发送 HTTP 请求，并使用 Reactor 来处理异步响应。
+ *
+ * @author zExNocs
+ * @date 2026/02/17
+ */
 @Service
 public class APIResponseService implements IAPIResponseService {
     /// webClient 缓存 url -> webClient 实例
