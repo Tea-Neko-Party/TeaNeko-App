@@ -37,6 +37,29 @@ public abstract class AbstractEvent<T> implements IEvent<T> {
     }
 
     /**
+     * 在通知处理器之前调用的方法。
+     * 默认没有任何操作。
+     */
+    @Override
+    public void _beforeNotify() {}
+
+    /**
+     * 在通知处理器之后调用的方法。
+     * 默认没有任何操作。
+     */
+    @Override
+    public void _afterNotify() {}
+
+    /**
+     * 默认没有下一个事件。
+     * @return 下一个事件。
+     */
+    @Override
+    public IEvent<?> _getNextEvent() {
+        return null;
+    }
+
+    /**
      * 事件是否被取消。
      * @return 是否被取消
      */

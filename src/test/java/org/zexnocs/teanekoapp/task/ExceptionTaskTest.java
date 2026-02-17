@@ -22,6 +22,10 @@ public class ExceptionTaskTest {
     @Autowired
     private ITaskService iTaskService;
 
+    /**
+     * 测试任务执行过程中抛出异常的情况。任务配置为：立即执行，最多重试 3 次，每次重试间隔 2 秒，过期时间为 2 秒。
+     *
+     */
     @Test
     void task_exception() {
         var currentTime = System.currentTimeMillis();

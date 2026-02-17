@@ -55,12 +55,12 @@ public interface IEvent<T> {
     /**
      * 在通知处理器之前调用的方法。
      */
-    default void _beforeNotify() {}
+    void _beforeNotify();
 
     /**
      * 在通知处理器之后调用的方法。
      */
-    default void _afterNotify() {}
+    void _afterNotify();
 
     /**
      * 获取要在同一线程中推动的下一个事件。
@@ -68,7 +68,5 @@ public interface IEvent<T> {
      * @return 下一个事件。
      */
     @Nullable
-    default IEvent<?> _getNextEvent() {
-        return null;
-    }
+    IEvent<?> _getNextEvent();
 }
