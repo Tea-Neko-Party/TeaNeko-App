@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.app_config;
+package org.zexnocs.teanekocore._app_config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;

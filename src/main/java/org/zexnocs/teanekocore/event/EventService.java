@@ -1,24 +1,20 @@
 package org.zexnocs.teanekocore.event;
 
-import jakarta.annotation.PostConstruct;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
-import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.event.core.Event;
 import org.zexnocs.teanekocore.event.core.EventHandlerScanner;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
-import java.time.Duration;
 import java.util.Optional;
-import java.util.Queue;
-import java.util.concurrent.ConcurrentLinkedQueue;
-
 
 /**
  * 事件服务，负责处理事件的推送和分发。
@@ -31,90 +27,58 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class EventService implements IEventService {
     /// 处理的最大迭代次数
     private static final int MAX_ITERATION = 10;
-    /// 事件打包服务的任务阶段命名空间
-    public static final String EVENT_SERVICE_PATCH_NAMESPACE = "event-service-patch";
     /// 事件处理服务的基本命名空间
     public static final String EVENT_PROCESS_DEFAULT_NAMESPACE = "event-process-default";
     /// 监听器处理服务的基本命名空间
     public static final String EVENT_LISTENER_DEFAULT_NAMESPACE = "event-listener-default";
-    private final ITaskService iTaskService;
 
-    @Value("${tea-neko.event.patch-rate-ms}")
-    private long patchInterval;
+    /// 任务服务
+    private final ITaskService iTaskService;
 
     /// 日志记录器
     private final ILogger logger;
 
-    /// 定时器服务
-    private final ITimerService timerService;
-
     /// 事件处理器扫描器
     private final EventHandlerScanner eventHandlerScanner;
-
-    /// 待打包的事件队列
-    private final Queue<IEvent<?>> eventQueue = new ConcurrentLinkedQueue<>();
 
     @Lazy
     @Autowired
     public EventService(ILogger logger,
-                        ITimerService timerService,
-                        EventHandlerScanner eventHandlerScanner, ITaskService iTaskService) {
+                        EventHandlerScanner eventHandlerScanner,
+                        ITaskService iTaskService) {
         this.logger = logger;
-        this.timerService = timerService;
         this.eventHandlerScanner = eventHandlerScanner;
         this.iTaskService = iTaskService;
     }
 
     /**
-     * 初始化事件服务，注册定时任务来处理事件队列。
-     *
-     */
-    @PostConstruct
-    public void init() {
-        timerService.registerByRate(
-                "EventService-分发事件",
-                EVENT_SERVICE_PATCH_NAMESPACE,
-                this::_patchEventQueue,
-                Duration.ofMillis(patchInterval),
-                EmptyTaskResult.getResultType());
-    }
-
-    /**
-     * 推送事件到事件队列。
+     * 推送事件并获取一个 TaskFuture 对象，可以通过该对象获取事件异常或者等待事件处理完成。
      * @param event 事件
+     * @return TaskFuture 对象，可以通过该对象获取事件异常或者等待事件处理完成。务必在事件处理完使用 .finish() 方法报告未处理的异常。
      */
     @Override
-    public void pushEvent(IEvent<?> event) {
-        if (event == null) {
-            return;
-        }
-        eventQueue.add(event);
-    }
-
-    /**
-     * 处理事件队列。
-     */
-    private EmptyTaskResult _patchEventQueue() {
-        // 处理事件队列
-        while(true) {
-            var event = eventQueue.poll();
-            if (event == null) {
-                break;
-            }
-            String eventProcessNamespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
-                    .map(Event::namespace)
-                    .filter(s -> !s.isEmpty())
-                    .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
-            iTaskService.subscribe(
+    public TaskFuture<ITaskResult<Void>> pushEventWithFuture(@NonNull IEvent<?> event) {
+        String eventProcessNamespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
+                .map(Event::namespace)
+                .filter(s -> !s.isEmpty())
+                .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
+        return iTaskService.subscribe(
                     "事件{" + event.getClass().getName() + "}的处理",
                     eventProcessNamespace,
                     () -> {
                         _processEvent(event);
                         return EmptyTaskResult.INSTANCE;
                     },
-                    EmptyTaskResult.getResultType()).finish();
-        }
-        return EmptyTaskResult.INSTANCE;
+                    EmptyTaskResult.getResultType());
+    }
+
+    /**
+     * 推送事件
+     * @param event 事件
+     */
+    @Override
+    public void pushEvent(@NonNull IEvent<?> event) {
+        pushEventWithFuture(event).finish();
     }
 
     /**

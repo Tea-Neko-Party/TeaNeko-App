@@ -13,7 +13,6 @@ public interface IEvent<T> {
      * 获取事件数据。
      * @return 事件数据
      */
-    @Nullable
     T getData();
 
     /**

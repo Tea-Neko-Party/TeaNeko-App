@@ -9,9 +9,7 @@ import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
 
 import java.lang.reflect.Method;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -61,9 +59,10 @@ public class EventHandlerScanner implements IScanner {
     /**
      * 扫描事件处理器。
      */
+    @SuppressWarnings("rawtypes")
     private synchronized void __scan() {
-        // 清理事件处理器
-        eventHandlerMap.clear();
+        // 先用 set 存储事件处理器，避免重复添加
+        var eventHandlerSetByType = new HashMap<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>>();
 
         // 扫描所有的 IListener 接口
         var beanPairs = iBeanScanner.getBeansWithAnnotation(EventListener.class);
@@ -78,9 +77,35 @@ public class EventHandlerScanner implements IScanner {
                     continue;
                 }
                 // 注册事件处理器
-                registerEventHandler(bean, method, methodAnnotation);
+                _registerEventHandler(bean, method, methodAnnotation, eventHandlerSetByType);
             }
         }
+        // 处理继承问题，子类获得所有父类的事件处理器
+        for (var entry : eventHandlerSetByType.entrySet()) {
+            var type = entry.getKey();
+            // 获取所有父类的事件处理器
+            var superclass = type.getSuperclass();
+            while (superclass != null &&
+                    IEvent.class.isAssignableFrom(superclass) &&
+                    !superclass.equals(IEvent.class)) {
+                var parent = superclass.asSubclass(IEvent.class);
+                // 获取父类的事件处理器，并添加到子类的事件处理器列表中
+                var parentHandlers = eventHandlerSetByType.getOrDefault(parent, Collections.emptySet());
+                entry.getValue().addAll(parentHandlers);
+                // 处理下一个父类
+                superclass = superclass.getSuperclass();
+            }
+        }
+
+        // 转化成 eventHandlerMap
+        eventHandlerMap.clear();
+        for (var entry : eventHandlerSetByType.entrySet()) {
+            var eventType = entry.getKey();
+            var handlerSet = entry.getValue();
+            var handlerList = new CopyOnWriteArrayList<>(handlerSet);
+            eventHandlerMap.put(eventType, handlerList);
+        }
+
         // 排序事件处理器
         for (var list : eventHandlerMap.values()) {
             list.sort(EventHandlerPatch::compareTo);
@@ -89,10 +114,17 @@ public class EventHandlerScanner implements IScanner {
 
     /**
      * 注册事件处理器。
-     * @param listener 监听器
-     * @param method 监听器的方法
+     *
+     * @param listener        监听器
+     * @param method          监听器的方法
+     * @param annotation      事件处理器的注解
+     * @param eventHandlerMap 事件处理器映射
      */
-    public synchronized void registerEventHandler(Object listener, Method method, EventHandler annotation) {
+    @SuppressWarnings("rawtypes")
+    private void _registerEventHandler(Object listener,
+                                             Method method,
+                                             EventHandler annotation,
+                                             Map<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>> eventHandlerMap) {
         String TAG = "事件监听器扫描器";
         var clazz = listener.getClass();
         // 判断方法的访问修饰符
@@ -137,7 +169,7 @@ public class EventHandlerScanner implements IScanner {
                 annotation
         );
         // 储存
-        eventHandlerMap.computeIfAbsent(eventClass, k -> new CopyOnWriteArrayList<>())
+        eventHandlerMap.computeIfAbsent(eventClass, k -> new HashSet<>())
                 .add(eventHandlerPatch);
     }
 
