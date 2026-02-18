@@ -29,11 +29,10 @@ public class ItemDataDtoService implements IItemDataDtoService {
     @Lazy
     @Autowired
     public ItemDataDtoService(ItemMetadataScanner itemMetadataScanner,
-                              ObjectMapper objectMapper,
                               ILogger logger,
                               IItemDataConfigService iItemDataConfigService) {
         this.itemMetadataScanner = itemMetadataScanner;
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper();
         this.logger = logger;
         this.iItemDataConfigService = iItemDataConfigService;
     }

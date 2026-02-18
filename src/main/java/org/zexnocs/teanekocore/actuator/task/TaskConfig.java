@@ -4,10 +4,10 @@ import lombok.*;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
@@ -60,7 +60,7 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      *    并且在堵塞的地方 catch InterruptedException，
      */
     @NonNull
-    private final Callable<ITaskResult<T>> callable;
+    private final MethodCallable<ITaskResult<T>> callable;
 
     /**
      * 任务执行的 delay 时间

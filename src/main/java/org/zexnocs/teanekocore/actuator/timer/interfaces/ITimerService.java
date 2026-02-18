@@ -1,9 +1,9 @@
 package org.zexnocs.teanekocore.actuator.timer.interfaces;
 
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
-import java.util.concurrent.Callable;
 
 /**
  * 管理定时器的服务。
@@ -38,7 +38,7 @@ public interface ITimerService {
      */
     <T> ITimerTaskConfig<T> registerByRate(String taskName,
                                            String taskStage,
-                                           Callable<ITaskResult<T>> callable,
+                                           MethodCallable<ITaskResult<T>> callable,
                                            Duration rate,
                                            Class<T> resultType);
 
@@ -61,7 +61,7 @@ public interface ITimerService {
      */
     <T> ITimerTaskConfig<T> registerByDelay(String taskName,
                                             String taskStage,
-                                            Callable<ITaskResult<T>> callable,
+                                            MethodCallable<ITaskResult<T>> callable,
                                             Duration delay,
                                             Class<T> resultType);
 
@@ -84,7 +84,7 @@ public interface ITimerService {
      */
     <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
                                                 String taskStage,
-                                                Callable<ITaskResult<T>> callable,
+                                                MethodCallable<ITaskResult<T>> callable,
                                                 Duration rate,
                                                 Class<T> resultType);
 
@@ -101,7 +101,7 @@ public interface ITimerService {
      */
     <T> ITimerTaskConfig<T> registerByCron(String taskName,
                                            String taskStage,
-                                           Callable<ITaskResult<T>> callable,
+                                           MethodCallable<ITaskResult<T>> callable,
                                            String cronExpression,
                                            Class<T> resultType);
 }

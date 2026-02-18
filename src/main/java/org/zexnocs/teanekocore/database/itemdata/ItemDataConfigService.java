@@ -24,11 +24,10 @@ public class ItemDataConfigService implements IItemDataConfigService {
 
     @Autowired
     public ItemDataConfigService(IDatabaseService iDatabaseService,
-                                 ItemDataRepository itemDataRepository,
-                                 ObjectMapper objectMapper) {
+                                 ItemDataRepository itemDataRepository) {
         this.iDatabaseService = iDatabaseService;
         this.itemDataRepository = itemDataRepository;
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**

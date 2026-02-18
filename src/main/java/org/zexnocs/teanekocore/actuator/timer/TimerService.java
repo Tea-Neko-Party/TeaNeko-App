@@ -11,12 +11,12 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
+import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -106,7 +106,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByRate(String taskName,
                                                   String taskStage,
-                                                  Callable<ITaskResult<T>> callable,
+                                                  MethodCallable<ITaskResult<T>> callable,
                                                   Duration rate,
                                                   Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -141,7 +141,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByDelay(String taskName,
                                                    String taskStage,
-                                                   Callable<ITaskResult<T>> callable,
+                                                   MethodCallable<ITaskResult<T>> callable,
                                                    Duration delay,
                                                    Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -176,7 +176,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
                                                        String taskStage,
-                                                       Callable<ITaskResult<T>> callable,
+                                                       MethodCallable<ITaskResult<T>> callable,
                                                        Duration rate,
                                                        Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -206,7 +206,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByCron(String taskName,
                                                   String taskStage,
-                                                  Callable<ITaskResult<T>> callable,
+                                                  MethodCallable<ITaskResult<T>> callable,
                                                   String cronExpression,
                                                   Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()

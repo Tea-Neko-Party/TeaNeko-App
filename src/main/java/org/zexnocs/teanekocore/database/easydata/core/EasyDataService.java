@@ -49,11 +49,10 @@ public class EasyDataService implements IEasyDataService {
     @Autowired
     public EasyDataService(ICacheService cacheService,
                            IDatabaseService databaseService,
-                           EasyDataRepositoryScanner easyDataRepositoryScanner,
-                           ObjectMapper objectMapper) {
+                           EasyDataRepositoryScanner easyDataRepositoryScanner) {
+        this.objectMapper = new ObjectMapper();
         this.databaseService = databaseService;
         this.easyDataRepositoryScanner = easyDataRepositoryScanner;
-        this.objectMapper = objectMapper;
         this.easyDataCache = ConcurrentMapCacheContainer.of(cacheService);
     }
 

@@ -27,11 +27,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
 
     @Autowired
     public ConfigDataSetService(IConfigDataGetService iConfigDataGetService,
-                                ILogger logger,
-                                ObjectMapper objectMapper) {
+                                ILogger logger) {
         this.iConfigDataGetService = iConfigDataGetService;
         this.logger = logger;
-        this.objectMapper = objectMapper;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**

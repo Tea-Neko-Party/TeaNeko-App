@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.actuator.task;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.actuator.task.api.SetTaskStage;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNotFoundException;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
@@ -11,12 +12,15 @@ import org.zexnocs.teanekocore.actuator.task.state.TaskCreatedState;
 import org.zexnocs.teanekocore.actuator.task.state.TaskExecutedState;
 import org.zexnocs.teanekocore.actuator.task.state.TaskSubmittedState;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
+import java.util.Optional;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
  * 任务执行服务。
+ * v4.0.9: 新增 AOP 处理 TaskStage namespace
  *
  * @author zExNocs
  * @date 2026/02/11
@@ -102,7 +106,10 @@ public class TaskExecuteService implements ITaskExecuteService {
         var taskStages = config.getTaskStages();
         // 如果列表为 null，则尝试从命名空间中获取。
         if (taskStages == null) {
-            var namespace = config.getTaskStageNamespace();
+            String namespace = Optional
+                    .ofNullable(MethodCallableUtils.INSTANCE.getAnnotation(config.getCallable(), SetTaskStage.class))
+                    .map(SetTaskStage::value)
+                    .orElseGet(config::getTaskStageNamespace);
             taskStages = taskStageScanner.getTaskStages(namespace);
             config.setTaskStages(taskStages);
         }

@@ -7,11 +7,18 @@ import org.zexnocs.teanekocore.logger.DefaultLogger;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
- * 日志配置。
- * 如果没有服务实现了 ILogger 接口，那么使用默认的日志实现。
+ * 工具类配置。
+ *
+ * @author zExNocs
+ * @date 2026/02/18
  */
 @Configuration
-public class LoggerConfig {
+public class UtilsConfig {
+    /**
+     * 提供一个默认的 ILogger 实现，如果没有其他实现被定义的话。
+     *
+     * @return {@link ILogger }
+     */
     @Bean
     @ConditionalOnMissingBean(ILogger.class)
     public ILogger logger() {

@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.event.core;
 
+import org.springframework.core.annotation.AliasFor;
 import org.springframework.stereotype.Component;
 
 import java.lang.annotation.ElementType;
@@ -28,6 +29,7 @@ public @interface Event {
      * 如果为空则不会被注册。
      * @return key
      */
+    @AliasFor(annotation = Component.class, attribute = "value")
     String value();
 
     /**

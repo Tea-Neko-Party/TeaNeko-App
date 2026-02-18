@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.database.itemdata.metadata;
 
+import org.springframework.core.annotation.AliasFor;
 import org.springframework.stereotype.Component;
 
 import java.lang.annotation.ElementType;
@@ -24,5 +25,6 @@ public @interface ItemMetadata {
      * 元数据标识
      * @return 标识字符串
      */
+    @AliasFor(annotation = Component.class, attribute = "value")
     String value();
 }

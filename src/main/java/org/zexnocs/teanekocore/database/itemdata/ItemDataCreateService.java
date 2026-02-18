@@ -25,11 +25,10 @@ public class ItemDataCreateService implements IItemDataCreateService {
     private final ItemMetadataScanner itemMetadataScanner;
 
     public ItemDataCreateService(ItemDataRepository itemDataRepository,
-                                 ObjectMapper objectMapper,
                                  ItemMetadataScanner itemMetadataScanner) {
         this.itemDataRepository = itemDataRepository;
-        this.objectMapper = objectMapper;
         this.itemMetadataScanner = itemMetadataScanner;
+        this.objectMapper = new ObjectMapper();
     }
 
     /**

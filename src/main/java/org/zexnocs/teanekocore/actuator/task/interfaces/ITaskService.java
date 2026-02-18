@@ -6,9 +6,9 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskDuplicateKeyException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNotFoundException;
+import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.util.UUID;
-import java.util.concurrent.Callable;
 
 /**
  * 任务服务接口。
@@ -68,7 +68,7 @@ public interface ITaskService {
             UUID key,
             String name,
             String taskStage,
-            Callable<ITaskResult<T>> callable,
+            MethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         var config = TaskConfig.<T>builder()
                 .name(name)
@@ -93,7 +93,7 @@ public interface ITaskService {
     default <T> TaskFuture<ITaskResult<T>> subscribe(
             String name,
             String taskStage,
-            Callable<ITaskResult<T>> callable,
+            MethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         return subscribe(UUID.randomUUID(), name, taskStage, callable, clazz);
     }

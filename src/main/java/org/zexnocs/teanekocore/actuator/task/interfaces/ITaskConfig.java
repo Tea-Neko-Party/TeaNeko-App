@@ -3,10 +3,10 @@ package org.zexnocs.teanekocore.actuator.task.interfaces;
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
+import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * 用于定义一个任务的基本配置，从而来组装一个 Task 实例。
@@ -31,7 +31,7 @@ public interface ITaskConfig<T> {
      * 获取任务 callable
      * @return 任务 callable，用于生成任务实例
      */
-    Callable<ITaskResult<T>> getCallable();
+    MethodCallable<ITaskResult<T>> getCallable();
 
     /**
      * 获取任务执行阶段列表
