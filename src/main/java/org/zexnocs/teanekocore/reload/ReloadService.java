@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.reload;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.api.IReloadable;
 import org.zexnocs.teanekocore.reload.interfaces.IReloadService;
 import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
@@ -20,10 +21,12 @@ public class ReloadService implements IReloadService {
     /// 管理所有 IReloadable 实现类的集合。
     private final Set<IReloadable> reloadableSet;
     private final IBeanScanner iBeanScanner;
+    private final ILogger logger;
 
-    public ReloadService(IBeanScanner iBeanScanner) {
+    public ReloadService(IBeanScanner iBeanScanner, ILogger logger) {
         this.reloadableSet = ConcurrentHashMap.newKeySet();
         this.iBeanScanner = iBeanScanner;
+        this.logger = logger;
     }
 
     /**
@@ -43,7 +46,13 @@ public class ReloadService implements IReloadService {
     @Override
     public void reloadAll() {
         for (IReloadable reloadable : this.reloadableSet) {
-            reloadable.reload();
+            try {
+                reloadable.reload();
+            } catch (Exception e) {
+                // 如果 reload 失败，记录错误日志
+                logger.errorWithReport(this.getClass().getSimpleName(), """
+                        reloadable %s reload 出现异常""".formatted(reloadable.getClass().getName()), e);
+            }
         }
     }
 
@@ -52,20 +61,27 @@ public class ReloadService implements IReloadService {
      */
     @PostConstruct
     public void init() {
-        scan();
+        __scan();
     }
 
     /**
      * 扫描所有 IReloadable 实现类，并将它们添加到管理列表中。
      */
-    public synchronized void scan() {
+    private synchronized void __scan() {
         // 清理之前的扫描结果
         reloadableSet.clear();
 
         // 获取所有 IReloadable 实现类的 Bean，并将它们添加到管理列表中
-        var beans = iBeanScanner.getBeansOfType(IReloadable.class);
-        for(var bean: beans.entrySet()) {
-            addReloadable(bean.getValue());
+        var beanPairs = iBeanScanner.getBeansOfType(IReloadable.class);
+        for(var beanPair: beanPairs.entrySet()) {
+            var bean = beanPair.getValue();
+            try {
+                addReloadable(bean);
+            } catch (Exception e) {
+                // 如果添加失败，记录错误日志
+                logger.errorWithReport(this.getClass().getSimpleName(), """
+                        bean %s 扫描出现异常""".formatted(iBeanScanner.getBeanClass(bean).getName()), e);
+            }
         }
     }
 }

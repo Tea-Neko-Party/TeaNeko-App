@@ -1,0 +1,200 @@
+package org.zexnocs.teanekocore.command;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.command.api.Command;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.command.api.DefaultCommand;
+import org.zexnocs.teanekocore.command.api.SubCommand;
+import org.zexnocs.teanekocore.command.easydata.CommandEasyData;
+import org.zexnocs.teanekocore.command.interfaces.ICommandPermissionManager;
+
+/**
+ * 命令权限管理器
+ *
+ * @author zExNocs
+ * @date 2026/02/18
+ */
+@Service("commandPermissionManager")
+public class CommandPermissionManager implements ICommandPermissionManager {
+    public static final String ENABLE_NAMESPACE = "command.permission.enable";
+    public static final String DISABLE_NAMESPACE = "command.permission.disable";
+    @Value("${tea-neko.debug.main-id:0}")
+    private String mainDebuggerId;
+
+    /**
+     * 在这里注册 Debug 者的 ID
+     * @return Debug 者的 ID
+     */
+    private String[] getDebugIds() {
+        return new String[] {
+                mainDebuggerId,
+        };
+    }
+
+    /**
+     * 添加权限
+     *
+     * @param userId 用户 ID
+     * @param permissionId 权限 ID
+     */
+    @Override
+    public void addPermission(String userId, String permissionId) {
+        // 获取 EasyData 的任务配置
+        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(permissionId).getTaskConfig("添加权限");
+        // 设置用户的权限为 true
+        task.setBoolean(userId, true);
+        // 推送任务
+        task.push();
+    }
+
+    /**
+     * 删除权限
+     *
+     * @param userId 用户 ID
+     * @param permissionId 权限 ID
+     */
+    @Override
+    public void removePermission(String userId, String permissionId) {
+        // 获取 EasyData 的任务配置
+        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(permissionId).getTaskConfig("删除权限");
+        // 设置用户的权限为 false
+        task.setBoolean(userId, false);
+        // 推送任务
+        task.push();
+    }
+
+    /**
+     * 禁止权限
+     *
+     * @param userId 用户 ID
+     * @param permissionId 权限 ID
+     */
+    @Override
+    public void banPermission(String userId, String permissionId) {
+        // 获取 EasyData 的任务配置
+        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(permissionId).getTaskConfig("禁止权限");
+        // 设置用户的权限为 true
+        task.setBoolean(userId, true);
+        // 推送任务
+        task.push();
+    }
+
+    /**
+     * 解除禁止权限
+     *
+     * @param userId 用户 ID
+     * @param permissionId 权限 ID
+     */
+    @Override
+    public void unbanPermission(String userId, String permissionId) {
+        // 获取 EasyData 的任务配置
+        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(permissionId).getTaskConfig("解除禁止权限");
+        // 设置用户的权限为 false
+        task.setBoolean(userId, false);
+        // 推送任务
+        task.push();
+    }
+
+    /**
+     * 判断是否有权限
+     *
+     * @param command 命令
+     * @param commandData 命令数据
+     * @return boolean
+     */
+    @Override
+    public boolean hasPermission(Command command, CommandData<?> commandData) {
+        return __hasPermission(commandData, command.permission(), command.permissionPackage());
+    }
+
+    /**
+     * 判断是否有权限
+     *
+     * @param command 命令
+     * @param defaultCommand 默认命令
+     * @param commandData 命令数据
+     * @return boolean
+     */
+    @Override
+    public boolean hasPermission(Command command, DefaultCommand defaultCommand, CommandData<?> commandData) {
+        // 获取权限包
+        var permissionPackage = defaultCommand.permissionPackage();
+        // 如果没有特殊设置权限包，则使用默认权限包
+        if(permissionPackage == null || permissionPackage.length == 0) {
+            permissionPackage = command.permissionPackage();
+        }
+        // 获取权限。如果 defaultCommand 没有设置权限，则使用 command 的权限
+        var expectedPermission = defaultCommand.permission();
+        if(expectedPermission.equals(CommandPermission.DEFAULT)) {
+            expectedPermission = command.permission();
+        }
+        return __hasPermission(commandData, expectedPermission, permissionPackage);
+    }
+
+    /**
+     * 判断是否有权限
+     *
+     * @param command 命令
+     * @param subCommand 子命令
+     * @param commandData 命令数据
+     * @return boolean
+     */
+    @Override
+    public boolean hasPermission(Command command, SubCommand subCommand, CommandData<?> commandData) {
+        // 获取权限包
+        var permissionPackage = subCommand.permissionPackage();
+        // 如果没有特殊设置权限包，则使用默认权限包
+        if(permissionPackage == null || permissionPackage.length == 0) {
+            permissionPackage = command.permissionPackage();
+        }
+        var expectedPermission = subCommand.permission();
+        // 如果 subCommand 没有设置权限，则使用 command 的权限
+        if(expectedPermission.equals(CommandPermission.DEFAULT)) {
+            expectedPermission = command.permission();
+        }
+        return __hasPermission(commandData, expectedPermission, permissionPackage);
+    }
+
+    /**
+     * 判断是否有权限
+     *
+     * @param commandData 命令数据
+     * @param expectedPermission 预期权限
+     * @param permissionPackage 权限包
+     * @return boolean
+     */
+    private boolean __hasPermission(CommandData<?> commandData, CommandPermission expectedPermission, String[] permissionPackage) {
+        // 1. 先判断是否被被取消权限，如果被禁止使用权限则直接返回 false
+        var __disableEasyData = CommandEasyData.of(DISABLE_NAMESPACE);
+        for(var permissionName: permissionPackage) {
+            if(__disableEasyData.get(permissionName).getBoolean(commandData.getSenderId())) {
+                return false;
+            }
+        }
+
+        // 2. 再判断是否有权限
+        // a. 判断原始权限
+        var actualPermission = commandData.getPermission();
+        // 判断权限是否为 Debug 模式
+        var senderId = commandData.getSenderId();
+        for(var debugId: getDebugIds()) {
+            if(senderId.equals(debugId)) {
+                actualPermission = CommandPermission.DEBUG;
+                break;
+            }
+        }
+        if(expectedPermission.getLevel() >= actualPermission.getLevel()) {
+            return true;
+        }
+        // b. 判断数据库权限
+        var __enableEasyData = CommandEasyData.of(ENABLE_NAMESPACE);
+        for(var permissionName: permissionPackage) {
+            if(__enableEasyData.get(permissionName).getBoolean(commandData.getSenderId())) {
+                return true;
+            }
+        }
+        // c. 如果没有权限，则返回 false
+        return false;
+    }
+}
