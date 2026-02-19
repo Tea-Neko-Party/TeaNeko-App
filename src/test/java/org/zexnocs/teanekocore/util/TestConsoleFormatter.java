@@ -9,6 +9,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 测试日志格式化工具
  * 用于生成美观的控制台输出，支持边框、步骤编号和多种日志级别
+ * tip: AI 写的 懒得自己搓了
+ *
+ * @author zExNocs
+ * @date 2026/02/13
  */
 public class TestConsoleFormatter {
 

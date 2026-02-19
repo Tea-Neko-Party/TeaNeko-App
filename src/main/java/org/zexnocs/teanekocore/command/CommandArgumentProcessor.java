@@ -410,13 +410,7 @@ public class CommandArgumentProcessor implements ICommandArgumentProcessor {
             if (type.isEnum())
                 return Enum.valueOf((Class) type, input);
         }
-        catch (Exception ignore) {
-            logger.errorWithReport(this.getClass().getSimpleName(), """
-                            转化参数值失败，使用默认值
-                             - 输入: %s
-                             - 目标类型: %s
-                            """.formatted(input, type.getName()));
-        }
+        catch (Exception ignore) {}
         return null;
     }
 
@@ -454,14 +448,15 @@ public class CommandArgumentProcessor implements ICommandArgumentProcessor {
             Parameter parameter,
             CommandData<?> commandData
     ) throws CommandDataTypeMismatchException {
+        // 获取参数的泛型类型，如果不是 ParameterizedType，则抛出异常
         Type methodType = parameter.getParameterizedType();
-        if (!(methodType instanceof ParameterizedType pt))
+        if (!(methodType instanceof ParameterizedType pt)) {
             throw new CommandDataTypeMismatchException();
+        }
         Class<?> expected = (Class<?>) pt.getActualTypeArguments()[0];
-        Type actualType = commandData.getClass().getGenericSuperclass();
-        if (!(actualType instanceof ParameterizedType actual))
-            throw new CommandDataTypeMismatchException();
-        Class<?> actualClass = (Class<?>) actual.getActualTypeArguments()[0];
+        // 获取 CommandData 的泛型类型参数，如果无法获取或不合法，则抛出异常
+        Class<?> actualClass = commandData.getRawDataType();
+        // 判断实际类型是否与预期类型兼容，如果不兼容，则抛出异常
         if (!expected.isAssignableFrom(actualClass)) throw new CommandDataTypeMismatchException();
     }
 }
