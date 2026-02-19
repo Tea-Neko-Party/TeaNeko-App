@@ -8,6 +8,7 @@ import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.command.core.CommandMapData;
 import org.zexnocs.teanekocore.command.core.CommandScanner;
+import org.zexnocs.teanekocore.command.exception.CommandDataTypeMismatchException;
 import org.zexnocs.teanekocore.command.interfaces.*;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -21,7 +22,7 @@ import java.lang.reflect.Method;
  * 4. 执行指令
  *
  * @author zExNocs
- * @date 2026/02/18
+ * @date 2025/04/25
  */
 @Service
 public class CommandDispatcher implements ICommandDispatcher {
@@ -123,7 +124,13 @@ public class CommandDispatcher implements ICommandDispatcher {
             if(subCommandMethodPair != null) {
                 var newArgs = new String[args.length - 1];
                 System.arraycopy(args, 1, newArgs, 0, args.length - 1);
-                var processedArgs = argumentProcessor.process(subCommandMethodPair.getSecond(), newArgs, data);
+                Object[] processedArgs;
+                try {
+                    processedArgs = argumentProcessor.process(subCommandMethodPair.getSecond(), newArgs, data);
+                } catch (CommandDataTypeMismatchException ignore) {
+                    // 如果参数类型不匹配，说明是子类数据获得了父类数据，正常现象，直接跳过
+                    return;
+                }
                 if(processedArgs == null) {
                     errorHandler.handleArgsError(data);
                 } else {
@@ -139,7 +146,13 @@ public class CommandDispatcher implements ICommandDispatcher {
         var defaultCommandMethod = mapData.getDefaultCommandMethod();
         var defaultCommand = mapData.getDefaultCommandAnnotation();
         if(defaultCommandMethod != null && defaultCommand != null) {
-            var processedArgs = argumentProcessor.process(defaultCommandMethod, args, data);
+            Object[] processedArgs;
+            try {
+                processedArgs = argumentProcessor.process(defaultCommandMethod, args, data);
+            } catch (CommandDataTypeMismatchException ignore) {
+                // 如果参数类型不匹配，说明是子类数据获得了父类数据，正常现象，直接跳过
+                return;
+            }
             if(processedArgs == null) {
                 errorHandler.handleArgsError(data);
             } else {

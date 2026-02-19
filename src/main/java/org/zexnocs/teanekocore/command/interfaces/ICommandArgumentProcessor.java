@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.command.interfaces;
 
 import org.zexnocs.teanekocore.command.CommandData;
+import org.zexnocs.teanekocore.command.exception.CommandDataTypeMismatchException;
 
 import java.lang.reflect.Method;
 
@@ -18,5 +19,5 @@ public interface ICommandArgumentProcessor {
      * @param commandData 指令数据。如果有参数是 CommandData 的话，可以直接使用
      * @return 处理后的参数
      */
-    Object[] process(Method method, String[] args, CommandData<?> commandData);
+    Object[] process(Method method, String[] args, CommandData<?> commandData) throws CommandDataTypeMismatchException;
 }

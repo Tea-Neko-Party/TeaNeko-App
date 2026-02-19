@@ -9,7 +9,10 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * @author zExNocs
  * @date 2026/02/16
  */
-@SpringBootApplication(scanBasePackages = {"org.zexnocs.teanekocore", "org.zexnocs.teanekoapp"})
+@SpringBootApplication(scanBasePackages = {
+		"org.zexnocs.teanekocore",
+		"org.zexnocs.teanekoapp",
+		"org.zexnocs.teanekoclient"})
 public class TeaNekoAppApplication {
 
 	public static void main(String[] args) {
