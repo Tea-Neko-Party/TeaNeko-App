@@ -1,13 +1,13 @@
-package org.zexnocs.teanekoapp.task;
+package org.zexnocs.teanekocore.task;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekoapp.util.TestConsoleFormatter;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
+import org.zexnocs.teanekocore.util.TestConsoleFormatter;
 
 import java.time.Duration;
 

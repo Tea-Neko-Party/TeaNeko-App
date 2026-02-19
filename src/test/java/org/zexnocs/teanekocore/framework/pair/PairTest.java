@@ -1,10 +1,7 @@
-package org.zexnocs.teanekoapp.framework.pair;
+package org.zexnocs.teanekocore.framework.pair;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekocore.framework.pair.HashPair;
-import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.pair.UnorderedPair;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;

@@ -1,12 +1,12 @@
-package org.zexnocs.teanekoapp.event;
+package org.zexnocs.teanekocore.event;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekoapp.event.object.AEvent;
-import org.zexnocs.teanekoapp.event.object.BEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
+import org.zexnocs.teanekocore.event.object.AEvent;
+import org.zexnocs.teanekocore.event.object.BEvent;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;

@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.framework.callable;
+package org.zexnocs.teanekocore.framework.callable;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.database;
+package org.zexnocs.teanekocore.database;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;

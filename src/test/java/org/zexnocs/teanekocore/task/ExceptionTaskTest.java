@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.task;
+package org.zexnocs.teanekocore.task;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

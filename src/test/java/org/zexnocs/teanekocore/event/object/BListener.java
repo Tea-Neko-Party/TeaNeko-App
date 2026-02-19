@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.event.object;
+package org.zexnocs.teanekocore.event.object;
 
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;

@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.util;
+package org.zexnocs.teanekocore.util;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
