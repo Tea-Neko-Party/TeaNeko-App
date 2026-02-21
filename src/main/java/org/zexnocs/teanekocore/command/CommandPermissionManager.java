@@ -1,6 +1,5 @@
 package org.zexnocs.teanekocore.command;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.Command;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
@@ -19,18 +18,6 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandPermissionManager;
 public class CommandPermissionManager implements ICommandPermissionManager {
     public static final String ENABLE_NAMESPACE = "command.permission.enable";
     public static final String DISABLE_NAMESPACE = "command.permission.disable";
-    @Value("${tea-neko.debug.main-id:0}")
-    private String mainDebuggerId;
-
-    /**
-     * 在这里注册 Debug 者的 ID
-     * @return Debug 者的 ID
-     */
-    private String[] getDebugIds() {
-        return new String[] {
-                mainDebuggerId,
-        };
-    }
 
     /**
      * 添加权限
@@ -176,14 +163,6 @@ public class CommandPermissionManager implements ICommandPermissionManager {
         // 2. 再判断是否有权限
         // a. 判断原始权限
         var actualPermission = commandData.getPermission();
-        // 判断权限是否为 Debug 模式
-        var senderId = commandData.getSenderId();
-        for(var debugId: getDebugIds()) {
-            if(senderId.equals(debugId)) {
-                actualPermission = CommandPermission.DEBUG;
-                break;
-            }
-        }
         if(expectedPermission.getLevel() >= actualPermission.getLevel()) {
             return true;
         }
