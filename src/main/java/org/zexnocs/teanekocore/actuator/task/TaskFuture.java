@@ -18,10 +18,11 @@ import java.util.function.Function;
 /**
  * 用来管理 Task 执行结果的 Future 对象。
  * 主要用于注册该 Task，并管理其执行链以及最后是否以异常结束。
- * 请结束后手动调用 finish() 方法来处理异常
+ * 请结束后手动调用 {@code finish()} 方法来处理异常
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.0
  */
 public class TaskFuture<T> {
     /// 共享资源

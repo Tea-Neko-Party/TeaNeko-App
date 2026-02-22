@@ -16,6 +16,7 @@ import java.util.concurrent.ScheduledFuture;
  *
  * @author zExNocs
  * @date 2026/02/10
+ * @since 4.0.0
  */
 public interface ITask<T> extends IStateMachine<ITaskState> {
     /**

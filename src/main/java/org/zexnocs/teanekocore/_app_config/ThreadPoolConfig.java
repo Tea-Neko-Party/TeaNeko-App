@@ -14,6 +14,7 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.0
  */
 @Configuration
 public class ThreadPoolConfig {

@@ -20,10 +20,11 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * 任务执行服务。
- * v4.0.9: 新增 AOP 处理 TaskStage namespace
+ * v4.0.8: 新增 AOP 处理 TaskStage namespace
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.0
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {

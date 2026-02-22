@@ -5,6 +5,7 @@ import java.util.UUID;
 /**
  * 任务重复键异常。当尝试注册一个已经存在的任务键时抛出。
  *
+ * @since 4.0.0
  * @author zExNocs
  * @date 2026/02/13
  */

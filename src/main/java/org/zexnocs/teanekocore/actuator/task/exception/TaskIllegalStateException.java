@@ -8,6 +8,7 @@ import org.zexnocs.teanekocore.actuator.task.state.ITaskState;
  *
  * @author zExNocs
  * @date 2026/02/12
+ * @since 4.0.0
  */
 public class TaskIllegalStateException extends RuntimeException {
     /**

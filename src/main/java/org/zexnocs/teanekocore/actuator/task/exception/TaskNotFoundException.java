@@ -7,6 +7,7 @@ import java.util.UUID;
  *
  * @author zExNocs
  * @date 2026/02/13
+ * @since 4.0.0
  */
 public class TaskNotFoundException extends RuntimeException {
     public TaskNotFoundException(UUID key) {

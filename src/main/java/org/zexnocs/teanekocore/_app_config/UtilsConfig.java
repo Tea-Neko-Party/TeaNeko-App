@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Configuration
 public class UtilsConfig {

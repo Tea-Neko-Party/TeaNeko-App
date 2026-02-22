@@ -5,6 +5,7 @@ package org.zexnocs.teanekocore.actuator.task.exception;
  *
  * @author zExNocs
  * @date 2026/02/12
+ * @since 4.0.0
  */
 public class TaskNoRetryRuntimeException extends RuntimeException {
     /**

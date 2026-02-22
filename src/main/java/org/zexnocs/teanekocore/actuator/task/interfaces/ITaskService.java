@@ -13,16 +13,18 @@ import java.util.UUID;
 /**
  * 任务服务接口。
  * 用于注册任务、提交任务结果。
- * <p>
- * 间接完成一个任务：
- * 1. 手动指定 key 并自行记录
- * 2. 使用 complete 或 completeExceptionally 方法完成任务
- * <p>
- * 主动完成一个任务：
- * 1. 在 supplier 中直接返回结果
+ *
+ * <p>间接完成一个任务：
+ * 1. 手动指定 {@code key} 并自行记录
+ * 2. 使用 {@code complete()} 或 {@code completeExceptionally()} 方法完成任务
+ *
+ * <p>主动完成一个任务：
+ * 1. 在 {@code callable} 中直接返回结果
  * 2. 可以使用随机 key
+ *
  * @author zExNocs
  * @date 2026/02/13
+ * @since 4.0.0
  */
 public interface ITaskService {
     // -------------- 注册任务 --------------

@@ -10,6 +10,7 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.0
  */
 @Configuration
 @EnableAsync

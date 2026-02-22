@@ -17,13 +17,15 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 由 TaskService 管理的异步 Callable 任务，只能执行一次的任务。
- * TaskConfig 可以生成多个 Task 实例，每个实例只能执行一次。
- * 不允许外部直接创建 Task 实例，必须通过 TaskConfig 创建。
- * 具体请看 TaskConfig 文档。
+ * 由 {@link TaskService} 管理的异步 {@link org.zexnocs.teanekocore.framework.function.MethodCallable} 任务，只能执行一次的任务。
+ * {@link TaskConfig} 可以生成多个 {@link Task} 实例，每个实例只能执行一次。
+ * 不允许外部直接创建 {@link Task} 实例，必须通过 {@link TaskConfig} 创建。
+ *
  * @param <T> 任务结果的类型
+ * @see TaskConfig
  * @author zExNocs
  * @date 2026/02/10
+ * @since 4.0.0
  */
 public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
     /// 任务执行的 config

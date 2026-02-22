@@ -13,30 +13,32 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * 任务配置
  * 其定义：
- * 1. 创建：TaskConfig 定义并生成 Task
- * 2. 存储：TaskService 以 cache 形式进行存储
- * 3. 执行：TaskExecuteService 执行 Callable，并返回 TaskResult
- * 4. 结果：TaskResult 存储结果
- * 5. 调度：TaskService 调度整个过程
- * 结果可能由 Callable 直接返回，也可以异步获取 并在 TaskService 中执行 TaskResult。
+ * 1. 创建：{@link TaskConfig} 定义并生成 {@link Task}
+ * 2. 存储：{@link TaskService} 以 {@link org.zexnocs.teanekocore.cache.interfaces.ICacheData} 形式进行存储
+ * 3. 执行：{@link TaskExecuteService} 执行 Callable，并返回 {@link TaskResult}
+ * 4. 结果：{@link TaskResult} 存储结果
+ * 5. 调度：{@link TaskService} 调度整个过程
+ * 结果可能由 Callable 直接返回，也可以异步获取 并在 {@link TaskService} 中执行 {@link TaskResult}。
  * 如果异步提交结果，需要自行指定 key 值以便于关联 result 和 task。
  * <p>
  * 关于 Callable 返回：
- * - 直接提交：返回非 null，会直接作为 result 提交。
- * - 间接提交：返回 null，那么 TaskService 将会等待异步主动提交结果；
- * 请不要在 Callable 里调用间接提交的方式，否则会抛出 TaskIllegalStateException。
- * 如果没有 result，请返回 new EmptyTaskResult()。
+ * - 直接提交：返回非 {@code null}，会直接作为 result 提交。
+ * - 间接提交：返回 {@code null}，那么 {@link TaskService} 将会等待异步主动提交结果；
+ * 请不要在 Callable 里调用间接提交的方式，否则会抛出 {@link org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException}。
+ * 如果没有 result，请返回 {@link EmptyTaskResult}。
  * <p>
- * 关于提交结果 success 字段：
- * - true：表示任务成功完成，TaskService 将会将 Task 标记为完成并在 TaskStorageService 中删除；
- * - false：表示任务执行失败，TaskService 将会根据 TaskConfig 中的重试策略进行重试；
- * 如果重试次数用尽将会将 Task 标记为失败并在 TaskStorageService 中删除。
- * 策略取决于 RetryStrategy。
+ * 关于提交结果 {@code success} 字段：
+ * - {@code true}：表示任务成功完成，{@link TaskService} 将会将 {@link Task} 标记为完成并删除；
+ * - {@code false}：表示任务执行失败，{@link TaskService} 将会根据 {@link TaskConfig} 中的重试策略进行重试；
+ * 如果重试次数用尽将会将 {@link Task} 标记为失败并删除。
+ * 策略取决于 {@link TaskRetryStrategy}。
  * <p>
- * 注意：每一个 Task 默认等待时间为 10min (可以在 TaskConfig 中修改)，超过等待时间后将会报错并删除 Task。
+ * 注意：每一个 {@link TaskConfig} 默认等待时间为 10min (可以修改)，超过等待时间后将会报错并删除 {@link Task}。
+ *
  * @param <T> 任务结果的类型
  * @author zExNocs
  * @date 2026/02/10
+ * @since 4.0.0
  */
 @Getter
 @Builder
@@ -53,19 +55,19 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      * 执行一定是异步的
      * 要求该订阅任务 直接 / 间接 提交 result
      * 直接：Callable 直接返回 result
-     * 间接：Callable 返回 null，在 TaskService 中提交 result
+     * 间接：Callable 返回 null，在 {@link TaskService} 中提交 result
      * 1. 如果 "异步" 获取结果，请使用 "间接"；如果 "同步" 获取结果，请使用 "直接"。
-     *    请勿在 "同步获取结果" 时使用 "间接" 方式，会在 complete 函数中 retry 失败并抛出 TaskRetryCollisionException
-     * 2. 如果要求任务是可中断的，请定时使用 Thread.currentThread().isInterrupted() 检查
-     *    并且在堵塞的地方 catch InterruptedException，
+     *    请勿在 "同步获取结果" 时使用 "间接" 方式，会在 complete 函数中 retry 失败并抛出 {@link org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException}
+     * 2. 如果要求任务是可中断的，请定时使用 {@code Thread.currentThread().isInterrupted()} 检查
+     *    并且在堵塞的地方 {@code catch(InterruptedException)}，
      */
     @NonNull
     private final MethodCallable<ITaskResult<T>> callable;
 
     /**
      * 任务执行的 delay 时间
-     * 只有当 delayDuration 过后，任务才会被执行
-     * 重试的 interval 由 retryInterval 决定，与 delayDuration 无关
+     * 只有当 {@code delayDuration} 过后，任务才会被执行
+     * 重试的 interval 由 {@code retryInterval} 决定，与 {@code delayDuration} 无关
      * 默认 0，即立即执行
      */
     @Setter

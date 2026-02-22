@@ -9,6 +9,8 @@ import java.lang.annotation.Target;
  * 将一个方法强行设置为一个任务阶段。
  * 会跳过显式的阶段设置，直接将当前阶段设置为注解中指定的阶段。
  *
+ * @since 4.0.8
+ * @see org.zexnocs.teanekocore.framework.function.MethodCallable
  * @author zExNocs
  * @date 2026/02/18
  */
