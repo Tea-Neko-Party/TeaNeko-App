@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.client.api;
 /**
  * Tea Neko 客户端
  * 用于发送给 Tea Neko 服务器消息并获取新消息。
+ * 一般作为适配器的基础接口，需要实现接口来与 Tea Neko 服务器进行通信。
  *
  * @author zExNocs
  * @date 2026/02/21
@@ -14,6 +15,4 @@ public interface ITeaNekoClient {
      * @return 原客户端
      */
     IClient getClient();
-
-
 }

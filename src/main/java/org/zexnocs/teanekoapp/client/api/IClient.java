@@ -17,6 +17,9 @@ public interface IClient {
     /**
      * 从客户端接收消息并处理。
      * 一般就是将 message 解析后包装成事件对象并推送到事件总线中。
+     * 一般分为两个主要事件：
+     * 1. 消息事件 MessageEvent：用于处理用户发送的消息
+     * 2. 响应事件 ResponseEvent：用于处理客户端的响应信息
      *
      * @param message 接收到的消息
      */
