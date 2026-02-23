@@ -1,7 +1,5 @@
 package org.zexnocs.teanekocore.actuator.task.interfaces;
 
-import org.jspecify.annotations.Nullable;
-
 /**
  * 任务结果接口。
  * 任务结果接口定义了任务执行后的结果类型，可以包含成功与否的状态以及具体的结果数据。
@@ -27,6 +25,5 @@ public interface ITaskResult<T> {
      *
      * @return 任务的结果数据。
      */
-    @Nullable
     T getResult();
 }

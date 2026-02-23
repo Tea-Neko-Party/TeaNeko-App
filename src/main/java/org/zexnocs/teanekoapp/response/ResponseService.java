@@ -15,6 +15,7 @@ import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -102,7 +103,6 @@ public class ResponseService implements IResponseService {
         var key = pair.first();
         var sendData = pair.second();
         var responseType = sendData.getResponseType();
-        Object parsedData = null;
         // 尝试将 rawData 解析成对应的对象，如果解析失败，则记录错误日志并返回
         if(responseType != null
             && !responseType.equals(Void.class)
@@ -110,7 +110,9 @@ public class ResponseService implements IResponseService {
             && !rawData.isBlank()) {
             // 如果 responseType 不为 null，则尝试解析 rawData 成对应的对象
             try {
-                parsedData = objectMapper.readValue(rawData, responseType);
+                var collectionType = objectMapper.getTypeFactory().constructCollectionType(List.class, responseType);
+                var parsedData = objectMapper.readValue(rawData, collectionType);
+                iTaskService.complete(key, new TaskResult<>(success, parsedData));
             } catch (JacksonException e) {
                 iTaskService.forceCompleteExceptionally(key, e);
                 logger.errorWithReport(ResponseService.class.getSimpleName(), """
@@ -118,11 +120,11 @@ public class ResponseService implements IResponseService {
                     success: %s
                     echo: %s
                     rawData: %s""".formatted(responseType.getName(), success, echo, rawData), e);
-                return;
             }
+        } else {
+            // 如果 responseType 为 null，则将空数据传递给 future
+            iTaskService.complete(key, new TaskResult<>(success, List.of()));
         }
-        // 将 parsedData 传递给对应的 future。
-        iTaskService.complete(key, new TaskResult<>(success, parsedData));
     }
 
 }

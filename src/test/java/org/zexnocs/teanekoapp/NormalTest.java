@@ -22,7 +22,7 @@ public class NormalTest {
     private ILogger iLogger;
 
     @Test
-    void run() throws InvocationTargetException, IllegalAccessException {
+    public void run() throws InvocationTargetException, IllegalAccessException {
         // 获取 method 方法
         Method method = null;
         for (Method m : this.getClass().getDeclaredMethods()) {

@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.response;
 
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
@@ -12,6 +13,7 @@ import lombok.Getter;
  * @since 4.0.8
  */
 @Getter
+@AllArgsConstructor
 public class ResponseData {
     /// 状态，是否是成功的响应
     /// 一般常见 {"status": "ok"} 与 {"status": "error"}，分别对应 success = true 与 success = false
