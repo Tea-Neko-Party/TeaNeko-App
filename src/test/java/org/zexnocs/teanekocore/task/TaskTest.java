@@ -51,7 +51,7 @@ public class TaskTest {
                 .separator()
                 .step("提交任务到服务");
 
-        var future = iTaskService.subscribe(config, Boolean.class);
+        var future = iTaskService.subscribeWithFuture(config, Boolean.class);
         formatter.step("等待任务完成");
         future.thenAccept(result -> formatter.step("任务 future 链执行")
                 .step("接收到结果" + result.getResult()));

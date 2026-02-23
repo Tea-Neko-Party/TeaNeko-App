@@ -99,7 +99,7 @@ public class FixedDelayTimer<T> implements ITimer<T> {
     @Override
     public void execute(ITaskService iTaskService) {
         // 让任务更新定时器状态。
-        var future = iTaskService.subscribe(timerTaskConfig.getTaskConfig(), resultType)
+        var future = iTaskService.subscribeWithFuture(timerTaskConfig.getTaskConfig(), resultType)
                 .whenComplete((v, t) -> lastExecutionTime.set(System.currentTimeMillis()));
         // 配置任务的 future 链。
         var chain = timerTaskConfig.getTaskFutureChain();

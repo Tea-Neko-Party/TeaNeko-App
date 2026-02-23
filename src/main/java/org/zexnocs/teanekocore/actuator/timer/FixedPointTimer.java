@@ -107,7 +107,7 @@ public class FixedPointTimer<T> implements ITimer<T>  {
      */
     @Override
     public void execute(ITaskService iTaskService) {
-        var taskFuture = iTaskService.subscribe(timerTaskConfig.getTaskConfig(), resultType);
+        var taskFuture = iTaskService.subscribeWithFuture(timerTaskConfig.getTaskConfig(), resultType);
         // 配置任务的 future 链。
         var chain = timerTaskConfig.getTaskFutureChain();
         if(chain != null) {

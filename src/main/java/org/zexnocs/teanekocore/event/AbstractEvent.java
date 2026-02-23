@@ -29,7 +29,9 @@ public abstract class AbstractEvent<T> implements IEvent<T> {
 
     /**
      * 事件的构造函数。
-     * @param data 事件数据
+     *
+     * @param data        事件数据
+     * @param genericType 事件数据的泛型类型
      */
     public AbstractEvent(@Nullable T data, @NonNull Class<T> genericType) {
         this.data = data;

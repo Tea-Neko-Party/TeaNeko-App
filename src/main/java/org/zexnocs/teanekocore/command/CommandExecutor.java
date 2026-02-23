@@ -41,6 +41,6 @@ public class CommandExecutor implements ICommandExecutor {
                     method.invoke(object, args);
                     return EmptyTaskResult.INSTANCE;
                 },
-                EmptyTaskResult.getResultType()).finish();
+                EmptyTaskResult.getResultType());
     }
 }

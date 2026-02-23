@@ -98,7 +98,7 @@ public class SmartRateTimer<T> implements ITimer<T> {
     @Override
     public void execute(ITaskService iTaskService) {
         // 当任务完成时，设置 lastTaskCompleted 为 true
-        var future = iTaskService.subscribe(timerTaskConfig.getTaskConfig(), resultType)
+        var future = iTaskService.subscribeWithFuture(timerTaskConfig.getTaskConfig(), resultType)
                 .whenComplete((v, t) -> lastTaskCompleted.set(true));
 
         // 配置任务的 future 链。

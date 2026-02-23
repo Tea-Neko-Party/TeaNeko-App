@@ -62,7 +62,7 @@ public class EventService implements IEventService {
                 .map(Event::namespace)
                 .filter(s -> !s.isEmpty())
                 .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
-        return iTaskService.subscribe(
+        return iTaskService.subscribeWithFuture(
                     "事件{" + event.getClass().getName() + "}的处理",
                     eventProcessNamespace,
                     () -> {
@@ -70,15 +70,6 @@ public class EventService implements IEventService {
                         return EmptyTaskResult.INSTANCE;
                     },
                     EmptyTaskResult.getResultType());
-    }
-
-    /**
-     * 推送事件
-     * @param event 事件
-     */
-    @Override
-    public void pushEvent(@NonNull IEvent<?> event) {
-        pushEventWithFuture(event).finish();
     }
 
     /**
@@ -193,6 +184,6 @@ public class EventService implements IEventService {
                 () -> {
                     patch.invoke(event);
                     return EmptyTaskResult.INSTANCE;
-                }, EmptyTaskResult.getResultType()).finish();
+                }, EmptyTaskResult.getResultType());
     }
 }

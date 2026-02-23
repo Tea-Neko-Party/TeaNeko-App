@@ -1,13 +1,17 @@
 package org.zexnocs.teanekoapp.response;
 
 
+import lombok.Getter;
+
 /**
  * 用于接收从 client 的响应信息。
  * 由各个 client 的适配器转化成该接口，并作为数据推送 ResponseEvent 事件。
  *
  * @author zExNocs
  * @date 2026/02/22
+ * @since 4.0.8
  */
+@Getter
 public class ResponseData {
     /// 状态，是否是成功的响应
     /// 一般常见 {"status": "ok"} 与 {"status": "error"}，分别对应 success = true 与 success = false

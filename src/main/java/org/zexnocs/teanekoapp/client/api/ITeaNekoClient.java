@@ -7,6 +7,7 @@ package org.zexnocs.teanekoapp.client.api;
  *
  * @author zExNocs
  * @date 2026/02/21
+ * @since 4.0.8
  */
 public interface ITeaNekoClient {
     /**

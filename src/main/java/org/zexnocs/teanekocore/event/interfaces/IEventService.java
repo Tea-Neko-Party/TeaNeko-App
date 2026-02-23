@@ -15,7 +15,9 @@ public interface IEventService {
      * 推送事件
      * @param event 事件
      */
-    void pushEvent(@NonNull IEvent<?> event);
+    default void pushEvent(@NonNull IEvent<?> event) {
+        pushEventWithFuture(event).finish();
+    }
 
     /**
      * 推送事件并获取一个 TaskFuture 对象，可以通过该对象获取事件异常或者等待事件处理完成。

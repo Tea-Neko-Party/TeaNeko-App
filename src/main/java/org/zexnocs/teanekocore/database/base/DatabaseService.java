@@ -72,7 +72,7 @@ public class DatabaseService implements IDatabaseService {
     public TaskFuture<ITaskResult<Void>> __pushTask(IDatabaseTaskConfig task) {
         iLogger.debug(this.getClass().getSimpleName(), """
                 提交数据库任务: %s""".formatted(task.getName()));
-        return iTaskService.subscribe(task.__getTaskConfig(), Void.class);
+        return iTaskService.subscribeWithFuture(task.__getTaskConfig(), Void.class);
     }
 
     /**

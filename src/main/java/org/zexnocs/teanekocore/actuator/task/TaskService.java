@@ -59,11 +59,11 @@ public class TaskService implements ITaskService {
      * @throws TaskDuplicateKeyException 如果指定的 key 已经被使用
      */
     @Override
-    public <T> TaskFuture<ITaskResult<T>> subscribe(UUID key, @NonNull ITaskConfig<T> config, Class<T> clazz)
+    public <T> TaskFuture<ITaskResult<T>> subscribeWithFuture(UUID key, @NonNull ITaskConfig<T> config, Class<T> clazz)
             throws TaskDuplicateKeyException {
         // 如果 key 已经存在，则抛出异常
         if(taskMap.containsKey(key)) {
-            throw new TaskDuplicateKeyException(key);
+            throw new TaskDuplicateKeyException(key.toString());
         }
         // 创建一个新的 Task 对象
         var future = new TaskFuture<>(logger, config.getName(), new CompletableFuture<ITaskResult<T>>());
@@ -150,6 +150,28 @@ public class TaskService implements ITaskService {
         taskMap.remove(key);
         task.switchState(new TaskFinishedState());
         return task.getFuture().completeExceptionally(exception);
+    }
+
+    /**
+     * 强制使用一个异常来完成一个订阅任务。
+     * 不会再重试该任务。
+     *
+     * @param key       订阅任务的唯一标识符
+     * @param exception 订阅任务的异常
+     * @throws TaskNotFoundException     如果没有找到对应的订阅任务
+     * @throws TaskIllegalStateException 如果该任务没有 executed 则抛出此
+     * @since 4.0.8
+     */
+    @Override
+    public void forceCompleteExceptionally(UUID key, Throwable exception) throws TaskNotFoundException, TaskIllegalStateException {
+        var task = taskMap.get(key);
+        if(task == null) {
+            // 没有找到对应的任务，抛出异常
+            throw new TaskNotFoundException(key);
+        }
+        taskMap.remove(key);
+        task.switchState(new TaskFinishedState());
+        task.getFuture().completeExceptionally(exception);
     }
 
     // ---------- Task 专用的 TaskCache -------------
