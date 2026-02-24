@@ -6,8 +6,6 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
-import org.zexnocs.teanekocore.command.core.CommandMapData;
-import org.zexnocs.teanekocore.command.core.CommandScanner;
 import org.zexnocs.teanekocore.command.exception.CommandDataTypeMismatchException;
 import org.zexnocs.teanekocore.command.interfaces.*;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -23,6 +21,7 @@ import java.lang.reflect.Method;
  *
  * @author zExNocs
  * @date 2025/04/25
+ * @since 4.0.0
  */
 @Service
 public class CommandDispatcher implements ICommandDispatcher {
@@ -80,8 +79,7 @@ public class CommandDispatcher implements ICommandDispatcher {
             if(regexpBody.matches(key)) {
                 var regexpMapData = commandScanner.getRegexpCommand(key);
                 if (regexpMapData == null) {
-                    // Safeguard: commandScanner.getRegexpCommandKeys() should only return keys
-                    // for which getRegexpCommand(key) is non-null. If null occurs, skip this key.
+                    // 理论上不应该发生，说明在获取正则指令时发生了问题，直接跳过
                     continue;
                 }
                 if(regexpMapData.getCommandAnnotation().enable()) {

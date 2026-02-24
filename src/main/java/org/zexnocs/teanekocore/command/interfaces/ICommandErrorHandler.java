@@ -4,9 +4,11 @@ import org.zexnocs.teanekocore.command.CommandData;
 
 /**
  * 指令执行错误时的处理器接口。
+ * <p>在调用 {@link ICommandDispatcher} 时进行注入。
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 public interface ICommandErrorHandler {
     /**

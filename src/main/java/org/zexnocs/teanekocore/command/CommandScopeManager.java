@@ -13,6 +13,7 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Service("commandScopeManager")
 public class CommandScopeManager implements ICommandScopeManager {

@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.command.api.CommandScope;
  * @param <T> 指令被解析前的数据类型
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Getter
 @Builder
@@ -25,15 +26,16 @@ public class CommandData<T> {
     /// 指令的实际作用域
     private final CommandScope scope;
 
+    /// 作用域的 ID。
+    /// 例如如果是群聊，则是 clintId + group@groupId
+    /// 如果是私聊，则是 private@userId
+    private final String scopeId;
+
     /// 指令发送者的实际权限
     private final CommandPermission permission;
 
     /// 指令发送者的识别 ID。
     private final String senderId;
-
-    /// 作用域的ID。
-    /// 例如如果是群聊，则是group-群号；如果是私聊，则是private-QQ号
-    private final String scopeId;
 
     /// 指令被解析前的数据，应该永远不为 null
     @NonNull

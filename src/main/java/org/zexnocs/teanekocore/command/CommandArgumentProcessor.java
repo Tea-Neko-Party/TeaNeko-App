@@ -22,6 +22,7 @@ import java.util.List;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Service("commandArgumentProcessor")
 public class CommandArgumentProcessor implements ICommandArgumentProcessor {

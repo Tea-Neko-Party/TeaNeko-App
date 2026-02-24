@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataServic
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @EasyData
 public class CommandEasyData extends BaseEasyData {

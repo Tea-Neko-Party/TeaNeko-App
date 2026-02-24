@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.command.core;
+package org.zexnocs.teanekocore.command;
 
 import lombok.Builder;
 import lombok.Getter;
@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Service("descriptionScanner")
 public class CommandDescriptionScanner implements IScanner {

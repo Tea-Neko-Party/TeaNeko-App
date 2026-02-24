@@ -39,7 +39,8 @@ public interface ITeaNekoMessageData {
     List<ITeaNekoMessage> getMessage();
 
     /**
-     * 获取消息的类型
+     * 获取消息的类型。
+     * 包括私人消息、群组消息和群组的临时对话等不同类型。
      *
      * @return {@link TeaNekoMessageType} 消息类型
      */

@@ -101,9 +101,9 @@ public interface IMessageSender {
         var messageBuilder = getMessageBuilder();
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
-            var platformId = senderData.getPlatformId();
-            if(platformId != null) {
-                messageBuilder.addAtMessage(platformId);
+            var userId = senderData.getUserIdInPlatform();
+            if(userId != null) {
+                messageBuilder.addAtMessage(userId);
             }
         }
         sendMessage(messageBuilder
@@ -136,9 +136,9 @@ public interface IMessageSender {
         var messageBuilder = getMessageBuilder();
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
-            var platformId = senderData.getPlatformId();
-            if (platformId != null) {
-                messageBuilder.addAtMessage(platformId);
+            var userId = senderData.getUserIdInPlatform();
+            if (userId != null) {
+                messageBuilder.addAtMessage(userId);
             }
         }
         sendMessage(messageBuilder

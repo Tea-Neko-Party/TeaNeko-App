@@ -28,7 +28,7 @@ public interface ITeaNekoSenderData {
      * @return 发送者的平台 ID
      */
     @Nullable
-    String getPlatformId();
+    String getUserIdInPlatform();
 
     /**
      * 发送者的 nickname，如果没有则返回 "user"
@@ -42,7 +42,7 @@ public interface ITeaNekoSenderData {
     /**
      * 发送者在群内的角色。
      * 允许使用范围是 "owner", "admin", "member"，"debug"。
-     * 如果是开发者，则返回 "debug"；
+     * 如果是开发者，则返回 "debug"；(在客户端构造 sender data 时注入)
      * 如果是群主，则返回 "owner"；
      * 如果是群管理员，则返回 "admin"；
      * 否则返回 "member"。
@@ -59,5 +59,6 @@ public interface ITeaNekoSenderData {
      *
      * @return 发送者的群 ID，如果不是群消息则返回 null
      */
+    @Nullable
     String getGroupId();
 }

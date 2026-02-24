@@ -6,6 +6,7 @@ package org.zexnocs.teanekocore.command.api;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 public enum CommandScope {
     /// 默认作用域。用于子指令是否遵循父指令的作用域

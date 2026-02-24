@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @NoArgsConstructor
 @Entity

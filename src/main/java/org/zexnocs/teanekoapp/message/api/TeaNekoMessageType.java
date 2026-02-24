@@ -14,5 +14,5 @@ public enum TeaNekoMessageType {
     GROUP,
 
     /// 群组的临时对话
-    GROUP_TEMP,
+    PRIVATE_TEMP,
 }

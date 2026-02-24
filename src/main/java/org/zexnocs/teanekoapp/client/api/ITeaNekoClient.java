@@ -13,6 +13,14 @@ import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
  */
 public interface ITeaNekoClient {
     /**
+     * 获取 Client ID，用于标识客户端，也用作 群组 Command Scope 的作用域 ID 前缀。
+     * <p>Client ID 改变会导致之前 {@link org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager} 群组相关设置失效。
+     *
+     * @return Client ID
+     */
+    String getClientId();
+
+    /**
      * 获取原客户端，可用于发送消息
      *
      * @return {@link IClient} 原客户端

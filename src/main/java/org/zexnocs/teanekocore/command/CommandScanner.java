@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.command.core;
+package org.zexnocs.teanekocore.command;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.util.Pair;
@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Service("commandScanner")
 public class CommandScanner implements IScanner {

@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.message.api;
 
+import org.jspecify.annotations.NonNull;
+
 /**
  * Tea Neko 消息内容接口。
  *
@@ -8,9 +10,11 @@ package org.zexnocs.teanekoapp.message.api;
  */
 public interface ITeaNekoContent {
     /**
-     * 转化成原始字符串，用于命令解析。
+     * 转化成命令解析的字符串表示。
+     * 例如 text 文字可以根据空格切割成多个字符串。
      *
-     * @return 消息内容的原始字符串表示
+     * @return {@link String[] } 转化后的字符串数组
      */
-    String toRawString();
+    @NonNull
+    String[] toCommandArgs();
 }

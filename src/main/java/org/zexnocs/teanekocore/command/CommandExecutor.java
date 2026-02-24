@@ -12,6 +12,7 @@ import java.lang.reflect.Method;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Service("commandExecutor")
 public class CommandExecutor implements ICommandExecutor {

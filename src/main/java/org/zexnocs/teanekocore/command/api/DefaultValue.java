@@ -12,10 +12,15 @@ import java.lang.annotation.Target;
  *
  * @author zExNocs
  * @date 2026/02/18
+ * @since 4.0.0
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.PARAMETER)
 public @interface DefaultValue {
-    /// 默认值。
+    /**
+     * 默认值。
+     *
+     * @return {@link String }
+     */
     String value();
 }
