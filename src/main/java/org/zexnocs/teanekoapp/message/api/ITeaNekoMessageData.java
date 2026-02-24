@@ -52,7 +52,7 @@ public interface ITeaNekoMessageData {
      * @return 消息发送者的元信息。
      */
     @NonNull
-    ITeaNekoSenderData getSender();
+    ITeaNekoSenderData getSenderData();
 
     /**
      * 获取消息来源客户端信息。
