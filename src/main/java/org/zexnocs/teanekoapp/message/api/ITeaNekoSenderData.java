@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.message.api;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 
 import java.util.UUID;
@@ -19,6 +20,15 @@ public interface ITeaNekoSenderData {
      */
     @NonNull
     UUID getUuid();
+
+    /**
+     * 发送者的平台 ID
+     * 例如 QQ 号、微信号、Telegram ID 等等，具体取决于消息来源的平台。
+     *
+     * @return 发送者的平台 ID
+     */
+    @Nullable
+    String getPlatformId();
 
     /**
      * 发送者的 nickname，如果没有则返回 "user"
