@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.client.api;
 
-import org.zexnocs.teanekoapp.sender.api.ITeaNekoSenderBox;
+import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
 
 /**
  * Tea Neko 客户端
@@ -22,7 +22,7 @@ public interface ITeaNekoClient {
     /**
      * 获取 Tea Neko 发送器工具箱
      *
-     * @return {@link ITeaNekoSenderBox} Tea Neko 发送器工具箱
+     * @return {@link ITeaNekoToolbox} Tea Neko 发送器工具箱
      */
-    ITeaNekoSenderBox getTeaNekoSenderBox();
+    ITeaNekoToolbox getTeaNekoToolbox();
 }
