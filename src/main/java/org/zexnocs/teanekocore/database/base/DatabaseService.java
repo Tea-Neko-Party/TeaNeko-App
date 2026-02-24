@@ -27,7 +27,7 @@ public class DatabaseService implements IDatabaseService {
     /// 用于数据库任务执行的阶段命名空间。
     public static final String TASK_STAGE_NAMESPACE = "general_database";
 
-    @Value("${tea-neko.database.max-retry-count}")
+    @Value("${tea-neko.database.max-retry-count:8}")
     private int MAX_RETRY_COUNT;
 
     /// 任务执行服务

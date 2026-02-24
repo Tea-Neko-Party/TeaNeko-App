@@ -36,7 +36,7 @@ public class CacheService implements ICacheService {
 
     @Autowired
     public CacheService(ITimerService iTimerService,
-                        @Value("${tea-neko.cache.general-clean-rate-ms}") long cleanCacheIntervalMs) {
+                        @Value("${tea-neko.cache.general-clean-rate-ms:1000}") long cleanCacheIntervalMs) {
         this.cleanCacheIntervalMs = cleanCacheIntervalMs;
         this.iTimerService = iTimerService;
     }

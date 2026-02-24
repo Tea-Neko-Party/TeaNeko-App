@@ -9,8 +9,6 @@ import org.zexnocs.teanekoapp.client.api.IClient;
  * 发送给客户端的数据接口。
  * <p>可自定义实现类来满足不同客户端需求。
  *
- * @see org.zexnocs.teanekoapp.response.ResponseData
- * @param <R> 该发送数据的响应数据类型
  * @author zExNocs
  * @date 2026/02/22
  * @since 4.0.8

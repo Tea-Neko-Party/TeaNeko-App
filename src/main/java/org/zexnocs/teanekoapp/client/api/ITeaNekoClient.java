@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.client.api;
 
+import org.zexnocs.teanekoapp.sender.api.ITeaNekoSenderBox;
+
 /**
  * Tea Neko 客户端
  * 用于发送给 Tea Neko 服务器消息并获取新消息。
@@ -13,7 +15,14 @@ public interface ITeaNekoClient {
     /**
      * 获取原客户端，可用于发送消息
      *
-     * @return 原客户端
+     * @return {@link IClient} 原客户端
      */
     IClient getClient();
+
+    /**
+     * 获取 Tea Neko 发送器工具箱
+     *
+     * @return {@link ITeaNekoSenderBox} Tea Neko 发送器工具箱
+     */
+    ITeaNekoSenderBox getTeaNekoSenderBox();
 }

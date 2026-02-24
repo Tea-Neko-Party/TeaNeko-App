@@ -51,7 +51,7 @@ public class TimerService implements ITimerService {
 
     // --------------- 计时器循环 -----------------
     @Async("timerScheduler")
-    @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms}")
+    @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}")
     public void timerLoop() {
         // 获得当前的时间戳。
         long now = System.currentTimeMillis();

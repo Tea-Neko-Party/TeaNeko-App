@@ -38,7 +38,7 @@ public class ResponseTest {
      */
     @Test
     public void testSuccess() {
-        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), UUID.randomUUID().toString(), 3);
+        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), 3);
         iSenderService.send(sendData, FakeSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertTrue(r.isSuccess());
@@ -54,7 +54,7 @@ public class ResponseTest {
      */
     @Test
     public void testFailure() {
-        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), UUID.randomUUID().toString(), 10);
+        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), 10);
         iSenderService.send(sendData, FakeSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertFalse(r.isSuccess());
