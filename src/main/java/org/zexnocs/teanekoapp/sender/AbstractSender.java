@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.sender;
 
+import lombok.AccessLevel;
+import lombok.Getter;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import org.zexnocs.teanekoapp.sender.api.ISender;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
@@ -24,9 +26,21 @@ public class AbstractSender<S extends ISendData<R>, R> implements ISender<S, R> 
     /// 发送数据的类型，用于提交给 senderService
     private final Class<S> sendDataClass;
 
-    public AbstractSender(ISenderService senderService, Class<S> sendDataClass) {
+    /// 发送器 token，用于指定 send data 的发送 token 来标识身份
+    @Getter(AccessLevel.PROTECTED)
+    private final String token;
+
+    /**
+     * 构造函数，初始化发送器。
+     *
+     * @param senderService 发送服务实例，用于将发送数据推送给客户端，并处理响应数据
+     * @param sendDataClass 发送数据的类型，用于提交给 senderService
+     * @param token         发送器 token，用于指定 send data 的发送 token 来标识身份
+     */
+    public AbstractSender(ISenderService senderService, Class<S> sendDataClass, String token) {
         this.senderService = senderService;
         this.sendDataClass = sendDataClass;
+        this.token = token;
     }
 
     /**

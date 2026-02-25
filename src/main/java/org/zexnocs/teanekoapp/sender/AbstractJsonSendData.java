@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.IClient;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import tools.jackson.databind.ObjectMapper;
@@ -37,6 +38,10 @@ public abstract class AbstractJsonSendData<R> implements ISendData<R> {
     @JsonIgnore
     private final Class<R> responseType;
 
+    @Getter
+    @JsonIgnore
+    private final String senderToken;
+
     /**
      * 构造函数，初始化发送数据的内容、mapper 和响应类型，并生成一个唯一的 echo 以标识这条发送数据。
      *
@@ -47,10 +52,26 @@ public abstract class AbstractJsonSendData<R> implements ISendData<R> {
     public AbstractJsonSendData(@NonNull IClient client,
                                 @NonNull ObjectMapper mapper,
                                 @NonNull Class<R> responseType) {
+        this(client, mapper, responseType, null);
+    }
+
+    /**
+     * 构造函数，初始化发送数据的内容、mapper 和响应类型，并生成一个唯一的 echo 以标识这条发送数据。
+     *
+     * @param client 发送数据的客户端
+     * @param mapper 用于翻译成 json 的 mapper
+     * @param responseType 响应类型的 Class 对象，用于在接收响应时进行类型转换
+     * @param senderToken  发送器的 token，可以用于标识发送器身份
+     */
+    public AbstractJsonSendData(@NonNull IClient client,
+                                @NonNull ObjectMapper mapper,
+                                @NonNull Class<R> responseType,
+                                @Nullable String senderToken) {
         this.client = client;
         this.mapper = mapper;
         this.responseType = responseType;
         this.echo = UUID.randomUUID().toString();
+        this.senderToken = senderToken;
     }
 
     /**

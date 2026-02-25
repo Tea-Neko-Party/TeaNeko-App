@@ -34,19 +34,27 @@ public interface ISendData<R> {
     /**
      * 获取发送数据的响应类型，用于后续处理响应数据。
      * <p>如果为 null 则表示响应数据为 null。
+     * <p>如果要解析成 json，需要标注为 {@link JsonIgnore}，以避免被当做发送数据的一部分。
      *
      * @return 响应类型的Class对象
      */
     @Nullable
-    @JsonIgnore
     Class<R> getResponseType();
 
     /**
      * 获取客户端。
+     * <p>如果要解析成 json，需要标注为 {@link JsonIgnore}，以避免被当做发送数据的一部分。
      *
      * @return {@link IClient } 发送数据的客户端，不能为空
      */
     @NonNull
-    @JsonIgnore
     IClient getClient();
+
+    /**
+     * 获取发送消息的 token，用于标记不同的消息来源。
+     * <p>如果为 null，则表示通用的消息来源。
+     * <p>如果要解析成 json，需要标注为 {@link JsonIgnore}，以避免被当做发送数据的一部分。
+     */
+    @Nullable
+    String getSenderToken();
 }

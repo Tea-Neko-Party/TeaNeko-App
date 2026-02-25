@@ -30,6 +30,6 @@ public class SentEvent<T extends ISendData<?>> extends AbstractEvent<T> {
     public void _afterNotify() {
         var sendData = getData();
         var client = sendData.getClient();
-        client.send(sendData.toSendString());
+        client.send(sendData);
     }
 }

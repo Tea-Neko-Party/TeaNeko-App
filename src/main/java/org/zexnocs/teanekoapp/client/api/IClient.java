@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.client.api;
 
+import org.zexnocs.teanekoapp.sender.api.ISendData;
+
 /**
  * 客户端接口，具有发送和接收 String 消息的能力。
  *
@@ -14,6 +16,15 @@ public interface IClient {
      * @param message 要发送的消息
      */
     void send(String message);
+
+    /**
+     * 根据发送消息发送到服务器种
+     *
+     * @param data 发送数据对象
+     */
+    default void send(ISendData<?> data) {
+        send(data.toSendString());
+    }
 
     /**
      * 从客户端接收消息并处理。

@@ -50,4 +50,13 @@ public class CommandData<T> {
     public Class<T> getRawDataType() {
         return (Class<T>) rawData.getClass();
     }
+
+    /**
+     * 指令发送器的统一 token
+     *
+     * @return 发送器 token
+     */
+    public static String getCommandToken() {
+        return "command";
+    }
 }
