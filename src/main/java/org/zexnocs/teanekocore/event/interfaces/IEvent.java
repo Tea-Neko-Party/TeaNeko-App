@@ -19,7 +19,7 @@ public interface IEvent<T> {
      * 获取事件数据的类型。
      * @return 事件数据的类型
      */
-    Class<T> getGenericType();
+    Class<? extends T> getGenericType();
 
     /**
      * 事件是否被取消。

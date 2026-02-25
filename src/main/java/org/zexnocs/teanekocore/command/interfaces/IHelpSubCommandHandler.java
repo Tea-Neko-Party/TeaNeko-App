@@ -27,5 +27,5 @@ public interface IHelpSubCommandHandler {
      * @param mapData     指令映射数据
      * @param args        剩下的指令参数
      */
-    void handleHelp(CommandData<?> commandData, CommandMapData mapData, String[] args);
+    void handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args);
 }

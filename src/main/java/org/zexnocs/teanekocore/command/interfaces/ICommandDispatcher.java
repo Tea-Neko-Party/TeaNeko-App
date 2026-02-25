@@ -13,9 +13,13 @@ import org.zexnocs.teanekocore.command.CommandData;
  */
 public interface ICommandDispatcher {
     /**
-     * @param data 指令数据
-     * @param errorHandler 错误处理器
+     * 调度指令。
+     *
+     * @param data                  指令数据
+     * @param errorHandler          错误处理器
      * @param helpSubCommandHandler 帮助子指令处理器
      */
-    void dispatch(CommandData<?> data, ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpSubCommandHandler);
+    void dispatch(CommandData<?> data,
+                  ICommandErrorHandler errorHandler,
+                  IHelpSubCommandHandler helpSubCommandHandler);
 }

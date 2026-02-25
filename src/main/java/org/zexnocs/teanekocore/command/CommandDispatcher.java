@@ -113,7 +113,7 @@ public class CommandDispatcher implements ICommandDispatcher {
                 if(args[0].equalsIgnoreCase(key)) {
                     var newArgs = new String[args.length - 1];
                     System.arraycopy(args, 1, newArgs, 0, args.length - 1);
-                    helpSubCommandHandler.handleHelp(data, mapData, newArgs);
+                    helpSubCommandHandler.handleSubHelp(data, mapData, newArgs);
                     return;
                 }
             }
