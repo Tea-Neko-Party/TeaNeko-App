@@ -6,6 +6,7 @@ package org.zexnocs.teanekocore.reload.api;
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.0
  */
 public interface IScanner extends IReloadable {
 }

@@ -19,6 +19,7 @@ import java.lang.annotation.Target;
  *
  * @author zExNocs
  * @date 2026/02/17
+ * @since 4.0.0
  */
 @Component
 @Target(ElementType.TYPE)
