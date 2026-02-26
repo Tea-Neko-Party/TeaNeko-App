@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.utils.bean_scanner;
+package org.zexnocs.teanekocore.utils.scanner.exception;
 
 import org.springframework.beans.factory.BeanDefinitionStoreException;
 

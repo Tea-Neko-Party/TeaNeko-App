@@ -32,9 +32,9 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      */
     @Override
     public CommandData<ITeaNekoMessageData> __parse(ITeaNekoMessageData data) {
-        var senderData = data.getSenderData();
+        var senderData = data.getUserData();
         // 预处理消息列表
-        var messageList = _preProcessMessageList(data.getMessage());
+        var messageList = _preProcessMessageList(data.getMessages());
 
         // 根据消息列表获取解析后的字符串列表
         var parsedList = _getParsedList(messageList);
@@ -68,7 +68,7 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      */
     @Override
     public Pair<CommandScope, String> getScopeAndScopeId(ITeaNekoMessageData data) {
-        var senderData = data.getSenderData();
+        var senderData = data.getUserData();
         // 获取作用域
         var scope = switch (data.getMessageType()) {
             case PRIVATE, PRIVATE_TEMP -> CommandScope.PRIVATE;

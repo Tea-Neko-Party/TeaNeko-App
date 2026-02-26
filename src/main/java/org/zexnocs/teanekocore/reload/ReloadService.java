@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.api.IReloadable;
 import org.zexnocs.teanekocore.reload.interfaces.IReloadService;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;

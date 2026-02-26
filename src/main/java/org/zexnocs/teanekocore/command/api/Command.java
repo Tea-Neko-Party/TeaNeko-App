@@ -14,9 +14,9 @@ import java.lang.annotation.Target;
  * @date 2026/02/18
  * @since 4.0.0
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@Component
 public @interface Command {
     /**
      * 指令名称，例如 "{/help, /帮助}"

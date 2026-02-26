@@ -12,6 +12,7 @@ import java.util.List;
  *
  * @author zExNocs
  * @date 2026/02/21
+ * @since 4.0.8
  */
 public interface ITeaNekoMessageData {
     /**
@@ -36,7 +37,7 @@ public interface ITeaNekoMessageData {
      * @return 消息内容列表，每个元素表示消息的一部分，可以是文本、图片、表情等不同类型的消息内容
      */
     @NonNull
-    List<ITeaNekoMessage> getMessage();
+    List<ITeaNekoMessage> getMessages();
 
     /**
      * 获取消息的类型。
@@ -53,7 +54,7 @@ public interface ITeaNekoMessageData {
      * @return 消息发送者的元信息。
      */
     @NonNull
-    ITeaNekoSenderData getSenderData();
+    ITeaNekoUserData getUserData();
 
     /**
      * 获取消息来源客户端信息。

@@ -7,25 +7,27 @@ import org.zexnocs.teanekocore.command.api.Command;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.api.IScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 指令扫描器
  * 扫描指令、默认指令和子指令
  *
+ * @see Command
+ * @see DefaultCommand
+ * @see SubCommand
  * @author zExNocs
  * @date 2026/02/18
  * @since 4.0.0
  */
 @Service("commandScanner")
-public class CommandScanner implements IScanner {
+public class CommandScanner extends AbstractScanner {
     /// 日志
     private final ILogger logger;
 
@@ -36,30 +38,10 @@ public class CommandScanner implements IScanner {
     private final Map<String, CommandMapData> regexpCommandMap = new ConcurrentHashMap<>();
     private final IBeanScanner iBeanScanner;
 
-    private final AtomicBoolean isInit = new AtomicBoolean(false);
-
     @Autowired
     public CommandScanner(ILogger logger, IBeanScanner iBeanScanner) {
         this.logger = logger;
         this.iBeanScanner = iBeanScanner;
-    }
-
-    /**
-     * 热重载方法。
-     */
-    @Override
-    public void reload() {
-        __scan();
-    }
-
-    /**
-     * 初始化方法，扫描指令。
-     *
-     */
-    public void init() {
-        if(isInit.compareAndSet(false, true)) {
-            __scan();
-        }
     }
 
     /**
@@ -108,7 +90,7 @@ public class CommandScanner implements IScanner {
      * 扫描指令。
      *
      */
-    private synchronized void __scan() {
+    protected synchronized void _scan() {
         prefixCommandMap.clear();
         regexpCommandMap.clear();
 

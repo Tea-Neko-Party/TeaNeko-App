@@ -16,9 +16,9 @@ import java.lang.annotation.Target;
  * @author zExNocs
  * @date 2026/02/12
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-@Component
 public @interface TaskStage {
     /**
      * 任务阶段的命名空间列表。

@@ -8,6 +8,7 @@ import org.jspecify.annotations.NonNull;
  *
  * @author zExNocs
  * @date 2026/02/21
+ * @since 4.0.8
  */
 public interface ITeaNekoMessage {
     /**

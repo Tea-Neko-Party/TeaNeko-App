@@ -1,8 +1,5 @@
 package org.zexnocs.teanekocore.database.itemdata.metadata;
 
-import org.springframework.core.annotation.AliasFor;
-import org.springframework.stereotype.Component;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -16,15 +13,15 @@ import java.lang.annotation.Target;
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
-@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface ItemMetadata {
     /**
      * 元数据标识
+     *
      * @return 标识字符串
      */
-    @AliasFor(annotation = Component.class, attribute = "value")
     String value();
 }

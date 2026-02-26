@@ -7,30 +7,28 @@ import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 import org.zexnocs.teanekocore.actuator.task.api.TaskStage;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.api.IScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.InterfaceAndAnnotationInconsistencyException;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 扫描任务阶段和其命名空间，并注册到 scanner 的容器中。
  *
+ * @see TaskStage
+ * @see ITaskStage
  * @author zExNocs
  * @date 2026/02/12
  */
 @Service
-public class TaskStageScanner implements IScanner {
+public class TaskStageScanner extends AbstractScanner {
 
     /// 命名空间 → 任务阶段列表。
     private final Map<String, List<TaskStageWrapper>> taskStages = new ConcurrentHashMap<>();
-
-    /// 是否已经初始化过了。
-    private final AtomicBoolean isInit = new AtomicBoolean(false);
     private final IBeanScanner iBeanScanner;
     private final ILogger iLogger;
 
@@ -60,26 +58,8 @@ public class TaskStageScanner implements IScanner {
                 .toList();
     }
 
-    /**
-     * 热重载方法。
-     */
     @Override
-    public void reload() {
-        _scan();
-    }
-
-    /**
-     * 初始化方法。
-     * 用于防止第一次重复加载。
-     */
-    @Override
-    public void init() {
-        if(isInit.compareAndSet(false, true)) {
-            _scan();
-        }
-    }
-
-    private synchronized void _scan() {
+    protected synchronized void _scan() {
         // 清理之前的扫描结果
         taskStages.clear();
         // 获取所有带有TaskStage注解的Bean

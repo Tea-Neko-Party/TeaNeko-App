@@ -1,6 +1,7 @@
-package org.zexnocs.teanekocore.utils.bean_scanner;
+package org.zexnocs.teanekocore.utils.scanner.inerfaces;
 
 import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
 
 import java.lang.annotation.Annotation;
 import java.util.Map;

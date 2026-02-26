@@ -8,23 +8,25 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.api.IScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 用于扫描和注册所有 BaseEasyDataRepository 的子类，
+ * 用于扫描和注册所有 {@link BaseEasyDataRepository} 的子类，
  * 并根据它们的泛型参数（即实体类）进行映射，以便在运行时能够根据实体类获取对应的仓库实例。
  *
+ * @see BaseEasyDataObject
+ * @see BaseEasyDataRepository
  * @author zExNocs
  * @date 2026/02/15
+ * @since 4.0.0
  */
 @Service("easyDataRepositoryScanner")
-public class EasyDataRepositoryScanner implements IScanner {
+public class EasyDataRepositoryScanner extends AbstractScanner {
     /// 仓库的实体类 → 仓库类
     private final Map<Class<? extends BaseEasyDataObject>, BaseEasyDataRepository<?>> repositories =
             new ConcurrentHashMap<>();
@@ -35,9 +37,6 @@ public class EasyDataRepositoryScanner implements IScanner {
     /// 日志
     private final ILogger logger;
 
-    /// 是否初始化过
-    private final AtomicBoolean isInitialized = new AtomicBoolean(false);
-
     @Lazy
     @Autowired
     public EasyDataRepositoryScanner(IBeanScanner beanScanner,
@@ -47,29 +46,10 @@ public class EasyDataRepositoryScanner implements IScanner {
     }
 
     /**
-     * 热重载方法。
-     */
-    @Override
-    public void reload() {
-        // 重新扫描和注册仓库
-        _scanAndRegisterRepositories();
-    }
-
-    /**
-     * 初始化方法。
-     * 用于防止第一次重复加载。
-     */
-    @Override
-    public void init() {
-        if(isInitialized.compareAndSet(false, true)) {
-            _scanAndRegisterRepositories();
-        }
-    }
-
-    /**
      * 获取指定表名的数据仓库。
      */
-    private synchronized void _scanAndRegisterRepositories() {
+    @Override
+    protected synchronized void _scan() {
         repositories.clear();
 
         var beans = beanScanner.getBeansOfType(BaseEasyDataRepository.class);

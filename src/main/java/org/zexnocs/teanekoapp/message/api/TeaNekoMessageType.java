@@ -5,6 +5,7 @@ package org.zexnocs.teanekoapp.message.api;
  *
  * @author zExNocs
  * @date 2026/02/21
+ * @since 4.0.8
  */
 public enum TeaNekoMessageType {
     /// 私人消息

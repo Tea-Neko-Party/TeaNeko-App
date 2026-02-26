@@ -97,7 +97,7 @@ public interface IMessageSender {
      * @param data    要回复的消息数据
      */
     default void sendAtReplyMessage(String text, ITeaNekoMessageData data) {
-        var senderData = data.getSenderData();
+        var senderData = data.getUserData();
         var messageBuilder = getMessageBuilder();
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
@@ -132,7 +132,7 @@ public interface IMessageSender {
      * @param data    要回复的消息数据
      */
     default void sendAtMessage(String text, ITeaNekoMessageData data) {
-        var senderData = data.getSenderData();
+        var senderData = data.getUserData();
         var messageBuilder = getMessageBuilder();
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {

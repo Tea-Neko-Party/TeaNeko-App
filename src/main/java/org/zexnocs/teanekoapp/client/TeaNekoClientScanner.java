@@ -6,7 +6,7 @@ import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -14,6 +14,8 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 负责扫描和注册所有标记了 {@link TeaNekoClient} 注解实现了 {@link ITeaNekoClient} 的类，并将它们注册到 TeaNeko 客户端中。
  *
+ * @see TeaNekoClient
+ * @see ITeaNekoClient
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9

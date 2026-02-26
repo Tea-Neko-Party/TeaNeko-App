@@ -1,4 +1,4 @@
-package org.zexnocs.teanekocore.utils.bean_scanner;
+package org.zexnocs.teanekocore.utils.scanner;
 
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.annotation.Annotation;
 import java.util.HashMap;

@@ -11,8 +11,9 @@ import java.util.UUID;
  *
  * @author zExNocs
  * @date 2026/02/21
+ * @since 4.0.8
  */
-public interface ITeaNekoSenderData {
+public interface ITeaNekoUserData {
     /**
      * 发送者的 UUID
      *

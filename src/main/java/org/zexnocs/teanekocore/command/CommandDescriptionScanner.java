@@ -7,56 +7,37 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.Command;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.framework.description.Description;
-import org.zexnocs.teanekocore.reload.api.IScanner;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
 
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 指令描述扫描器。
  *
+ * @see Command
+ * @see Description
  * @author zExNocs
  * @date 2026/02/18
  * @since 4.0.0
  */
 @Service("descriptionScanner")
-public class CommandDescriptionScanner implements IScanner {
+public class CommandDescriptionScanner extends AbstractScanner {
     /// command scanner
     private final CommandScanner commandScanner;
 
     /// 指令描述数据map
     private final Map<Command, DescriptionMapData> descriptionDataMap = new ConcurrentHashMap<>();
 
-    private final AtomicBoolean isInit = new AtomicBoolean(false);
-
     @Autowired
     public CommandDescriptionScanner(CommandScanner commandScanner) {
         this.commandScanner = commandScanner;
     }
 
-    /**
-     * 热重载方法。
-     */
     @Override
-    public void reload() {
-        __scan();
-    }
-
-    /**
-     * 初始化方法。
-     * 用于防止第一次重复加载。
-     */
-    @Override
-    public void init() {
-        if(isInit.compareAndSet(false, true)) {
-            __scan();
-        }
-    }
-
-    private synchronized void __scan() {
+    protected synchronized void _scan() {
         descriptionDataMap.clear();
         // 获取所有前缀指令集
         var commandMap = commandScanner.getPrefixCommandMap();

@@ -1,8 +1,5 @@
 package org.zexnocs.teanekocore.event.core;
 
-import org.springframework.core.annotation.AliasFor;
-import org.springframework.stereotype.Component;
-
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -21,7 +18,6 @@ import java.lang.annotation.Target;
  * @date 2026/02/17
  * @since 4.0.0
  */
-@Component
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 public @interface Event {
@@ -30,7 +26,6 @@ public @interface Event {
      * 如果为空则不会被注册。
      * @return key
      */
-    @AliasFor(annotation = Component.class, attribute = "value")
     String value();
 
     /**

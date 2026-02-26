@@ -5,26 +5,25 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.api.IScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 扫描事件处理器的类。
  *
+ * @see EventHandler
+ * @see EventListener
  * @author zExNocs
  * @date 2026/02/17
+ * @since 4.0.0
  */
 @Service("eventHandlerScanner")
-public class EventHandlerScanner implements IScanner {
-
-    private final AtomicBoolean isInit = new AtomicBoolean(false);
-
+public class EventHandlerScanner extends AbstractScanner {
     /// 事件类 → 事件处理器列表
     @SuppressWarnings("rawtypes")
     private final Map<Class<? extends IEvent>,
@@ -38,29 +37,11 @@ public class EventHandlerScanner implements IScanner {
     }
 
     /**
-     * 热重载方法。
-     */
-    @Override
-    public void reload() {
-        __scan();
-    }
-
-    /**
-     * 初始化方法。
-     * 用于防止第一次重复加载。
-     */
-    @Override
-    public void init() {
-        if (isInit.compareAndSet(false, true)) {
-            __scan();
-        }
-    }
-
-    /**
      * 扫描事件处理器。
      */
+    @Override
     @SuppressWarnings("rawtypes")
-    private synchronized void __scan() {
+    protected synchronized void _scan() {
         // 先用 set 存储事件处理器，避免重复添加
         var eventHandlerSetByType = new HashMap<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>>();
 

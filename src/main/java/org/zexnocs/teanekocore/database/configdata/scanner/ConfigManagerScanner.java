@@ -5,18 +5,25 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigManagerNotFoundException;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.api.IScanner;
-import org.zexnocs.teanekocore.utils.bean_scanner.IBeanScanner;
+import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 配置管理器扫描器。
+ *
+ * @see ConfigManager
+ * @author zExNocs
+ * @date 2026/02/16
+ * @since 4.0.0
+ */
 @Service
-public class ConfigManagerScanner implements IScanner {
+public class ConfigManagerScanner extends AbstractScanner {
     /// logger
     private final ILogger logger;
 
@@ -29,9 +36,6 @@ public class ConfigManagerScanner implements IScanner {
     /// 包扫描服务
     private final IBeanScanner iBeanScanner;
 
-    /// 防止重复初始化的标志
-    private final AtomicBoolean isInit = new AtomicBoolean(false);
-
     @Autowired
     public ConfigManagerScanner(ILogger logger, IBeanScanner iBeanScanner) {
         this.logger = logger;
@@ -39,27 +43,10 @@ public class ConfigManagerScanner implements IScanner {
     }
 
     /**
-     * 热重载方法。
-     */
-    @Override
-    public void reload() {
-        __scan();
-    }
-
-    /**
-     * 初始化方法。
-     */
-    @Override
-    public void init() {
-        if(isInit.compareAndSet(false, true)) {
-            __scan();
-        }
-    }
-
-    /**
      * 扫描所有带有 ConfigManager 注解的类。
      */
-    private synchronized void __scan() {
+    @Override
+    protected synchronized void _scan() {
         configManagerMap.clear();
         namespaceToConfigManagerList.clear();
         // 遍历所有注册的包下的 ConfigManager 类，将其添加到 eventMap 中
