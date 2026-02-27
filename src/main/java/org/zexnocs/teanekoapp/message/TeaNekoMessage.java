@@ -17,6 +17,10 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 @Builder
 @AllArgsConstructor
 public class TeaNekoMessage implements ITeaNekoMessage {
+    /**
+     * 消息内容前缀，用于注册消息内容类。
+     */
+    public static final String PREFIX = "TeaNeko-";
 
     /**
      * 消息类型，例如 "text"、"image"、"at" 等。

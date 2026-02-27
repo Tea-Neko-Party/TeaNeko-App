@@ -40,6 +40,7 @@ public class TeaNekoClientScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
+        handlerMap.clear();
         var beanPairs = iBeanScanner.getBeansWithAnnotationAndInterface(TeaNekoClient.class, ITeaNekoClient.class);
         for (var pair : beanPairs.values()) {
             var beanAnnotation = pair.first();

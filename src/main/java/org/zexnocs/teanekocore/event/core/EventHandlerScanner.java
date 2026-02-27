@@ -42,6 +42,7 @@ public class EventHandlerScanner extends AbstractScanner {
     @Override
     @SuppressWarnings("rawtypes")
     protected synchronized void _scan() {
+        eventHandlerMap.clear();
         // 先用 set 存储事件处理器，避免重复添加
         var eventHandlerSetByType = new HashMap<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>>();
 
