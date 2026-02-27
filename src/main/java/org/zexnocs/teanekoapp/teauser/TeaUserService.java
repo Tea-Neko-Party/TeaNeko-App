@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 @Service
 public class TeaUserService implements ITeaUserService {
     /// 数据库中命名空间
-    public static String EASY_DATA_NAMESPACE = "tea_user_mapping";
+    public static String EASY_DATA_NAMESPACE = "tea-user-mapping";
     private final ILogger logger;
 
     public TeaUserService(ILogger logger) {
@@ -41,7 +41,7 @@ public class TeaUserService implements ITeaUserService {
      * @return TeaUser 对象的 UUID; 如果没有找到则返回 null
      */
     @Override
-    public @Nullable UUID getUserId(ITeaNekoClient client, String userId) {
+    public @Nullable UUID getId(ITeaNekoClient client, String userId) {
         var target = getTarget(client);
         var uuid = target.get(userId);
         if(uuid == null) {
@@ -68,7 +68,7 @@ public class TeaUserService implements ITeaUserService {
      */
     @Override
     @NonNull
-    public TaskFuture<UUID> getOrCreateUserId(ITeaNekoClient client, String userId) {
+    public TaskFuture<UUID> getOrCreateId(ITeaNekoClient client, String userId) {
         var target = getTarget(client);
         var uuid = target.get(userId);
         if (uuid != null) {
