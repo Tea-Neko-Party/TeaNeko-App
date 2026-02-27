@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoapp.message;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
@@ -26,11 +27,13 @@ public class TeaNekoMessage implements ITeaNekoMessage {
      * 消息类型，例如 "text"、"image"、"at" 等。
      */
     @Getter
+    @JsonProperty("type")
     private final String type;
 
     /**
      * 消息内容对象，具体类型根据消息类型而定。必须实现 ITeaNekoContent 接口。
      */
     @Getter
+    @JsonProperty("data")
     private final ITeaNekoContent content;
 }

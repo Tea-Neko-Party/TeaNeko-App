@@ -13,7 +13,7 @@ import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContent;
  *
  * @author zExNocs
  * @date 2026/02/27
- * @since 4.0.9
+ * @since 4.0.10
  */
 @Getter
 @AllArgsConstructor
