@@ -12,6 +12,7 @@ import java.lang.annotation.Target;
  * 标记一个类为 TeaNeko 客户端组件。
  * 被标记的类将被自动扫描并注册到 TeaNeko 客户端中。
  *
+ * @see ITeaNekoClient
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9
@@ -22,6 +23,7 @@ import java.lang.annotation.Target;
 public @interface TeaNekoClient {
     /**
      * Tea Neko Client 的唯一标识符。
+     * <p>应当与 {@code ITeaNekoClient.getClientId()} 一致
      * <p>用于作为其 web 的后缀。
      *
      * @return {@link String }

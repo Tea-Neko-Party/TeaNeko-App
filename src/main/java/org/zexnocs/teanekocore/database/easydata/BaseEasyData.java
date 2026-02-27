@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.database.easydata;
 
+import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekocore.database.easydata.api.IEasyData;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
@@ -35,6 +36,7 @@ public abstract class BaseEasyData implements IEasyData {
      * 根据 target 获取数据对象。
      */
     @Override
+    @NonNull
     public IEasyDataDto get(String target) {
         return service.getEasyData(this, target);
     }
