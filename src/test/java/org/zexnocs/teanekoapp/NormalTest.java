@@ -21,6 +21,6 @@ public class NormalTest {
 
     @Test
     public void run() {
-        iTeaUserService.getId(responseTestTeaNekoClient, "test");
+        iTeaUserService.get(responseTestTeaNekoClient, "test");
     }
 }

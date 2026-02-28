@@ -59,7 +59,7 @@ public class TeaUserCoinService implements ITeaUserCoinService {
      */
     @Override
     public TaskFuture<IItemDataDTO<IItemMetadata>> getCoin(ITeaNekoClient client, String userId) {
-        return iTeaUserService.getOrCreateId(client, userId)
+        return iTeaUserService.getOrCreate(client, userId)
                 .thenComposeTask(this::getCoin);
     }
 }

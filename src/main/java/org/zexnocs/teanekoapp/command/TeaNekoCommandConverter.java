@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.command;
 
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -13,6 +14,7 @@ import org.zexnocs.teanekocore.framework.pair.Pair;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * TeaNekoApp 的指令转换器。将 ITeaNekoMessageData 转化成 CommandData。
@@ -77,12 +79,33 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
 
         // 构造作用域 ID
         var scopeId = switch (scope) {
-            case PRIVATE -> "private@" + senderData.getUuid();
-            case GROUP   -> data.getClient().getClientId() + "-group@" + senderData.getGroupId();
+            case PRIVATE -> getPrivateScopeId(senderData.getUuid());
+            case GROUP   -> getGroupScopeId(data.getClient(), senderData.getGroupId());
             // default 不可能发生，因为上面已经覆盖了所有情况
             default -> throw new RuntimeException("Invalid scope" + scope.toString());
         };
         return IndependentPair.of(scope, scopeId);
+    }
+
+    /**
+     * 根据用户 UUID 获取作用域 ID。
+     *
+     * @param uuid 用户 UUID
+     * @return {@link String } 作用域 ID
+     */
+    public String getPrivateScopeId(UUID uuid) {
+        return "private@" + uuid;
+    }
+
+    /**
+     * 根据 client 和 groupId 获取作用域 ID。
+     *
+     * @param client  客户端
+     * @param groupId 群 ID
+     * @return 作用域 ID
+     */
+    public String getGroupScopeId(ITeaNekoClient client, String groupId) {
+        return client.getClientId() + "-group@" + groupId;
     }
 
     /**

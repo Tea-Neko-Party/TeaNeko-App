@@ -27,9 +27,9 @@ public class CommandPermissionManager implements ICommandPermissionManager {
      * @param permissionId 权限 ID
      */
     @Override
-    public void addPermission(String userId, String permissionId) {
+    public void addPermission(String userId, String scopeId, String permissionId) {
         // 获取 EasyData 的任务配置
-        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(permissionId).getTaskConfig("添加权限");
+        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(scopeId + "@" + permissionId).getTaskConfig("添加权限");
         // 设置用户的权限为 true
         task.setBoolean(userId, true);
         // 推送任务
@@ -43,9 +43,9 @@ public class CommandPermissionManager implements ICommandPermissionManager {
      * @param permissionId 权限 ID
      */
     @Override
-    public void removePermission(String userId, String permissionId) {
+    public void removePermission(String userId, String scopeId, String permissionId) {
         // 获取 EasyData 的任务配置
-        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(permissionId).getTaskConfig("删除权限");
+        var task = CommandEasyData.of(ENABLE_NAMESPACE).get(scopeId + "@" + permissionId).getTaskConfig("删除权限");
         // 设置用户的权限为 false
         task.setBoolean(userId, false);
         // 推送任务
@@ -59,9 +59,9 @@ public class CommandPermissionManager implements ICommandPermissionManager {
      * @param permissionId 权限 ID
      */
     @Override
-    public void banPermission(String userId, String permissionId) {
+    public void banPermission(String userId, String scopeId, String permissionId) {
         // 获取 EasyData 的任务配置
-        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(permissionId).getTaskConfig("禁止权限");
+        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(scopeId + "@" + permissionId).getTaskConfig("禁止权限");
         // 设置用户的权限为 true
         task.setBoolean(userId, true);
         // 推送任务
@@ -75,9 +75,9 @@ public class CommandPermissionManager implements ICommandPermissionManager {
      * @param permissionId 权限 ID
      */
     @Override
-    public void unbanPermission(String userId, String permissionId) {
+    public void unbanPermission(String userId, String scopeId, String permissionId) {
         // 获取 EasyData 的任务配置
-        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(permissionId).getTaskConfig("解除禁止权限");
+        var task = CommandEasyData.of(DISABLE_NAMESPACE).get(scopeId + "@" + permissionId).getTaskConfig("解除禁止权限");
         // 设置用户的权限为 false
         task.setBoolean(userId, false);
         // 推送任务
@@ -156,21 +156,28 @@ public class CommandPermissionManager implements ICommandPermissionManager {
         // 1. 先判断是否被被取消权限，如果被禁止使用权限则直接返回 false
         var __disableEasyData = CommandEasyData.of(DISABLE_NAMESPACE);
         for(var permissionName: permissionPackage) {
-            if(__disableEasyData.get(permissionName).getBoolean(commandData.getSenderId())) {
+            if(__disableEasyData.get(permissionName)
+                    .getBoolean(commandData.getScopeId() + "@" + commandData.getSenderId())) {
                 return false;
             }
         }
-
-        // 2. 再判断是否有权限
-        // a. 判断原始权限
         var actualPermission = commandData.getPermission();
+        // 2. 再判断是否有权限
+        // a. 如果是 DEBUG 指令，且用户不是 DBUG 权限，则直接返回 false
+        if(expectedPermission.equals(CommandPermission.DEBUG) &&
+           !actualPermission.equals(CommandPermission.DEBUG)) {
+            return false;
+        }
+
+        // b. 判断原始权限
         if(expectedPermission.getLevel() >= actualPermission.getLevel()) {
             return true;
         }
-        // b. 判断数据库权限
+        // c. 判断数据库权限
         var __enableEasyData = CommandEasyData.of(ENABLE_NAMESPACE);
         for(var permissionName: permissionPackage) {
-            if(__enableEasyData.get(permissionName).getBoolean(commandData.getSenderId())) {
+            if(__enableEasyData.get(permissionName)
+                    .getBoolean(commandData.getScopeId() + "@" + commandData.getSenderId())) {
                 return true;
             }
         }

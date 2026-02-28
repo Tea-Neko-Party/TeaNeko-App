@@ -25,8 +25,8 @@ public interface IEasyDataDtoTaskConfig extends IDatabaseTaskConfig {
      * @param key 键。
      * @param value 值。
      */
-    default void setBoolean(String key, boolean value) throws JsonSerializationFailedException {
-        set(key, value);
+    default IEasyDataDtoTaskConfig setBoolean(String key, boolean value) throws JsonSerializationFailedException {
+        return set(key, value);
     }
 
     /**

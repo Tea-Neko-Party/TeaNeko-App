@@ -46,31 +46,35 @@ public interface ICommandPermissionManager {
      * 给指定的用户添加一个权限。
      *
      * @param userId       用户 ID
+     * @param scopeId      所处范围 ID
      * @param permissionId 权限 ID
      */
-    void addPermission(String userId, String permissionId);
+    void addPermission(String userId, String scopeId, String permissionId);
 
     /**
      * 给指定的用户删除一个权限。
      *
      * @param userId       用户 ID
+     * @param scopeId      所处范围 ID
      * @param permissionId 权限 ID
      */
-    void removePermission(String userId, String permissionId);
+    void removePermission(String userId, String scopeId, String permissionId);
 
     /**
      * 禁止指定的用户的一个权限。
      *
      * @param userId       用户 ID
+     * @param scopeId      所处范围 ID
      * @param permissionId 权限 ID
      */
-    void banPermission(String userId, String permissionId);
+    void banPermission(String userId, String scopeId, String permissionId);
 
     /**
      * 解除禁止指定的用户的一个权限。
      *
      * @param userId       用户 ID
+     * @param scopeId      所处范围 ID
      * @param permissionId 权限 ID
      */
-    void unbanPermission(String userId, String permissionId);
+    void unbanPermission(String userId, String scopeId, String permissionId);
 }

@@ -41,7 +41,7 @@ public class TeaUserService implements ITeaUserService {
      * @return TeaUser 对象的 UUID; 如果没有找到则返回 null
      */
     @Override
-    public @Nullable UUID getId(ITeaNekoClient client, String userId) {
+    public @Nullable UUID get(ITeaNekoClient client, String userId) {
         var target = getTarget(client);
         var uuid = target.get(userId);
         if(uuid == null) {
@@ -68,7 +68,7 @@ public class TeaUserService implements ITeaUserService {
      */
     @Override
     @NonNull
-    public TaskFuture<UUID> getOrCreateId(ITeaNekoClient client, String userId) {
+    public TaskFuture<UUID> getOrCreate(ITeaNekoClient client, String userId) {
         var target = getTarget(client);
         var uuid = target.get(userId);
         if (uuid != null) {

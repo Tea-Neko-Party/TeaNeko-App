@@ -15,6 +15,34 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
  */
 public interface ITeaNekoToolbox {
     /**
+     * 获取消息发送器工具。
+     *
+     * @param token 发送器 token，用于表示发送者的身份
+     * @return {@link IMessageSender }
+     */
+    IMessageSender getMessageSender(@NonNull String token);
+
+    /**
+     * 获取根据消息 ID 获取消息的发送器工具。
+     *
+     * @param token 发送器 token，用于表示发送者的身份
+     * @return {@link IGetMessageSender }
+     */
+    IGetMessageSender getGetMsgSender(@NonNull String token);
+
+    /**
+     * 获取平台用户信息的发送器
+     *
+     * @param token 发送器 token，用于表示发送者的身份
+     * @return 获取平台用户信息的发送器
+     */
+    IPlatformUserGetSender getPlatformUserGetSender(@NonNull String token);
+
+    // =======================================================================
+    // 以下是默认 token 的重载方法，方便适配器实现类直接使用默认 token 来获取发送器工具。
+    // =======================================================================
+
+    /**
      * 默认 token
      */
     private static String defaultToken() {
@@ -31,31 +59,6 @@ public interface ITeaNekoToolbox {
     }
 
     /**
-     * 获取消息发送器工具。
-     *
-     * @param token 发送器 token，用于表示发送者的身份
-     * @return {@link IMessageSender }
-     */
-    IMessageSender getMessageSender(@NonNull String token);
-
-    /**
-     * 获取根据消息 ID 获取消息的发送器工具。
-     *
-     * @return {@link IGetMessageSender }
-     */
-    default IGetMessageSender getGetMsgSender() {
-        return getGetMsgSender(defaultToken());
-    }
-
-    /**
-     * 获取根据消息 ID 获取消息的发送器工具。
-     *
-     * @param token 发送器 token，用于表示发送者的身份
-     * @return {@link IGetMessageSender }
-     */
-    IGetMessageSender getGetMsgSender(@NonNull String token);
-
-    /**
      * 获取平台用户信息的发送器
      *
      * @return 获取平台用户信息的发送器
@@ -65,10 +68,11 @@ public interface ITeaNekoToolbox {
     }
 
     /**
-     * 获取平台用户信息的发送器
+     * 获取根据消息 ID 获取消息的发送器工具。
      *
-     * @param token 发送器 token，用于表示发送者的身份
-     * @return 获取平台用户信息的发送器
+     * @return {@link IGetMessageSender }
      */
-    IPlatformUserGetSender getPlatformUserGetSender(@NonNull String token);
+    default IGetMessageSender getGetMsgSender() {
+        return getGetMsgSender(defaultToken());
+    }
 }

@@ -1,10 +1,7 @@
 package org.zexnocs.teanekocore.command;
 
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekocore.command.api.Command;
-import org.zexnocs.teanekocore.command.api.CommandScope;
-import org.zexnocs.teanekocore.command.api.DefaultCommand;
-import org.zexnocs.teanekocore.command.api.SubCommand;
+import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.command.easydata.CommandEasyData;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
@@ -92,13 +89,18 @@ public class CommandScopeManager implements ICommandScopeManager {
         }
 
         // 再判断是否在范围内
-        // a. 判断原始权限。如果匹配或者范围是 ALL，则返回 true
+        // a. 判断是不是 DEFAULT + DEBUGGER scope 的情况，如果是则直接返回 true
+        if(expectedScope.equals(CommandScope.DEFAULT) && commandData.getPermission().equals(CommandPermission.DEBUG)) {
+            return true;
+        }
+
+        // b. 判断原始权限。如果匹配或者范围是 ALL，则返回 true
         var actualScope = commandData.getScope();
         if(expectedScope.equals(actualScope) || expectedScope.equals(CommandScope.ALL)) {
             return true;
         }
 
-        // b. 判断数据库权限
+        // c. 判断数据库权限
         var __enableEasyData = CommandEasyData.of(ENABLE_NAMESPACE);
         return __enableEasyData.get(commandId).getBoolean(scopeId);
     }
