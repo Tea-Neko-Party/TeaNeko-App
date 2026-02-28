@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.fake_client;
+package org.zexnocs.teanekoapp.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -14,7 +14,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class FakeResponseData {
+public class ResponseTestResponseData {
     /// 数据
     @JsonProperty("data")
     private String data;

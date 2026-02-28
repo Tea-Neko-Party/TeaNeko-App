@@ -5,7 +5,9 @@ package org.zexnocs.teanekocore.database.configdata.api;
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
+@FunctionalInterface
 public interface IConfigKey {
     /**
      * 获取配置键。

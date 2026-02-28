@@ -1,9 +1,7 @@
-package org.zexnocs.teanekoapp.fake_client;
+package org.zexnocs.teanekoapp.response;
 
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.client.api.IClient;
-import org.zexnocs.teanekoapp.response.ResponseData;
-import org.zexnocs.teanekoapp.response.ResponseEvent;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
@@ -19,12 +17,12 @@ import java.util.Map;
  * @date 2026/02/23
  */
 @Component
-public class FakeClient implements IClient {
+public class ResponseTestClient implements IClient {
     private final ObjectMapper mapper = new ObjectMapper();
     private final IEventService iEventService;
     private final ITaskService iTaskService;
 
-    public FakeClient(IEventService iEventService, ITaskService iTaskService) {
+    public ResponseTestClient(IEventService iEventService, ITaskService iTaskService) {
         this.iEventService = iEventService;
         this.iTaskService = iTaskService;
     }

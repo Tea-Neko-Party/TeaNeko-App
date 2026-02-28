@@ -34,6 +34,30 @@ public interface IForwardMessageBuilder {
     IForwardMessageBuilder addBotText(String message);
 
     /**
+     * 添加一群文本
+     *
+     * @param textList 消息内容列表
+     * @return {@link IForwardMessageBuilder }
+     */
+    IForwardMessageBuilder addBotAllText(List<String> textList);
+
+    /**
+     * 添加一个消息
+     *
+     * @param messageList 消息内容列表
+     * @return 当前构造器实例
+     */
+    IForwardMessageBuilder addBotList(List<ITeaNekoMessage> messageList);
+
+    /**
+     * 添加一群消息
+     *
+     * @param messageListList 消息内容列表
+     * @return {@link IForwardMessageBuilder }
+     */
+    IForwardMessageBuilder addBotAllList(List<List<ITeaNekoMessage>> messageListList);
+
+    /**
      * 添加一个简单的消息
      *
      * @param userId   用户 ID

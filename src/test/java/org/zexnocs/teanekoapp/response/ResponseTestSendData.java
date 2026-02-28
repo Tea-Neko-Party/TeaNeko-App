@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.fake_client;
+package org.zexnocs.teanekoapp.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
@@ -14,7 +14,7 @@ import tools.jackson.databind.ObjectMapper;
  * @date 2026/02/23
  */
 @Getter
-public class FakeSendData extends AbstractJsonSendData<FakeResponseData> {
+public class ResponseTestSendData extends AbstractJsonSendData<ResponseTestResponseData> {
 
     /// 还剩多少次可以 success
     @JsonProperty("count")
@@ -26,10 +26,10 @@ public class FakeSendData extends AbstractJsonSendData<FakeResponseData> {
      * @param client       发送数据的客户端
      * @param mapper       用于翻译成 json 的 mapper
      */
-    public FakeSendData(@NonNull IClient client,
-                        @NonNull ObjectMapper mapper,
-                        int count) {
-        super(client, mapper, FakeResponseData.class);
+    public ResponseTestSendData(@NonNull IClient client,
+                                @NonNull ObjectMapper mapper,
+                                int count) {
+        super(client, mapper, ResponseTestResponseData.class);
         this.count = count;
     }
 

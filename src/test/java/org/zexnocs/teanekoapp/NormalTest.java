@@ -3,7 +3,7 @@ package org.zexnocs.teanekoapp;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekoapp.fake_client.FakeTeaNekoClient;
+import org.zexnocs.teanekoapp.response.ResponseTestTeaNekoClient;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -17,10 +17,10 @@ public class NormalTest {
     @Autowired
     private ITeaUserService iTeaUserService;
     @Autowired
-    private FakeTeaNekoClient fakeTeaNekoClient;
+    private ResponseTestTeaNekoClient responseTestTeaNekoClient;
 
     @Test
     public void run() {
-        iTeaUserService.getId(fakeTeaNekoClient, "test");
+        iTeaUserService.getId(responseTestTeaNekoClient, "test");
     }
 }

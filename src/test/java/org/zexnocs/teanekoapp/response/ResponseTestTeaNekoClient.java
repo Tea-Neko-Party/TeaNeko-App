@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.fake_client;
+package org.zexnocs.teanekoapp.response;
 
 import org.zexnocs.teanekoapp.client.api.IClient;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
@@ -12,15 +12,15 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
  * @author zExNocs
  * @date 2026/02/27
  */
-@TeaNekoClient(FakeTeaNekoClient.ID)
-public class FakeTeaNekoClient implements ITeaNekoClient {
+@TeaNekoClient(ResponseTestTeaNekoClient.ID)
+public class ResponseTestTeaNekoClient implements ITeaNekoClient {
 
     public final static String ID = "Fake Tea Neko Client";
 
-    private final FakeClient fakeClient;
+    private final ResponseTestClient responseTestClient;
 
-    public FakeTeaNekoClient(FakeClient fakeClient) {
-        this.fakeClient = fakeClient;
+    public ResponseTestTeaNekoClient(ResponseTestClient responseTestClient) {
+        this.responseTestClient = responseTestClient;
     }
 
     /**
@@ -41,7 +41,7 @@ public class FakeTeaNekoClient implements ITeaNekoClient {
      */
     @Override
     public IClient getClient() {
-        return fakeClient;
+        return responseTestClient;
     }
 
     /**

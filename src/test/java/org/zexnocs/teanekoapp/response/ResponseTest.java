@@ -12,8 +12,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.zexnocs.teanekoapp.client.api.IClient;
-import org.zexnocs.teanekoapp.fake_client.FakeClient;
-import org.zexnocs.teanekoapp.fake_client.FakeSendData;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import tools.jackson.databind.ObjectMapper;
@@ -32,15 +30,15 @@ public class ResponseTest {
     @Autowired
     private ISenderService iSenderService;
     @Autowired
-    private FakeClient fakeClient;
+    private ResponseTestClient responseTestClient;
 
     /**
      * 测试成功接收响应的情况。发送一个请求并注册回调函数，等待响应并验证结果是否正确。
      */
     @Test
     public void testSuccess() {
-        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), 3);
-        iSenderService.send(sendData, FakeSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
+        var sendData = new ResponseTestSendData(responseTestClient, new ObjectMapper(), 3);
+        iSenderService.send(sendData, ResponseTestSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertTrue(r.isSuccess());
                     var result = r.getResult();
@@ -55,8 +53,8 @@ public class ResponseTest {
      */
     @Test
     public void testFailure() {
-        var sendData = new FakeSendData(fakeClient, new ObjectMapper(), 10);
-        iSenderService.send(sendData, FakeSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
+        var sendData = new ResponseTestSendData(responseTestClient, new ObjectMapper(), 10);
+        iSenderService.send(sendData, ResponseTestSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertFalse(r.isSuccess());
                     Assertions.assertNotNull(r.getResult());
@@ -70,7 +68,7 @@ public class ResponseTest {
      */
     @Test
     public void testInvalidResponseType() {
-        InvalidSendData sendData = new InvalidSendData(fakeClient, new ObjectMapper(), UUID.randomUUID().toString());
+        InvalidSendData sendData = new InvalidSendData(responseTestClient, new ObjectMapper(), UUID.randomUUID().toString());
         iSenderService.send(sendData, InvalidSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertTrue(r.isSuccess());
