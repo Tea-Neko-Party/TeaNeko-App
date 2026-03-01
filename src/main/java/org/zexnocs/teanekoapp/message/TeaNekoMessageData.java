@@ -22,22 +22,22 @@ import java.util.List;
 @Builder
 public class TeaNekoMessageData implements ITeaNekoMessageData {
     /// 消息的发送时间戳
-    private final ZonedDateTime time;
+    protected final ZonedDateTime time;
 
     /// 消息的唯一 ID
-    private final String messageId;
+    protected final String messageId;
 
     /// 消息内容列表
-    private final List<ITeaNekoMessage> messages;
+    protected final List<ITeaNekoMessage> messages;
 
     /// 获取消息的类型。
     /// 包括私人消息、群组消息和群组的临时对话等不同类型。
-    private final TeaNekoMessageType messageType;
+    protected final TeaNekoMessageType messageType;
 
     /// 消息发送者的元信息
-    private final ITeaNekoUserData userData;
+    protected final ITeaNekoUserData userData;
 
     /// 获取消息来源客户端信息。
     /// 包括客户端支持的信息发送器。
-    private final ITeaNekoClient client;
+    protected final ITeaNekoClient client;
 }

@@ -1,6 +1,5 @@
 package org.zexnocs.teanekoapp.message.api.content;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 
@@ -50,16 +49,4 @@ public interface INodeTeaNekoContent extends ITeaNekoContent {
         return new String[0];
     }
 
-    /**
-     * 获取类型。
-     * 该方法应当加上 {@link com.fasterxml.jackson.annotation.JsonIgnore} 注解防止被序列化。
-     *
-     * @return {@link String} 类型字符串
-     */
-    @NonNull
-    @JsonIgnore
-    @Override
-    default String getType() {
-        return TYPE;
-    }
 }

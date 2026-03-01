@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoapp.message;
 
-import lombok.Builder;
 import lombok.Getter;
+import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoUserData;
@@ -17,23 +17,23 @@ import java.util.UUID;
  * @since 4.0.9
  */
 @Getter
-@Builder
+@SuperBuilder
 public class TeaNekoUserData implements ITeaNekoUserData {
     /**
      * 发送者的 UUID
      */
-    private final @NonNull UUID uuid;
+    protected final @NonNull UUID uuid;
 
     /**
      * 发送者的平台 ID
      * 例如 QQ 号、微信号、Telegram ID 等等，具体取决于消息来源的平台。
      */
-    private final @Nullable String userIdInPlatform;
+    protected final @Nullable String userIdInPlatform;
 
     /**
      * 发送者的 nickname，如果没有则返回 "user"
      */
-    private final @NonNull String nickname;
+    protected final @NonNull String nickname;
 
     /**
      * 发送者在群内的角色。
@@ -44,11 +44,11 @@ public class TeaNekoUserData implements ITeaNekoUserData {
      * 否则返回 "member"。
      * 如果是私聊，则始终为 "owner"。
      */
-    private final @NonNull CommandPermission role;
+    protected final @NonNull CommandPermission role;
 
     /**
      * 发送者的群 ID，或者来自群临时对话的群 ID。
      * 如果是私聊消息，则返回 null。
      */
-    private final @Nullable String groupId;
+    protected final @Nullable String groupId;
 }

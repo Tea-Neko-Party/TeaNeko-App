@@ -31,7 +31,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
         teaNekoClientScanner.getHandlerMap().forEach((k, v) -> {
-            if(v.second() instanceof WebSocketHandler handler) {
+            if(v.second().getClient() instanceof WebSocketHandler handler) {
                 registry.addHandler(handler, "/ws/" + k)
                         .setAllowedOrigins("*");
             }

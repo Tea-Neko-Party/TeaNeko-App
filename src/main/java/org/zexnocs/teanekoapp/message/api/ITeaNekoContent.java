@@ -18,13 +18,4 @@ public interface ITeaNekoContent {
      */
     @NonNull
     String[] toCommandArgs();
-
-    /**
-     * 获取类型。
-     * 该方法应当加上 {@link com.fasterxml.jackson.annotation.JsonIgnore} 注解防止被序列化。
-     *
-     * @return {@link String} 类型字符串
-     */
-    @NonNull
-    String getType();
 }

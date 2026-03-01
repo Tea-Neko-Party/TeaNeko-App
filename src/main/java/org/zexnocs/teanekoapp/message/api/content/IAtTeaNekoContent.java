@@ -1,6 +1,5 @@
 package org.zexnocs.teanekoapp.message.api.content;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 
@@ -22,19 +21,6 @@ public interface IAtTeaNekoContent extends ITeaNekoContent {
      * @return {@link String} 被 @ 用户的平台 ID
      */
     @NonNull String getId();
-
-    /**
-     * 获取类型。
-     * 该方法应当加上 {@link com.fasterxml.jackson.annotation.JsonIgnore} 注解防止被序列化。
-     *
-     * @return {@link String} 类型字符串
-     */
-    @NonNull
-    @JsonIgnore
-    @Override
-    default String getType() {
-        return TYPE;
-    }
 
     /**
      * 转化成命令解析的字符串表示。
