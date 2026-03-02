@@ -21,4 +21,7 @@ public enum CommandScope {
 
     /// 群组和私聊指令，在群聊和私聊中都生效
     ALL,
+
+    /// 其他 scope，不支持的 scope，或不确定的 scope
+    OTHER
 }

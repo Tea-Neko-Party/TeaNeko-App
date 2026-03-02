@@ -36,6 +36,16 @@ public class TeaNekoUserData implements ITeaNekoUserData {
     protected final @NonNull String nickname;
 
     /**
+     * 发送者的备注，如果没有则返回 null
+     */
+    protected final @Nullable String card;
+
+    /**
+     * 发送者的 level，如果没有建议设置为 100
+     */
+    protected final int level;
+
+    /**
      * 发送者在群内的角色。
      * 允许使用范围是 "owner", "admin", "member"，"debug"。
      * 如果是开发者，则返回 "debug"；(在客户端构造 sender data 时注入)

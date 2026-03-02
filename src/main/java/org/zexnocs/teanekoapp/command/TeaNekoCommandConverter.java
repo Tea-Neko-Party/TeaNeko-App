@@ -75,14 +75,14 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
         var scope = switch (data.getMessageType()) {
             case PRIVATE, PRIVATE_TEMP -> CommandScope.PRIVATE;
             case GROUP -> CommandScope.GROUP;
+            default -> CommandScope.OTHER;
         };
 
         // 构造作用域 ID
         var scopeId = switch (scope) {
             case PRIVATE -> getPrivateScopeId(senderData.getUuid());
             case GROUP   -> getGroupScopeId(data.getClient(), senderData.getGroupId());
-            // default 不可能发生，因为上面已经覆盖了所有情况
-            default -> throw new RuntimeException("Invalid scope" + scope.toString());
+            default -> "other@" + senderData.getUuid();
         };
         return IndependentPair.of(scope, scopeId);
     }

@@ -4,6 +4,7 @@ import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.client.api.IClient;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
+import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -53,7 +54,7 @@ public class ResponseTestClient implements IClient {
      * @param message 接收到的消息
      */
     @Override
-    public void handle(String message) {
+    public IEvent<?> handle(String message) {
         // 将 message 转化成 map
         var data = mapper.readValue(message, Map.class);
         // 获取 echo 字段
@@ -77,5 +78,6 @@ public class ResponseTestClient implements IClient {
         }
         var responseEvent = new ResponseEvent(responseData, ResponseData.class);
         iEventService.pushEvent(responseEvent);
+        return null;
     }
 }

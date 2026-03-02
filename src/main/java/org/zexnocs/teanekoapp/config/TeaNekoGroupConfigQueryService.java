@@ -26,8 +26,9 @@ public class TeaNekoGroupConfigQueryService extends AbstractConfigDataQueryServi
     @Autowired
     public TeaNekoGroupConfigQueryService(ConfigDataGetService configDataGetService,
                                           ConfigManagerScanner configManagerScanner,
+                                          ObjectMapper objectMapper,
                                           ILogger logger) {
-        super(configDataGetService, configManagerScanner, new ObjectMapper(), logger);
+        super(configDataGetService, configManagerScanner, objectMapper, logger);
     }
 
     /**

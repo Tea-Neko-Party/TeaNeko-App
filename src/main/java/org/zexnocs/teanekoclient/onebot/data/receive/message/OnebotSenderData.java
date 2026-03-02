@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Onebot 消息发送者原生数据类，包含了发送者的基本信息和在群内的角色等信息。
@@ -71,6 +72,7 @@ public class OnebotSenderData {
     /// 群等级
     @JsonProperty("level")
     @Builder.Default
+    @Nullable
     private String level = null;
 
     /**

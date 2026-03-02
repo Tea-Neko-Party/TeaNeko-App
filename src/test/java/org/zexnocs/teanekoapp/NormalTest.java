@@ -17,6 +17,9 @@ public class NormalTest {
     @Autowired
     private ILogger iLogger;
 
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Test
     public void run() {
         var rawData = """
@@ -30,8 +33,6 @@ public class NormalTest {
                     }
                 }
                 """;
-
-        var objectMapper = new ObjectMapper();
         var collectionType = objectMapper.getTypeFactory().constructCollectionType(List.class, Map.class);
         var parsedData = objectMapper.readValue(rawData, collectionType);
         iLogger.info("test", "Parsed Data: " + parsedData);

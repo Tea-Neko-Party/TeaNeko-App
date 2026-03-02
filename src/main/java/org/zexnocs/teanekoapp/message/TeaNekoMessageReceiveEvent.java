@@ -9,7 +9,8 @@ import org.zexnocs.teanekocore.event.AbstractEvent;
  * 从客户端接收到 message 时触发的事件。
  * <p>客户端方面一般实现一个新的事件来继承该事件，并提供详细的泛型类型。
  * <p>监听器方面如果：
- * <p>- 处理所有 message，可以直接监听 {@code TeaNekoMessageReceiveEvent<?>}; 注意不要在 {@code ?} 处使用具体类型，因为依然会导致非该类型的事件被监听到。
+ * <p>- 处理所有 message，可以直接监听 {@code TeaNekoMessageReceiveEvent<?>};
+ * 注意不要在 {@code ?} 处使用具体类型，因为依然会导致非该类型的事件被监听到。
  * <p>- 如果要处理特定类型的 message，请直接监听客户端中继承的事件。
  * <p>例如，客户端实现了
  * {@code AEvent extends TeaNekoMessageReceiveEvent<ASpecificMessage>}

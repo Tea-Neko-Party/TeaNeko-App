@@ -26,7 +26,7 @@ public abstract class AbstractScanner implements IScanner {
      * 热重载方法。
      */
     @Override
-    public final void reload() {
+    public void reload() {
         _scan();
     }
 
@@ -35,7 +35,7 @@ public abstract class AbstractScanner implements IScanner {
      * 用于防止第一次重复加载。
      */
     @Override
-    public final void init() {
+    public void init() {
         if(isInit.compareAndSet(false, true)) {
             _scan();
         }
