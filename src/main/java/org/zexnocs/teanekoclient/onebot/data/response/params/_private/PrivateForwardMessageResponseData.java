@@ -1,8 +1,11 @@
 package org.zexnocs.teanekoclient.onebot.data.response.params._private;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
 /**
  * 私聊消息转发响应子数据
@@ -12,7 +15,10 @@ import lombok.Getter;
  * @since 4.0.11
  */
 @Getter
-@Builder
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PrivateForwardMessageResponseData {
     @JsonProperty("message_id")
     private long messageId;

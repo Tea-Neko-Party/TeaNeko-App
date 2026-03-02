@@ -1,8 +1,11 @@
 package org.zexnocs.teanekoclient.onebot.data.response.params._private;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
 
 /**
@@ -13,7 +16,10 @@ import lombok.Getter;
  * @since 4.0.11
  */
 @Getter
-@Builder
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 public class GetFriendListResponseData {
     /// 用户的 QQ 号
     @JsonProperty("user_id")
@@ -36,7 +42,10 @@ public class GetFriendListResponseData {
     private Group group;
 
     @Getter
-    @Builder
+    @Setter
+    @SuperBuilder
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Group {
         // 分组 ID
         @JsonProperty("group_id")

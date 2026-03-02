@@ -3,6 +3,8 @@ package org.zexnocs.teanekoapp.message;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
@@ -15,7 +17,10 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
  * @date 2026/02/27
  * @since 4.0.9
  */
+@Getter
+@Setter
 @SuperBuilder
+@NoArgsConstructor
 @AllArgsConstructor
 public class TeaNekoMessage implements ITeaNekoMessage {
     /**
@@ -28,12 +33,12 @@ public class TeaNekoMessage implements ITeaNekoMessage {
      */
     @Getter
     @JsonProperty("type")
-    protected final String type;
+    protected String type;
 
     /**
      * 消息内容对象，具体类型根据消息类型而定。必须实现 ITeaNekoContent 接口。
      */
     @Getter
     @JsonProperty("data")
-    protected final ITeaNekoContent content;
+    protected ITeaNekoContent content;
 }

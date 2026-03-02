@@ -8,12 +8,15 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
-import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.zexnocs.teanekoapp.client.AbstractWebsocketClient;
 import org.zexnocs.teanekoapp.client.api.IClient;
+import org.zexnocs.teanekoapp.response.ResponseEvent;
+import org.zexnocs.teanekoclient.onebot.data.response.OnebotRawResponseData;
+import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
+import org.zexnocs.teanekoclient.onebot.event.PostReceiveEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
@@ -29,27 +32,31 @@ import java.util.concurrent.Executors;
  * @since 4.0.12
  */
 @Component
-public class OnebotClient extends TextWebSocketHandler implements IClient {
+public class OnebotClient extends AbstractWebsocketClient implements IClient {
     private static final String TAG = "Onebot WebSocket Server";
 
-    // 存储所有连接的会话。注意：现在存的是被装饰过的、线程安全的 Session
+    /// 存储所有连接的会话。注意：现在存的是被装饰过的、线程安全的 Session
     private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
-    // 用于异步发送消息的线程池
+    /// 用于异步发送消息的线程池
     private final ExecutorService sendExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
+    ///  logger
     private final ILogger logger;
-    private final IEventService eventService;
-    private final ObjectMapper objectMapper;
+
+    /// 共享数据组件
+    private final OnebotEventShareComponent onebotEventShareComponent;
 
     @Setter
     private boolean canAcceptConnections = true;
 
     @Autowired
-    public OnebotClient(ILogger logger, IEventService eventService, ObjectMapper objectMapper) {
+    public OnebotClient(ILogger logger,
+                        IEventService eventService,
+                        OnebotEventShareComponent onebotEventShareComponent) {
+        super(eventService);
         this.logger = logger;
-        this.eventService = eventService;
-        this.objectMapper = objectMapper;
+        this.onebotEventShareComponent = onebotEventShareComponent;
     }
 
     @Override
@@ -77,7 +84,7 @@ public class OnebotClient extends TextWebSocketHandler implements IClient {
         logger.debug(TAG, "Received message from %s: %s".formatted(session.getId(), payload));
 
         // 异步处理接收到的消息，防止阻塞 WebSocket 的 IO 接收线程
-        CompletableFuture.runAsync(() -> handle(payload), sendExecutor)
+        CompletableFuture.runAsync(() -> _handle(payload), sendExecutor)
                 .exceptionally(ex -> {
                     logger.error(TAG, "消息处理异常: " + ex.getMessage(), ex);
                     return null;
@@ -86,29 +93,22 @@ public class OnebotClient extends TextWebSocketHandler implements IClient {
 
     @Override
     public IEvent<?> handle(String information) {
-        /* todo
-        try {
-            var rootNode = objectMapper.readTree(information);
-            // 解析成一般 post type 消息
-            if(rootNode.has("post_type") || rootNode.has("message_type")) {
-                return new PostReceiveEvent(information);
-            }
-            // 否则尝试解析成 response 消息
-            if(rootNode.has("status") && rootNode.has("echo")) {
-                return new ResponseReceiveEvent(information);
-            }
-
-            // 如果都不匹配，报错并返回 null
-            logger.errorWithReport(ReceiveEvent.class.getName(),
-                    "未知的信息类型: " + information);
-            return null;
-        } catch(Exception e) {
-            logger.errorWithReport(ReceiveEvent.class.getName(),
-                    "JSON 解析失败: " + information + ", 错误: " + e.getMessage());
-            return null;
+        var rootNode = onebotEventShareComponent.objectMapper.readTree(information);
+        // 解析成一般 post type 消息
+        if(rootNode.has("post_type") || rootNode.has("message_type")) {
+            return new PostReceiveEvent(information, onebotEventShareComponent);
+        }
+        // 否则尝试解析成 response 消息
+        if(rootNode.has("status") && rootNode.has("echo")) {
+            // 解析成 OnebotRawResponseData 对象
+            return new ResponseEvent(
+                    onebotEventShareComponent.objectMapper.convertValue(rootNode, OnebotRawResponseData.class),
+                    OnebotRawResponseData.class
+            );
         }
 
-         */
+        // 如果都不匹配，报错并返回 null
+        logger.errorWithReport(this.getClass().getSimpleName(), "未知的信息类型: " + information);
         return null;
     }
 

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
@@ -16,41 +18,44 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
  * @date 2026/03/01
  * @since 4.0.11
  */
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 @TeaNekoContent(OnebotMessage.PREFIX + ImageOnebotContent.TYPE)
 public class ImageOnebotContent implements ITeaNekoContent {
     public static final String TYPE = "image";
 
     // 图片文件名
     @JsonProperty("file")
-    String file;
+    private String file;
 
     // 图片 URL
     @JsonProperty("url")
-    String url;
+    private String url;
 
     // 图片类型
     @JsonProperty("subType")
-    int subType;
+    private int subType;
 
     @JsonProperty("sub_type")
-    int subType2;
+    private int subType2;
 
     // 图片文件大小（字节）
     @JsonProperty("file_size")
-    long fileSize;
+    private long fileSize;
 
     // ---- Lagrange 扩展 ----
     @JsonProperty("filename")
-    String filename;
+    private String filename;
+
     @JsonProperty("summary")
-    String summary;
+    private String summary;
 
     // ---- napcat 扩展 ----
     @JsonProperty("key")
-    String key;
+    private String key;
 
     /**
      * 转化成命令解析的字符串表示。

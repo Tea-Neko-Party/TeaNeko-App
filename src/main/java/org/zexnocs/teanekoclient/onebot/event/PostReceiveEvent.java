@@ -49,7 +49,7 @@ public class PostReceiveEvent extends AbstractEvent<String> {
             } catch (Exception e) {
                 eventShareComponent.logger.errorWithReport(this.getClass().getSimpleName(),
                         "构造事件失败，该事件类的构造函数不接受 String, OnebotEventShareComponent 类型的参数: %s\n信息: %s"
-                                .formatted(eventClazz.getName(), information));
+                                .formatted(eventClazz.getName(), information), e);
                 return null;
             }
         } else {

@@ -11,7 +11,7 @@ import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
  * @date 2026/02/16
  */
 @Configuration
-@EnableJpaRepositories(basePackages = "org.zexnocs.teanekocore")
-@EntityScan(basePackages = "org.zexnocs.teanekocore")
+@EnableJpaRepositories(basePackages = "org.zexnocs")
+@EntityScan(basePackages = "org.zexnocs")
 public class JpaConfig {
 }

@@ -2,10 +2,8 @@ package org.zexnocs.teanekoclient.onebot.data.receive.message;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
+import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -16,15 +14,16 @@ import org.jspecify.annotations.Nullable;
  * @since 4.0.11
  */
 @Getter
-@Builder
-@AllArgsConstructor
+@Setter
+@SuperBuilder
 @NoArgsConstructor
+@AllArgsConstructor
 public class OnebotSenderData {
     // ----- 通用参数 -----
     /// user_id 用户QQ号
     @JsonProperty("user_id")
     @Builder.Default
-    private long userId = -1;
+    private Long userId = -1L;
 
     /// nickname 昵称
     @JsonProperty("nickname")
@@ -51,7 +50,7 @@ public class OnebotSenderData {
     /// group_id 群号
     @JsonProperty("group_id")
     @Builder.Default
-    private int groupId = -1;
+    private Long groupId = -1L;
 
     // ----- Lagrange 扩展 -----
     /// 性别
@@ -62,7 +61,7 @@ public class OnebotSenderData {
     /// 年龄
     @JsonProperty("age")
     @Builder.Default
-    private int age = -1;
+    private Integer age = -1;
 
     /// 地区
     @JsonProperty("area")

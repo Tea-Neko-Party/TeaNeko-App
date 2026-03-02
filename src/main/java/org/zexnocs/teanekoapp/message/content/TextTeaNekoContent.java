@@ -3,6 +3,9 @@ package org.zexnocs.teanekoapp.message.content;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContent;
@@ -16,10 +19,13 @@ import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContent;
  * @since 4.0.10
  */
 @Getter
+@Setter
+@SuperBuilder
+@NoArgsConstructor
 @AllArgsConstructor
 @TeaNekoContent(TeaNekoMessage.PREFIX + ITextTeaNekoContent.TYPE)
 public class TextTeaNekoContent implements ITextTeaNekoContent {
     /// 文本内容
     @JsonProperty("text")
-    private final String text;
+    private String text;
 }

@@ -1,7 +1,10 @@
 package org.zexnocs.teanekoapp.message;
 
-import lombok.Builder;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -19,25 +22,28 @@ import java.util.List;
  * @since 4.0.9
  */
 @Getter
-@Builder
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TeaNekoMessageData implements ITeaNekoMessageData {
     /// 消息的发送时间戳
-    protected final ZonedDateTime time;
+    protected ZonedDateTime time;
 
     /// 消息的唯一 ID
-    protected final String messageId;
+    protected String messageId;
 
     /// 消息内容列表
-    protected final List<? extends ITeaNekoMessage> messages;
+    protected List<? extends ITeaNekoMessage> messages;
 
     /// 获取消息的类型。
     /// 包括私人消息、群组消息和群组的临时对话等不同类型。
-    protected final TeaNekoMessageType messageType;
+    protected TeaNekoMessageType messageType;
 
     /// 消息发送者的元信息
-    protected final ITeaNekoUserData userData;
+    protected ITeaNekoUserData userData;
 
     /// 获取消息来源客户端信息。
     /// 包括客户端支持的信息发送器。
-    protected final ITeaNekoClient client;
+    protected ITeaNekoClient client;
 }

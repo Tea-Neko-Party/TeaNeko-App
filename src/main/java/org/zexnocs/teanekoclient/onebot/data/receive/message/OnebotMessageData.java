@@ -5,6 +5,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -19,8 +21,10 @@ import java.util.Map;
  * @since 4.0.11
  */
 @Getter
-@AllArgsConstructor
+@Setter
+@SuperBuilder
 @NoArgsConstructor
+@AllArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OnebotMessageData {
     // ----- 一般字段 -----
@@ -62,7 +66,7 @@ public class OnebotMessageData {
 
     /// font 字体
     @JsonProperty("font")
-    private int font;
+    private Integer font;
 
     /**
      * 消息子类型。
@@ -98,7 +102,7 @@ public class OnebotMessageData {
     // ----- 临时对话字段 -----
     /// temp_source 临时对话来源
     @JsonProperty("temp_source")
-    private int tempSource;
+    private Integer tempSource;
 
     // ----- Lagrange OneBot 扩展字段 -----
     /// anonymous 匿名信息
@@ -107,7 +111,7 @@ public class OnebotMessageData {
 
     /// target_id 目标ID
     @JsonProperty("target_id")
-    private long targetId;
+    private Long targetId;
 
     /// message_style 消息样式
     @JsonProperty("message_style")

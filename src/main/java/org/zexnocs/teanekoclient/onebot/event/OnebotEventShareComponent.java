@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoclient.onebot.event;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
@@ -39,13 +40,13 @@ public class OnebotEventShareComponent {
     @Autowired
     public OnebotEventShareComponent(ILogger logger,
                                      EventScanner eventScanner,
-                                     ObjectMapper objectMapper,
+                                     @Qualifier("onebotObjectMapper") ObjectMapper customObjectMapper,
                                      OnebotTeaNekoClient onebotTeaNekoClient,
                                      ITeaUserService iTeaUserService,
                                      IEventService iEventService) {
         this.logger = logger;
         this.eventScanner = eventScanner;
-        this.objectMapper = objectMapper;
+        this.objectMapper = customObjectMapper;
         this.onebotTeaNekoClient = onebotTeaNekoClient;
         this.iTeaUserService = iTeaUserService;
         this.iEventService = iEventService;

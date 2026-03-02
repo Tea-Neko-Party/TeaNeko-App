@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
@@ -16,9 +18,11 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
  * @date 2026/03/01
  * @since 4.0.11
  */
-@AllArgsConstructor
-@NoArgsConstructor
 @Getter
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 @TeaNekoContent(OnebotMessage.PREFIX + MFaceOnebotContent.TYPE)
 public class MFaceOnebotContent implements ITeaNekoContent {
     public static final String TYPE = "mface";

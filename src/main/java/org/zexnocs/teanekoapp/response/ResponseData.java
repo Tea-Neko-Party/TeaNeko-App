@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoapp.response;
 
-
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 
 /**
  * 用于接收从 client 的响应信息。
@@ -13,6 +15,9 @@ import lombok.Getter;
  * @since 4.0.8
  */
 @Getter
+@Setter
+@SuperBuilder
+@NoArgsConstructor
 @AllArgsConstructor
 public class ResponseData {
     /// 状态，是否是成功的响应

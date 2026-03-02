@@ -3,6 +3,8 @@ package org.zexnocs.teanekoapp.message.content;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.TeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
@@ -16,18 +18,20 @@ import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
  * @date 2026/02/27
  * @since 4.0.10
  */
+@Setter
+@NoArgsConstructor
 @AllArgsConstructor
 @TeaNekoContent(TeaNekoMessage.PREFIX + IImageTeaNekoContent.TYPE)
 public class ImageTeaNekoContent implements IImageTeaNekoContent {
     /// 图片来源 URL（file/http/base64）
     @JsonProperty("url")
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private final String url;
+    private String url;
 
     /// 同 url，可能有一个为 null
     @JsonProperty("file")
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    private final String file;
+    private String file;
 
     /**
      * 获取图片来源 URL。

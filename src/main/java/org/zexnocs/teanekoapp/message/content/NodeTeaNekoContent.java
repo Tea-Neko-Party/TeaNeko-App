@@ -3,6 +3,9 @@ package org.zexnocs.teanekoapp.message.content;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
@@ -18,18 +21,21 @@ import java.util.List;
  * @since 4.0.10
  */
 @Getter
+@Setter
+@SuperBuilder
+@NoArgsConstructor
 @AllArgsConstructor
 @TeaNekoContent(TeaNekoMessage.PREFIX + INodeTeaNekoContent.TYPE)
 public class NodeTeaNekoContent implements INodeTeaNekoContent {
     /// 被转发消息的用户 ID
     @JsonProperty("userId")
-    private final String userId;
+    private String userId;
 
     /// 被转发消息的昵称
     @JsonProperty("nickname")
-    private final String nickname;
+    private String nickname;
 
     /// 被转发消息的内容列表
     @JsonProperty("content")
-    private final List<ITeaNekoContent> content;
+    private List<ITeaNekoContent> content;
 }

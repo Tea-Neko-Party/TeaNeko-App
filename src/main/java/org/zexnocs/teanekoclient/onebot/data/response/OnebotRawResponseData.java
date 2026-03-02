@@ -2,8 +2,12 @@ package org.zexnocs.teanekoclient.onebot.data.response;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Builder;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.SuperBuilder;
+import org.zexnocs.teanekoapp.response.ResponseData;
 
 /**
  * onebot response 数据类，用于构造 {@link org.zexnocs.teanekoapp.response.ResponseData}
@@ -14,8 +18,11 @@ import lombok.Getter;
  * @since 4.0.11
  */
 @Getter
-@Builder
-public class OnebotResponseRawData {
+@Setter
+@SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
+public class OnebotRawResponseData extends ResponseData {
     /**
      * 状态。"ok" 或者 "error"。
      */

@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.config;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.CommandScope;
@@ -26,9 +27,9 @@ public class TeaNekoGroupConfigQueryService extends AbstractConfigDataQueryServi
     @Autowired
     public TeaNekoGroupConfigQueryService(ConfigDataGetService configDataGetService,
                                           ConfigManagerScanner configManagerScanner,
-                                          ObjectMapper objectMapper,
+                                          @Qualifier("customObjectMapper") ObjectMapper customObjectMapper,
                                           ILogger logger) {
-        super(configDataGetService, configManagerScanner, objectMapper, logger);
+        super(configDataGetService, configManagerScanner, customObjectMapper, logger);
     }
 
     /**

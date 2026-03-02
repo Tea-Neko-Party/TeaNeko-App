@@ -18,7 +18,7 @@ public class ResponseEvent extends AbstractEvent<ResponseData> {
      * @param genericType 事件数据的泛型类型
      */
     public ResponseEvent(@Nullable ResponseData data,
-                         @NonNull Class<ResponseData> genericType) {
+                         @NonNull Class<? extends ResponseData> genericType) {
         super(data, genericType);
     }
 }

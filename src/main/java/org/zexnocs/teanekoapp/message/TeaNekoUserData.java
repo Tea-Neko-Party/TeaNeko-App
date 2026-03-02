@@ -1,6 +1,9 @@
 package org.zexnocs.teanekoapp.message;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -17,33 +20,36 @@ import java.util.UUID;
  * @since 4.0.9
  */
 @Getter
+@Setter
 @SuperBuilder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TeaNekoUserData implements ITeaNekoUserData {
     /**
      * 发送者的 UUID
      */
-    protected final @NonNull UUID uuid;
+    protected @NonNull UUID uuid;
 
     /**
      * 发送者的平台 ID
      * 例如 QQ 号、微信号、Telegram ID 等等，具体取决于消息来源的平台。
      */
-    protected final @Nullable String userIdInPlatform;
+    protected @Nullable String userIdInPlatform;
 
     /**
      * 发送者的 nickname，如果没有则返回 "user"
      */
-    protected final @NonNull String nickname;
+    protected @NonNull String nickname;
 
     /**
      * 发送者的备注，如果没有则返回 null
      */
-    protected final @Nullable String card;
+    protected @Nullable String card;
 
     /**
      * 发送者的 level，如果没有建议设置为 100
      */
-    protected final int level;
+    protected int level;
 
     /**
      * 发送者在群内的角色。
@@ -54,11 +60,11 @@ public class TeaNekoUserData implements ITeaNekoUserData {
      * 否则返回 "member"。
      * 如果是私聊，则始终为 "owner"。
      */
-    protected final @NonNull CommandPermission role;
+    protected @NonNull CommandPermission role;
 
     /**
      * 发送者的群 ID，或者来自群临时对话的群 ID。
      * 如果是私聊消息，则返回 null。
      */
-    protected final @Nullable String groupId;
+    protected @Nullable String groupId;
 }
