@@ -114,7 +114,7 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      * @param messageList 需要被转化的数据
      * @return 预处理后的消息列表
      */
-    List<ITeaNekoMessage> _preProcessMessageList(List<ITeaNekoMessage> messageList) {
+    List<? extends ITeaNekoMessage> _preProcessMessageList(List<? extends ITeaNekoMessage> messageList) {
         var result = new ArrayList<>(messageList);
         // 处理 reply 的情况：如果第一个是 reply，则删除
         if(!result.isEmpty() && result.getFirst().getType().equalsIgnoreCase("reply")) {
@@ -133,7 +133,7 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      * @param messageList 消息列表
      * @return 解析后的消息列表
      */
-    private List<String> _getParsedList(List<ITeaNekoMessage> messageList) {
+    private List<String> _getParsedList(List<? extends ITeaNekoMessage> messageList) {
         return messageList
                 .stream()
                 .map(ITeaNekoMessage::getContent)      // 转化成 Stream<ITeaNekoContent>

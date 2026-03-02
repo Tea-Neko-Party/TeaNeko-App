@@ -37,7 +37,7 @@ public interface ITeaNekoMessageData {
      * @return 消息内容列表，每个元素表示消息的一部分，可以是文本、图片、表情等不同类型的消息内容
      */
     @NonNull
-    List<ITeaNekoMessage> getMessages();
+    List<? extends ITeaNekoMessage> getMessages();
 
     /**
      * 获取消息的类型。
