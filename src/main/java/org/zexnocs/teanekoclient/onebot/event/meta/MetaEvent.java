@@ -30,7 +30,7 @@ public class MetaEvent extends AbstractEvent<String> {
     private final OnebotEventShareComponent eventShareComponent;
 
     public MetaEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(information, String.class);
+        super(information);
         this.eventShareComponent = eventShareComponent;
     }
 

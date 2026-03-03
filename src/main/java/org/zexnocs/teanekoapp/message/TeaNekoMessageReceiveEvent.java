@@ -1,6 +1,5 @@
 package org.zexnocs.teanekoapp.message;
 
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.event.AbstractEvent;
@@ -33,10 +32,8 @@ public class TeaNekoMessageReceiveEvent<T extends ITeaNekoMessageData> extends A
      * 事件的构造函数。
      *
      * @param data        事件数据
-     * @param genericType 事件数据的泛型类型
      */
-    public TeaNekoMessageReceiveEvent(@Nullable T data,
-                                      @NonNull Class<T> genericType) {
-        super(data, genericType);
+    public TeaNekoMessageReceiveEvent(@Nullable T data) {
+        super(data);
     }
 }

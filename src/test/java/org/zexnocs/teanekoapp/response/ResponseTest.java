@@ -38,7 +38,7 @@ public class ResponseTest {
     @Test
     public void testSuccess() {
         var sendData = new ResponseTestSendData(responseTestClient, new ObjectMapper(), 3);
-        iSenderService.send(sendData, ResponseTestSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
+        iSenderService.send(sendData, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertTrue(r.isSuccess());
                     var result = r.getResult();
@@ -54,7 +54,7 @@ public class ResponseTest {
     @Test
     public void testFailure() {
         var sendData = new ResponseTestSendData(responseTestClient, new ObjectMapper(), 10);
-        iSenderService.send(sendData, ResponseTestSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
+        iSenderService.send(sendData, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertFalse(r.isSuccess());
                     Assertions.assertNotNull(r.getResult());
@@ -69,7 +69,7 @@ public class ResponseTest {
     @Test
     public void testInvalidResponseType() {
         InvalidSendData sendData = new InvalidSendData(responseTestClient, new ObjectMapper(), UUID.randomUUID().toString());
-        iSenderService.send(sendData, InvalidSendData.class, Duration.ZERO, 3, Duration.ofSeconds(1))
+        iSenderService.send(sendData, Duration.ZERO, 3, Duration.ofSeconds(1))
                 .thenAccept(r -> {
                     Assertions.assertTrue(r.isSuccess());
                     Assertions.assertNotNull(r.getResult());

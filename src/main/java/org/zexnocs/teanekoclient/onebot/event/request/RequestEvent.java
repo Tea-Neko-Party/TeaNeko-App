@@ -30,7 +30,7 @@ public class RequestEvent extends AbstractEvent<String> {
     private final OnebotEventShareComponent eventShareComponent;
 
     public RequestEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(information, String.class);
+        super(information);
         this.eventShareComponent = eventShareComponent;
     }
 

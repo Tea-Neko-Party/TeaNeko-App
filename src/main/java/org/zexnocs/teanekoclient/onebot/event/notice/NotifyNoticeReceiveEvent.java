@@ -17,6 +17,6 @@ public class NotifyNoticeReceiveEvent extends AbstractEvent<NotifyNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "notify";
 
     public NotifyNoticeReceiveEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(NotifyNoticeData.fromJson(information, eventShareComponent.objectMapper), NotifyNoticeData.class);
+        super(NotifyNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

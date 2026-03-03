@@ -23,9 +23,6 @@ public class AbstractSender<S extends ISendData<R>, R> implements ISender<S, R> 
     /// 发送服务，用于将发送数据推送给客户端，并处理响应数据
     private final ISenderService senderService;
 
-    /// 发送数据的类型，用于提交给 senderService
-    private final Class<S> sendDataClass;
-
     /// 发送器 token，用于指定 send data 的发送 token 来标识身份
     @Getter(AccessLevel.PROTECTED)
     private final String token;
@@ -34,12 +31,10 @@ public class AbstractSender<S extends ISendData<R>, R> implements ISender<S, R> 
      * 构造函数，初始化发送器。
      *
      * @param senderService 发送服务实例，用于将发送数据推送给客户端，并处理响应数据
-     * @param sendDataClass 发送数据的类型，用于提交给 senderService
      * @param token         发送器 token，用于指定 send data 的发送 token 来标识身份
      */
-    public AbstractSender(ISenderService senderService, Class<S> sendDataClass, String token) {
+    public AbstractSender(ISenderService senderService, String token) {
         this.senderService = senderService;
-        this.sendDataClass = sendDataClass;
         this.token = token;
     }
 
@@ -54,6 +49,6 @@ public class AbstractSender<S extends ISendData<R>, R> implements ISender<S, R> 
      */
     @Override
     public TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendData, Duration delay, int maxRetryCount, Duration retryDelay) {
-        return senderService.send(sendData, sendDataClass, delay, maxRetryCount, retryDelay);
+        return senderService.send(sendData, delay, maxRetryCount, retryDelay);
     }
 }

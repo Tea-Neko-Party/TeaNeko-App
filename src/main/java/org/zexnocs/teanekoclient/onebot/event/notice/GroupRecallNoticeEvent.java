@@ -17,6 +17,6 @@ public class GroupRecallNoticeEvent extends AbstractEvent<GroupRecallNoticeData>
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_recall";
 
     public GroupRecallNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupRecallNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupRecallNoticeData.class);
+        super(GroupRecallNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

@@ -17,6 +17,6 @@ public class BotOnlineNoticeEvent extends AbstractEvent<BotOnlineNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "bot_online";
 
     public BotOnlineNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(BotOnlineNoticeData.fromJson(information, eventShareComponent.objectMapper), BotOnlineNoticeData.class);
+        super(BotOnlineNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

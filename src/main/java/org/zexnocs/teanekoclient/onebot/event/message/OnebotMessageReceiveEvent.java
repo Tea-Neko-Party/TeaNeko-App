@@ -24,7 +24,7 @@ public class OnebotMessageReceiveEvent extends TeaNekoMessageReceiveEvent<TeaNek
      * @param teaNekoMessageData 符合 TeaNeko 规范的消息数据，包含了 TeaNeko 规范中定义的字段和功能
      */
     public OnebotMessageReceiveEvent(OnebotMessageData onebotMessageData, TeaNekoMessageData teaNekoMessageData) {
-        super(teaNekoMessageData, TeaNekoMessageData.class);
+        super(teaNekoMessageData);
         this.onebotMessageData = onebotMessageData;
     }
 }

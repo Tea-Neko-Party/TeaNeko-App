@@ -17,6 +17,6 @@ public class GroupBanNoticeEvent extends AbstractEvent<GroupBanNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_ban";
 
     public GroupBanNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupBanNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupBanNoticeData.class);
+        super(GroupBanNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

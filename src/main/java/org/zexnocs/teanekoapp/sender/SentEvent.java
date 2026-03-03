@@ -1,6 +1,5 @@
 package org.zexnocs.teanekoapp.sender;
 
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import org.zexnocs.teanekocore.event.AbstractEvent;
@@ -17,10 +16,9 @@ public class SentEvent<T extends ISendData<?>> extends AbstractEvent<T> {
      * 事件的构造函数。
      *
      * @param data        事件数据
-     * @param genericType 事件数据的类型
      */
-    public SentEvent(@Nullable T data, @NonNull Class<T> genericType) {
-        super(data, genericType);
+    public SentEvent(@Nullable T data) {
+        super(data);
     }
 
     /**

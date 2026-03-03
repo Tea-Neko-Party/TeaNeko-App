@@ -17,6 +17,6 @@ public class GroupRequestEvent extends AbstractEvent<GroupRequestData> {
     public static final String KEY = RequestEvent.PARSE_SUFFIX_KEY + "group";
 
     public GroupRequestEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupRequestData.fromJson(information, eventShareComponent.objectMapper), GroupRequestData.class);
+        super(GroupRequestData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

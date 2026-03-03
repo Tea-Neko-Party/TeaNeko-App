@@ -17,6 +17,6 @@ public class LifecycleMetaEvent extends AbstractEvent<LifecycleMetaEventData> {
     public static final String KEY = MetaEvent.PARSE_SUFFIX_KEY + "lifecycle";
 
     public LifecycleMetaEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(LifecycleMetaEventData.fromJson(information, eventShareComponent.objectMapper), LifecycleMetaEventData.class);
+        super(LifecycleMetaEventData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

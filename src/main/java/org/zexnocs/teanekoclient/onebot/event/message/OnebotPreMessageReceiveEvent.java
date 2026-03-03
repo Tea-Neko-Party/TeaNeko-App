@@ -38,7 +38,7 @@ public class OnebotPreMessageReceiveEvent extends AbstractEvent<OnebotMessageDat
      * @param eventShareComponent 共享组件
      */
     public OnebotPreMessageReceiveEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(OnebotMessageData.fromJson(information, eventShareComponent.objectMapper), OnebotMessageData.class);
+        super(OnebotMessageData.fromJson(information, eventShareComponent.objectMapper));
         this.eventShareComponent = eventShareComponent;
     }
 

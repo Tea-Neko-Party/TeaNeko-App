@@ -19,6 +19,6 @@ public class ResponseEvent extends AbstractEvent<ResponseData> {
      */
     public ResponseEvent(@Nullable ResponseData data,
                          @NonNull Class<? extends ResponseData> genericType) {
-        super(data, genericType);
+        super(data);
     }
 }

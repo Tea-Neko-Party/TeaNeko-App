@@ -16,12 +16,6 @@ public interface IEvent<T> {
     T getData();
 
     /**
-     * 获取事件数据的类型。
-     * @return 事件数据的类型
-     */
-    Class<? extends T> getGenericType();
-
-    /**
      * 事件是否被取消。
      * @return 是否被取消
      */
@@ -44,13 +38,6 @@ public interface IEvent<T> {
      * @param cancelled 是否被取消
      */
     boolean getAndSetCancelled(boolean cancelled);
-
-    /**
-     * 检测事件的完整性。
-     * 如果完整则返回 true，否则返回 false。
-     * @return 是否完整。
-     */
-    boolean isComplete();
 
     /**
      * 在通知处理器之前调用的方法。

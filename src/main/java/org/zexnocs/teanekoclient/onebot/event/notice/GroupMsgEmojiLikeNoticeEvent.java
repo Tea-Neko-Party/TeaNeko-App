@@ -17,6 +17,6 @@ public class GroupMsgEmojiLikeNoticeEvent extends AbstractEvent<GroupMsgEmojiLik
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_msg_emoji_like";
 
     public GroupMsgEmojiLikeNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupMsgEmojiLikeNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupMsgEmojiLikeNoticeData.class);
+        super(GroupMsgEmojiLikeNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

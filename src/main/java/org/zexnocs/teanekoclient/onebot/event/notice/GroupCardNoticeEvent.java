@@ -17,6 +17,6 @@ public class GroupCardNoticeEvent extends AbstractEvent<GroupCardNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_card";
 
     public GroupCardNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupCardNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupCardNoticeData.class);
+        super(GroupCardNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

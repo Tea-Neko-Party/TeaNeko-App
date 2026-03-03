@@ -2,7 +2,6 @@ package org.zexnocs.teanekocore.event;
 
 import lombok.Getter;
 import lombok.Setter;
-import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 
@@ -23,19 +22,13 @@ public abstract class AbstractEvent<T> implements IEvent<T> {
     @Getter
     private T data;
 
-    /// 事件数据的类型
-    @Getter
-    private final Class<? extends T> genericType;
-
     /**
      * 事件的构造函数。
      *
-     * @param data        事件数据
-     * @param genericType 事件数据的泛型类型
+     * @param data 事件数据
      */
-    public AbstractEvent(@Nullable T data, @NonNull Class<? extends T> genericType) {
+    public AbstractEvent(@Nullable T data) {
         this.data = data;
-        this.genericType = genericType;
     }
 
     /**
@@ -92,19 +85,5 @@ public abstract class AbstractEvent<T> implements IEvent<T> {
     @Override
     public boolean getAndSetCancelled(boolean cancelled) {
         return isCancelled.getAndSet(cancelled);
-    }
-
-    /**
-     * 检测事件的完整性。
-     * 如果完整则返回 true，否则返回 false。
-     * @return 是否完整。
-     */
-    @Override
-    public boolean isComplete() {
-        // 如果 T 是 Void，则永远返回 true
-        if (data == null && Void.class.equals(genericType)) {
-            return true;
-        }
-        return data != null;
     }
 }

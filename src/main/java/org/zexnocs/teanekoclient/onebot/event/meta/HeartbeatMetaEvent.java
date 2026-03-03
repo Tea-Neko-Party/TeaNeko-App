@@ -17,6 +17,6 @@ public class HeartbeatMetaEvent extends AbstractEvent<HeartbeatMetaEventData> {
     public static final String KEY = MetaEvent.PARSE_SUFFIX_KEY + "heartbeat";
 
     public HeartbeatMetaEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(HeartbeatMetaEventData.fromJson(information, eventShareComponent.objectMapper), HeartbeatMetaEventData.class);
+        super(HeartbeatMetaEventData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

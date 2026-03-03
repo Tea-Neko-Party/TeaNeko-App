@@ -18,6 +18,6 @@ public class GroupDecreaseNoticeEvent extends AbstractEvent<GroupDecreaseNoticeD
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_decrease";
 
     public GroupDecreaseNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupDecreaseNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupDecreaseNoticeData.class);
+        super(GroupDecreaseNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

@@ -50,7 +50,6 @@ public class SenderService implements ISenderService {
      * @see ITaskResult
      *
      * @param sendData      要发送的数据
-     * @param sendDataClass 发送数据的类对象
      * @param delay         发送延迟的时间，单位毫秒
      * @param maxRetryCount 最大重试次数
      * @param retryDelay    重试延迟的时间，单位毫秒
@@ -59,7 +58,6 @@ public class SenderService implements ISenderService {
      */
     @Override
     public <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(S sendData,
-                                                                             Class<S> sendDataClass,
                                                                              Duration delay,
                                                                              int maxRetryCount,
                                                                              Duration retryDelay)
@@ -81,7 +79,7 @@ public class SenderService implements ISenderService {
                 .name("注册 sendData 的响应 future")
                 .callable(() -> {
                     // 推送事件
-                    iEventService.pushEvent(new SentEvent<>(sendData, sendDataClass));
+                    iEventService.pushEvent(new SentEvent<>(sendData));
                     return null;
                 })
                 .delayDuration(delay)

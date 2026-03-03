@@ -17,6 +17,6 @@ public class EssenceNoticeEvent extends AbstractEvent<EssenceNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "essence";
 
     public EssenceNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(EssenceNoticeData.fromJson(information, eventShareComponent.objectMapper), EssenceNoticeData.class);
+        super(EssenceNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

@@ -17,6 +17,6 @@ public class GroupAdminNoticeEvent extends AbstractEvent<GroupAdminNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_admin";
 
     public GroupAdminNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupAdminNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupAdminNoticeData.class);
+        super(GroupAdminNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

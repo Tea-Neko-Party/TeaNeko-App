@@ -17,6 +17,6 @@ public class GroupUploadNoticeEvent extends AbstractEvent<GroupUploadNoticeData>
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "group_upload";
 
     public GroupUploadNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(GroupUploadNoticeData.fromJson(information, eventShareComponent.objectMapper), GroupUploadNoticeData.class);
+        super(GroupUploadNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

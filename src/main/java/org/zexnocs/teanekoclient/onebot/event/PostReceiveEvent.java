@@ -26,7 +26,7 @@ public class PostReceiveEvent extends AbstractEvent<String> {
 
     /// 构造器
     public PostReceiveEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(information, String.class);
+        super(information);
         this.eventShareComponent = eventShareComponent;
     }
 

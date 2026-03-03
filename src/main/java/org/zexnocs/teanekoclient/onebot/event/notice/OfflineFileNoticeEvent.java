@@ -17,6 +17,6 @@ public class OfflineFileNoticeEvent extends AbstractEvent<OfflineFileNoticeData>
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "offline_file";
 
     public OfflineFileNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(OfflineFileNoticeData.fromJson(information, eventShareComponent.objectMapper), OfflineFileNoticeData.class);
+        super(OfflineFileNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

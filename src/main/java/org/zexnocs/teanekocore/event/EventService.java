@@ -90,13 +90,6 @@ public class EventService implements IEventService {
                 return;
             }
 
-            // 判断事件的完整性
-            if (!event.isComplete()) {
-                logger.warn(this.getClass().getSimpleName(), "%s 不完整，取消事件。".formatted(TAG));
-                event.setCancelled(true);
-                return;
-            }
-
             // 通知之前的操作
             try {
                 event._beforeNotify();

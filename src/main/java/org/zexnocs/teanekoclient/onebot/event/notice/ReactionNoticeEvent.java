@@ -17,6 +17,6 @@ public class ReactionNoticeEvent extends AbstractEvent<ReactionNoticeData> {
     public static final String KEY = NoticeReceiveEvent.PARSE_SUFFIX_KEY + "reaction";
 
     public ReactionNoticeEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(ReactionNoticeData.fromJson(information, eventShareComponent.objectMapper), ReactionNoticeData.class);
+        super(ReactionNoticeData.fromJson(information, eventShareComponent.objectMapper));
     }
 }

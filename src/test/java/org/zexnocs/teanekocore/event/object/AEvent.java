@@ -16,6 +16,6 @@ public class AEvent extends AbstractEvent<AtomicInteger>  {
      * @param integer 用于是否触发了事件的标志。当事件被触发时，次数会增加 1。
      */
     public AEvent(AtomicInteger integer) {
-        super(integer, AtomicInteger.class);
+        super(integer);
     }
 }

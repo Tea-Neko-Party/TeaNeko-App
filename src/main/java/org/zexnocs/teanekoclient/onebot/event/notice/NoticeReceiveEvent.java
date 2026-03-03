@@ -29,7 +29,7 @@ public class NoticeReceiveEvent extends AbstractEvent<String> {
     private final OnebotEventShareComponent eventShareComponent;
 
     public NoticeReceiveEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(information, String.class);
+        super(information);
         this.eventShareComponent = eventShareComponent;
     }
 
