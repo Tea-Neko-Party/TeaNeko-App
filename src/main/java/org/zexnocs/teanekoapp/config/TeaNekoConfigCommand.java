@@ -50,7 +50,7 @@ public class TeaNekoConfigCommand {
     @DefaultCommand
     public void queryCurrentConfig(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         if(ruleName.isBlank()) {
             try {
                 var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
@@ -91,7 +91,7 @@ public class TeaNekoConfigCommand {
     public void queryExistingPrivateManagerRules(CommandData<ITeaNekoMessageData> commandData,
                                                  @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         if(ruleName.isBlank()) {
             var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
                     teaNekoPrivateConfigQueryService.queryAllConfigManagerDetails() :
@@ -124,7 +124,7 @@ public class TeaNekoConfigCommand {
     public void registerPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                            String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.registerConfig(rule, commandData.getScopeId());
@@ -142,7 +142,7 @@ public class TeaNekoConfigCommand {
     public void unregisterPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                              String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             if (iConfigDataService.unregisterConfig(rule, commandData.getScopeId())) {
@@ -162,7 +162,7 @@ public class TeaNekoConfigCommand {
     public void setPrivateManagerRuleConfig(CommandData<ITeaNekoMessageData> commandData,
                                             String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -193,7 +193,7 @@ public class TeaNekoConfigCommand {
     public void addPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                 String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -226,7 +226,7 @@ public class TeaNekoConfigCommand {
     public void removePrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                    String ruleName, String configField, int index) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.removeFromRuleConfigListFiled(rule, commandData.getScopeId(), configField, index);
@@ -258,7 +258,7 @@ public class TeaNekoConfigCommand {
     public void clearPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                   String ruleName, String configField) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.clearRuleConfigListFiled(rule, commandData.getScopeId(), configField);

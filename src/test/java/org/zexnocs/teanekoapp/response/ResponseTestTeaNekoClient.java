@@ -40,7 +40,7 @@ public class ResponseTestTeaNekoClient implements ITeaNekoClient {
      * @return {@link IClient} 原客户端
      */
     @Override
-    public IClient getClient() {
+    public IClient client() {
         return responseTestClient;
     }
 
@@ -50,7 +50,7 @@ public class ResponseTestTeaNekoClient implements ITeaNekoClient {
      * @return {@link ITeaNekoToolbox} Tea Neko 发送器工具箱
      */
     @Override
-    public ITeaNekoToolbox getTeaNekoToolbox() {
+    public ITeaNekoToolbox teaNekoToolbox() {
         return null;
     }
 }

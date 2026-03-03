@@ -65,7 +65,7 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
         }
         // 处理帮助指令
         var messageSender = data.getClient()
-                .getTeaNekoToolbox()
+                .teaNekoToolbox()
                 .getMessageSender(CommandData.getCommandToken());
         var commandAnnotation = mapData.getCommandAnnotation();
         var descriptionData = commandDescriptionScanner.getDescriptionData(commandAnnotation);

@@ -42,7 +42,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
             messageSender.sendReplyMessage("用户不存在喵", data);
             return;
         }
@@ -58,7 +58,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
             messageSender.sendReplyMessage("用户不存在喵", data);
             return;
         }
@@ -74,7 +74,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
             messageSender.sendReplyMessage("用户不存在喵", data);
             return;
         }
@@ -90,7 +90,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
             messageSender.sendReplyMessage("用户不存在喵", data);
             return;
         }

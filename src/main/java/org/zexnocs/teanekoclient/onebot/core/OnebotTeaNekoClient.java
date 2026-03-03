@@ -1,13 +1,13 @@
 package org.zexnocs.teanekoclient.onebot.core;
 
-import lombok.Getter;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
 /**
- * todo
+ * Onebot TeaNeko 客户端类，封装了 OnebotClient 和 OnebotToolbox。
  *
  * @author zExNocs
  * @date 2026/03/02
@@ -15,20 +15,12 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
  */
 @TeaNekoClient(value = OnebotTeaNekoClient.ID, description = """
         Onebot 11 协议的客户端。""")
-public class OnebotTeaNekoClient implements ITeaNekoClient {
+public record OnebotTeaNekoClient(OnebotClient client, OnebotToolbox teaNekoToolbox) implements ITeaNekoClient {
     public static final String ID = "onebot";
 
-    @Getter
-    private final OnebotClient client;
-
-    @Getter
-    private final OnebotToolbox teaNekoToolbox;
-
     @Lazy
-    public OnebotTeaNekoClient(OnebotClient onebotClient, OnebotToolbox onebotToolbox) {
-        this.client = onebotClient;
-        this.teaNekoToolbox = onebotToolbox;
-    }
+    @Autowired
+    public OnebotTeaNekoClient {}
 
     /**
      * 获取 Client ID，用于标识客户端，也用作 群组 Command Scope 的作用域 ID 前缀。

@@ -25,12 +25,12 @@ public interface ITeaNekoClient {
      *
      * @return {@link IClient} 原客户端
      */
-    IClient getClient();
+    IClient client();
 
     /**
      * 获取 Tea Neko 发送器工具箱
      *
      * @return {@link ITeaNekoToolbox} Tea Neko 发送器工具箱
      */
-    ITeaNekoToolbox getTeaNekoToolbox();
+    ITeaNekoToolbox teaNekoToolbox();
 }
