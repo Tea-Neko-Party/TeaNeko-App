@@ -30,6 +30,12 @@ public class GroupMsgSendParamsData implements IMessageSendParamsData {
         return ACTION;
     }
 
+    /**
+     * 使用新的消息列表创建一个新的参数数据对象。
+     *
+     * @param newMessageSubDataList 新的消息列表
+     * @return {@link IMessageSendParamsData }
+     */
     @Override
     public IMessageSendParamsData withMessage(List<OnebotMessage> newMessageSubDataList) {
         return this.toBuilder()

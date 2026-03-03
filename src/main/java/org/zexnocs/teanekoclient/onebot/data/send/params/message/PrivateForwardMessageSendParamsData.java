@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
-import org.zexnocs.teanekoclient.onebot.data.response.params._private.PrivateForwardMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 import java.util.List;
@@ -19,7 +19,7 @@ import java.util.List;
  */
 @Getter
 @Builder
-public class PrivateForwardMessageSendParamsData implements ISendParamsData<PrivateForwardMessageResponseData> {
+public class PrivateForwardMessageSendParamsData implements ISendParamsData<OnebotMessageResponseData> {
     public static final String ACTION = "send_private_forward_msg";
 
     /// 私聊账号
@@ -62,7 +62,7 @@ public class PrivateForwardMessageSendParamsData implements ISendParamsData<Priv
      * @return 反应数据的类型。
      */
     @Override
-    public Class<PrivateForwardMessageResponseData> getResponseDataType() {
-        return PrivateForwardMessageResponseData.class;
+    public Class<OnebotMessageResponseData> getResponseDataType() {
+        return OnebotMessageResponseData.class;
     }
 }

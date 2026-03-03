@@ -3,7 +3,7 @@ package org.zexnocs.teanekoclient.onebot.data.send.params.group;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
-import org.zexnocs.teanekoclient.onebot.data.response.params.group.GroupMemberResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.GroupMemberResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 /**

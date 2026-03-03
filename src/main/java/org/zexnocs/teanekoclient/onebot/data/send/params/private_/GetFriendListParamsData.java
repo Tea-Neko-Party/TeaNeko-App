@@ -2,7 +2,7 @@ package org.zexnocs.teanekoclient.onebot.data.send.params.private_;
 
 import lombok.Builder;
 import lombok.Getter;
-import org.zexnocs.teanekoclient.onebot.data.response.params._private.GetFriendListResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.GetFriendListResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 /**
