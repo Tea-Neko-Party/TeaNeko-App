@@ -9,6 +9,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriBuilder;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.api.APIRequestData;
 import org.zexnocs.teanekocore.api_response.api.APIRequestParam;
 import org.zexnocs.teanekocore.api_response.api.IAPIRequestData;
@@ -18,6 +19,7 @@ import org.zexnocs.teanekocore.api_response.exception.APIURLErrorException;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
+import org.zexnocs.teanekocore.logger.ILogger;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.util.retry.Retry;
@@ -47,26 +49,29 @@ public class APIResponseService implements IAPIResponseService {
 
     /// 用于执行 API 请求的 Scheduler
     private final Scheduler scheduler;
+    private final ILogger logger;
 
     @Autowired
-    public APIResponseService(Scheduler apiScheduler, ICacheService iCacheService) {
+    public APIResponseService(Scheduler apiScheduler, ICacheService iCacheService, ILogger logger) {
         this.scheduler = apiScheduler;
         this.responseCache = ConcurrentMapCacheContainer.of(iCacheService);
+        this.logger = logger;
     }
 
     /**
      * 添加一个 API 请求任务
-     * @param requestData 请求数据对象，必须实现 {@link IAPIRequestData} 接口
+     *
+     * @param requestData  请求数据对象，必须实现 {@link IAPIRequestData} 接口
      * @param responseType 响应数据类型，必须实现 {@link IAPIResponseData} 接口
      * @param disableCache 是否将该数据缓存，防止重复请求。如果为 false，则会将该数据缓存到 responseCache 中，
-     * @param skipCache 是否跳过缓存，直接请求 API。如果为 false，则会先检查 responseCache 中是否有缓存的响应数据，
-     * @param <REQ> 请求数据类型，必须实现 {@link IAPIRequestData} 接口
-     * @param <RES> 响应数据类型，必须实现 {@link IAPIResponseData} 接口
+     * @param skipCache    是否跳过缓存，直接请求 API。如果为 false，则会先检查 responseCache 中是否有缓存的响应数据，
+     * @param <REQ>        请求数据类型，必须实现 {@link IAPIRequestData} 接口
+     * @param <RES>        响应数据类型，必须实现 {@link IAPIResponseData} 接口
      * @throws APIRequestAnnotationNotFoundException 如果请求数据类缺少 APIRequestData 注解
-     * @throws APIURLErrorException 如果 APIRequestData 注解中的 URL 为空或格式错误
+     * @throws APIURLErrorException                  如果 APIRequestData 注解中的 URL 为空或格式错误
      */
     @Override
-    public <REQ extends IAPIRequestData, RES extends IAPIResponseData> CompletableFuture<RES> addTask(
+    public <REQ extends IAPIRequestData, RES extends IAPIResponseData> TaskFuture<RES> addTask(
             REQ requestData,
             Class<RES> responseType,
             boolean disableCache,
@@ -83,7 +88,7 @@ public class APIResponseService implements IAPIResponseService {
             throw new APIURLErrorException("APIRequestData 注解中的 URL 不能为空");
         }
         // 获取 WebClient 实例
-        var future = new CompletableFuture<RES>();
+        var future = new TaskFuture<>(logger, "订阅 api", new CompletableFuture<RES>());
         var webClient = _getWebClient(url);
         var params = _extractParams(requestData);
         boolean isPost = apiRequestAnnotation.method().equalsIgnoreCase("POST");
