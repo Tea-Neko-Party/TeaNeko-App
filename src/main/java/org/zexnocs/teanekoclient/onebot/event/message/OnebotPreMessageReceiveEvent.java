@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoclient.onebot.event.message;
 
-import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekoclient.onebot.event.PostReceiveEvent;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageDataConvertUtils;
@@ -9,14 +9,14 @@ import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.Event;
 
 /**
- * 在发送 {@link OnebotMessageReceiveEvent} 之前触发的事件，主要用于构造 {@link TeaNekoMessageData}。
+ * 在发送 {@link OnebotMessageReceiveEvent} 之前触发的事件，主要用于构造 {@link OnebotMessageData}。
  *
  * @author zExNocs
  * @date 2026/03/02
  * @since 4.0.11
  */
 @Event(OnebotPreMessageReceiveEvent.KEY)
-public class OnebotPreMessageReceiveEvent extends AbstractEvent<OnebotMessageData> {
+public class OnebotPreMessageReceiveEvent extends AbstractEvent<OnebotRawMessageData> {
     public final static String KEY = PostReceiveEvent.SUFFIX_KEY + "message";
 
     /**
@@ -30,7 +30,7 @@ public class OnebotPreMessageReceiveEvent extends AbstractEvent<OnebotMessageDat
      * @param eventShareComponent 共享组件
      */
     public OnebotPreMessageReceiveEvent(String information, OnebotEventShareComponent eventShareComponent) {
-        super(OnebotMessageData.fromJson(information, eventShareComponent.objectMapper));
+        super(OnebotRawMessageData.fromJson(information, eventShareComponent.objectMapper));
         this.eventShareComponent = eventShareComponent;
     }
 

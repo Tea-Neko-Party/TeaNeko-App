@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoclient.onebot.utils;
 
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
@@ -29,19 +29,20 @@ public enum OnebotMessageDataConvertUtils {
      * @param onebotData 原始的 onebot 消息数据
      * @param eventShareComponent 共享组件
      * @param uuid 发送事件的用户的 UUID
-     * @return {@link Pair }<{@link OnebotMessageData }, {@link TeaNekoMessageData }>
+     * @return {@link Pair }<{@link OnebotRawMessageData }, {@link OnebotMessageData }>
      */
-    public TeaNekoMessageData parse(OnebotMessageData onebotData,
-                                    OnebotEventShareComponent eventShareComponent,
-                                    UUID uuid) {
+    public OnebotMessageData parse(OnebotRawMessageData onebotData,
+                                   OnebotEventShareComponent eventShareComponent,
+                                   UUID uuid) {
         // 构造 teaNekoData，使用 onebotData 中的字段进行转换
-        return TeaNekoMessageData.builder()
+        return OnebotMessageData.builder()
                 .time(ChinaDateUtil.Instance.convertToChinaZonedDateTime(onebotData.getTime() * 1000L))
                 .messageId(String.valueOf(onebotData.getMessageId()))
                 .messages(onebotData.getMessage())
                 .messageType(getTeaNekoMessageType(onebotData))
                 .userData(getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData), uuid))
                 .client(eventShareComponent.onebotTeaNekoClient)
+                .onebotRawMessageData(onebotData)
                 .build();
     }
 
@@ -51,7 +52,7 @@ public enum OnebotMessageDataConvertUtils {
      * @param onebotData 原始的 onebot 消息数据
      * @return {@link TeaNekoMessageType } 转换后的 TeaNekoMessageType 枚举值
      */
-    public @NonNull TeaNekoMessageType getTeaNekoMessageType(OnebotMessageData onebotData) {
+    public @NonNull TeaNekoMessageType getTeaNekoMessageType(OnebotRawMessageData onebotData) {
         TeaNekoMessageType type;
         var rawType = onebotData.getMessageType();
         if(rawType.equalsIgnoreCase("private")) {
@@ -76,7 +77,7 @@ public enum OnebotMessageDataConvertUtils {
      * @param uuid 发送事件的用户的 UUID
      * @return {@link TeaNekoUserData } 构造后的
      */
-    public TeaNekoUserData getTeaNekoUserData(OnebotMessageData onebotData,
+    public TeaNekoUserData getTeaNekoUserData(OnebotRawMessageData onebotData,
                                               TeaNekoMessageType teaNekoMessageType,
                                               UUID uuid) {
         var senderData = onebotData.getSender();
