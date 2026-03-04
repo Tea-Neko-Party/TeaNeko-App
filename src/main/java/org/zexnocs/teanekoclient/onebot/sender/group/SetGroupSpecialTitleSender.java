@@ -1,11 +1,11 @@
-package org.zexnocs.teanekoclient.onebot.sender.request;
+package org.zexnocs.teanekoclient.onebot.sender.group;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
-import org.zexnocs.teanekoclient.onebot.data.send.params.request.SetGroupSpecialTitleRequestSendParamsData;
+import org.zexnocs.teanekoclient.onebot.data.send.params.group.SetGroupSpecialTitleRequestSendParamsData;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import tools.jackson.databind.ObjectMapper;
 

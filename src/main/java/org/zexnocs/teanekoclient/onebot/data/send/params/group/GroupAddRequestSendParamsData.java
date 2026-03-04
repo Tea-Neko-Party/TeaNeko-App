@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoclient.onebot.data.send.params.request;
+package org.zexnocs.teanekoclient.onebot.data.send.params.group;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -10,7 +10,7 @@ import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 import java.util.Map;
 
 /**
- * 添加/拒绝私人好友请求的参数数据
+ * 同意/拒绝加群请求
  *
  * @author zExNocs
  * @date 2026/03/01
@@ -21,8 +21,8 @@ import java.util.Map;
 @Getter
 @Builder
 @SuppressWarnings("rawtypes")
-public class PrivateAddRequestSendParamsData implements ISendParamsData<Map> {
-    public final static String ACTION = "set_friend_add_request";
+public class GroupAddRequestSendParamsData implements ISendParamsData<Map> {
+    public final static String ACTION = "set_group_add_request";
 
     @Override
     public String getAction() {

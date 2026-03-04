@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoclient.onebot.data.send.params.request;
+package org.zexnocs.teanekoclient.onebot.data.send.params.private_;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -10,11 +10,10 @@ import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 import java.util.Map;
 
 /**
- * 设置群头衔请求参数数据。
- * <p>对应的响应类型为 Map。
+ * 添加/拒绝私人好友请求的参数数据
  *
  * @author zExNocs
- * @date 2026/02/28
+ * @date 2026/03/01
  * @since 4.0.11
  */
 @NoArgsConstructor
@@ -22,25 +21,22 @@ import java.util.Map;
 @Getter
 @Builder
 @SuppressWarnings("rawtypes")
-public class SetGroupSpecialTitleRequestSendParamsData implements ISendParamsData<Map> {
-    public final static String ACTION = "set_group_special_title";
+public class PrivateAddRequestSendParamsData implements ISendParamsData<Map> {
+    public final static String ACTION = "set_friend_add_request";
 
     @Override
     public String getAction() {
         return ACTION;
     }
 
-    @JsonProperty("group_id")
-    private long groupId;
+    @JsonProperty("flag")
+    private String flag;
 
-    @JsonProperty("user_id")
-    private long userId;
+    @JsonProperty("approve")
+    private boolean approve;
 
-    @JsonProperty("special_title")
-    private String specialTitle;
-
-    @JsonProperty("duration")
-    private long duration;
+    @JsonProperty("reason")
+    private String reason;
 
     /**
      * 获取反应数据的类型。
