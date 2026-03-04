@@ -39,7 +39,8 @@ public class TeaNekoHelpCommand {
     public void help(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("1") int index) {
         int MAX_NUMBER_PER_PAGE = 10;
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         // 根据第一个指令体的首字母进行排序，并筛选出 description 不为空的指令
         List<Command> sortedKeys = commandDescriptionScanner.getDescriptionDataKeySet().stream()
                 .filter(o -> commandDescriptionScanner.getDescriptionData(o).getCommandDescription() != null &&
@@ -51,14 +52,15 @@ public class TeaNekoHelpCommand {
         int totalPage = (int) Math.ceil((double) sortedKeys.size() / MAX_NUMBER_PER_PAGE);
         // 判断当前页数是否超过总页数
         if (index > totalPage) {
-            messageSender.sendAtReplyMessage("当前页数超过总页数。页数范围为[1," + totalPage + "]", data);
+            messageSender.addAtReplyTextMessage("当前页数超过总页数。页数范围为[1," + totalPage + "]").send();
             return;
         }
         // 获取当前页数的指令
         int startIndex = (index - 1) * MAX_NUMBER_PER_PAGE;
         int endIndex = Math.min(startIndex + MAX_NUMBER_PER_PAGE, sortedKeys.size());
         // 发送当前页的指令
-        var builder = messageSender.getForwardBuilder(data);
+        var builder = data.getClient().teaNekoToolbox().getMessageSender()
+                .getForwardBuilder(CommandData.getCommandToken(), data);
         for(int i = startIndex; i < endIndex; i++) {
             var key = sortedKeys.get(i);
             var description = commandDescriptionScanner.getDescriptionData(key).getCommandDescription();

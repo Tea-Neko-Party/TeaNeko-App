@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp.message.api.content;
 
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 
 import java.util.List;
 
@@ -35,9 +36,9 @@ public interface INodeTeaNekoContent extends ITeaNekoContent {
     /**
      * 获取被转发消息的内容。
      *
-     * @return {@link List }<{@link ITeaNekoContent }> 被转发消息的内容列表
+     * @return {@link List }<{@link ? } {@link extends } {@link ITeaNekoMessage }>
      */
-    List<ITeaNekoContent> getContent();
+    List<? extends ITeaNekoMessage> getMessages();
 
     /**
      * 默认不转化成指令。

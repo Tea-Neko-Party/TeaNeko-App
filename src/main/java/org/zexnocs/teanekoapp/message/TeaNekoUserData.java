@@ -34,7 +34,7 @@ public class TeaNekoUserData implements ITeaNekoUserData {
      * 发送者的平台 ID
      * 例如 QQ 号、微信号、Telegram ID 等等，具体取决于消息来源的平台。
      */
-    protected @Nullable String userIdInPlatform;
+    protected @NonNull String userIdInPlatform;
 
     /**
      * 发送者的 nickname，如果没有则返回 "user"

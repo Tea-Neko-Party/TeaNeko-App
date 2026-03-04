@@ -19,8 +19,9 @@ public interface IGetMessageSender {
      * 一般 future 是新创一个 future 来接收到 {@link org.zexnocs.teanekoapp.sender.interfaces.ISenderService} 的结果后使用
      * {@code .whenComplete()} 来完成这个 future。
      *
+     * @param token     发送器发送环境的标识符
      * @param messageId 消息 ID
      * @return 一个 future，完成后会得到一个包含消息数据的结果对象
      */
-    TaskFuture<ITaskResult<ITeaNekoMessageData>> sendMessageWithFuture(String messageId);
+    TaskFuture<ITaskResult<ITeaNekoMessageData>> getMsg(String token, String messageId);
 }

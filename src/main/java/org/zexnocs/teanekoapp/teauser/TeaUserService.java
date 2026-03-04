@@ -24,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
 @Service
 public class TeaUserService implements ITeaUserService {
     /// 数据库中命名空间
-    public static String EASY_DATA_NAMESPACE = "tea-user-mapping";
+    public static final String EASY_DATA_NAMESPACE = "tea-user-mapping";
     private final ILogger logger;
 
     public TeaUserService(ILogger logger) {

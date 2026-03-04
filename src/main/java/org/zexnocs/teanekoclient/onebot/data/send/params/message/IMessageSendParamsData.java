@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoclient.onebot.data.send.params.message;
 
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
@@ -19,7 +19,7 @@ public interface IMessageSendParamsData extends ISendParamsData<OnebotMessageRes
      *
      * @return 当前消息列表
      */
-    List<OnebotMessage> getMessageSubDataList();
+    List<? extends ITeaNekoMessage> getMessageList();
 
     /**
      * 使用新的信息列表生成新的消息发送参数数据。
@@ -27,7 +27,7 @@ public interface IMessageSendParamsData extends ISendParamsData<OnebotMessageRes
      *
      * @param message 消息列表
      */
-    IMessageSendParamsData withMessage(List<OnebotMessage> message);
+    IMessageSendParamsData withMessage(List<? extends ITeaNekoMessage> message);
 
     /**
      * 获取反应数据的类型。

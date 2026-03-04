@@ -42,8 +42,9 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
-            messageSender.sendReplyMessage("用户不存在喵", data);
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                    .getEasyBuilder(CommandData.getCommandToken(), data);
+            messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
         iCommandPermissionManager.addPermission(user.toString(), commandData.getScopeId(), permission);
@@ -58,8 +59,9 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
-            messageSender.sendReplyMessage("用户不存在喵", data);
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                    .getEasyBuilder(CommandData.getCommandToken(), data);
+            messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
         iCommandPermissionManager.removePermission(user.toString(), commandData.getScopeId(), permission);
@@ -74,8 +76,9 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
-            messageSender.sendReplyMessage("用户不存在喵", data);
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                    .getEasyBuilder(CommandData.getCommandToken(), data);
+            messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
         iCommandPermissionManager.banPermission(user.toString(), commandData.getScopeId(), permission);
@@ -90,8 +93,9 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
-            messageSender.sendReplyMessage("用户不存在喵", data);
+            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                    .getEasyBuilder(CommandData.getCommandToken(), data);
+            messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
         iCommandPermissionManager.unbanPermission(user.toString(), commandData.getScopeId(), permission);

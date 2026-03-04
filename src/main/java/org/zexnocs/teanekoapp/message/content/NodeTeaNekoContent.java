@@ -7,7 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoMessage;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContent;
 
@@ -37,5 +37,5 @@ public class NodeTeaNekoContent implements INodeTeaNekoContent {
 
     /// 被转发消息的内容列表
     @JsonProperty("content")
-    private List<ITeaNekoContent> content;
+    private List<? extends ITeaNekoMessage> messages;
 }

@@ -1,9 +1,10 @@
 package org.zexnocs.teanekoclient.onebot.data.send.params.message;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
@@ -29,18 +30,21 @@ public class PrivateForwardMessageSendParamsData implements ISendParamsData<Oneb
     /// 外显
     /// 不知道是什么
     @Builder.Default
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonProperty("prompt")
     private final String prompt = null;
 
     /// 底下文本
     /// 目前仅桌面端可见
     @Builder.Default
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonProperty("summary")
     private final String summary = null;
 
     /// 内容
     /// 放在外面展示的标题
     @JsonProperty("source")
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @Builder.Default
     private final String source = null;
 
@@ -49,7 +53,7 @@ public class PrivateForwardMessageSendParamsData implements ISendParamsData<Oneb
      * 详细见 {@link org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContent}
      */
     @JsonProperty("messages")
-    private final List<OnebotMessage> messages;
+    private final List<? extends ITeaNekoMessage> messages;
 
     @Override
     public String getAction() {

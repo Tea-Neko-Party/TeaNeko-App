@@ -50,21 +50,22 @@ public class TeaNekoConfigCommand {
     @DefaultCommand
     public void queryCurrentConfig(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender().getEasyBuilder(CommandData.getCommandToken(), data);
         if(ruleName.isBlank()) {
             try {
                 var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
                         teaNekoPrivateConfigQueryService.queryAllConfigManagerDetailsInObject(commandData) :
                         teaNekoGroupConfigQueryService.queryAllConfigManagerDetailsInObject(commandData);
                 if(textList.isEmpty()) {
-                    messageSender.sendReplyMessage("您没有注册任何配置喵。", data);
+                    messageSender.sendReplyMessage("您没有注册任何配置喵。");
                     return;
                 }
-                messageSender.getForwardBuilder(data)
+                data.getClient().teaNekoToolbox().getMessageSender()
+                        .getForwardBuilder(CommandData.getCommandToken(), data)
                         .addBotAllText(textList)
                         .sendByPart(10);
             } catch (IllegalAccessException e) {
-                messageSender.sendReplyMessage("出现配置字段无法访问的情况喵。", data);
+                messageSender.sendReplyMessage("出现配置字段无法访问的情况喵。");
                 logger.errorWithReport(this.getClass().getName(), "出现配置字段无法访问的情况喵。", e);
             }
         } else {
@@ -73,11 +74,11 @@ public class TeaNekoConfigCommand {
                 String text = commandData.getScope().equals(CommandScope.PRIVATE) ?
                         teaNekoPrivateConfigQueryService.queryOneConfigManagerDetailInObject(rule, commandData) :
                         teaNekoGroupConfigQueryService.queryOneConfigManagerDetailInObject(rule, commandData);
-                messageSender.sendTextMessage(text, data);
+                messageSender.sendTextMessage(text);
             } catch (ConfigDataNotFoundException | ConfigManagerNotFoundException e) {
-                messageSender.sendReplyMessage("未注册该配置，或者该配置不存在。", data);
+                messageSender.sendReplyMessage("未注册该配置，或者该配置不存在。");
             } catch (IllegalAccessException e) {
-                messageSender.sendReplyMessage("出现配置字段无法访问的情况喵。", data);
+                messageSender.sendReplyMessage("出现配置字段无法访问的情况喵。");
                 logger.errorWithReport(this.getClass().getName(), "出现配置字段无法访问的情况喵。", e);
             }
         }
@@ -91,16 +92,18 @@ public class TeaNekoConfigCommand {
     public void queryExistingPrivateManagerRules(CommandData<ITeaNekoMessageData> commandData,
                                                  @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         if(ruleName.isBlank()) {
             var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
                     teaNekoPrivateConfigQueryService.queryAllConfigManagerDetails() :
                     teaNekoGroupConfigQueryService.queryAllConfigManagerDetails();
             if(textList.isEmpty()) {
-                messageSender.sendReplyMessage("当前没有任何可用的配置喵。", data);
+                messageSender.sendReplyMessage("当前没有任何可用的配置喵。");
                 return;
             }
-            messageSender.getForwardBuilder(data)
+            data.getClient().teaNekoToolbox().getMessageSender()
+                    .getForwardBuilder(CommandData.getCommandToken(), data)
                     .addBotAllText(textList)
                     .send();
         } else {
@@ -109,9 +112,9 @@ public class TeaNekoConfigCommand {
                 var text = commandData.getScope().equals(CommandScope.PRIVATE) ?
                         teaNekoPrivateConfigQueryService.queryOneConfigManagerDetail(rule) :
                         teaNekoGroupConfigQueryService.queryOneConfigManagerDetail(rule);
-                messageSender.sendTextMessage(text, data);
+                messageSender.sendTextMessage(text);
             } catch (ConfigManagerNotFoundException e) {
-                messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+                messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
             }
         }
     }
@@ -124,13 +127,14 @@ public class TeaNekoConfigCommand {
     public void registerPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                            String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.registerConfig(rule, commandData.getScopeId());
-            messageSender.sendReplyMessage("注册配置 " + ruleName + " 成功喵。", data);
+            messageSender.sendReplyMessage("注册配置 " + ruleName + " 成功喵。");
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         }
     }
 
@@ -142,16 +146,17 @@ public class TeaNekoConfigCommand {
     public void unregisterPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                              String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             if (iConfigDataService.unregisterConfig(rule, commandData.getScopeId())) {
-                messageSender.sendReplyMessage("注销配置 " + ruleName + " 成功喵。", data);
+                messageSender.sendReplyMessage("注销配置 " + ruleName + " 成功喵。");
             } else {
-                messageSender.sendReplyMessage("该配置未注册喵。", data);
+                messageSender.sendReplyMessage("该配置未注册喵。");
             }
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         }
     }
 
@@ -162,25 +167,26 @@ public class TeaNekoConfigCommand {
     public void setPrivateManagerRuleConfig(CommandData<ITeaNekoMessageData> commandData,
                                             String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.setRuleConfigField(rule, commandData.getScopeId(), configField, configValue);
-            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 设置成功喵", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 设置成功喵");
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         } catch (ConfigDataNotFoundException e) {
-            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。", data);
+            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。");
         } catch (NoSuchFieldException e) {
-            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。");
         } catch (IllegalArgumentException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 的值不合法喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 的值不合法喵。");
         } catch (IllegalAccessException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
         } catch (Exception e) {
-            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。", data);
+            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
         }
     }
@@ -193,27 +199,28 @@ public class TeaNekoConfigCommand {
     public void addPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                 String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.addToRuleConfigListFiled(rule, commandData.getScopeId(), configField, configValue);
-            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已添加值 " + configValue + " 喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已添加值 " + configValue + " 喵。");
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         } catch (ConfigDataNotFoundException e) {
-            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。", data);
+            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。");
         } catch (NoSuchFieldException e) {
-            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。");
         } catch (ObjectFieldUtil.FieldNotListException e) {
-            messageSender.sendReplyMessage("该字段不是 list 喵。", data);
+            messageSender.sendReplyMessage("该字段不是 list 喵。");
         } catch (IllegalArgumentException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 的值不合法喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 的值不合法喵。");
         } catch (IllegalAccessException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
         } catch (Exception e) {
-            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。", data);
+            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
         }
     }
@@ -226,26 +233,27 @@ public class TeaNekoConfigCommand {
     public void removePrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                    String ruleName, String configField, int index) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.removeFromRuleConfigListFiled(rule, commandData.getScopeId(), configField, index);
-            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已删除索引为 " + index + " 的值喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已删除索引为 " + index + " 的值喵。");
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         } catch (ConfigDataNotFoundException e) {
-            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。", data);
+            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。");
         } catch (NoSuchFieldException e) {
-            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。");
         } catch (ObjectFieldUtil.FieldNotListException e) {
-            messageSender.sendReplyMessage("该字段不是 list 喵。", data);
+            messageSender.sendReplyMessage("该字段不是 list 喵。");
         } catch (IndexOutOfBoundsException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 的索引超出范围喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 的索引超出范围喵。");
         } catch (IllegalAccessException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
         } catch (Exception e) {
-            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。", data);
+            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
         }
     }
@@ -258,24 +266,25 @@ public class TeaNekoConfigCommand {
     public void clearPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                   String ruleName, String configField) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender(CommandData.getCommandToken());
+        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.clearRuleConfigListFiled(rule, commandData.getScopeId(), configField);
-            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已清空喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 的配置字段 " + configField + " 已清空喵。");
         } catch (ConfigManagerNotFoundException e) {
-            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。", data);
+            messageSender.sendReplyMessage("配置" + ruleName + "不存在喵。");
         } catch (ConfigDataNotFoundException e) {
-            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。", data);
+            messageSender.sendReplyMessage("您尚未注册配置 " + ruleName + " 喵。");
         } catch (NoSuchFieldException e) {
-            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。", data);
+            messageSender.sendReplyMessage("配置 " + ruleName + " 中不存在配置字段 " + configField + " 喵。");
         } catch (ObjectFieldUtil.FieldNotListException e) {
-            messageSender.sendReplyMessage("该字段不是 list 喵。", data);
+            messageSender.sendReplyMessage("该字段不是 list 喵。");
         } catch (IllegalAccessException e) {
-            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。", data);
+            messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
         } catch (Exception e) {
-            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。", data);
+            messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
         }
     }

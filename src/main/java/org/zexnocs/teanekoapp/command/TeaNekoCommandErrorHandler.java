@@ -2,7 +2,7 @@ package org.zexnocs.teanekoapp.command;
 
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.interfaces.ICommandErrorHandler;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -33,15 +33,16 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
     }
 
     /**
-     * 根据 data 获取到 sender。
+     * 根据 data 获取到 easy sender
      *
      * @param data message data
      * @return sender
      */
-    private IMessageSender getMessageSender(ITeaNekoMessageData data) {
+    private IEasyMessageSenderBuilder getMessageSender(ITeaNekoMessageData data) {
         return data.getClient()
                 .teaNekoToolbox()
-                .getMessageSender(CommandData.getCommandToken());
+                .getMessageSender()
+                .getEasyBuilder(CommandData.getCommandToken(), data);
     }
 
     /**
@@ -66,7 +67,7 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
         }
         var rawData = commandData.getRawData();
         if (rawData instanceof ITeaNekoMessageData data) {
-            getMessageSender(data).sendAtReplyMessage("未找到相应的指令。", data);
+            getMessageSender(data).addAtReplyTextMessage("未找到相应的指令。").send();
         } else {
             logger.errorWithReport(this.getClass().getSimpleName(), """
                             指令数据错误，应：%s，实际：%s""".formatted(
@@ -87,7 +88,7 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
         }
         var rawData = commandData.getRawData();
         if (rawData instanceof ITeaNekoMessageData data) {
-            getMessageSender(data).sendAtReplyMessage("指令参数错误。", data);
+            getMessageSender(data).addAtReplyTextMessage("指令参数错误。").send();
         } else {
             logger.errorWithReport(this.getClass().getSimpleName(), """
                             指令数据错误，应：%s，实际：%s""".formatted(
@@ -108,7 +109,7 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
         }
         var rawData = commandData.getRawData();
         if (rawData instanceof ITeaNekoMessageData data) {
-            getMessageSender(data).sendAtReplyMessage("没有权限执行该指令。", data);
+            getMessageSender(data).addAtReplyTextMessage("没有权限执行该指令。").send();
         } else {
             logger.errorWithReport(this.getClass().getSimpleName(), """
                             指令数据错误，应：%s，实际：%s""".formatted(
@@ -129,7 +130,7 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
         }
         var rawData = commandData.getRawData();
         if (rawData instanceof ITeaNekoMessageData data) {
-            getMessageSender(data).sendAtReplyMessage("指令不在作用域内。", data);
+            getMessageSender(data).addAtReplyTextMessage("指令不在作用域内。").send();
         } else {
             logger.errorWithReport(this.getClass().getSimpleName(), """
                             指令数据错误，应：%s，实际：%s""".formatted(

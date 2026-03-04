@@ -1,0 +1,244 @@
+package org.zexnocs.teanekoclient.onebot.sender.message;
+
+import lombok.Setter;
+import lombok.experimental.Accessors;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContent;
+import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
+import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
+import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
+import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
+import org.zexnocs.teanekoclient.onebot.core.OnebotIdService;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupForwardMessageSendParamsData;
+import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import tools.jackson.databind.ObjectMapper;
+
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 群转发消息发送器
+ */
+@Component("Onebot-GroupForwardMessageSender")
+public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForwardMessageSendParamsData, OnebotMessageResponseData> {
+    /// bot name
+    private final String BOT_NAME;
+
+    /// onebot 消息发送失败处理器，用于处理发送失败的情况，例如记录日志、重试等
+    private final OnebotMessageFailSendHandler onebotMessageFailSendHandler;
+
+    /// onebot ID 服务，用于获取 bot ID 等相关信息
+    private final OnebotIdService onebotIdService;
+
+    /**
+     * 构造函数，初始化发送器。
+     *
+     * @param senderService 发送服务实例，用于将发送数据推送给客户端，并处理响应数据
+     * @param client        要推送数据的客户端
+     * @param mapper        mapper，建议使用 {@code @Qualifier("onebotObjectMapper") } 的 mapper
+     */
+    public GroupForwardMessageSender(ISenderService senderService,
+                                     OnebotClient client,
+                                     @Qualifier("onebotObjectMapper") ObjectMapper mapper,
+                                     @Value("${tea-neko.bot.default-name}") String botName,
+                                     OnebotMessageFailSendHandler onebotMessageFailSendHandler,
+                                     OnebotIdService onebotIdService) {
+        super(senderService, client, mapper);
+        this.BOT_NAME = botName;
+        this.onebotMessageFailSendHandler = onebotMessageFailSendHandler;
+        this.onebotIdService = onebotIdService;
+    }
+
+
+    /**
+     * 获取一个新的构造器，用于快速添加新的消息。
+     * 不应该在多线程中使用同一个实例。
+     *
+     * @param token 发送器发送环境的标识符，例如可以是一个用户 ID，用于标识发送的目标用户
+     * @param groupId 群组 ID，表示要发送消息的目标群组
+     * @return {@link GroupForwardMessageBuilder }
+     */
+    public GroupForwardMessageBuilder getBuilder(String token, long groupId) {
+        return new GroupForwardMessageBuilder(token, groupId);
+    }
+
+    /**
+     * 一个简易构造器，用于快速添加新的消息。
+     * 不应该在多线程中使用同一个实例。
+     *
+     * @author zExNocs
+     * @date 2026/03/05
+     * @since 4.0.12
+     */
+    @Accessors(chain = true)
+    public class GroupForwardMessageBuilder implements IForwardMessageSenderBuilder {
+        /// 用户 id
+        private final long groupId;
+
+        /// 消息列表
+        private final List<OnebotMessage> messageList = new ArrayList<>();
+
+        /// token
+        private final String token;
+
+        /// 外显
+        @Setter
+        private String prompt = null;
+
+        /// 底下文本
+        @Setter
+        private String summary = null;
+
+        /// 内容
+        @Setter
+        private String source = null;
+
+        /// 发送延迟
+        @Setter
+        private Duration delay = Duration.ZERO;
+
+        /// retry 次数
+        @Setter
+        private int retryCount = 8;
+
+        /// retry 间隔
+        @Setter
+        private Duration retryInterval = Duration.ofMillis(200);
+
+        /// 记录发送失败的情况
+        @Setter
+        private boolean recordFailed = true;
+
+        public GroupForwardMessageBuilder(String token, long groupId) {
+            this.groupId = groupId;
+            this.token = token;
+        }
+
+        /**
+         * 获取 bot name
+         *
+         * @return bot name
+         */
+        @Override
+        public String getBotName() {
+            return GroupForwardMessageSender.this.BOT_NAME;
+        }
+
+        /**
+         * 获取 bot ID
+         *
+         * @return bot ID
+         */
+        @Override
+        public String getBotId() {
+            return String.valueOf(onebotIdService.getBotId());
+        }
+
+        /**
+         * 发送转发信息 with future
+         *
+         * @return 发送结果的 future
+         */
+        @Override
+        public TaskFuture<IMessageResponseData> sendWithFuture() {
+            var data = GroupForwardMessageSendParamsData.builder()
+                    .groupId(groupId)
+                    .messages(messageList)
+                    .prompt(prompt)
+                    .source(source)
+                    .summary(summary)
+                    .build();
+            var future = GroupForwardMessageSender.this.sendWithFuture(token, data, delay, retryCount, retryInterval);
+            if(recordFailed) {
+                future = onebotMessageFailSendHandler.recordFailed(GroupForwardMessageSender.class.getSimpleName(),
+                        messageList,
+                        future);
+            }
+            return future.thenApply(r -> {
+                if(r.isSuccess()) {
+                    return r.getResult().getFirst();
+                } else {
+                    return null;
+                }
+            });
+        }
+
+        /**
+         * 以分段的方式发送消息。
+         * @param partSize 每段的大小
+         */
+        public void sendByPart(int partSize) {
+            int totalSize = messageList.size();
+            int totalSegments = (totalSize + partSize - 1) / partSize; // 向上取整
+            for (int i = 0; i < totalSegments; i++) {
+                int start = i * partSize;
+                int end = Math.min(start + partSize, totalSize);
+                var segment = messageList.subList(start, end);
+                var data = GroupForwardMessageSendParamsData.builder()
+                        .groupId(groupId)
+                        .messages(segment)
+                        .prompt(prompt)
+                        .source(source)
+                        .summary(summary)
+                        .build();
+                GroupForwardMessageSender.this.send(token, data, delay, retryCount, retryInterval);
+            }
+        }
+
+        /**
+         * 添加一个简单的消息
+         *
+         * @param userId   用户 ID
+         * @param nickname 用户昵称
+         * @param message  消息内容
+         * @return {@link IForwardMessageSenderBuilder }
+         */
+        @Override
+        public IForwardMessageSenderBuilder addText(String userId, String nickname, String message) {
+            messageList.add(OnebotMessage.builder()
+                    .type(NodeTeaNekoContent.TYPE)
+                    .content(NodeTeaNekoContent.builder()
+                            .userId(userId)
+                            .nickname(nickname)
+                            .messages(List.of(OnebotMessage.builder()
+                                    .type(TextTeaNekoContent.TYPE)
+                                    .content(TextTeaNekoContent.builder()
+                                            .text(message)
+                                            .build())
+                                    .build()))
+                            .build())
+                    .build());
+            return this;
+        }
+
+        /**
+         * 添加一个消息
+         *
+         * @param userId      用户 ID
+         * @param nickname    用户昵称
+         * @param messageList 消息内容列表
+         * @return 当前构造器实例
+         */
+        @Override
+        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoMessage> messageList) {
+            this.messageList.add(OnebotMessage.builder()
+                    .type(NodeTeaNekoContent.TYPE)
+                    .content(NodeTeaNekoContent.builder()
+                            .userId(userId)
+                            .nickname(nickname)
+                            .messages(messageList)
+                            .build())
+                    .build());
+            return this;
+        }
+    }
+}

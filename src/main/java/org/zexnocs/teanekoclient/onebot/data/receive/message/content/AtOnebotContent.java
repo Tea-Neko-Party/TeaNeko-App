@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoclient.onebot.data.receive.message.content;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -32,6 +33,7 @@ public class AtOnebotContent implements IAtTeaNekoContent {
     private String qq;
 
     /// 被@的用户的昵称
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonProperty("name")
     private String name;
 

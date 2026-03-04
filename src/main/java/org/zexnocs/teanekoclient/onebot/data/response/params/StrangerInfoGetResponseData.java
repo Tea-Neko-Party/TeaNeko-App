@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.zexnocs.teanekoapp.response.api.IPlatformUserResponseData;
 
 import java.util.List;
 import java.util.Map;
@@ -18,7 +19,7 @@ import java.util.Map;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class StrangerInfoGetResponseData {
+public class StrangerInfoGetResponseData implements IPlatformUserResponseData {
 
     /**
      * 用户唯一标识
@@ -439,4 +440,14 @@ public class StrangerInfoGetResponseData {
      */
     @JsonProperty("login_days")
     private int loginDays;
+
+    /**
+     * 获取用户在该平台上的唯一标识符。
+     *
+     * @return 用户唯一标识符
+     */
+    @Override
+    public String getPlatformUserId() {
+        return String.valueOf(userId);
+    }
 }

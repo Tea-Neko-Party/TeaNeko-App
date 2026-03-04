@@ -3,7 +3,7 @@ package org.zexnocs.teanekoclient.onebot.data.send.params.message;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 
 import java.util.List;
 
@@ -23,7 +23,7 @@ public class GroupMsgSendParamsData implements IMessageSendParamsData {
     private long groupId;
 
     @JsonProperty("message")
-    private List<OnebotMessage> messageSubDataList;
+    private List<? extends ITeaNekoMessage> messageList;
 
     @Override
     public String getAction() {
@@ -37,9 +37,9 @@ public class GroupMsgSendParamsData implements IMessageSendParamsData {
      * @return {@link IMessageSendParamsData }
      */
     @Override
-    public IMessageSendParamsData withMessage(List<OnebotMessage> newMessageSubDataList) {
+    public IMessageSendParamsData withMessage(List<? extends ITeaNekoMessage> newMessageSubDataList) {
         return this.toBuilder()
-                .messageSubDataList(newMessageSubDataList)
+                .messageList(newMessageSubDataList)
                 .build();
     }
 }

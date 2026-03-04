@@ -28,7 +28,7 @@ public interface ITeaNekoUserData {
      *
      * @return 发送者的平台 ID
      */
-    @Nullable
+    @NonNull
     String getUserIdInPlatform();
 
     /**
