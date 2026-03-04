@@ -17,4 +17,13 @@ public interface IReloadable {
      * 用于防止第一次重复加载。
      */
     void init();
+
+    /**
+     * 获取优先级
+     *
+     * @return 优先级，数值越大优先级越高
+     */
+    default int getPriority() {
+        return 0;
+    }
 }

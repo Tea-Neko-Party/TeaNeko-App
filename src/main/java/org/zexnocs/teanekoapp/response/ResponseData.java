@@ -6,6 +6,8 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
+import java.util.Map;
+
 /**
  * 用于接收从 client 的响应信息。
  * 由各个 client 的适配器转化成该接口，并作为数据推送 ResponseEvent 事件。
@@ -27,6 +29,6 @@ public class ResponseData {
     /// echo 字段，唯一标识符，用于匹配发送信息时注册的 future 与客户端响应的信息
     private String echo;
 
-    /// 数据的原始字符串，将会在 {@link org.zexnocs.teanekoapp.response.interfaces.IResponseService} 中被解析成对应的对象
-    private String rawData;
+    /// 数据的原始形式，将会在 {@link org.zexnocs.teanekoapp.response.interfaces.IResponseService} 中被解析成对应的对象
+    private Map<String, Object> rawData;
 }

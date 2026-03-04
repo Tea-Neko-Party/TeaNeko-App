@@ -3,10 +3,7 @@ package org.zexnocs.teanekoapp.command;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.CommandDescriptionScanner;
-import org.zexnocs.teanekocore.command.api.Command;
-import org.zexnocs.teanekocore.command.api.CommandScope;
-import org.zexnocs.teanekocore.command.api.DefaultCommand;
-import org.zexnocs.teanekocore.command.api.DefaultValue;
+import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.command.interfaces.ICommandPermissionManager;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
@@ -20,7 +17,7 @@ import java.util.List;
  * @date 2026/02/28
  * @since 4.0.11
  */
-@Command(value = {"/help"}, scope = CommandScope.ALL)
+@Command(value = {"/help"}, scope = CommandScope.ALL, permission = CommandPermission.ALL)
 public class TeaNekoHelpCommand {
 
     private final CommandDescriptionScanner commandDescriptionScanner;

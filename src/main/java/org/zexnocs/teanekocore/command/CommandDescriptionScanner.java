@@ -31,6 +31,12 @@ public class CommandDescriptionScanner extends AbstractScanner {
     /// 指令描述数据map
     private final Map<Command, DescriptionMapData> descriptionDataMap = new ConcurrentHashMap<>();
 
+    /// 修改优先级
+    @Override
+    public int getPriority() {
+        return -1;
+    }
+
     @Autowired
     public CommandDescriptionScanner(CommandScanner commandScanner) {
         this.commandScanner = commandScanner;

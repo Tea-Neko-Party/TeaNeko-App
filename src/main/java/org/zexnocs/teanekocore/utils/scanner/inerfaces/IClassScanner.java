@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.utils.scanner.inerfaces;
 
 import java.lang.annotation.Annotation;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 类扫描器接口，扫描不用定义为 bean 的类与其注解。
@@ -11,6 +12,14 @@ import java.util.Map;
  * @since 4.0.10
  */
 public interface IClassScanner {
+    /**
+     * 获取所有带有指定接口的 classes
+     *
+     * @param <T> 接口类型
+     * @return 一个包含所有带有指定接口的 class 的 set
+     */
+    <T> Set<Class<? extends T>> getClassesWithInterface(Class<T> interfaceType);
+
     /**
      * 获取所有带有指定注解的 classes
      *

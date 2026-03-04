@@ -107,11 +107,11 @@ public class ResponseService implements IResponseService {
         if(responseType != null
             && !responseType.equals(Void.class)
             && rawData != null
-            && !rawData.isBlank()) {
+            && !rawData.isEmpty()) {
             // 如果 responseType 不为 null，则尝试解析 rawData 成对应的对象
             try {
                 var collectionType = objectMapper.getTypeFactory().constructCollectionType(List.class, responseType);
-                var parsedData = objectMapper.readValue(rawData, collectionType);
+                var parsedData = objectMapper.convertValue(rawData, collectionType);
                 iTaskService.complete(key, new TaskResult<>(success, parsedData));
             } catch (JacksonException e) {
                 iTaskService.forceCompleteExceptionally(key, e);

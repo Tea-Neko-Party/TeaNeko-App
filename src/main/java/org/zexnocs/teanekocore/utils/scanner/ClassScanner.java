@@ -12,10 +12,7 @@ import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Modifier;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * 类扫描器，扫描不用定义为 bean 的类与其注解。
@@ -37,6 +34,34 @@ public class ClassScanner implements IClassScanner {
         this.logger = logger;
     }
 
+
+    /**
+     * 获取所有带有指定接口的 classes
+     *
+     * @param interfaceType@return 一个包含所有带有指定接口的 class 的 set
+     */
+    @Override
+    public <T> Set<Class<? extends T>> getClassesWithInterface(Class<T> interfaceType) {
+        var result = new HashSet<Class<? extends T>>();
+        var scanner = new ClassPathScanningCandidateComponentProvider(false);
+        scanner.addIncludeFilter(new AssignableTypeFilter(interfaceType));
+        for (var basePackage : basePackages) {
+            for (var beanDefinition : scanner.findCandidateComponents(basePackage)) {
+                try {
+                    var clazz = ClassUtils.forName(Objects.requireNonNull(beanDefinition.getBeanClassName()), null);
+                    if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers())) {
+                        continue;
+                    }
+                    result.add(clazz.asSubclass(interfaceType));
+                } catch (ClassNotFoundException | NoClassDefFoundError e) {
+                    logger.error(this.getClass().getSimpleName(),
+                            "扫描类失败，类名：%s".formatted(beanDefinition.getBeanClassName()),
+                            e);
+                }
+            }
+        }
+        return result;
+    }
 
     /**
      * 获取所有带有指定注解的 classes

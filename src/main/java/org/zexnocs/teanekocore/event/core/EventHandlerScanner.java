@@ -7,6 +7,7 @@ import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.lang.reflect.Method;
 import java.util.*;
@@ -30,10 +31,12 @@ public class EventHandlerScanner extends AbstractScanner {
             List<EventHandlerPatch<? extends IEvent>>> eventHandlerMap = new ConcurrentHashMap<>();
     private final IBeanScanner iBeanScanner;
     private final ILogger iLogger;
+    private final IClassScanner iClassScanner;
 
-    public EventHandlerScanner(IBeanScanner iBeanScanner, ILogger iLogger) {
+    public EventHandlerScanner(IBeanScanner iBeanScanner, ILogger iLogger, IClassScanner iClassScanner) {
         this.iBeanScanner = iBeanScanner;
         this.iLogger = iLogger;
+        this.iClassScanner = iClassScanner;
     }
 
     /**
@@ -63,8 +66,9 @@ public class EventHandlerScanner extends AbstractScanner {
             }
         }
         // 处理继承问题，子类获得所有父类的事件处理器
-        for (var entry : eventHandlerSetByType.entrySet()) {
-            var type = entry.getKey();
+        // 获取所有继承了 IEvent 的事件类
+        var eventTypes = iClassScanner.getClassesWithInterface(IEvent.class);
+        for (var type : eventTypes) {
             // 获取所有父类的事件处理器
             var superclass = type.getSuperclass();
             while (superclass != null &&
@@ -73,7 +77,10 @@ public class EventHandlerScanner extends AbstractScanner {
                 var parent = superclass.asSubclass(IEvent.class);
                 // 获取父类的事件处理器，并添加到子类的事件处理器列表中
                 var parentHandlers = eventHandlerSetByType.getOrDefault(parent, Collections.emptySet());
-                entry.getValue().addAll(parentHandlers);
+                var set = eventHandlerSetByType.computeIfAbsent(
+                        type.asSubclass(IEvent.class),
+                        k -> new HashSet<>());
+                set.addAll(parentHandlers);
                 // 处理下一个父类
                 superclass = superclass.getSuperclass();
             }
@@ -104,9 +111,9 @@ public class EventHandlerScanner extends AbstractScanner {
      */
     @SuppressWarnings("rawtypes")
     private void _registerEventHandler(Object listener,
-                                             Method method,
-                                             EventHandler annotation,
-                                             Map<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>> eventHandlerMap) {
+                                       Method method,
+                                       EventHandler annotation,
+                                       Map<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>> eventHandlerMap) {
         String TAG = "事件监听器扫描器";
         var clazz = listener.getClass();
         // 判断方法的访问修饰符
