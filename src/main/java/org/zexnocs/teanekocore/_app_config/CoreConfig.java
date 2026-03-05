@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore._app_config;
 
+import org.springframework.boot.autoconfigure.AutoConfigurationPackage;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -16,5 +17,6 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableAsync
 @EnableScheduling
 @EnableTransactionManagement
+@AutoConfigurationPackage(basePackages = "org.zexnocs.teanekocore")
 public class CoreConfig {
 }

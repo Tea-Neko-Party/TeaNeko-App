@@ -5,8 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 /**
- * 一个签到区块的数据类。
- * 签到区块是用来
+ * 一个签到区块的数据类。主要用于补签时提供签到区块的相关信息。
  *
  * @author zExNocs
  * @date 2026/03/05
