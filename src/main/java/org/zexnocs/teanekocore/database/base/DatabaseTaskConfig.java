@@ -94,7 +94,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public void addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
+    public IDatabaseTaskConfig addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -103,6 +103,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
 
         // 添加任务到任务队列。
         transactionQueue.add(task);
+        return this;
     }
 
     /**
@@ -112,7 +113,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public void addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
+    public IDatabaseTaskConfig addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -120,6 +121,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
         }
         // 添加任务到任务队列。
         cacheQueue.add(task);
+        return this;
     }
 
     /**
@@ -131,7 +133,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public void merge(@NonNull IDatabaseTaskConfig config) throws DatabaseTaskRepeatedSubmissionException {
+    public IDatabaseTaskConfig merge(@NonNull IDatabaseTaskConfig config) throws DatabaseTaskRepeatedSubmissionException {
         // 判断当前任务是否已经提交。
         if (isPushed.get()) {
             // 当前任务已经提交，不应该再合并任务。
@@ -147,6 +149,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
         // 合并任务。
         this.transactionQueue.addAll(config.__getTasksWithTransaction());
         this.cacheQueue.addAll(config.__getTasksWithCache());
+        return this;
     }
 
     /**

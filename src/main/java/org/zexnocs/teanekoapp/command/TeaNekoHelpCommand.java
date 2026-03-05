@@ -17,7 +17,9 @@ import java.util.List;
  * @date 2026/02/28
  * @since 4.0.11
  */
-@Command(value = {"/help"}, scope = CommandScope.ALL, permission = CommandPermission.ALL)
+@Command(value = {"/help"},
+        scope = CommandScope.ALL,
+        permission = CommandPermission.ALL)
 public class TeaNekoHelpCommand {
 
     private final CommandDescriptionScanner commandDescriptionScanner;

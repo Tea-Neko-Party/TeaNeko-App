@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoplugin.general.signin;
+package org.zexnocs.teanekoplugin.general.signin.data;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
@@ -16,12 +16,12 @@ import lombok.NoArgsConstructor;
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class SignInData {
+public class SignInRecordData {
     /**
      * 本次签到的时间。
      */
-    @JsonProperty("sign_in_time")
-    private String signInTime;
+    @JsonProperty("time")
+    private String time;
 
     /**
      * 本次签到获取的金币数量。

@@ -100,13 +100,31 @@ public enum ChinaDateUtil {
     }
 
     /**
+     * 获取当前时间的 {@link LocalDate}
+     *
+     * @return 当前日期
+     */
+    public LocalDate getNowDate() {
+        return LocalDate.now(zoneId);
+    }
+
+    /**
+     * 获取当前时间的 {@link LocalDateTime}
+     *
+     * @return 当前日期时间
+     */
+    public LocalDateTime getNowDateTime() {
+        return LocalDateTime.now(zoneId);
+    }
+
+    /**
      * 将现在的时间转换为不带有时分秒的日期
      * e.g. 2024-06-01
      *
      * @return 字符串
      */
     public String getNowDateString() {
-        return convertToString(LocalDate.now(zoneId));
+        return convertToString(getNowDate());
     }
 
     /**
@@ -116,7 +134,7 @@ public enum ChinaDateUtil {
      * @return 字符串
      */
     public String getNowDateTimeString() {
-        return convertToString(LocalDateTime.now(zoneId));
+        return convertToString(getNowDateTime());
     }
 
     /**

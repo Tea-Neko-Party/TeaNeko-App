@@ -9,7 +9,7 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
 import org.zexnocs.teanekocore.database.easydata.core.exception.JsonSerializationFailedException;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDtoTaskConfig;
-import tools.jackson.databind.JavaType;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Collection;
@@ -156,18 +156,41 @@ public class EasyDataDto implements IEasyDataDto {
         }
         // 如果不是String，尝试用Json解析
         try {
-            // 如果是 List，则不能直接用 Json 解析
-            if(List.class.isAssignableFrom(clazz)) {
-                JavaType javaType = objectMapper.getTypeFactory()
-                        .constructCollectionType(List.class, String.class);
-                return objectMapper.readValue(value, javaType);
-            }
             return objectMapper.readValue(value, clazz);
         } catch (Exception e) {
             throw new JsonSerializationFailedException("""
                     Json 反序列化失败。
                     键：%s
                     要求的类型：%s
+                    提供的类型：%s""".formatted(key, clazz.getName(), value.getClass().getName()),
+                    e);
+        }
+    }
+
+    /**
+     * 根据键获取 List 值
+     *
+     * @param key   键
+     * @param clazz List 中元素的类型
+     */
+    @Override
+    public <T> List<T> getList(String key, @NonNull Class<T> clazz) throws JsonSerializationFailedException {
+        // 如果数据为null，刷新数据。
+        refreshIfNecessary();
+        // 从缓存中获取值
+        String value = data.get(key);
+        // 如果不存在，返回空列表
+        if (value == null) {
+            return List.of();
+        }
+        // 尝试用Json解析
+        try {
+            return objectMapper.readerForListOf(clazz).readValue(value);
+        } catch (Exception e) {
+            throw new JsonSerializationFailedException("""
+                    Json 反序列化失败。
+                    键：%s
+                    要求的类型：List<%s>
                     提供的类型：%s""".formatted(key, clazz.getName(), value.getClass().getName()),
                     e);
         }
@@ -242,7 +265,7 @@ public class EasyDataDto implements IEasyDataDto {
                 addTransactionTask(() -> repository.updateDataObjectData(namespace, target, key, str));
                 // 缓存写入
                 addCacheTask(() -> data.put(key, str));
-            } catch (Exception e) {
+            } catch (JacksonException e) {
                 throw new JsonSerializationFailedException("""
                         Json 序列化失败。
                         键：%s

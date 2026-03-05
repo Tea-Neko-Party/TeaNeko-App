@@ -5,6 +5,7 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.database.easydata.core.exception.JsonSerializationFailedException;
 
 import java.util.Collection;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -83,6 +84,15 @@ public interface IEasyDataDto {
     default <T> T get(String key, @NonNull T defaultValue) throws JsonSerializationFailedException {
         return Objects.requireNonNull(get(key, (Class<T>) defaultValue.getClass(), defaultValue));
     }
+
+    /**
+     * 根据键获取 List 值
+     * <br>注意这个 List 是 ImmutableList，不能修改。
+     *
+     * @param key 键
+     * @param clazz List 中元素的类型
+     */
+    <T> List<T> getList(String key, @NonNull Class<T> clazz) throws JsonSerializationFailedException;
 
     /**
      * 根据键获取布尔值。

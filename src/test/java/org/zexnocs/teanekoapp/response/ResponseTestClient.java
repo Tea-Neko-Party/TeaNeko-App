@@ -70,9 +70,9 @@ public class ResponseTestClient implements IClient {
         // 构造响应消息
         ResponseData responseData;
         if(count == 0) {
-            var map = new HashMap<String, String>();
+            var map = new HashMap<String, Object> ();
             map.put("data", "Hello, this is a response from FakeClient!");
-            responseData = new ResponseData(true, echo, mapper.writeValueAsString(map));
+            responseData = new ResponseData(true, echo, map);
         } else {
             responseData = new ResponseData(false, echo, null);
         }

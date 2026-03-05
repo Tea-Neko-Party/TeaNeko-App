@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp.message.api;
 
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -64,4 +65,17 @@ public interface ITeaNekoMessageData {
      */
     @NonNull
     ITeaNekoClient getClient();
+
+    /**
+     * 快速获取一个消息发送器构建器，使用当前消息数据作为上下文。
+     *
+     * @return 消息发送器构建器
+     */
+    @NonNull
+    default IEasyMessageSenderBuilder getMessageSender(String token) {
+        return getClient()
+                .teaNekoToolbox()
+                .getMessageSender()
+                .getEasyBuilder(token, this);
+    }
 }

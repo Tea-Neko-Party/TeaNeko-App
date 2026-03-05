@@ -47,7 +47,7 @@ public interface IDatabaseTaskConfig {
      * @param task 任务
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    void addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
+    IDatabaseTaskConfig addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 添加缓存任务。
@@ -55,7 +55,7 @@ public interface IDatabaseTaskConfig {
      * @param task 缓存任务
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    void addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
+    IDatabaseTaskConfig addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 合并任务。
@@ -65,7 +65,7 @@ public interface IDatabaseTaskConfig {
      * @param config 任务
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    void merge(@NonNull IDatabaseTaskConfig config) throws DatabaseTaskRepeatedSubmissionException;
+    IDatabaseTaskConfig merge(@NonNull IDatabaseTaskConfig config) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 原子性修改任务的push状态。
