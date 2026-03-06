@@ -56,8 +56,9 @@ public interface ITaskService {
     /**
      * 手动指定一个 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param key       任务的唯一标识符
      * @param name      任务名称
@@ -85,8 +86,9 @@ public interface ITaskService {
     /**
      * 使用随机 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param name      任务名称
      * @param taskStage 任务阶段命名空间
@@ -106,8 +108,9 @@ public interface ITaskService {
     /**
      * 使用随机 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param name 任务名称
      * @param callable 任务
@@ -126,8 +129,9 @@ public interface ITaskService {
     /**
      * 使用指定 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param key 任务的唯一标识符
      * @param name 任务名称
@@ -201,8 +205,9 @@ public interface ITaskService {
     /**
      * 使用随机 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param name      任务名称
      * @param taskStage 任务阶段命名空间
@@ -221,8 +226,9 @@ public interface ITaskService {
     /**
      * 使用随机 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param name 任务名称
      * @param callable 任务
@@ -240,8 +246,9 @@ public interface ITaskService {
     /**
      * 使用指定 key 和默认配置来注册一个任务。
      * 默认：
-     * 1. 不重试
-     * 2. 过期时间 10 分钟
+     * 1. 不延迟
+     * 2. 不重试
+     * 3. 过期时间 10 分钟
      *
      * @param key 任务的唯一标识符
      * @param name 任务名称
