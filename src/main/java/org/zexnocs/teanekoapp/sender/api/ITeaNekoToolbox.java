@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.sender.api;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IGetMessageSender;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserInfoConstructor;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
@@ -34,6 +35,12 @@ public interface ITeaNekoToolbox {
      * @return 获取平台用户信息的发送器
      */
     IPlatformUserGetSender getPlatformUserGetSender();
+
+    /**
+     * 获取构造平台用户信息的发送器。
+     * 该发射器可以根据平台 ID 构造出用户的信息列表。
+     */
+    IPlatformUserInfoConstructor getPlatformUserInfoConstructorSender();
 
     /**
      * 获取符合当前适配器实现类的 logger。

@@ -35,4 +35,14 @@ public interface ITeaUserService {
      * @return TeaUser 对象的 UUID 的 future; 如果没有则会异步创建一个新的 TeaUser，并返回其 UUID
      */
     TaskFuture<UUID> getOrCreate(ITeaNekoClient client, String userId);
+
+    /**
+     * 根据 client 和 UUID 获取 平台用户 ID。
+     *
+     * @param client 客户端
+     * @param uuid TeaUser 的 UUID
+     * @return 平台用户 ID; 如果没有找到则返回 null
+     */
+    @Nullable
+    String getPlatformId(ITeaNekoClient client, UUID uuid);
 }

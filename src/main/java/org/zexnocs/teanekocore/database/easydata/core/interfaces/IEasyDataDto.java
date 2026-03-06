@@ -105,6 +105,14 @@ public interface IEasyDataDto {
     }
 
     /**
+     * 获取所有值为 value 的 key。
+     *
+     * @param value 值。
+     * @return 包含所有 key 的集合。
+     */
+    List<String> getKeysByValue(String value);
+
+    /**
      * 获取 keySet。
      * @return keySet。
      */

@@ -29,12 +29,17 @@ public class OnebotToolbox implements ITeaNekoToolbox {
     @Getter
     private final ILogger logger;
 
+    @Getter
+    private final OnebotUserInfoConstructor platformUserInfoConstructorSender;
+
     public OnebotToolbox(OnebotGetMsgSender getMsgSender,
                          OnebotMessageSender messageSender,
-                         StrangerInfoGetSender platformUserGetSender, ILogger logger) {
+                         StrangerInfoGetSender platformUserGetSender, ILogger logger,
+                         OnebotUserInfoConstructor platformUserInfoConstructorSender) {
         this.getMsgSender = getMsgSender;
         this.messageSender = messageSender;
         this.platformUserGetSender = platformUserGetSender;
         this.logger = logger;
+        this.platformUserInfoConstructorSender = platformUserInfoConstructorSender;
     }
 }

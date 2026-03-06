@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDtoTas
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -194,6 +195,26 @@ public class EasyDataDto implements IEasyDataDto {
                     提供的类型：%s""".formatted(key, clazz.getName(), value.getClass().getName()),
                     e);
         }
+    }
+
+    /**
+     * 获取所有值为 value 的 key。
+     *
+     * @param value 值。
+     * @return 包含所有 key 的集合。
+     */
+    @Override
+    public List<String> getKeysByValue(String value) {
+        // 如果数据为null，刷新数据。
+        refreshIfNecessary();
+        // 遍历所有键值对，找到值为 value 的键
+        List<String> keys = new ArrayList<>();
+        for (var entry : data.entrySet()) {
+            if (entry.getValue().equals(value)) {
+                keys.add(entry.getKey());
+            }
+        }
+        return keys;
     }
 
     /**

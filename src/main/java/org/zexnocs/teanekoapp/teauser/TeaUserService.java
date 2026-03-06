@@ -6,8 +6,12 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
+import org.zexnocs.teanekocore.framework.pair.HashPair;
+import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Objects;
@@ -23,14 +27,18 @@ import java.util.concurrent.CompletableFuture;
  */
 @Service
 public class TeaUserService implements ITeaUserService {
-    /// 数据库中命名空间
-    public static final String EASY_DATA_NAMESPACE = "tea-user-mapping";
+    /// 转化为 TeaUser 的数据命名空间
+    public static final String TO_TEA_USER_NAMESPACE = "to_teaneko";
+
     private final ILogger logger;
 
-    public TeaUserService(ILogger logger) {
-        this.logger = logger;
-    }
+    /// 构造一个根据 UUID 和 客户端获取 平台ID 的缓存
+    private final ConcurrentMapCacheContainer<Pair<String, UUID>, String> cache;
 
+    public TeaUserService(ILogger logger, ICacheService iCacheService) {
+        this.logger = logger;
+        cache = ConcurrentMapCacheContainer.of(iCacheService);
+    }
 
     /**
      * 根据客户端和平台用户 ID 获取 TeaUser。
@@ -42,13 +50,17 @@ public class TeaUserService implements ITeaUserService {
      */
     @Override
     public @Nullable UUID get(ITeaNekoClient client, String userId) {
-        var target = getTarget(client);
-        var uuid = target.get(userId);
-        if(uuid == null) {
+        var target = getToTeaUserTarget(client);
+        var uuidStr = target.get(userId);
+        if(uuidStr == null) {
             return null;
         }
         try {
-            return UUID.fromString(uuid);
+            var uuid = UUID.fromString(uuidStr);
+            // 添加到缓存中
+            var cacheKey = HashPair.of(client.getClientId(), uuid);
+            cache.put(cacheKey, userId);
+            return uuid;
         } catch (IllegalArgumentException e) {
             // 如果数据库中的数据不是一个合法的 UUID 字符串，则删除并返回 null
             target.getTaskConfig("删除非法 UUID 数据")
@@ -69,7 +81,7 @@ public class TeaUserService implements ITeaUserService {
     @Override
     @NonNull
     public TaskFuture<UUID> getOrCreate(ITeaNekoClient client, String userId) {
-        var target = getTarget(client);
+        var target = getToTeaUserTarget(client);
         var uuid = target.get(userId);
         if (uuid != null) {
             try {
@@ -78,6 +90,11 @@ public class TeaUserService implements ITeaUserService {
                         "成功获取现有 UUID",
                         new CompletableFuture<>());
                 resultFuture.complete(existingUuid);
+
+                // 添加到缓存中
+                var cacheKey = HashPair.of(client.getClientId(), existingUuid);
+                cache.put(cacheKey, userId);
+
                 return resultFuture;
             } catch (IllegalArgumentException e) {
                 // 如果数据库中的数据不是一个合法的 UUID 字符串，则与后面一样设置一个新的 UUID
@@ -86,7 +103,40 @@ public class TeaUserService implements ITeaUserService {
         return target.getTaskConfig("创建新的 UUID")
                 .set(userId, UUID.randomUUID().toString())
                 .pushWithFuture()
-                .thenApply(r -> UUID.fromString(Objects.requireNonNull(target.get(userId))));
+                .thenApply(r -> {
+                    var currentUUID = UUID.fromString(Objects.requireNonNull(target.get(userId)));
+                    // 添加到缓存中
+                    var cacheKey = HashPair.of(client.getClientId(), currentUUID);
+                    cache.put(cacheKey, userId);
+                    return currentUUID;
+                });
+    }
+
+    /**
+     * 根据 client 和 UUID 获取 平台用户 ID。
+     *
+     * @param client 客户端
+     * @param uuid   TeaUser 的 UUID
+     * @return 平台用户 ID; 如果没有找到则返回 null
+     */
+    @Override
+    public @Nullable String getPlatformId(ITeaNekoClient client, UUID uuid) {
+        // 先尝试从缓存中获取
+        var cacheKey = HashPair.of(client.getClientId(), uuid);
+        var cachedUserId = cache.get(cacheKey);
+        if (cachedUserId != null) {
+            return cachedUserId;
+        }
+        // 否则强行从数据库中获取
+        var keyList = getToTeaUserTarget(client).getKeysByValue(uuid.toString());
+        if (keyList.isEmpty()) {
+            return null;
+        } else {
+            var userId = keyList.getFirst();
+            // 将结果缓存起来
+            cache.put(cacheKey, userId);
+            return userId;
+        }
     }
 
     /**
@@ -96,8 +146,8 @@ public class TeaUserService implements ITeaUserService {
      * @return TeaUser 的 target
      */
     @NonNull
-    private static IEasyDataDto getTarget(ITeaNekoClient client) {
+    private static IEasyDataDto getToTeaUserTarget(ITeaNekoClient client) {
         // 获取到 target
-        return GeneralEasyData.of(EASY_DATA_NAMESPACE).get(client.getClientId());
+        return GeneralEasyData.of(TO_TEA_USER_NAMESPACE).get(client.getClientId());
     }
 }
