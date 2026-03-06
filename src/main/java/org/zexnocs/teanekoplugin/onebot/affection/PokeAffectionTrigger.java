@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>1h 内同一用户对同一目标只能增加一次好感度
  * <br>只在 Onebot 中触发
  *
+ * @see org.zexnocs.teanekoplugin.general.affection.AffectionService
  * @author zExNocs
  * @date 2026/03/06
  * @since 4.1.0

@@ -58,7 +58,7 @@ public interface IItemDataService {
      * @return type → 物品数据传输对象 映射。
      */
     @NonNull
-    Map<String, IItemDataDTO<?>> getMapByOwnerNamespace(UUID ownerId, String namespace);
+    Map<String, IItemDataDTO<? extends IItemMetadata>> getMapByOwnerNamespace(UUID ownerId, String namespace);
 
     /**
      * 获取 namespace 下对应 type 的所有物品数据传输对象映射
@@ -67,7 +67,7 @@ public interface IItemDataService {
      * @return ownerId → 物品数据传输对象 映射。
      */
     @NonNull
-    Map<UUID, IItemDataDTO<?>> getMapByNamespaceType(String namespace, String type);
+    Map<UUID, IItemDataDTO<? extends IItemMetadata>> getMapByNamespaceType(String namespace, String type);
 
     /**
      * 获取 ownerId 下对应的 namespace 下 type 类型的物品数据传输对象
@@ -77,5 +77,5 @@ public interface IItemDataService {
      * @return 物品数据传输对象列表。如果不存在则返回 null。
      */
     @Nullable
-    IItemDataDTO<?> getByOwnerNamespaceType(UUID ownerId, String namespace, String type);
+    IItemDataDTO<? extends IItemMetadata> getByOwnerNamespaceType(UUID ownerId, String namespace, String type);
 }

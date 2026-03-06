@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoapp.sender.api.sender_box;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
-import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.time.Duration;
@@ -28,7 +28,7 @@ public interface IForwardMessageSenderBuilder {
      *
      * @return 发送结果的 future
      */
-    TaskFuture<IMessageResponseData> sendWithFuture();
+    TaskFuture<IMessageSendResponseData> sendWithFuture();
 
     /**
      * 以分段的方式发送消息。

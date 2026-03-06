@@ -7,6 +7,7 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataCacheService;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
+import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
 
 import java.util.Collections;
@@ -24,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ItemDataCacheService implements IItemDataCacheService {
 
     /// 缓存 UUID 到 IItemDataDTO 的映射
-    private final ConcurrentMapCacheContainer<UUID, IItemDataDTO<?>> itemDataDtoCache;
+    private final ConcurrentMapCacheContainer<UUID, IItemDataDTO<? extends IItemMetadata>> itemDataDtoCache;
 
     /// 缓存 (ownerId, namespace) 到 (type, UUID) 映射的缓存
     private final ConcurrentMapCacheContainer<HashPair<UUID, String>, ConcurrentHashMap<String, UUID>>
@@ -41,7 +42,7 @@ public class ItemDataCacheService implements IItemDataCacheService {
      * @param dto 物品数据对象
      */
     @Override
-    public void createCache(ItemDataDTO<?> dto) {
+    public void createCache(ItemDataDTO<? extends IItemMetadata> dto) {
         itemDataDtoCache.put(dto.getUuid(), dto);
     }
 
@@ -82,7 +83,7 @@ public class ItemDataCacheService implements IItemDataCacheService {
      * @return 物品数据传输对象
      */
     @Override
-    public IItemDataDTO<?> getDTOByUUID(UUID uuid) {
+    public IItemDataDTO<? extends IItemMetadata> getDTOByUUID(UUID uuid) {
         return itemDataDtoCache.get(uuid);
     }
 

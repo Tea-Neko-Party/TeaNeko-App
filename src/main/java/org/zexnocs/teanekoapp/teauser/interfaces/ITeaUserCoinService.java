@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoapp.teauser.interfaces;
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
@@ -15,6 +16,16 @@ import java.util.UUID;
  * @since 4.0.11
  */
 public interface ITeaUserCoinService {
+
+    /**
+     * 直接获取用户的猫猫币 dto。如果不存在则会返回 null。
+     *
+     * @param userId 用户的 UUID
+     * @return 用户的猫猫币 dto，如果不存在则返回 null
+     */
+    @Nullable
+    IItemDataDTO<? extends IItemMetadata> getCoinDirect(UUID userId);
+
     /**
      * 获取用户的猫猫币 dto future。
      *

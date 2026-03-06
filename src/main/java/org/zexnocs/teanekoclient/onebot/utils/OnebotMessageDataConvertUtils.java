@@ -90,8 +90,6 @@ public enum OnebotMessageDataConvertUtils {
                 .uuid(uuid)
                 .userIdInPlatform(String.valueOf(onebotData.getUserId()))
                 .nickname(nickname)
-                .card(senderData.getCard())
-                .level(getLevel(senderData))
                 .role(getCommandPermission(teaNekoMessageType, senderData))
                 .groupId(String.valueOf(onebotData.getGroupId()))
                 .build();
@@ -124,23 +122,5 @@ public enum OnebotMessageDataConvertUtils {
             // 其他类型的消息，默认权限是 MEMBER
             default -> CommandPermission.MEMBER;
         };
-    }
-
-    /**
-     * 根据 senderData 中的 level 字段，解析出一个整数，如果解析失败或者该字段不存在，则默认值为 100
-     *
-     * @param senderData onebot 消息中的 sender 字段数据
-     * @return int
-     */
-    public int getLevel(OnebotSenderData senderData) {
-        try {
-            if (senderData.getLevel() != null) {
-                return Integer.parseInt(senderData.getLevel());
-            } else {
-                return 100;
-            }
-        } catch (NumberFormatException e) {
-            return 100;
-        }
     }
 }

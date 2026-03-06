@@ -3,17 +3,16 @@ package org.zexnocs.teanekoclient.onebot.sender.group;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberInfoSender;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.response.params.GroupMemberResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.group.GetGroupMemberInfoParamsData;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * 获取群成员信息发送器
@@ -22,8 +21,9 @@ import java.util.List;
  * @date 2026/03/04
  * @since 4.0.12
  */
-@Component("GroupMemberInfoSender")
-public class GetGroupMemberInfoSender extends AbstractOnebotSender<GetGroupMemberInfoParamsData, GroupMemberResponseData> {
+@Component("Onebot-GroupMemberInfoSender")
+public class GetGroupMemberInfoSender extends AbstractOnebotSender<GetGroupMemberInfoParamsData,
+        GroupMemberResponseData> implements IGetGroupMemberInfoSender {
 
     /**
      * 构造函数，初始化发送器。
@@ -46,17 +46,23 @@ public class GetGroupMemberInfoSender extends AbstractOnebotSender<GetGroupMembe
      * @param groupId 群号
      * @param userId 成员QQ号
      */
-    public TaskFuture<ITaskResult<List<GroupMemberResponseData>>> get(String token, long groupId, long userId) {
+    public TaskFuture<GroupMemberResponseData> get(String token, String groupId, String userId) {
         return sendWithFuture(
                 token,
                 GetGroupMemberInfoParamsData
                     .builder()
-                    .groupId(groupId)
-                    .userId(userId)
+                    .groupId(Long.parseLong(groupId))
+                    .userId(Long.parseLong(userId))
                     .noCache(true)
                     .build(),
                 Duration.ZERO,
                 3,
-                Duration.ofMillis(200));
+                Duration.ofMillis(200))
+                .thenApply(r -> {
+                    if(!r.isSuccess()) {
+                        return null;
+                    }
+                    return r.getResult().getFirst();
+                });
     }
 }

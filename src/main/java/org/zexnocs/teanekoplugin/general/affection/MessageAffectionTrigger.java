@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoplugin.general.affection.trigger;
+package org.zexnocs.teanekoplugin.general.affection;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.TeaNekoMessageReceiveEvent;

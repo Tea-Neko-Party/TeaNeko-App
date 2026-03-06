@@ -15,7 +15,7 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
  */
 @TeaNekoClient(value = OnebotTeaNekoClient.ID, description = """
         Onebot 11 协议的客户端。""")
-public record OnebotTeaNekoClient(OnebotClient client, OnebotToolbox teaNekoToolbox) implements ITeaNekoClient {
+public record OnebotTeaNekoClient(OnebotClient getClient, OnebotToolbox getTeaNekoToolbox) implements ITeaNekoClient {
     public static final String ID = "onebot";
 
     @Lazy

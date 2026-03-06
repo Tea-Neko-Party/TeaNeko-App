@@ -99,6 +99,9 @@ public class OnebotRawMessageData {
     @JsonProperty("group_id")
     private long groupId;
 
+    @JsonProperty("group_name")
+    private String groupName;
+
     // ----- 临时对话字段 -----
     /// temp_source 临时对话来源
     @JsonProperty("temp_source")

@@ -100,8 +100,6 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
                                             .uuid(pair.second())
                                             .userIdInPlatform(String.valueOf(senderData.getUserId()))
                                             .nickname(senderData.getNickname())
-                                            .card(senderData.getCard())
-                                            .level(OnebotMessageDataConvertUtils.Instance.getLevel(senderData))
                                             .role(OnebotMessageDataConvertUtils.Instance.getCommandPermission(messageType, senderData))
                                             .groupId(String.valueOf(senderData.getGroupId()))
                                             .build())

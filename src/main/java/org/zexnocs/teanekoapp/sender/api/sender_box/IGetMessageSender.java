@@ -23,5 +23,5 @@ public interface IGetMessageSender {
      * @param messageId 消息 ID
      * @return 一个 future，完成后会得到一个包含消息数据的结果对象
      */
-    TaskFuture<ITaskResult<ITeaNekoMessageData>> getMsg(String token, String messageId);
+    TaskFuture<? extends ITaskResult<ITeaNekoMessageData>> getMsg(String token, String messageId);
 }

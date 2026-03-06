@@ -68,7 +68,7 @@ public class AffectionCommand {
             }
             long currentToTarget = iAffectionService.getAffection(senderUUID, targetUUID);
             long targetToCurrent = iAffectionService.getAffection(targetUUID, senderUUID);
-            var builder = client.teaNekoToolbox().getMessageSender().getMsgListBuilder()
+            var builder = client.getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
                     .addAtMessage(data.getUserData().getUserIdInPlatform())
                     .addTextMessage(" 对 ")
                     .addAtMessage(targetId)
@@ -118,10 +118,10 @@ public class AffectionCommand {
                 // 如果为 null，说明是跨平台，则直接跳过。
                 continue;
             }
-            var messageBuilder = client.teaNekoToolbox().getMessageSender().getMsgListBuilder()
+            var messageBuilder = client.getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
                     .addTextMessage("第 %d 名: ".formatted(++record))
                     .addMessages(client
-                            .teaNekoToolbox()
+                            .getTeaNekoToolbox()
                             .getPlatformUserInfoConstructorSender()
                             .getSimpleInfo(thisTargetId))
                     .addTextMessage("\n%s: %d".formatted(prompt, affectionValue));

@@ -8,13 +8,13 @@ import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContent;
 import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
-import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.core.OnebotIdService;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
-import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupForwardMessageSendParamsData;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
@@ -29,7 +29,7 @@ import java.util.List;
  * 群转发消息发送器
  */
 @Component("Onebot-GroupForwardMessageSender")
-public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForwardMessageSendParamsData, OnebotMessageResponseData> {
+public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForwardMessageSendParamsData, OnebotMessageSendResponseData> {
     /// bot name
     private final String BOT_NAME;
 
@@ -149,7 +149,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
          * @return 发送结果的 future
          */
         @Override
-        public TaskFuture<IMessageResponseData> sendWithFuture() {
+        public TaskFuture<IMessageSendResponseData> sendWithFuture() {
             var data = GroupForwardMessageSendParamsData.builder()
                     .groupId(groupId)
                     .messages(messageList)

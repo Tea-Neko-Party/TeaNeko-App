@@ -67,7 +67,7 @@ public class StrangerGetCommand {
                                             strangerInfo.getNickname(),
                                             strangerInfo.getSex(),
                                             strangerInfo.getAge(),
-                                            strangerInfo.getQqLevel(),
+                                            strangerInfo.getLevel(),
                                             strangerInfo.getLongNick(),
                                             strangerInfo.getPos(),
                                             strangerInfo.getCollege(),

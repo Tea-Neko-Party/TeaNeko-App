@@ -9,11 +9,11 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
-import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
-import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.PrivateMsgSendParamsData;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
@@ -33,7 +33,7 @@ import java.util.List;
  * @since 4.0.12
  */
 @Service("Onebot-PrivateMessageSender")
-public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendParamsData, OnebotMessageResponseData> {
+public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendParamsData, OnebotMessageSendResponseData> {
     /// onebot 消息发送失败处理器，用于处理发送失败的情况，例如记录日志、重试等
     private final OnebotMessageFailSendHandler onebotMessageFailSendHandler;
 
@@ -64,12 +64,12 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      * @param retryDelay    重试间隔
      * @return 发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
      */
-    public TaskFuture<ITaskResult<List<OnebotMessageResponseData>>> sendMessage(String token,
-                                                                                List<? extends ITeaNekoMessage> messageList,
-                                                                                String userId,
-                                                                                Duration delay,
-                                                                                int maxRetryCount,
-                                                                                Duration retryDelay) {
+    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(String token,
+                                                                                    List<? extends ITeaNekoMessage> messageList,
+                                                                                    String userId,
+                                                                                    Duration delay,
+                                                                                    int maxRetryCount,
+                                                                                    Duration retryDelay) {
         return sendWithFuture(token,
                 PrivateMsgSendParamsData.builder()
                         .userId(Long.parseLong(userId))
@@ -149,7 +149,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          * @see TaskFuture
          */
         @Override
-        public TaskFuture<? extends IMessageResponseData> sendWithFuture() {
+        public TaskFuture<? extends IMessageSendResponseData> sendWithFuture() {
             var messages = messageListBuilder.build();
             var future = PrivateMessageSender.this.sendMessage(
                     token,

@@ -83,8 +83,8 @@ public interface ITeaNekoMessageData {
     @NonNull
     default IEasyMessageSenderBuilder getMessageSender(String token) {
         return getClient()
-                .teaNekoToolbox()
-                .getMessageSender()
+                .getTeaNekoToolbox()
+                .getMessageSenderTools()
                 .getEasyBuilder(token, this);
     }
 
@@ -96,8 +96,8 @@ public interface ITeaNekoMessageData {
     @NonNull
     default IForwardMessageSenderBuilder getForwardMessageSender(String token) {
         return getClient()
-                .teaNekoToolbox()
-                .getMessageSender()
+                .getTeaNekoToolbox()
+                .getMessageSenderTools()
                 .getForwardBuilder(token, this);
     }
 }

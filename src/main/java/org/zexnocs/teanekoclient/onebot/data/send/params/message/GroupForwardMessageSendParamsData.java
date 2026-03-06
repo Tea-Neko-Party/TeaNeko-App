@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
-import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 import java.util.List;
@@ -19,7 +19,7 @@ import java.util.List;
  */
 @Getter
 @Builder
-public class GroupForwardMessageSendParamsData implements ISendParamsData<OnebotMessageResponseData> {
+public class GroupForwardMessageSendParamsData implements ISendParamsData<OnebotMessageSendResponseData> {
     public static final String ACTION = "send_group_forward_msg";
 
     /// 群号
@@ -62,7 +62,7 @@ public class GroupForwardMessageSendParamsData implements ISendParamsData<Onebot
      * @return 反应数据的类型。
      */
     @Override
-    public Class<OnebotMessageResponseData> getResponseDataType() {
-        return OnebotMessageResponseData.class;
+    public Class<OnebotMessageSendResponseData> getResponseDataType() {
+        return OnebotMessageSendResponseData.class;
     }
 }

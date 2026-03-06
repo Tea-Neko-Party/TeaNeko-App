@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.database.itemdata.interfaces;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
+import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
 import java.util.Map;
 import java.util.UUID;
@@ -17,7 +18,7 @@ public interface IItemDataCacheService {
      * 创建 UUID → IItemDataDTO 的缓存
      * @param dto 物品数据对象
      */
-    void createCache(ItemDataDTO<?> dto);
+    void createCache(ItemDataDTO<? extends IItemMetadata> dto);
 
     /**
      * 创建 (ownerId, namespace) → UUID集合 的缓存
@@ -45,7 +46,7 @@ public interface IItemDataCacheService {
      * @return 物品数据传输对象
      */
     @Nullable
-    IItemDataDTO<?> getDTOByUUID(UUID uuid);
+    IItemDataDTO<? extends IItemMetadata> getDTOByUUID(UUID uuid);
 
     /**
      * 根据 (ownerId, namespace) 获取 UUID 集合

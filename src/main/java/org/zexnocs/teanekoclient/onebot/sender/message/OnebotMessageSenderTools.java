@@ -4,7 +4,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 
 import java.util.Objects;
@@ -17,16 +17,16 @@ import java.util.Objects;
  * @since 4.0.12
  */
 @Component("Onebot-MessageSender")
-public class OnebotMessageSender implements IMessageSender {
+public class OnebotMessageSenderTools implements IMessageSenderTools {
     private final PrivateForwardMessageSender privateForwardMessageSender;
     private final GroupForwardMessageSender groupForwardMessageSender;
     private final PrivateMessageSender privateMessageSender;
     private final GroupMessageSender groupMessageSender;
 
-    public OnebotMessageSender(PrivateForwardMessageSender privateForwardMessageSender,
-                               GroupForwardMessageSender groupForwardMessageSender,
-                               PrivateMessageSender privateMessageSender,
-                               GroupMessageSender groupMessageSender) {
+    public OnebotMessageSenderTools(PrivateForwardMessageSender privateForwardMessageSender,
+                                    GroupForwardMessageSender groupForwardMessageSender,
+                                    PrivateMessageSender privateMessageSender,
+                                    GroupMessageSender groupMessageSender) {
         this.privateForwardMessageSender = privateForwardMessageSender;
         this.groupForwardMessageSender = groupForwardMessageSender;
         this.privateMessageSender = privateMessageSender;

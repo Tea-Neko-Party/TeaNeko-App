@@ -184,12 +184,12 @@ public class ItemDataService implements IItemDataService {
      * @return 物品数据传输对象列表
      */
     @Override
-    public @NonNull Map<String, IItemDataDTO<?>> getMapByOwnerNamespace(UUID ownerId,
+    public @NonNull Map<String, IItemDataDTO<? extends IItemMetadata>> getMapByOwnerNamespace(UUID ownerId,
                                                                         String namespace) {
         // 尝试从缓存中获取该 (ownerId, namespace) 下的 UUID 列表
         var type2Uuid = iItemDataCacheService.getUUIDsByOwnerNamespace(ownerId, namespace);
         if(type2Uuid != null) {
-            Map<String, IItemDataDTO<?>> result = new ConcurrentHashMap<>();
+            Map<String, IItemDataDTO<? extends IItemMetadata>> result = new ConcurrentHashMap<>();
             for (var entry : type2Uuid.entrySet()) {
                 var dto = getByUuid(entry.getValue());
                 result.put(entry.getKey(), dto);
@@ -201,7 +201,7 @@ public class ItemDataService implements IItemDataService {
         var itemDataObjects = itemDataRepository.findAllByOwnerIdAndNamespace(ownerId, namespace);
         // 构建 UUID 列表缓存和输出列表
         var caches = new ConcurrentHashMap<String, UUID>();
-        var result = new ConcurrentHashMap<String, IItemDataDTO<?>>();
+        var result = new ConcurrentHashMap<String, IItemDataDTO<? extends IItemMetadata>>();
         for(var object: itemDataObjects) {
             var uuid = object.getUuid();
             caches.put(object.getType(), uuid);
@@ -221,9 +221,9 @@ public class ItemDataService implements IItemDataService {
      * @return ownerId → 物品数据传输对象 映射。
      */
     @Override
-    public @NonNull Map<UUID, IItemDataDTO<?>> getMapByNamespaceType(String namespace, String type) {
+    public @NonNull Map<UUID, IItemDataDTO<? extends IItemMetadata>> getMapByNamespaceType(String namespace, String type) {
         var itemDataObjects = itemDataRepository.findAllByNamespaceAndType(namespace, type);
-        var result = new ConcurrentHashMap<UUID, IItemDataDTO<?>>();
+        var result = new ConcurrentHashMap<UUID, IItemDataDTO<? extends IItemMetadata>>();
         for(var object: itemDataObjects) {
             var uuid = object.getUuid();
             var dto = getByUuid(uuid);
@@ -241,7 +241,7 @@ public class ItemDataService implements IItemDataService {
      */
     @Nullable
     @Override
-    public IItemDataDTO<?> getByOwnerNamespaceType(UUID ownerId,
+    public IItemDataDTO<? extends IItemMetadata> getByOwnerNamespaceType(UUID ownerId,
                                                    String namespace,
                                                    String type) {
         // 直接获取缓存该 namespace 下的全部物品数据传输对象列表
@@ -256,7 +256,7 @@ public class ItemDataService implements IItemDataService {
      * @throws InvalidMetadataTypeException 无效的元数据类型异常
      * @throws ItemDataNotFoundException 物品数据未找到异常
      */
-    public IItemDataDTO<?> getByUuid(UUID uuid)
+    public IItemDataDTO<? extends IItemMetadata> getByUuid(UUID uuid)
         throws InvalidMetadataTypeException, ItemDataNotFoundException {
         // 尝试从缓存中获取
         var cachedDto = iItemDataCacheService.getDTOByUUID(uuid);

@@ -15,6 +15,13 @@ public interface IPlatformUserResponseData {
     String getPlatformUserId();
 
     /**
+     * 获取用户在该平台的等级。
+     *
+     * @return 用户等级
+     */
+    int getLevel();
+
+    /**
      * 获取用户的昵称。
      *
      * @return 用户昵称

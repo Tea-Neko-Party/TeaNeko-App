@@ -11,7 +11,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
  * @date 2026/02/24
  * @since 4.0.9
  */
-public interface IMessageSender {
+public interface IMessageSenderTools {
     /**
      * 获取一个
      * {@link ITeaNekoMessageListBuilder}

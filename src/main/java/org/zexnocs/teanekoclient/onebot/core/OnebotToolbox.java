@@ -3,8 +3,10 @@ package org.zexnocs.teanekoclient.onebot.core;
 import lombok.Getter;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberInfoSender;
+import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
-import org.zexnocs.teanekoclient.onebot.sender.message.OnebotMessageSender;
+import org.zexnocs.teanekoclient.onebot.sender.message.OnebotMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -21,7 +23,7 @@ public class OnebotToolbox implements ITeaNekoToolbox {
     private final OnebotGetMsgSender getMsgSender;
 
     @Getter
-    private final OnebotMessageSender messageSender;
+    private final OnebotMessageSenderTools messageSenderTools;
 
     @Getter
     private final StrangerInfoGetSender platformUserGetSender;
@@ -32,14 +34,20 @@ public class OnebotToolbox implements ITeaNekoToolbox {
     @Getter
     private final OnebotUserInfoConstructor platformUserInfoConstructorSender;
 
+    @Getter
+    private final IGetGroupMemberInfoSender groupInfoGetSender;
+
     public OnebotToolbox(OnebotGetMsgSender getMsgSender,
-                         OnebotMessageSender messageSender,
-                         StrangerInfoGetSender platformUserGetSender, ILogger logger,
-                         OnebotUserInfoConstructor platformUserInfoConstructorSender) {
+                         OnebotMessageSenderTools messageSenderTools,
+                         StrangerInfoGetSender platformUserGetSender,
+                         ILogger logger,
+                         OnebotUserInfoConstructor platformUserInfoConstructorSender,
+                         GetGroupMemberInfoSender groupInfoGetSender) {
         this.getMsgSender = getMsgSender;
-        this.messageSender = messageSender;
+        this.messageSenderTools = messageSenderTools;
         this.platformUserGetSender = platformUserGetSender;
         this.logger = logger;
         this.platformUserInfoConstructorSender = platformUserInfoConstructorSender;
+        this.groupInfoGetSender = groupInfoGetSender;
     }
 }

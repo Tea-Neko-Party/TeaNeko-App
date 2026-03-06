@@ -38,7 +38,7 @@ public class TeaNekoHelpCommand {
     public void help(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("1") int index) {
         int MAX_NUMBER_PER_PAGE = 10;
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         // 根据第一个指令体的首字母进行排序，并筛选出 description 不为空的指令
         List<Command> sortedKeys = commandDescriptionScanner.getDescriptionDataKeySet().stream()
@@ -58,7 +58,7 @@ public class TeaNekoHelpCommand {
         int startIndex = (index - 1) * MAX_NUMBER_PER_PAGE;
         int endIndex = Math.min(startIndex + MAX_NUMBER_PER_PAGE, sortedKeys.size());
         // 发送当前页的指令
-        var builder = data.getClient().teaNekoToolbox().getMessageSender()
+        var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getForwardBuilder(CommandData.getCommandToken(), data);
         for(int i = startIndex; i < endIndex; i++) {
             var key = sortedKeys.get(i);

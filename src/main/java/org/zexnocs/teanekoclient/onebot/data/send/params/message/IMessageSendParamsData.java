@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoclient.onebot.data.send.params.message;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
-import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 import java.util.List;
@@ -13,7 +13,7 @@ import java.util.List;
  * @date 2026/03/01
  * @since 4.0.11
  */
-public interface IMessageSendParamsData extends ISendParamsData<OnebotMessageResponseData> {
+public interface IMessageSendParamsData extends ISendParamsData<OnebotMessageSendResponseData> {
     /**
      * 获取当前消息列表。
      *
@@ -35,7 +35,7 @@ public interface IMessageSendParamsData extends ISendParamsData<OnebotMessageRes
      * @return 反应数据的类型。
      */
     @Override
-    default Class<OnebotMessageResponseData> getResponseDataType() {
-        return OnebotMessageResponseData.class;
+    default Class<OnebotMessageSendResponseData> getResponseDataType() {
+        return OnebotMessageSendResponseData.class;
     }
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.zexnocs.teanekoapp.response.api.IGroupMemberResponseData;
 
 /**
  * 群成员信息响应子数据
@@ -15,7 +16,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class GroupMemberResponseData {
+public class GroupMemberResponseData implements IGroupMemberResponseData {
     /// 群号
     @JsonProperty("group_id")
     private long groupId;
@@ -38,7 +39,7 @@ public class GroupMemberResponseData {
 
     /// 年龄
     @JsonProperty("age")
-    private int age;
+    private Integer age;
 
     /// 地域
     @JsonProperty("area")
@@ -46,15 +47,15 @@ public class GroupMemberResponseData {
 
     /// 加入时间
     @JsonProperty("join_time")
-    private long joinTime;
+    private Long joinTime;
 
     /// 上次发言时间
     @JsonProperty("last_sent_time")
-    private long lastSentTime;
+    private Long lastSentTime;
 
     /// 群等级
     @JsonProperty("level")
-    private int level;
+    private Integer level;
 
     /// 群内的角色
     @JsonProperty("role")

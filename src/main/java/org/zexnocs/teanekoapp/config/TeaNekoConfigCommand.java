@@ -50,7 +50,7 @@ public class TeaNekoConfigCommand {
     @DefaultCommand
     public void queryCurrentConfig(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender().getEasyBuilder(CommandData.getCommandToken(), data);
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getEasyBuilder(CommandData.getCommandToken(), data);
         if(ruleName.isBlank()) {
             try {
                 var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
@@ -60,7 +60,7 @@ public class TeaNekoConfigCommand {
                     messageSender.sendReplyMessage("您没有注册任何配置喵。");
                     return;
                 }
-                data.getClient().teaNekoToolbox().getMessageSender()
+                data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                         .getForwardBuilder(CommandData.getCommandToken(), data)
                         .addBotAllText(textList)
                         .sendByPart(10);
@@ -92,7 +92,7 @@ public class TeaNekoConfigCommand {
     public void queryExistingPrivateManagerRules(CommandData<ITeaNekoMessageData> commandData,
                                                  @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         if(ruleName.isBlank()) {
             var textList = commandData.getScope().equals(CommandScope.PRIVATE) ?
@@ -102,7 +102,7 @@ public class TeaNekoConfigCommand {
                 messageSender.sendReplyMessage("当前没有任何可用的配置喵。");
                 return;
             }
-            data.getClient().teaNekoToolbox().getMessageSender()
+            data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getForwardBuilder(CommandData.getCommandToken(), data)
                     .addBotAllText(textList)
                     .send();
@@ -127,7 +127,7 @@ public class TeaNekoConfigCommand {
     public void registerPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                            String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -146,7 +146,7 @@ public class TeaNekoConfigCommand {
     public void unregisterPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
                                              String ruleName) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -167,7 +167,7 @@ public class TeaNekoConfigCommand {
     public void setPrivateManagerRuleConfig(CommandData<ITeaNekoMessageData> commandData,
                                             String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         var configValue = String.join(" ", configValueList);
         try {
@@ -199,7 +199,7 @@ public class TeaNekoConfigCommand {
     public void addPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                 String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         var configValue = String.join(" ", configValueList);
         try {
@@ -233,7 +233,7 @@ public class TeaNekoConfigCommand {
     public void removePrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                    String ruleName, String configField, int index) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -266,7 +266,7 @@ public class TeaNekoConfigCommand {
     public void clearPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                   String ruleName, String configField) {
         var data = commandData.getRawData();
-        var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+        var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                 .getEasyBuilder(CommandData.getCommandToken(), data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);

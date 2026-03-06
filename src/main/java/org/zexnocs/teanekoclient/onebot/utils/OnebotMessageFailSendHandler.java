@@ -3,7 +3,7 @@ package org.zexnocs.teanekoclient.onebot.utils;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
-import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.easydata.debug.DebugEasyData;
@@ -33,13 +33,13 @@ public class OnebotMessageFailSendHandler {
      *
      * @param namespace 记录的命名空间，可以用于区分不同类型的记录，例如 "PrivateForwardMessageSender" 等
      * @param future 发送消息的 future，可以通过该 future 来获取发送结果或者进行后续操作
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link OnebotMessageResponseData }>>>
+     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link OnebotMessageSendResponseData }>>>
      *     发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
      */
-    public TaskFuture<ITaskResult<List<OnebotMessageResponseData>>> recordFailed(
+    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> recordFailed(
             String namespace,
             List<? extends ITeaNekoMessage> messages,
-            TaskFuture<ITaskResult<List<OnebotMessageResponseData>>> future) {
+            TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> future) {
         return future.whenComplete((result, throwable) -> {
             if(throwable == null && result.isSuccess()) {
                 // 成功不需要记录

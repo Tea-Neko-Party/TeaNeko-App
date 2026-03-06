@@ -93,7 +93,7 @@ public class SauceNAOCommand {
                         .sendReplyMessage("指令使用错误：未输入正确的图片URL地址 / 未回复信息");
                 return;
             }
-            data.getClient().teaNekoToolbox()
+            data.getClient().getTeaNekoToolbox()
                     .getGetMsgSender()
                     .getMsg(CommandData.getCommandToken(), replyContext.getId())
                     .thenAccept(result -> {
@@ -164,7 +164,7 @@ public class SauceNAOCommand {
                             continue;
                         }
                         var resultHeader = resultData.getHeader();
-                        var messageBuilder = data.getClient().teaNekoToolbox().getMessageSender().getMsgListBuilder();
+                        var messageBuilder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder();
                         if(config.isPreview()) {
                             messageBuilder.addImageMessage(resultHeader.getThumbnail());
                         }

@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 import lombok.experimental.SuperBuilder;
-import org.jspecify.annotations.Nullable;
 
 /**
  * Onebot 消息发送者原生数据类，包含了发送者的基本信息和在群内的角色等信息。
@@ -41,38 +40,11 @@ public class OnebotSenderData {
     @Builder.Default
     private String role = "member";
 
-    /// title 用户在群内的头衔
-    @JsonProperty("title")
-    @Builder.Default
-    private String title = null;
-
     // ----- 群内临时会话发送者参数 -----
     /// group_id 群号
     @JsonProperty("group_id")
     @Builder.Default
     private Long groupId = -1L;
-
-    // ----- Lagrange 扩展 -----
-    /// 性别
-    @JsonProperty("sex")
-    @Builder.Default
-    private String sex = null;
-
-    /// 年龄
-    @JsonProperty("age")
-    @Builder.Default
-    private Integer age = -1;
-
-    /// 地区
-    @JsonProperty("area")
-    @Builder.Default
-    private String area = null;
-
-    /// 群等级
-    @JsonProperty("level")
-    @Builder.Default
-    @Nullable
-    private String level = null;
 
     /**
      * 获取用户在群内的角色。

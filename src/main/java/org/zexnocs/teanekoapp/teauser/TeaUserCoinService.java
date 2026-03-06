@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoapp.teauser;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
@@ -34,6 +35,17 @@ public class TeaUserCoinService implements ITeaUserCoinService {
     public TeaUserCoinService(IItemDataService iItemDataService, ITeaUserService iTeaUserService) {
         this.iItemDataService = iItemDataService;
         this.iTeaUserService = iTeaUserService;
+    }
+
+    /**
+     * 直接获取用户的猫猫币 dto。如果不存在则会返回 null。
+     *
+     * @param userId 用户的 UUID
+     * @return 用户的猫猫币 dto，如果不存在则返回 null
+     */
+    @Override
+    public @Nullable IItemDataDTO<? extends IItemMetadata> getCoinDirect(UUID userId) {
+        return iItemDataService.getByOwnerNamespaceType(userId, DATABASE_NAMESPACE, ITEM_TYPE);
     }
 
     /**

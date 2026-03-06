@@ -6,7 +6,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
-import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.time.Duration;
@@ -47,7 +47,7 @@ public interface IEasyMessageSenderBuilder {
      * @see TaskFuture
      * @return 发送消息的 future，可以通过该 future 来获取发送结果或者进行后续操作
      */
-    TaskFuture<? extends IMessageResponseData> sendWithFuture();
+    TaskFuture<? extends IMessageSendResponseData> sendWithFuture();
 
     /**
      * 发送消息。

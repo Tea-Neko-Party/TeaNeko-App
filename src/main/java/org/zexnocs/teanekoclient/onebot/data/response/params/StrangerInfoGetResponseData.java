@@ -139,7 +139,7 @@ public class StrangerInfoGetResponseData implements IPlatformUserResponseData {
      * QQ 等级
      */
     @JsonProperty("qqLevel")
-    private int qqLevel;
+    private int level;
 
     /**
      * QID

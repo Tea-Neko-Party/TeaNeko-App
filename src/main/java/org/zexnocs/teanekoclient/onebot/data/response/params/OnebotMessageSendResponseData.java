@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
+import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 
 /**
  * 群消息转发响应子数据
@@ -16,7 +16,7 @@ import org.zexnocs.teanekoapp.response.api.IMessageResponseData;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class OnebotMessageResponseData implements IMessageResponseData {
+public class OnebotMessageSendResponseData implements IMessageSendResponseData {
 
     @JsonProperty("message_id")
     private Long messageId;

@@ -1,9 +1,6 @@
 package org.zexnocs.teanekoapp.sender.api;
 
-import org.zexnocs.teanekoapp.sender.api.sender_box.IGetMessageSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserInfoConstructor;
+import org.zexnocs.teanekoapp.sender.api.sender_box.*;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
@@ -18,9 +15,9 @@ public interface ITeaNekoToolbox {
     /**
      * 获取消息发送器工具。
      *
-     * @return {@link IMessageSender }
+     * @return {@link IMessageSenderTools }
      */
-    IMessageSender getMessageSender();
+    IMessageSenderTools getMessageSenderTools();
 
     /**
      * 获取根据消息 ID 获取消息的发送器工具。
@@ -28,6 +25,13 @@ public interface ITeaNekoToolbox {
      * @return {@link IGetMessageSender }
      */
     IGetMessageSender getGetMsgSender();
+
+    /**
+     * 获取平台用户在指定群组中的信息的发送器。
+     *
+     * @return 获取平台用户在指定群组中的信息的发送器
+     */
+    IGetGroupMemberInfoSender getGroupInfoGetSender();
 
     /**
      * 获取平台用户信息的发送器

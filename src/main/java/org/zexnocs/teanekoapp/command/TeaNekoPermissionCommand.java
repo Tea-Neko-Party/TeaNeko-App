@@ -42,7 +42,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getEasyBuilder(CommandData.getCommandToken(), data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
@@ -59,7 +59,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getEasyBuilder(CommandData.getCommandToken(), data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
@@ -76,7 +76,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getEasyBuilder(CommandData.getCommandToken(), data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
@@ -93,7 +93,7 @@ public class TeaNekoPermissionCommand {
         var data = commandData.getRawData();
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
-            var messageSender = data.getClient().teaNekoToolbox().getMessageSender()
+            var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getEasyBuilder(CommandData.getCommandToken(), data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;

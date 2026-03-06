@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 真心话服务类，负责管理真心话的状态和数据。
  *
+ * @see DiceService
  * @author zExNocs
  * @date 2026/03/06
  * @since 4.1.0
