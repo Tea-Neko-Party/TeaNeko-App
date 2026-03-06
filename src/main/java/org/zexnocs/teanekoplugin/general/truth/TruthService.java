@@ -109,7 +109,8 @@ public class TruthService {
         }
         // 判断用户是否已经加入
         var userId = data.getUserData().getUuid();
-        if (groupData.userDataMap.putIfAbsent(userId, new TruthUserData(userId, value, time)) == null) {
+        if (groupData.userDataMap.putIfAbsent(userId,
+                new TruthUserData(data.getUserData().getUserIdInPlatform(), value, time)) == null) {
             groupData.getMessageSender().sendAtReplyMessage("投掷成功喵！点数是：" + value);
         } else {
             groupData.getMessageSender().sendAtReplyMessage("你已经投掷过了喵！");
@@ -170,7 +171,7 @@ public class TruthService {
     @AllArgsConstructor
     private static class TruthUserData implements Comparable<TruthUserData> {
         /// 用户ID
-        private final UUID userID;
+        private final String userID;
 
         /// 用户数据
         private final int value;
