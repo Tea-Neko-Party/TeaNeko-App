@@ -65,7 +65,7 @@ public class OnebotMessageListBuilder implements ITeaNekoMessageListBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     @Override
-    public ITeaNekoMessageListBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList) {
+    public ITeaNekoMessageListBuilder addMessages(@NonNull List<? extends ITeaNekoMessage> messageList) {
         for (ITeaNekoMessage message : messageList) {
             addMessage(message);
         }

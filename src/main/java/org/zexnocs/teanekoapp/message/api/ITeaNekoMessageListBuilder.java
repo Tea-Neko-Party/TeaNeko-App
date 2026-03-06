@@ -40,7 +40,7 @@ public interface ITeaNekoMessageListBuilder {
      * @param messageList 已经构造好的消息对象列表
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList);
+    ITeaNekoMessageListBuilder addMessages(@NonNull List<? extends ITeaNekoMessage> messageList);
 
     /**
      * 添加一个文本消息。

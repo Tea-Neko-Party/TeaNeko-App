@@ -1,0 +1,59 @@
+package org.zexnocs.teanekoplugin.onebot.meow;
+
+import org.zexnocs.teanekoclient.onebot.event.notice.NotifyNoticeReceiveEvent;
+import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
+import org.zexnocs.teanekoclient.onebot.sender.message.PrivateMessageSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekocore.command.CommandData;
+import org.zexnocs.teanekocore.event.core.EventHandler;
+import org.zexnocs.teanekocore.event.core.EventListener;
+
+import java.time.Duration;
+
+/**
+ * 喵呜戳一戳服务，监听戳一戳事件，当被戳到时回复 "喵呜~"
+ * 只有 onebot 协议的戳一戳事件会被监听到，其他协议的戳一戳事件将被忽略。
+ *
+ * @author zExNocs
+ * @date 2026/03/06
+ * @since 4.1.0
+ */
+@EventListener
+public class MeowPokeService {
+
+    private final PrivateMessageSender privateMessageSender;
+    private final GroupMessageSender groupMessageSender;
+
+    public MeowPokeService(PrivateMessageSender privateMessageSender, GroupMessageSender groupMessageSender) {
+        this.privateMessageSender = privateMessageSender;
+        this.groupMessageSender = groupMessageSender;
+    }
+
+    @EventHandler
+    public void handle(NotifyNoticeReceiveEvent event) {
+        var data = event.getData();
+        if (data.getTargetID() == data.getSelfID()) {
+            if(data.getGroupID() != 0) {
+                groupMessageSender.sendMessage(
+                        CommandData.getCommandToken(),
+                        OnebotMessageListBuilder.builder()
+                                .addTextMessage("喵呜~")
+                                .build(),
+                        String.valueOf(data.getGroupID()),
+                        Duration.ZERO,
+                        3,
+                        Duration.ZERO).finish();
+            } else {
+                privateMessageSender.sendMessage(
+                        CommandData.getCommandToken(),
+                        OnebotMessageListBuilder.builder()
+                                .addTextMessage("喵呜~")
+                                .build(),
+                        String.valueOf(data.getUserID()),
+                        Duration.ZERO,
+                        3,
+                        Duration.ZERO).finish();
+            }
+        }
+    }
+}

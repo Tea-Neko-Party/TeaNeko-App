@@ -105,7 +105,7 @@ public interface IEasyMessageSenderBuilder {
      * @param messageList 已经构造好的消息对象列表
      * @return 当前的构造器对象，以便于链式调用
      */
-    default IEasyMessageSenderBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList) {
+    default IEasyMessageSenderBuilder addMessages(@NonNull List<? extends ITeaNekoMessage> messageList) {
         getMessageListBuilder().addMessages(messageList);
         return this;
     }

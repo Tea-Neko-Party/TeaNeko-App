@@ -7,9 +7,12 @@ import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.send.params.private_.LikeSendParamsData;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -43,9 +46,10 @@ public class LikeSender extends AbstractOnebotSender<LikeSendParamsData, Map> {
      * @param token  发送器发送环境的标识符
      * @param userId 用户ID
      * @param times  点赞次数
+     * @return 点赞结果的任务未来对象，完成时包含一个列表，每个元素是一个包含点赞结果信息的映射
      */
-    public void like(String token, long userId, int times) {
-        send(token,
+    public TaskFuture<ITaskResult<List<Map>>> like(String token, long userId, int times) {
+        return sendWithFuture(token,
             LikeSendParamsData.builder()
                     .userId(userId)
                     .times(times)
