@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.sender.api.sender_box;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 
 /**
  * 根据接收到的 {@link ITeaNekoMessageData} 类型来快速发送消息的发送器接口。
@@ -11,6 +12,15 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
  * @since 4.0.9
  */
 public interface IMessageSender {
+    /**
+     * 获取一个
+     * {@link ITeaNekoMessageListBuilder}
+     * 用于快速构造消息列表。
+     *
+     * @return {@link ITeaNekoMessageListBuilder }
+     */
+    ITeaNekoMessageListBuilder getMsgListBuilder();
+
     /**
      * 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
      *

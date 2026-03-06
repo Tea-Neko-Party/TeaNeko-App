@@ -18,6 +18,10 @@ import java.util.Optional;
 public interface IConfigDataService {
     /**
      * 根据 key 获取对应 manager 的配置数据。
+     *
+     * @param configManager 配置管理器，需要实现 {@link ConfigManager} 注解
+     * @param configClass   配置类
+     * @param key           config key
      * @return 配置数据
      * @throws IllegalArgumentException 如果规则注解中的配置类为空
      */
@@ -31,6 +35,10 @@ public interface IConfigDataService {
 
     /**
      * 根据 key 获取对应 manager 的配置数据。
+     *
+     * @param configManager 配置管理器，需要实现 {@link ConfigManager} 注解
+     * @param configClass   配置类
+     * @param key           config key
      * @return 配置数据
      * @throws IllegalArgumentException 如果规则注解中的配置类为空
      */
@@ -40,8 +48,9 @@ public interface IConfigDataService {
 
     /**
      * 使用默认配置注册 configData。
+     *
      * @param configManager 配置管理器
-     * @param key            配置键
+     * @param key           配置键
      */
     default void registerConfig(@NonNull ConfigManager configManager, IConfigKey key) {
         registerConfig(configManager, key.getKey());
@@ -49,15 +58,17 @@ public interface IConfigDataService {
 
     /**
      * 使用默认配置注册 configData。
+     *
      * @param configManager 配置管理器
-     * @param key            配置键
+     * @param key           配置键
      */
     void registerConfig(@NonNull ConfigManager configManager, String key);
 
     /**
      * 注销 configData。
+     *
      * @param configManager 配置管理器
-     * @param key            配置键
+     * @param key           配置键
      * @return 如果注销成功，则返回 true; 否则返回 false。
      */
     default boolean unregisterConfig(@NonNull ConfigManager configManager, IConfigKey key) {
@@ -66,8 +77,9 @@ public interface IConfigDataService {
 
     /**
      * 注销 configData。
+     *
      * @param configManager 配置管理器
-     * @param key            配置键
+     * @param key           配置键
      * @return 如果注销成功，则返回 true; 否则返回 false。
      */
     boolean unregisterConfig(@NonNull ConfigManager configManager, String key);
@@ -75,6 +87,7 @@ public interface IConfigDataService {
 
     /**
      * 使用字段的方法设置群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName  字段名称
@@ -91,6 +104,7 @@ public interface IConfigDataService {
 
     /**
      * 使用字段的方法设置群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName  字段名称
@@ -108,6 +122,7 @@ public interface IConfigDataService {
 
     /**
      * 为 Config 中 List 的字段添加一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -129,6 +144,7 @@ public interface IConfigDataService {
 
     /**
      * 为 Config 中 List 的字段添加一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -148,6 +164,7 @@ public interface IConfigDataService {
 
     /**
      * 为 Config 中 List 的字段移除一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -169,6 +186,7 @@ public interface IConfigDataService {
 
     /**
      * 为 Config 中 List 的字段移除一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -188,6 +206,7 @@ public interface IConfigDataService {
 
     /**
      * 清理一个群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -206,6 +225,7 @@ public interface IConfigDataService {
 
     /**
      * 清理一个群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称

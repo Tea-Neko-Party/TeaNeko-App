@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.message.api;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -85,5 +86,18 @@ public interface ITeaNekoMessageData {
                 .teaNekoToolbox()
                 .getMessageSender()
                 .getEasyBuilder(token, this);
+    }
+
+    /**
+     * 快速获取一个 forward 消息发送器构建器，使用当前消息数据作为上下文。
+     *
+     * @return forward 消息发送器构建器
+     */
+    @NonNull
+    default IForwardMessageSenderBuilder getForwardMessageSender(String token) {
+        return getClient()
+                .teaNekoToolbox()
+                .getMessageSender()
+                .getForwardBuilder(token, this);
     }
 }

@@ -1,9 +1,11 @@
 package org.zexnocs.teanekoclient.onebot.sender.message;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 
 import java.util.Objects;
 
@@ -29,6 +31,18 @@ public class OnebotMessageSender implements IMessageSender {
         this.groupForwardMessageSender = groupForwardMessageSender;
         this.privateMessageSender = privateMessageSender;
         this.groupMessageSender = groupMessageSender;
+    }
+
+    /**
+     * 获取一个
+     * {@link ITeaNekoMessageListBuilder}
+     * 用于快速构造消息列表。
+     *
+     * @return {@link ITeaNekoMessageListBuilder }
+     */
+    @Override
+    public ITeaNekoMessageListBuilder getMsgListBuilder() {
+        return OnebotMessageListBuilder.builder();
     }
 
     /**
