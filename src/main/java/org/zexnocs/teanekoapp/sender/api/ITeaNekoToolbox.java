@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.sender.api;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IGetMessageSender;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSender;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
+import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
  * Tea Neko 工具箱
@@ -33,4 +34,11 @@ public interface ITeaNekoToolbox {
      * @return 获取平台用户信息的发送器
      */
     IPlatformUserGetSender getPlatformUserGetSender();
+
+    /**
+     * 获取符合当前适配器实现类的 logger。
+     *
+     * @return 符合当前适配器实现类的 logger
+     */
+    ILogger getLogger();
 }

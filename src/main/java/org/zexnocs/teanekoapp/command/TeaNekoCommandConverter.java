@@ -2,14 +2,14 @@ package org.zexnocs.teanekoapp.command;
 
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
+import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.interfaces.ICommandConverter;
-import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -45,14 +45,12 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
         if(parsedList.isEmpty()) {
             return null;
         }
-        // 获取作用域和作用域 ID
-        var scopePair = getScopeAndScopeId(data);
 
         return CommandData.<ITeaNekoMessageData>builder()
                 .body(parsedList.getFirst())
                 .args(parsedList.subList(1, parsedList.size()).toArray(new String[0]))
-                .scope(scopePair.first())
-                .scopeId(scopePair.second())
+                .scope(getScope(data))
+                .scopeId(data.getScopeId())
                 .permission(senderData.getRole())
                 .senderId(senderData.getUuid().toString())
                 .rawData(data)
@@ -63,49 +61,17 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      * 根据
      * {@code T}
      * 获取到
-     * {@code Pair.of(scope, scopeId)}
+     * {@code scope}
      *
      * @param data 需要被转化的数据
-     * @return {@link Pair }<{@link CommandScope }, {@link String }>
+     * @return {@link CommandScope }
      */
-    @Override
-    public Pair<CommandScope, String> getScopeAndScopeId(ITeaNekoMessageData data) {
-        var senderData = data.getUserData();
-        // 获取作用域
-        var scope = switch (data.getMessageType()) {
+    public CommandScope getScope(ITeaNekoMessageData data) {
+        return switch (data.getMessageType()) {
             case PRIVATE, PRIVATE_TEMP -> CommandScope.PRIVATE;
             case GROUP -> CommandScope.GROUP;
             default -> CommandScope.OTHER;
         };
-
-        // 构造作用域 ID
-        var scopeId = switch (scope) {
-            case PRIVATE -> getPrivateScopeId(senderData.getUuid());
-            case GROUP   -> getGroupScopeId(data.getClient(), senderData.getGroupId());
-            default -> "other@" + senderData.getUuid();
-        };
-        return IndependentPair.of(scope, scopeId);
-    }
-
-    /**
-     * 根据用户 UUID 获取作用域 ID。
-     *
-     * @param uuid 用户 UUID
-     * @return {@link String } 作用域 ID
-     */
-    public String getPrivateScopeId(UUID uuid) {
-        return "private@" + uuid;
-    }
-
-    /**
-     * 根据 client 和 groupId 获取作用域 ID。
-     *
-     * @param client  客户端
-     * @param groupId 群 ID
-     * @return 作用域 ID
-     */
-    public String getGroupScopeId(ITeaNekoClient client, String groupId) {
-        return client.getClientId() + "-group@" + groupId;
     }
 
     /**
@@ -141,5 +107,46 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
                 .flatMap(Arrays::stream)               // 扁平化为 Stream<String>
                 .filter(s -> !s.isBlank())       // 过滤掉空字符串
                 .toList();
+    }
+
+
+    /**
+     * 根据消息类型和用户数据，构造一个作用域 ID，用于在 TeaNeko 中区分不同来源的消息。
+     *
+     * @param type 消息类型
+     * @param userData 用户数据
+     * @param client 客户端，用于构造群消息的作用域 ID
+     * @return {@link String } 构造后的作用域 ID
+     */
+    public String getScopeId(TeaNekoMessageType type,
+                             TeaNekoUserData userData,
+                             ITeaNekoClient client) {
+        // 构造作用域 ID
+        return switch (type) {
+            case PRIVATE, PRIVATE_TEMP -> getPrivateScopeId(userData.getUuid());
+            case GROUP   -> getGroupScopeId(client, userData.getGroupId());
+            default -> "other@" + userData.getUuid();
+        };
+    }
+
+    /**
+     * 根据用户 UUID 获取作用域 ID。
+     *
+     * @param uuid 用户 UUID
+     * @return {@link String } 作用域 ID
+     */
+    public String getPrivateScopeId(UUID uuid) {
+        return "private@" + uuid;
+    }
+
+    /**
+     * 根据 client 和 groupId 获取作用域 ID。
+     *
+     * @param client  客户端
+     * @param groupId 群 ID
+     * @return 作用域 ID
+     */
+    public String getGroupScopeId(ITeaNekoClient client, String groupId) {
+        return client.getClientId() + "-group@" + groupId;
     }
 }

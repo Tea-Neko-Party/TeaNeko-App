@@ -40,6 +40,9 @@ public class TeaNekoMessageData implements ITeaNekoMessageData {
     /// 包括私人消息、群组消息和群组的临时对话等不同类型。
     protected TeaNekoMessageType messageType;
 
+    /// 区域 ID，表示发送环境的 ID
+    protected String scopeId;
+
     /// 消息发送者的元信息
     protected ITeaNekoUserData userData;
 

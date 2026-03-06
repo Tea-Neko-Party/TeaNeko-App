@@ -35,14 +35,18 @@ public enum OnebotMessageDataConvertUtils {
                                    OnebotEventShareComponent eventShareComponent,
                                    UUID uuid) {
         // 构造 teaNekoData，使用 onebotData 中的字段进行转换
+        var userData = getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData), uuid);
+        var messageType = getTeaNekoMessageType(onebotData);
+        var client = eventShareComponent.onebotTeaNekoClient;
         return OnebotMessageData.builder()
                 .time(ChinaDateUtil.Instance.convertToChinaZonedDateTime(onebotData.getTime() * 1000L))
                 .messageId(String.valueOf(onebotData.getMessageId()))
                 .messages(onebotData.getMessage())
-                .messageType(getTeaNekoMessageType(onebotData))
-                .userData(getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData), uuid))
-                .client(eventShareComponent.onebotTeaNekoClient)
+                .messageType(messageType)
+                .userData(userData)
+                .client(client)
                 .onebotRawMessageData(onebotData)
+                .scopeId(eventShareComponent.teaNekoCommandConverter.getScopeId(messageType, userData, client))
                 .build();
     }
 

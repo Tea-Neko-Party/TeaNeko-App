@@ -25,6 +25,14 @@ public interface ITeaNekoMessageData {
     ZonedDateTime getTime();
 
     /**
+     * 获取消息的 scope ID
+     *
+     * @return 消息的 scope ID
+     */
+    @NonNull
+    String getScopeId();
+
+    /**
      * 获取消息的唯一 ID
      *
      * @return 消息的唯一 ID

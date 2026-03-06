@@ -6,6 +6,7 @@ import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
+import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
  * onebot 发送器工具箱，提供一些基于 onebot 协议的发送器工具。
@@ -25,11 +26,15 @@ public class OnebotToolbox implements ITeaNekoToolbox {
     @Getter
     private final StrangerInfoGetSender platformUserGetSender;
 
+    @Getter
+    private final ILogger logger;
+
     public OnebotToolbox(OnebotGetMsgSender getMsgSender,
                          OnebotMessageSender messageSender,
-                         StrangerInfoGetSender platformUserGetSender) {
+                         StrangerInfoGetSender platformUserGetSender, ILogger logger) {
         this.getMsgSender = getMsgSender;
         this.messageSender = messageSender;
         this.platformUserGetSender = platformUserGetSender;
+        this.logger = logger;
     }
 }

@@ -1,8 +1,6 @@
 package org.zexnocs.teanekocore.command.interfaces;
 
 import org.zexnocs.teanekocore.command.CommandData;
-import org.zexnocs.teanekocore.command.api.CommandScope;
-import org.zexnocs.teanekocore.framework.pair.Pair;
 
 /**
  * 指令转换器接口。将数据转换成指令数据对象。
@@ -21,17 +19,6 @@ public interface ICommandConverter<T> {
     default CommandData<?> parse(Object data) throws ClassCastException {
         return __parse(__convertToGeneric(data));
     }
-
-    /**
-     * 根据
-     * {@code T}
-     * 获取到
-     * {@code Pair.of(scope, scopeId)}
-     *
-     * @param data 需要被转化的数据
-     * @return {@link Pair }<{@link CommandScope }, {@link String }>
-     */
-    Pair<CommandScope, String> getScopeAndScopeId(T data);
 
     /**
      * 将Object转化成泛型类型。
