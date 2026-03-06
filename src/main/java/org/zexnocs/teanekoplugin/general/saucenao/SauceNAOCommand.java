@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoplugin.general.saucenao;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.zexnocs.teanekoapp.config.TeaNekoGroupConfigQueryService;
 import org.zexnocs.teanekoapp.config.TeaNekoPrivateConfigQueryService;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -203,14 +204,21 @@ public class SauceNAOCommand {
                     builder.sendByPart(8);
                 }).whenComplete((result, error) -> {
                     if(error != null) {
-                        data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("查询失败，报错信息：");
-                        var builder = data.getForwardMessageSender(CommandData.getCommandToken());
-                        var sb = new StringBuilder();
-                        for(var line: error.getStackTrace()) {
-                            sb.append(line.toString()).append("\n");
+                        // 寻找 error 源头
+                        var source = error;
+                        while(source != null && !(source instanceof WebClientResponseException)) {
+                            source = source.getCause();
                         }
-                        builder.addBotText(sb.toString());
-                        builder.sendByPart(8);
+                        if(source == null) {
+                            data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("查询失败，未知报错信息。");
+                        } else {
+                            data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("查询失败，报错信息：");
+                            var builder = data.getForwardMessageSender(CommandData.getCommandToken());
+                            for(var stack : source.getStackTrace()) {
+                                builder.addBotText(stack.toString());
+                            }
+                            builder.sendByPart(8);
+                        }
                     }
                 });
     }

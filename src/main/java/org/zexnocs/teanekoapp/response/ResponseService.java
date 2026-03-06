@@ -17,6 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -34,12 +35,12 @@ public class ResponseService implements IResponseService {
     private final Map<String, Pair<UUID, ISendData<?>>> echoToSendDataMap = new ConcurrentHashMap<>();
 
     /// objectMapper，允许将单个对象转化成 list
-    private final ObjectMapper objectMapper;
+    private final ObjectMapper defaultObjectMapper;
     private final ILogger logger;
     private final ITaskService iTaskService;
 
     public ResponseService(ILogger logger, ITaskService iTaskService) {
-        objectMapper = JsonMapper.builder()
+        defaultObjectMapper = JsonMapper.builder()
                 .enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                 .build();
         this.logger = logger;
@@ -110,6 +111,8 @@ public class ResponseService implements IResponseService {
             && !rawData.isEmpty()) {
             // 如果 responseType 不为 null，则尝试解析 rawData 成对应的对象
             try {
+                var objectMapper = Optional.ofNullable(sendData.getObjectMapper())
+                        .orElse(defaultObjectMapper);
                 var collectionType = objectMapper.getTypeFactory().constructCollectionType(List.class, responseType);
                 var parsedData = objectMapper.convertValue(rawData, collectionType);
                 iTaskService.complete(key, new TaskResult<>(success, parsedData));

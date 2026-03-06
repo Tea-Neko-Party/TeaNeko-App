@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.IClient;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 发送给客户端的数据接口。
@@ -57,4 +58,12 @@ public interface ISendData<R> {
      */
     @Nullable
     String getSenderToken();
+
+    /**
+     * 获取解析 response data 的 object mapper
+     *
+     * <p>如果为 null，则表示使用默认的 object mapper。
+     */
+    @Nullable
+    ObjectMapper getObjectMapper();
 }

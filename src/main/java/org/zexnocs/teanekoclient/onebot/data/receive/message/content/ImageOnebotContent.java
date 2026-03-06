@@ -6,9 +6,8 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 
 /**
@@ -23,10 +22,8 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + ImageOnebotContent.TYPE)
-public class ImageOnebotContent implements ITeaNekoContent {
-    public static final String TYPE = "image";
-
+@TeaNekoContent(OnebotMessage.PREFIX + IImageTeaNekoContent.TYPE)
+public class ImageOnebotContent implements IImageTeaNekoContent {
     // 图片文件名
     @JsonProperty("file")
     private String file;
@@ -56,15 +53,4 @@ public class ImageOnebotContent implements ITeaNekoContent {
     // ---- napcat 扩展 ----
     @JsonProperty("key")
     private String key;
-
-    /**
-     * 转化成命令解析的字符串表示。
-     * 例如 text 文字可以根据空格切割成多个字符串。
-     *
-     * @return {@link String[] } 转化后的字符串数组
-     */
-    @Override
-    public @NonNull String[] toCommandArgs() {
-        return new String[]{"[CQ:image,url=" + url + "]"};
-    }
 }

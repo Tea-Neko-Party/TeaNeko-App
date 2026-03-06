@@ -46,40 +46,4 @@ public interface ISenderService {
             Duration delay,
             int maxRetryCount,
             Duration retryDelay) throws ResponseEchoDuplicateException;
-
-    /**
-     * 发送信息，默认不进行重试。
-     *
-     * @param <R>      响应数据类型
-     * @param <S>      发送数据类型，必须实现 {@link ISendData} 接口
-     * @param sendData 要发送的数据
-     * @param delay    发送延迟的时间，单位毫秒
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>}
-     * @throws ResponseEchoDuplicateException 如果 echo 已经存在于注册表中，则抛出该异常
-     * @see ISendData
-     * @see TaskFuture
-     * @see ITaskResult
-     */
-    default <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(
-            S sendData,
-            Duration delay) throws ResponseEchoDuplicateException {
-        return send(sendData, delay, 0, Duration.ZERO);
-    }
-
-    /**
-     * 发送信息，不进行重试并没有发送延迟。
-     *
-     * @param <R>      响应数据类型
-     * @param <S>      发送数据类型，必须实现 {@link ISendData} 接口
-     * @param sendData 要发送的数据
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>}
-     * @throws ResponseEchoDuplicateException 如果 echo 已经存在于注册表中，则抛出该异常
-     * @see ISendData
-     * @see TaskFuture
-     * @see ITaskResult
-     */
-    default <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(S sendData)
-            throws ResponseEchoDuplicateException{
-        return send(sendData, Duration.ZERO, 0, Duration.ZERO);
-    }
 }

@@ -41,6 +41,6 @@ public class ResponseTestSendData extends AbstractJsonSendData<ResponseTestRespo
     @Override
     public @NonNull String toSendString() {
         count--;
-        return mapper.writeValueAsString(this);
+        return objectMapper.writeValueAsString(this);
     }
 }

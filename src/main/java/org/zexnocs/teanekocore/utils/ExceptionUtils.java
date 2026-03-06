@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.utils;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -17,13 +19,13 @@ public enum ExceptionUtils {
      * @param throwable 要处理的异常对象。
      * @return 格式化的异常信息字符串。
      */
-    public String buildExceptionMessage(Throwable throwable) {
-        StringBuilder sb = new StringBuilder();
+    public List<String> buildExceptionMessageList(Throwable throwable) {
         Set<Throwable> visited = new HashSet<>();
+        List<String> messages = new ArrayList<>();
 
         while (throwable != null && !visited.contains(throwable)) {
             visited.add(throwable);
-
+            StringBuilder sb = new StringBuilder();
             // 堆栈信息
             sb.append("====> 异常类型: ").append(throwable.getClass().getName()).append("\n");
             sb.append("-> 异常信息: ").append(throwable.getMessage()).append("\n");
@@ -55,8 +57,17 @@ public enum ExceptionUtils {
             if (throwable != null && !visited.contains(throwable)) {
                 sb.append("-> 源头信息:\n");
             }
+            messages.add(sb.toString());
         }
+        return messages;
+    }
 
-        return sb.toString();
+    /**
+     * 构建异常信息字符串，包含异常类型、信息和堆栈跟踪。
+     * @param throwable 要处理的异常对象。
+     * @return 格式化的异常信息字符串。
+     */
+    public String buildExceptionMessage(Throwable throwable) {
+        return String.join("\n", buildExceptionMessageList(throwable));
     }
 }
