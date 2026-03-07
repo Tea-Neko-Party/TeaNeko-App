@@ -112,9 +112,11 @@ public class TruthService {
         var userId = data.getUserData().getUuid();
         if (groupData.userDataMap.putIfAbsent(userId,
                 new TruthUserData(data.getUserData().getUserIdInPlatform(), value, time)) == null) {
-            groupData.getMessageSender().sendAtReplyMessage("投掷成功喵！点数是：" + value);
+            data.getMessageSender(CommandData.getCommandToken())
+                    .sendAtReplyMessage("投掷成功喵！点数是：" + value);
         } else {
-            groupData.getMessageSender().sendAtReplyMessage("你已经投掷过了喵！");
+            data.getMessageSender(CommandData.getCommandToken())
+                    .sendAtReplyMessage("你已经投掷过了喵！");
         }
     }
 
