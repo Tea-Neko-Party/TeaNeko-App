@@ -8,6 +8,7 @@ import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -70,9 +71,11 @@ public class ResponseTestClient implements IClient {
         // 构造响应消息
         ResponseData responseData;
         if(count == 0) {
-            var map = new HashMap<String, Object> ();
+            var list = new ArrayList<Map<String, Object>>();
+            var map = new HashMap<String, Object>();
             map.put("data", "Hello, this is a response from FakeClient!");
-            responseData = new ResponseData(true, echo, map);
+            list.add(map);
+            responseData = new ResponseData(true, echo, list);
         } else {
             responseData = new ResponseData(false, echo, null);
         }

@@ -9,15 +9,16 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.response.ResponseData;
 
+import java.util.List;
 import java.util.Map;
 
 /**
- * onebot response 数据类，用于构造 {@link org.zexnocs.teanekoapp.response.ResponseData}
+ * onebot response 数据类，用于构造
+ * {@link ResponseData}
  *
- * @see org.zexnocs.teanekoapp.response.ResponseData
  * @author zExNocs
  * @date 2026/02/28
- * @since 4.0.11
+ *
  */
 @Getter
 @Setter
@@ -47,7 +48,7 @@ public class OnebotRawResponseData extends ResponseData {
      * 参数数据。
      */
     @JsonProperty("data")
-    private Map<String, Object> rawData;
+    private List<Map<String, Object>> rawData;
 
     /**
      * 提示消息

@@ -6,6 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,5 +31,5 @@ public class ResponseData {
     private String echo;
 
     /// 数据的原始形式，将会在 {@link org.zexnocs.teanekoapp.response.interfaces.IResponseService} 中被解析成对应的对象
-    private Map<String, Object> rawData;
+    private List<Map<String, Object>> rawData;
 }

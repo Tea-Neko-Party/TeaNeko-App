@@ -123,6 +123,16 @@ public class ResponseTest {
         public @Nullable String getSenderToken() {
             return "";
         }
+
+        /**
+         * 获取解析 response data 的 object mapper
+         *
+         * <p>如果为 null，则表示使用默认的 object mapper。
+         */
+        @Override
+        public @Nullable ObjectMapper getObjectMapper() {
+            return null;
+        }
     }
 
     @NoArgsConstructor
