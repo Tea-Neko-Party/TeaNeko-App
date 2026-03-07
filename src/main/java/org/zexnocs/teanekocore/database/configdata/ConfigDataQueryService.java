@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.database.configdata;
 
+import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigManagerNamespaceMismatchException;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataQueryService;
@@ -17,17 +18,19 @@ import java.util.List;
 /**
  * 配置数据查询服务抽象类
  *
- * @param <T> 配置数据的键类型
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
+ * @version 4.1.0
  */
-public abstract class AbstractConfigDataQueryService<T> implements IConfigDataQueryService<T> {
+@Service
+public class ConfigDataQueryService implements IConfigDataQueryService {
     private final ConfigDataGetService configDataGetService;
     private final ConfigManagerScanner configManagerScanner;
     private final ILogger logger;
     private final ObjectMapper objectMapper;
 
-    public AbstractConfigDataQueryService(
+    public ConfigDataQueryService(
             ConfigDataGetService configDataGetService,
             ConfigManagerScanner configManagerScanner,
             ObjectMapper objectMapper,
@@ -46,7 +49,8 @@ public abstract class AbstractConfigDataQueryService<T> implements IConfigDataQu
      * @throws ConfigManagerNamespaceMismatchException 当ConfigManager的命名空间与ConfigData的命名空间不匹配时抛出此异常。
      */
     @Override
-    public String queryOneConfigManagerDetail(ConfigManager configManager) throws ConfigManagerNamespaceMismatchException {
+    public String queryOneConfigManagerDetail(ConfigManager configManager)
+            throws ConfigManagerNamespaceMismatchException {
         var sb = new StringBuilder();
         sb.append("=> 配置名称：").append(configManager.value()).append("\n");
         sb.append("=> 配置描述：").append(configManager.description()).append("\n");
@@ -85,12 +89,13 @@ public abstract class AbstractConfigDataQueryService<T> implements IConfigDataQu
     /**
      * 查询所有配置管理器的详细信息，包括配置描述和配置数据描述。
      *
+     * @param namespaces 配置管理器所属的命名空间列表
      * @return {@link List }<{@link String }> 所有配置管理器的详细信息字符串列表
      */
     @Override
-    public List<String> queryAllConfigManagerDetails() {
+    public List<String> queryAllConfigManagerDetails(List<String> namespaces) {
         var configManagers = new HashSet<ConfigManager>();
-        for(var namespace: getNamespaces()) {
+        for(var namespace: namespaces) {
             configManagers.addAll(configManagerScanner.getConfigManagersByNamespace(namespace));
         }
         return configManagers.stream()
@@ -152,13 +157,14 @@ public abstract class AbstractConfigDataQueryService<T> implements IConfigDataQu
     /**
      * 查询所有配置管理器的详细信息，包括配置描述和配置数据描述，并将配置数据转化成 JSON 字符串。
      *
-     * @param key 配置数据的键
+     * @param namespaces 配置管理器所属的命名空间列表
+     * @param key        配置数据的键
      * @return {@link List }<{@link String }>
      */
     @Override
-    public List<String> queryAllConfigManagerDetailsInObject(String key) {
+    public List<String> queryAllConfigManagerDetailsInObject(List<String> namespaces, String key) {
         var configManagers = new HashSet<ConfigManager>();
-        for(var namespace: getNamespaces()) {
+        for(var namespace: namespaces) {
             configManagers.addAll(configManagerScanner.getConfigManagersByNamespace(namespace));
         }
         return configManagers.stream()

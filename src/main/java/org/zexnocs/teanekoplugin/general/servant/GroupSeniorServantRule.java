@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoplugin.general.servant;
 
-import org.zexnocs.teanekoapp.config.TeaNekoGroupConfigQueryService;
+import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 
@@ -15,7 +15,7 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
         value = "group-servants",
         description = """
         群高级公务员，具有一票决定权。""",
-        namespaces = {TeaNekoGroupConfigQueryService.NAMESPACE},
+        namespaces = {TeaNekoConfigNamespaces.GROUP},
         configType = GroupSeniorServantRuleConfig.class)
 public class GroupSeniorServantRule {
     private final IConfigDataService iConfigService;

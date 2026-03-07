@@ -2,8 +2,7 @@ package org.zexnocs.teanekoplugin.general.saucenao;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import org.zexnocs.teanekoapp.config.TeaNekoGroupConfigQueryService;
-import org.zexnocs.teanekoapp.config.TeaNekoPrivateConfigQueryService;
+import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContent;
@@ -35,8 +34,7 @@ import java.util.List;
         value = "sauceNAO",
         description = "sauceNAO 的 api 配置",
         namespaces = {
-                TeaNekoPrivateConfigQueryService.NAMESPACE,
-                TeaNekoGroupConfigQueryService.NAMESPACE
+                TeaNekoConfigNamespaces.GENERAL
         },
         configType = SauceNAORuleConfig.class)
 public class SauceNAOCommand {

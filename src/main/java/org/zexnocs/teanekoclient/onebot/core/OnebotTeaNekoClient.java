@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
+import org.zexnocs.teanekoapp.config.ConfigNamespace;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
 /**
@@ -13,10 +14,27 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
  * @date 2026/03/02
  * @since 4.0.11
  */
-@TeaNekoClient(value = OnebotTeaNekoClient.ID, description = """
-        Onebot 11 协议的客户端。""")
+@ConfigNamespace(
+        generalNamespace = {OnebotTeaNekoClient.GENERAL_NAMESPACE},
+        privateNamespace = {OnebotTeaNekoClient.PRIVATE_NAMESPACE},
+        groupNamespace = {OnebotTeaNekoClient.GROUP_NAMESPACE}
+)
+@TeaNekoClient(
+        value = OnebotTeaNekoClient.ID,
+        description = "Onebot 11 协议的客户端。"
+)
 public record OnebotTeaNekoClient(OnebotClient getClient, OnebotToolbox getTeaNekoToolbox) implements ITeaNekoClient {
+    /// 客户端 ID，必须唯一且不可变更。
     public static final String ID = "onebot";
+
+    /// config 中 general namespace
+    public static final String GENERAL_NAMESPACE = "onebot-general";
+
+    /// config 中 private namespace
+    public static final String PRIVATE_NAMESPACE = "onebot-private";
+
+    /// config 中 group namespace
+    public static final String GROUP_NAMESPACE = "onebot-group";
 
     @Lazy
     @Autowired
