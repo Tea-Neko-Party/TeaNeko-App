@@ -7,6 +7,7 @@ import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.Command;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.framework.description.Description;
@@ -25,7 +26,9 @@ import java.time.Duration;
  * @since 4.1.0
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
-@Command(value = {"/status", "/状态"}, scope = CommandScope.ALL)
+@Command(value = {"/status", "/状态"},
+        permission = CommandPermission.ALL,
+        scope = CommandScope.ALL)
 public class StatusCommand {
     /// CPU 使用率阈值
     private final static int CPU_THRESHOLD = 80;

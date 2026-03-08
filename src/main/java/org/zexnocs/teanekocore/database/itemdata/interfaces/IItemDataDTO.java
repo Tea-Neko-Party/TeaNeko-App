@@ -8,8 +8,11 @@ import java.util.UUID;
 /**
  * 数据传输对象接口
  *
+ * @see org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO 实现类
+ * @see IItemMetadata
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
 public interface IItemDataDTO<T extends IItemMetadata> {
     /**

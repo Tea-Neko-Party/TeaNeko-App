@@ -23,8 +23,12 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 物品数据服务类，提供对物品数据的获取和创建功能。
  *
+ * @see org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO 一个实现了 IItemDataDTO 接口的物品数据传输对象类
+ * @see IItemDataDTO
+ * @see IItemMetadata
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
 @Service
 public class ItemDataService implements IItemDataService {
@@ -51,6 +55,7 @@ public class ItemDataService implements IItemDataService {
 
     /**
      * 根据 UUID 和元数据类型类获取物品数据传输对象
+     *
      * @param uuid 物品唯一标识符
      * @param clazz 物品元数据类型类
      * @return 物品数据传输对象
@@ -75,6 +80,7 @@ public class ItemDataService implements IItemDataService {
 
     /**
      * 获取或创建一个新的物品数据传输对象
+     *
      * @param ownerId 拥有者 ID
      * @param namespace 命名空间
      * @param type 物品类型
@@ -216,6 +222,7 @@ public class ItemDataService implements IItemDataService {
 
     /**
      * 获取 namespace 下对应 type 的所有物品数据传输对象映射
+     *
      * @param namespace 命名空间
      * @param type 物品类型
      * @return ownerId → 物品数据传输对象 映射。
@@ -234,6 +241,7 @@ public class ItemDataService implements IItemDataService {
 
     /**
      * 获取 ownerId 下对应的 namespace 下 type 类型的物品数据传输对象列表
+     *
      * @param ownerId 拥有者 ID
      * @param namespace 命名空间
      * @param type 物品类型
@@ -251,6 +259,7 @@ public class ItemDataService implements IItemDataService {
 
     /**
      * 根据 UUID 获取物品数据传输对象任务配置
+     *
      * @param uuid 物品唯一标识符
      * @return 物品数据传输对象任务配置
      * @throws InvalidMetadataTypeException 无效的元数据类型异常
