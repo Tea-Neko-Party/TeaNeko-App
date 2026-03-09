@@ -19,17 +19,13 @@ public class ItemDataDTO<T extends IItemMetadata> implements IItemDataDTO<T> {
     /// 所属的服务
     private final IItemDataConfigService service;
 
-    /// 物品唯一标识符
+    /// 物品命名空间
     @Getter
-    private final UUID uuid;
+    private final String namespace;
 
     /// 物品拥有者的唯一标识符
     @Getter
     private final UUID ownerId;
-
-    /// 物品命名空间
-    @Getter
-    private final String namespace;
 
     /// 物品类型键
     @Getter
@@ -50,16 +46,14 @@ public class ItemDataDTO<T extends IItemMetadata> implements IItemDataDTO<T> {
      * 构造函数
      */
     public ItemDataDTO(IItemDataConfigService service,
-                       UUID uuid,
-                       UUID ownerId,
                        String namespace,
+                       UUID ownerId,
                        String type,
                        int count,
                        T metadata,
                        Class<?> metadataClass)
     {
             this.service = service;
-            this.uuid = uuid;
             this.ownerId = ownerId;
             this.namespace = namespace;
             this.type = type;

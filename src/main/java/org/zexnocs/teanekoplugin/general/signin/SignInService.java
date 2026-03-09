@@ -278,13 +278,11 @@ public class SignInService {
                 .set(ChinaDateUtil.Instance.convertToString(currentDate), record);
 
         iTeaUserCoinService.getCoin(userId)
-                .thenComposeTask(coinItem ->
-                        coinItem.getDatabaseTaskConfig("签到金币更新")
-                                .addCount(coin)
-                                .merge(targetTask)
-                                .merge(recordTask)
-                                .pushWithFuture())
-                .finish();
+                .getDatabaseTaskConfig("签到金币更新")
+                .addCount(coin)
+                .merge(targetTask)
+                .merge(recordTask)
+                .push();
     }
 
     /**

@@ -6,6 +6,7 @@ import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTOTaskConfig;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataConfigService;
+import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataCreateService;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDtoTaskConfig;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 import tools.jackson.databind.ObjectMapper;
@@ -15,19 +16,23 @@ import tools.jackson.databind.ObjectMapper;
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
 @Service
 public class ItemDataConfigService implements IItemDataConfigService {
     private final IDatabaseService iDatabaseService;
     private final ItemDataRepository itemDataRepository;
     private final ObjectMapper objectMapper;
+    private final IItemDataCreateService iItemDataCreateService;
 
     @Autowired
     public ItemDataConfigService(IDatabaseService iDatabaseService,
-                                 ItemDataRepository itemDataRepository) {
+                                 ItemDataRepository itemDataRepository,
+                                 IItemDataCreateService iItemDataCreateService) {
         this.iDatabaseService = iDatabaseService;
         this.itemDataRepository = itemDataRepository;
         this.objectMapper = new ObjectMapper();
+        this.iItemDataCreateService = iItemDataCreateService;
     }
 
     /**
@@ -45,6 +50,7 @@ public class ItemDataConfigService implements IItemDataConfigService {
                 itemDataRepository,
                 objectMapper,
                 itemDataDTO,
+                iItemDataCreateService,
                 taskName);
     }
 }

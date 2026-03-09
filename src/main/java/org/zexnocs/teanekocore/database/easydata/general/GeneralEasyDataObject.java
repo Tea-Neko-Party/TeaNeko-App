@@ -14,7 +14,7 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
  */
 @NoArgsConstructor
 @Entity
-@Table(name = "easy_data", uniqueConstraints = {
+@Table(name = "general_data", uniqueConstraints = {
         @UniqueConstraint(columnNames = {"namespace", "target", "o_key"})
 })
 public class GeneralEasyDataObject extends BaseEasyDataObject {

@@ -16,12 +16,6 @@ import java.util.UUID;
  */
 public interface IItemDataDTO<T extends IItemMetadata> {
     /**
-     * 获取 UUID
-     * @return 物品 UUID
-     */
-    UUID getUuid();
-
-    /**
      * 获取拥有者 ID
      * @return 拥有者 UUID
      */

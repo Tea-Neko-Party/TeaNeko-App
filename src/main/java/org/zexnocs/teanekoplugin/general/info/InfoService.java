@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
-import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import org.zexnocs.teanekocore.utils.RandomUtil;
@@ -32,7 +31,6 @@ public class InfoService {
 
     @Autowired
     public InfoService(RandomUtil randomUtil,
-                       ITeaUserService teaUserService,
                        PersonalInfoService personalInfoService,
                        MessageBoardInfoService messageBoardInfoService, ITeaUserCoinService iTeaUserCoinService) {
         this.personalInfoService = personalInfoService;
@@ -61,8 +59,7 @@ public class InfoService {
         } else {
             randomMessage = "暂无留言信息";
         }
-        var coin = iTeaUserCoinService.getCoinDirect(target);
-        int coinInt = coin == null ? 0 : coin.getCount();
+        var coinInt = iTeaUserCoinService.getCoin(target).getCount();
 
         if(data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             // 如果是群组，则只显示群组消息

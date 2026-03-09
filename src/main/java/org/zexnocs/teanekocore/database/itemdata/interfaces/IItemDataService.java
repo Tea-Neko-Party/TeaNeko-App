@@ -1,10 +1,6 @@
 package org.zexnocs.teanekocore.database.itemdata.interfaces;
 
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekocore.actuator.task.TaskFuture;
-import org.zexnocs.teanekocore.database.itemdata.exception.InvalidMetadataTypeException;
-import org.zexnocs.teanekocore.database.itemdata.exception.ItemDataNotFoundException;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
 import java.util.Map;
@@ -17,52 +13,49 @@ import java.util.UUID;
  * @see IItemMetadata
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
  */
 public interface IItemDataService {
     /**
-     * 根据 UUID 获取物品数据传输对象
+     * 获取一个物品数据传输对象。
+     * <br>如果不存在该数据，依然会返回一个 DTO，但是其数量为 0，且其元数据为 null。
      *
-     * @param uuid 物品唯一标识符
-     * @param clazz 物品元数据类型类
-     * @return 物品数据传输对象
-     * @throws InvalidMetadataTypeException 无效的元数据类型异常
-     * @throws ItemDataNotFoundException 物品数据未找到异常
-     * @throws ClassCastException 类转换异常
+     * @param namespace 命名空间
+     * @param ownerId   拥有者 ID
+     * @param type      物品类型
+     * @param clazz     物品元数据类型类
+     * @return {@link IItemDataDTO }<{@link T }>
      */
-    <T extends IItemMetadata> IItemDataDTO<T> getByUuid(UUID uuid, Class<T> clazz)
-        throws InvalidMetadataTypeException, ItemDataNotFoundException, ClassCastException;
+    @NonNull
+    <T extends IItemMetadata> IItemDataDTO<? extends T> get(
+            String namespace, UUID ownerId,
+            String type,
+            Class<T> clazz
+    );
 
     /**
-     * 创建一个新的物品数据传输对象
+     * 获取一个物品数据传输对象。
+     * <br>如果不存在该数据，依然会返回一个 DTO，但是其数量为 0，且其元数据为 null。
      *
-     * @param ownerId 拥有者 ID
      * @param namespace 命名空间
-     * @param type 物品类型
-     * @param count 初始数量
-     * @param metadata 物品元数据
-     * @param <T> 物品元数据类型
-     * @return 新创建的物品数据传输对象的 Future：
-     *      1. 如果要减少数量，请使用 .thenComposeTask 来链式调用 .reduceCount()，并 return .pushWithFuture() 来提交更改。
-     *      2. 抛出的异常会被 Future 捕获并传递到 exceptionally 块中，请在 exceptionally 块中使用 TaskFuture.unwrapException 来获取原始异常。
-     *      3. 请结尾使用 .finish() 来记录异常。
+     * @param ownerId   拥有者 ID
+     * @param type      物品类型
+     * @return {@link IItemDataDTO }<{@link ? }>
      */
-    <T extends IItemMetadata> TaskFuture<IItemDataDTO<T>> getOrCreate(
-            UUID ownerId,
-            String namespace,
-            String type,
-            int count,
-            T metadata
-    );
+    @NonNull
+    default IItemDataDTO<?> get(String namespace, UUID ownerId, String type) {
+        return get(namespace, ownerId, type, IItemMetadata.class);
+    }
 
     /**
      * 获取 ownerId 下对应的 namespace 全部物品数据传输对象映射
      *
-     * @param ownerId   拥有者 ID
      * @param namespace 命名空间
+     * @param ownerId   拥有者 ID
      * @return type → 物品数据传输对象 映射。
      */
     @NonNull
-    Map<String, IItemDataDTO<? extends IItemMetadata>> getMapByOwnerNamespace(UUID ownerId, String namespace);
+    Map<String, IItemDataDTO<? extends IItemMetadata>> getByOwner(String namespace, UUID ownerId);
 
     /**
      * 获取 namespace 下对应 type 的所有物品数据传输对象映射
@@ -72,16 +65,5 @@ public interface IItemDataService {
      * @return ownerId → 物品数据传输对象 映射。
      */
     @NonNull
-    Map<UUID, IItemDataDTO<? extends IItemMetadata>> getMapByNamespaceType(String namespace, String type);
-
-    /**
-     * 获取 ownerId 下对应的 namespace 下 type 类型的物品数据传输对象
-     *
-     * @param ownerId 拥有者 ID
-     * @param namespace 命名空间
-     * @param type 物品类型
-     * @return 物品数据传输对象列表。如果不存在则返回 null。
-     */
-    @Nullable
-    IItemDataDTO<? extends IItemMetadata> getByOwnerNamespaceType(UUID ownerId, String namespace, String type);
+    Map<UUID, IItemDataDTO<? extends IItemMetadata>> getByType(String namespace, String type);
 }

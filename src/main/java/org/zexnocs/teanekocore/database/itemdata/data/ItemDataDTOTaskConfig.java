@@ -4,24 +4,36 @@ import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.itemdata.ItemDataRepository;
 import org.zexnocs.teanekocore.database.itemdata.exception.InsufficientItemCountException;
+import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataCreateService;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDtoTaskConfig;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.UUID;
+
 /**
  * 物品数据传输对象的数据库任务配置实现。
+ * <br>4.1.3: 使用 config 作为创建新 itemData 对象，而不是在 service 中。
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
+ * @version 4.1.3
  */
 public class ItemDataDTOTaskConfig<T extends IItemMetadata>
         extends DatabaseTaskConfig implements IItemDataDtoTaskConfig<T> {
+    /// 物品数据传输对象，包含了物品的 uuid、数量和元数据等信息。
     private final ItemDataDTO<T> itemDataDTO;
 
+    /// 物品数据仓库，用于执行数据库操作。
     private final ItemDataRepository itemDataRepository;
 
+    /// 对象映射器，用于将元数据对象转换为 JSON 字符串存储到数据库中。
     private final ObjectMapper objectMapper;
+
+    /// uuid 指针，用于在事务任务中获取 uuid 参数，避免 lambda 捕获导致的参数问题。
+    private final UUID[] uuids = new UUID[1];
 
     /**
      * 使用默认的任务阶段链创建数据库任务配置。
@@ -36,11 +48,18 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
                                  ItemDataRepository itemDataRepository,
                                  ObjectMapper objectMapper,
                                  ItemDataDTO<T> itemDataDTO,
+                                 IItemDataCreateService itemDataCreateService,
                                  String taskName) {
         super(databaseService, taskName);
         this.itemDataRepository = itemDataRepository;
         this.itemDataDTO = itemDataDTO;
         this.objectMapper = objectMapper;
+        // 第一步先确保该物品数据对象存在，如果不存在则创建一个新的对象。
+        addTransactionTask(() -> {
+            var created = itemDataCreateService.createIfAbsent(itemDataDTO);
+            // 更新 uuid 指针，供后续任务使用。
+            uuids[0] = created.getUuid();
+        });
     }
 
     /**
@@ -56,7 +75,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
             throw new IllegalArgumentException("要加的数量必须是正数。");
         }
         // 数据库写入
-        addTransactionTask(() -> itemDataRepository.incrementItemCount(itemDataDTO.getUuid(), amount));
+        addTransactionTask(() -> itemDataRepository.incrementItemCount(uuids[0], amount));
         // 缓存更新
         addCacheTask(() -> itemDataDTO.getCountAtomic().addAndGet(amount));
         return this;
@@ -82,7 +101,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
 
         // 数据库写入
         addTransactionTask(() -> {
-            var number = itemDataRepository.decrementItemCount(itemDataDTO.getUuid(), amount);
+            var number = itemDataRepository.decrementItemCount(uuids[0], amount);
             if(number <= 0) {
                 throw new InsufficientItemCountException(String.format("""
                         数量不足，当前数量：%d，尝试减少数量：%d""",
@@ -106,7 +125,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
             throw new IllegalArgumentException("物品数量不能为负数。");
         }
         // 数据库写入
-        addTransactionTask(() -> itemDataRepository.safeUpdateCount(itemDataDTO.getUuid(), count));
+        addTransactionTask(() -> itemDataRepository.safeUpdateCount(uuids[0], count));
 
         // 缓存更新
         addCacheTask(() -> itemDataDTO.getCountAtomic().set(count));
@@ -123,7 +142,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
     public IItemDataDtoTaskConfig<T> setMetaData(T metaData) throws JacksonException {
         String metaDataJson = objectMapper.writeValueAsString(metaData);
         // 数据库写入
-        addTransactionTask(() -> itemDataRepository.updateMetadata(itemDataDTO.getUuid(), metaDataJson));
+        addTransactionTask(() -> itemDataRepository.updateMetadata(uuids[0], metaDataJson));
         // 缓存更新
         addCacheTask(() -> itemDataDTO.setMetadata(metaData));
         return this;

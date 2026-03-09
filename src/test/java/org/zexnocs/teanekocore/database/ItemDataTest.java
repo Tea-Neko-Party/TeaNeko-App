@@ -36,19 +36,18 @@ public class ItemDataTest {
     public void testInsufficiency() {
         int initialCount = 4;
         AtomicBoolean flag = new AtomicBoolean(false);
-        iItemDataService.getOrCreate(owner, "test", "test", 0, null).thenComposeTask(
-                        iItemData -> iItemData.getDatabaseTaskConfig("设置数量")
-                                .setCount(initialCount)
-                                .pushWithFuture())
+        iItemDataService.get("test", owner, "test")
+                .getDatabaseTaskConfig("设置数量")
+                .setCount(initialCount)
+                .pushWithFuture()
                 .finish().join();
 
-        iItemDataService.getOrCreate(owner, "test", "test", 0, null)
-                .thenComposeTask(iItemData ->
-                        iItemData.getDatabaseTaskConfig("测试减少数量")
-                        .addCount(1)
-                        .reduceCount(20)
-                        .addCount(1)
-                        .pushWithFuture())
+        iItemDataService.get("test", owner, "test")
+                .getDatabaseTaskConfig("测试减少数量")
+                .addCount(1)
+                .reduceCount(20)
+                .addCount(1)
+                .pushWithFuture()
                 .exceptionally(t -> {
                     var unwrapped = TaskFuture.unwrapException(t);
                     Assertions.assertInstanceOf(InsufficientItemCountException.class, unwrapped);
@@ -59,8 +58,8 @@ public class ItemDataTest {
                 .join();
         // assert 数量没有被修改
         Assertions.assertTrue(flag.get());
-        iItemDataService.getOrCreate(owner, "test", "test", 0, null)
-                .thenAccept(iItemData -> Assertions.assertEquals(initialCount, iItemData.getCount())).finish().join();
+        var currentItem = iItemDataService.get("test", owner, "test");
+        Assertions.assertEquals(initialCount, currentItem.getCount());
     }
 
     /**
@@ -68,22 +67,23 @@ public class ItemDataTest {
      */
     @Test
     public void testConcurrentModification() {
-        int taskCount = 10;
-        int itemCount = 4;
-
+        int taskCount = 50;
+        int itemCount = 12;
+        // 初始化数据
         AtomicInteger counter = new AtomicInteger(0);
-        iItemDataService.getOrCreate(owner, "test", "test", 0, null).thenComposeTask(
-                        iItemData -> iItemData.getDatabaseTaskConfig("设置数量")
-                                .setCount(itemCount)
-                                .pushWithFuture())
+        iItemDataService.get("test", owner, "test")
+                .getDatabaseTaskConfig("设置数量")
+                .setCount(itemCount)
+                .pushWithFuture()
                 .finish().join();
+
+        // 创建多个任务并发修改同一条数据，每个任务都尝试减少 1 个数量
         List<CompletableFuture<?>> futures = new ArrayList<>();
         for (int i = 0; i < taskCount; i++) {
-            var future = iItemDataService.getOrCreate(owner, "test", "test", 0, null)
-                    .thenComposeTask(iItemData ->
-                            iItemData.getDatabaseTaskConfig("测试并发修改")
-                                    .reduceCount(1)
-                                    .pushWithFuture())
+            var future = iItemDataService.get("test", owner, "test")
+                    .getDatabaseTaskConfig("测试并发修改")
+                    .reduceCount(1)
+                    .pushWithFuture()
                     .exceptionally(t -> {
                         var unwrapped = TaskFuture.unwrapException(t);
                         Assertions.assertInstanceOf(InsufficientItemCountException.class, unwrapped);

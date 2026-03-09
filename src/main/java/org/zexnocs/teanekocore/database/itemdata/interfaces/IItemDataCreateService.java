@@ -1,11 +1,8 @@
 package org.zexnocs.teanekocore.database.itemdata.interfaces;
 
-import org.springframework.jmx.export.metadata.InvalidMetadataException;
+import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataObject;
-import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
-import tools.jackson.core.JacksonException;
-
-import java.util.UUID;
+import org.zexnocs.teanekocore.database.itemdata.exception.InvalidMetadataTypeException;
 
 /**
  * 物品数据创建服务接口
@@ -15,19 +12,13 @@ import java.util.UUID;
  */
 public interface IItemDataCreateService {
     /**
-     * 在数据库事务中创建一个新的物品数据记录
-     * @param ownerId 拥有者 ID
-     * @param namespace 命名空间
-     * @param type 物品类型
-     * @param count 初始数量
-     * @param metadata 物品元数据
+     * 在数据库事务中创建一个新的物品数据记录。
+     * <br>默认数量为 0，metadata 为 null。
+     *
+     * @see IItemDataDtoService
+     * @param dto 物品数据传输对象，包含了物品的 uuid、数量和元数据等信息。
      * @return 新创建的物品数据传输对象
+     * @throws InvalidMetadataTypeException 无效的物品元数据类型异常
      */
-    ItemDataObject createIfAbsent(
-            UUID ownerId,
-            String namespace,
-            String type,
-            int count,
-            IItemMetadata metadata
-    ) throws ClassCastException, InvalidMetadataException, JacksonException;
+    ItemDataObject createIfAbsent(ItemDataDTO<?> dto) throws InvalidMetadataTypeException;
 }

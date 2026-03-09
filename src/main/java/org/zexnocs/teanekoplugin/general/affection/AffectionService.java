@@ -77,30 +77,27 @@ public class AffectionService implements IAffectionService {
         int finalSingleAffection = singleAffection;
         int finalTotalAffection = totalAffection;
         // 获取或创建好感度数据
-        iItemDataService.getOrCreate(
-                senderId,
-                NAMESPACE,
-                targetId.toString(),
-                DEFAULT_AFFECTION,
-                null).thenApply(item -> {
-            var config = item.getDatabaseTaskConfig("增加好感度");
-            var config2 = senderData.getTaskConfig("更新每日好感度数据");
-            // 更新好感度
-            config.addCount(amount);
-            // 更新每日好感度数据
-            Map<String, Integer> singleAffectionMap = todayData != null ?
-                    todayData.getDailyAffection() :
-                    new ConcurrentHashMap<>();
-            singleAffectionMap.put(targetId.toString(), finalSingleAffection + amount);
-            var newTodayData = new AffectionDailyData(
-                    finalTotalAffection + amount,
-                    singleAffectionMap);
-            config2.set(DailyKey, newTodayData);
-            // 合并并推送
-            config.merge(config2);
-            config.push();
-            return null;
-        }).finish();
+        var dto = iItemDataService.get(NAMESPACE, senderId, targetId.toString());
+        var config = dto.getDatabaseTaskConfig("增加好感度");
+        var config2 = senderData.getTaskConfig("更新每日好感度数据");
+        // 更新好感度
+        if(dto.getCount() == 0) {
+            // 如果为 0 则说明之前没有好感度数据，设置为默认值进行初始化
+            config.setCount(DEFAULT_AFFECTION);
+        }
+        config.addCount(amount);
+        // 更新每日好感度数据
+        Map<String, Integer> singleAffectionMap = todayData != null ?
+                todayData.getDailyAffection() :
+                new ConcurrentHashMap<>();
+        singleAffectionMap.put(targetId.toString(), finalSingleAffection + amount);
+        var newTodayData = new AffectionDailyData(
+                finalTotalAffection + amount,
+                singleAffectionMap);
+        config2.set(DailyKey, newTodayData);
+        // 合并并推送
+        config.merge(config2)
+                .push();
         return true;
     }
 
@@ -119,19 +116,16 @@ public class AffectionService implements IAffectionService {
             return;
         }
         // 获取或创建好感度数据
-        iItemDataService.getOrCreate(
-                senderId,
-                NAMESPACE,
-                targetId.toString(),
-                DEFAULT_AFFECTION,
-                null).thenApply(item -> {
-                    var config = item.getDatabaseTaskConfig("增加好感度");
-                    // 更新好感度
-                    config.addCount(amount);
-                    // 推送
-                    config.push();
-                    return null;
-                }).finish();
+        var dto = iItemDataService.get(NAMESPACE, senderId, targetId.toString());
+        var config = dto.getDatabaseTaskConfig("增加好感度");
+        // 更新好感度
+        if(dto.getCount() == 0) {
+            // 如果为 0 则说明之前没有好感度数据，设置为默认值进行初始化
+            config.setCount(DEFAULT_AFFECTION);
+        }
+        config.addCount(amount);
+        // 推送
+        config.push();
     }
 
     /**
@@ -144,15 +138,12 @@ public class AffectionService implements IAffectionService {
     @Override
     public int getAffection(UUID senderId, UUID targetId) {
         // 获取好感度数据
-        var item = iItemDataService.getByOwnerNamespaceType(
-                senderId,
-                NAMESPACE,
-                targetId.toString());
-        if(item == null) {
+        var item = iItemDataService.get(NAMESPACE, senderId, targetId.toString());
+        if(item.getCount() == 0) {
+            // 没有数据，说明好感度为默认值
             return 0;
-        } else {
-            return item.getCount() - DEFAULT_AFFECTION;
         }
+        return item.getCount() - DEFAULT_AFFECTION;
     }
 
     /**
@@ -165,7 +156,7 @@ public class AffectionService implements IAffectionService {
     @Override
     public List<Pair<UUID, Integer>> getTopKAffectionTargets(UUID senderId, int k) {
         // 获取好感度数据列表
-        var type2item = iItemDataService.getMapByOwnerNamespace(senderId, NAMESPACE);
+        var type2item = iItemDataService.getByOwner(NAMESPACE, senderId);
         // 排序并获取前 k 名
         List<Pair<UUID, Integer>> list = new ArrayList<>();
         for(var entry: type2item.entrySet()) {
@@ -193,7 +184,7 @@ public class AffectionService implements IAffectionService {
     @Override
     public List<Pair<UUID, Integer>> getTopKAffectionSenders(UUID targetId, int k) {
         // 获取好感度数据列表
-        var senderId2item = iItemDataService.getMapByNamespaceType(
+        var senderId2item = iItemDataService.getByType(
                 NAMESPACE,
                 String.valueOf(targetId));
         // 排序并获取前 k 名

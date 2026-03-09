@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
-import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -15,58 +15,37 @@ import java.util.UUID;
  */
 public interface IItemDataCacheService {
     /**
-     * 创建 UUID → IItemDataDTO 的缓存
+     * 创建物品数据传输对象 DTO 的缓存
+     *
      * @param dto 物品数据对象
      */
-    void createCache(ItemDataDTO<? extends IItemMetadata> dto);
+    void putCache(ItemDataDTO<? extends IItemMetadata> dto);
 
     /**
-     * 创建 (ownerId, namespace) → UUID集合 的缓存
-     * @param ownerId 物品拥有者 ID
+     * 创建 types 集合。一般是由数据库中查询出所有的 type 来创建该集合的缓存。
+     *
      * @param namespace 物品命名空间
-     * @param uuids 物品 UUID 集合
+     * @param ownerId   物品拥有者 ID
+     * @param types     物品类型集合
      */
-    void createOwnerNamespace2UUIDsCache(UUID ownerId,
-                                         String namespace,
-                                         Map<String, UUID> uuids);
+    void putTypes(String namespace, UUID ownerId, Set<String> types);
 
     /**
-     * 在现有的 (ownerId, namespace) → UUID 集合缓存中添加新的 UUID 映射
-     * 前提是该缓存已经存在
-     * @param ownerId 物品拥有者 ID
+     * 根据 namespace, ownerId, type 获取物品数据传输对象 DTO
+     *
      * @param namespace 物品命名空间
-     * @param type 物品类型
-     * @param uuid 物品 UUID
-     */
-    void addToOwnerNamespace2UUIDsCache(UUID ownerId, String namespace, String type, UUID uuid);
-
-    /**
-     * 根据 UUID 获取物品数据传输对象 DTO
-     * @param uuid 物品 UUID
+     * @param ownerId   用户 ID
+     * @param type      类型
      * @return 物品数据传输对象
      */
-    @Nullable
-    IItemDataDTO<? extends IItemMetadata> getDTOByUUID(UUID uuid);
+    @Nullable IItemDataDTO<? extends IItemMetadata> getCache(String namespace, UUID ownerId, String type);
 
     /**
-     * 根据 (ownerId, namespace) 获取 UUID 集合
-     * @param ownerId 物品拥有者 ID
+     * 根据 (namespace, ownerId) 获取物品类型集合
+     *
      * @param namespace 物品命名空间
+     * @param ownerId   物品拥有者 ID
      * @return 物品 UUID 列表
      */
-    @Nullable
-    Map<String, UUID> getUUIDsByOwnerNamespace(UUID ownerId, String namespace);
-
-    /**
-     * 删除 (ownerId, namespace) 下的 UUID 集合缓存
-     * @param ownerId 物品拥有者 ID
-     * @param namespace 物品命名空间
-     */
-    void removeOwnerNamespace2UUIDsCache(UUID ownerId, String namespace);
-
-    /**
-     * 删除 UUID 对应的物品数据传输对象缓存
-     * @param uuid 物品 UUID
-     */
-    void removeDTOByUUID(UUID uuid);
+    @Nullable Set<String> getTypes(String namespace, UUID ownerId);
 }

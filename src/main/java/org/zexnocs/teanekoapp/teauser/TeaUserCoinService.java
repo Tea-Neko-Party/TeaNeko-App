@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.teauser;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
@@ -8,7 +8,6 @@ import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataService;
-import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
 import java.util.UUID;
 
@@ -38,26 +37,16 @@ public class TeaUserCoinService implements ITeaUserCoinService {
     }
 
     /**
-     * 直接获取用户的猫猫币 dto。如果不存在则会返回 null。
-     *
-     * @param userId 用户的 UUID
-     * @return 用户的猫猫币 dto，如果不存在则返回 null
-     */
-    @Override
-    public @Nullable IItemDataDTO<? extends IItemMetadata> getCoinDirect(UUID userId) {
-        return iItemDataService.getByOwnerNamespaceType(userId, DATABASE_NAMESPACE, ITEM_TYPE);
-    }
-
-    /**
      * 获取用户的猫猫币 dto future。
      *
      * @param userId 用户的 UUID
      * @return 用户的猫猫币 dto future
      * @see TaskFuture
      */
+    @NonNull
     @Override
-    public TaskFuture<IItemDataDTO<IItemMetadata>> getCoin(UUID userId) {
-        return iItemDataService.getOrCreate(userId, DATABASE_NAMESPACE, ITEM_TYPE, 0, null);
+    public IItemDataDTO<?> getCoin(UUID userId) {
+        return iItemDataService.get(DATABASE_NAMESPACE, userId, ITEM_TYPE);
     }
 
     /**
@@ -70,8 +59,8 @@ public class TeaUserCoinService implements ITeaUserCoinService {
      * @see TaskFuture
      */
     @Override
-    public TaskFuture<IItemDataDTO<IItemMetadata>> getCoin(ITeaNekoClient client, String userId) {
+    public TaskFuture<IItemDataDTO<?>> getCoin(ITeaNekoClient client, String userId) {
         return iTeaUserService.getOrCreate(client, userId)
-                .thenComposeTask(this::getCoin);
+                .thenApply(this::getCoin);
     }
 }

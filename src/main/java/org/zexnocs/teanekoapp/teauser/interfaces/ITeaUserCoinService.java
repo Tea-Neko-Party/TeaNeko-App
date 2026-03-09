@@ -1,10 +1,9 @@
 package org.zexnocs.teanekoapp.teauser.interfaces;
 
-import org.jspecify.annotations.Nullable;
+import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
-import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 
 import java.util.UUID;
 
@@ -18,22 +17,14 @@ import java.util.UUID;
 public interface ITeaUserCoinService {
 
     /**
-     * 直接获取用户的猫猫币 dto。如果不存在则会返回 null。
-     *
-     * @param userId 用户的 UUID
-     * @return 用户的猫猫币 dto，如果不存在则返回 null
-     */
-    @Nullable
-    IItemDataDTO<? extends IItemMetadata> getCoinDirect(UUID userId);
-
-    /**
      * 获取用户的猫猫币 dto future。
      *
      * @param userId 用户的 UUID
      * @return 用户的猫猫币 dto future
      * @see TaskFuture
      */
-    TaskFuture<IItemDataDTO<IItemMetadata>> getCoin(UUID userId);
+    @NonNull
+    IItemDataDTO<?> getCoin(UUID userId);
 
     /**
      * 根据 client 和 平台用户 ID 获取用户的猫猫币 dto future。
@@ -43,5 +34,5 @@ public interface ITeaUserCoinService {
      * @param userId 平台用户 ID
      * @return 用户的猫猫币 dto future
      */
-    TaskFuture<IItemDataDTO<IItemMetadata>> getCoin(ITeaNekoClient client, String userId);
+    TaskFuture<IItemDataDTO<?>> getCoin(ITeaNekoClient client, String userId);
 }
