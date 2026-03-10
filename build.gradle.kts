@@ -138,6 +138,9 @@ tasks {
 
         // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
         systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
+
+        // 设置主类
+        mainClass.set("org.zexnocs.teanekoapp.TeaNekoAppApplication")
     }
 
     // ========= bootJar 配置 =========
