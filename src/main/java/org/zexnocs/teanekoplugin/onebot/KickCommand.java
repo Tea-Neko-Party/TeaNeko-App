@@ -2,6 +2,7 @@ package org.zexnocs.teanekoplugin.onebot;
 
 import lombok.AllArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupKickSender;
@@ -26,7 +27,8 @@ import java.util.concurrent.ConcurrentHashMap;
 @Command(value = {"/kick", "/踢出"},
         permission = CommandPermission.ADMIN,
         scope = CommandScope.GROUP,
-        permissionPackage = "permission.group.kick")
+        permissionPackage = "permission.group.kick",
+        supportedClients = {OnebotTeaNekoClient.class})
 public class KickCommand {
     // 群号 → 用户ID → 踢出数据
     private final ConcurrentMapCacheContainer<Long, Map<Long, KickData>> kickDataMap;

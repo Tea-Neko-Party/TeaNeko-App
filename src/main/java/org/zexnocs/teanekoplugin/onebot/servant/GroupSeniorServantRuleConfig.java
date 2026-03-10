@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoplugin.general.servant;
+package org.zexnocs.teanekoplugin.onebot.servant;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -20,8 +20,8 @@ import java.util.List;
 @AllArgsConstructor
 public class GroupSeniorServantRuleConfig implements IConfigData {
     /**
-     * 平台 ID 列表。
+     * onebot ID 列表。
      */
     @Description("群高级公务员列表")
-    private List<String> list;
+    private List<Long> list;
 }

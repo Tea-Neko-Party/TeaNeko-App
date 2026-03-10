@@ -5,6 +5,7 @@ import lombok.Getter;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
+import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
 
 /**
  * 指令的数据类
@@ -25,6 +26,9 @@ public class CommandData<T> {
 
     /// 指令的实际作用域
     private final CommandScope scope;
+
+    /// 指令所属的 client
+    private final Class<? extends ICommandClient> clientClass;
 
     /// 作用域的 ID。
     /// 例如如果是群聊，则是 clintId + group@groupId

@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.event.message.OnebotMessageReceiveEvent;
 import org.zexnocs.teanekoclient.onebot.sender.message.DeleteMessageSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.event.core.EventHandler;
@@ -26,12 +27,14 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 public class AutoDeleteRule {
     private final DeleteMessageSender deleteMessageSender;
     private final IConfigDataService iConfigService;
+    private final OnebotScopeIdUtils onebotScopeIdUtils;
 
     @Autowired
     public AutoDeleteRule(DeleteMessageSender deleteMessageSender,
-                          IConfigDataService iConfigService) {
+                          IConfigDataService iConfigService, OnebotScopeIdUtils onebotScopeIdUtils) {
         this.deleteMessageSender = deleteMessageSender;
         this.iConfigService = iConfigService;
+        this.onebotScopeIdUtils = onebotScopeIdUtils;
     }
 
     /**
@@ -42,7 +45,9 @@ public class AutoDeleteRule {
     @EventHandler
     public void onMessage(OnebotMessageReceiveEvent event) {
         var data = event.getData();
-        iConfigService.getConfigData(this, AutoDeleteRuleConfig.class, data.getUserData().getGroupId())
+        iConfigService.getConfigData(this,
+                        AutoDeleteRuleConfig.class,
+                        onebotScopeIdUtils.getGroupConfigKey(data.getUserData().getGroupId()))
             .ifPresent(config -> {
                 var list = config.getList();
                 if(list == null || list.isEmpty()) {

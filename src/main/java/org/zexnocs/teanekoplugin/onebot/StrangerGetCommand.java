@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoplugin.onebot;
 
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
@@ -20,7 +21,8 @@ import org.zexnocs.teanekocore.utils.ChinaDateUtil;
  */
 @Description("获取陌生人信息。规格：/sg <QQ号>")
 @Command(value = {"/sg", "/陌生人"},
-        permission = CommandPermission.ALL)
+        permission = CommandPermission.ALL,
+        supportedClients = {OnebotTeaNekoClient.class})
 public class StrangerGetCommand {
 
     private final StrangerInfoGetSender strangerInfoGetSender;

@@ -19,5 +19,5 @@ public interface IPlatformUserInfoConstructor {
      * @param platformId 平台 ID
      * @return 用户信息列表的 future
      */
-    List<? extends ITeaNekoMessage> getSimpleInfo(String platformId);
+    List<ITeaNekoMessage> getSimpleInfo(String platformId);
 }

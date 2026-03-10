@@ -37,6 +37,7 @@ public interface IEasyMessageSenderBuilder {
      *
      * @return {@link ITeaNekoMessageData} 发送数据对象
      */
+    @Nullable
     ITeaNekoMessageData getRepliedData();
 
     /**
@@ -105,7 +106,7 @@ public interface IEasyMessageSenderBuilder {
      * @param messageList 已经构造好的消息对象列表
      * @return 当前的构造器对象，以便于链式调用
      */
-    default IEasyMessageSenderBuilder addMessages(@NonNull List<? extends ITeaNekoMessage> messageList) {
+    default IEasyMessageSenderBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList) {
         getMessageListBuilder().addMessages(messageList);
         return this;
     }
@@ -161,9 +162,14 @@ public interface IEasyMessageSenderBuilder {
      * 根据 data 添加一个 at 消息。
      *
      * @return 当前的构造器对象，以便于链式调用
+     * @throws IllegalStateException 如果没有 repliedData 可供获取被 at 的用户 ID，或者消息类型不是群消息
      */
-    default IEasyMessageSenderBuilder addAtMessage() {
+    default IEasyMessageSenderBuilder addAtMessage() throws IllegalStateException {
         var data = getRepliedData();
+        if(data == null) {
+            // 如果没有 repliedData，则无法添加 at 消息，因为无法获取被 at 的用户 ID
+            throw new IllegalStateException("无法添加 at 消息，因为没有 repliedData 可供获取被 at 的用户 ID");
+        }
         var senderData = data.getUserData();
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
@@ -177,8 +183,13 @@ public interface IEasyMessageSenderBuilder {
      * 根据 data 添加一个 reply 消息。
      *
      * @return 当前的构造器对象，以便于链式调用
+     * @throws IllegalStateException 如果没有 repliedData 可供获取被回复的消息 ID
      */
-    default IEasyMessageSenderBuilder addReplyMessage() {
+    default IEasyMessageSenderBuilder addReplyMessage() throws IllegalStateException  {
+        if(getRepliedData() == null) {
+            // 如果没有 repliedData，则无法添加 reply 消息，因为无法获取被回复的消息 ID
+            throw new IllegalStateException("无法添加 reply 消息，因为没有 repliedData 可供获取被回复的消息 ID");
+        }
         getMessageListBuilder().addReplyMessage(getRepliedData().getMessageId());
         return this;
     }

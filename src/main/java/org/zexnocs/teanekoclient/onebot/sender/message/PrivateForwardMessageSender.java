@@ -232,7 +232,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
          * @return 当前构造器实例
          */
         @Override
-        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<? extends ITeaNekoMessage> messageList) {
+        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoMessage> messageList) {
             this.messageList.add(OnebotMessage.builder()
                     .type(NodeTeaNekoContent.TYPE)
                     .content(NodeTeaNekoContent.builder()

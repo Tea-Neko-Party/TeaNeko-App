@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.utils;
 
+import lombok.Getter;
 import org.springframework.scheduling.support.CronExpression;
 
 import java.time.*;
@@ -15,6 +16,7 @@ public enum ChinaDateUtil {
     Instance;
 
     /// 中国时区
+    @Getter
     private final ZoneId zoneId = ZoneId.of("Asia/Shanghai");
 
     /// yyyy-MM-dd 格式的日期格式化器

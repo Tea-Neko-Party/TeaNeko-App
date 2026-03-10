@@ -3,12 +3,9 @@ package org.zexnocs.teanekoplugin.onebot.meow;
 import org.zexnocs.teanekoclient.onebot.event.notice.NotifyNoticeReceiveEvent;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.PrivateMessageSender;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
-import org.zexnocs.teanekocore.command.CommandData;
+import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
-
-import java.time.Duration;
 
 /**
  * 喵呜戳一戳服务，监听戳一戳事件，当被戳到时回复 "喵呜~"
@@ -34,25 +31,11 @@ public class MeowPokeService {
         var data = event.getData();
         if (data.getTargetID() == data.getSelfID()) {
             if(data.getGroupID() != 0) {
-                groupMessageSender.sendMessage(
-                        CommandData.getCommandToken(),
-                        OnebotMessageListBuilder.builder()
-                                .addTextMessage("喵呜~")
-                                .build(),
-                        String.valueOf(data.getGroupID()),
-                        Duration.ZERO,
-                        3,
-                        Duration.ZERO).finish();
+                groupMessageSender.getBuilder(String.valueOf(data.getGroupID()), AbstractEvent.getEventToken())
+                        .sendTextMessage("喵呜~");
             } else {
-                privateMessageSender.sendMessage(
-                        CommandData.getCommandToken(),
-                        OnebotMessageListBuilder.builder()
-                                .addTextMessage("喵呜~")
-                                .build(),
-                        String.valueOf(data.getUserID()),
-                        Duration.ZERO,
-                        3,
-                        Duration.ZERO).finish();
+                privateMessageSender.getBuilder(String.valueOf(data.getUserID()), AbstractEvent.getEventToken())
+                        .sendTextMessage("喵呜~");
             }
         }
     }

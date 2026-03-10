@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.command.api;
 
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -49,6 +50,15 @@ public @interface Command {
      * @return {@link CommandScope }
      */
     CommandScope scope() default CommandScope.ALL;
+
+    /**
+     * 该 command 支持的 tea neko client。
+     * <br>如果包含多个 client，则在这些 client 中都可以使用该 command。
+     * <br>如果包含 {@link ICommandClient}，则表示支持所有 client。
+     *
+     * @return {@link ICommandClient } 的 class 数组
+     */
+    Class<? extends ICommandClient>[] supportedClients() default {ICommandClient.class};
 
     /**
      * 是否启动该指令。

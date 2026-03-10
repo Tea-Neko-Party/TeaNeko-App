@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoplugin.onebot.title;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.group.SetGroupSpecialTitleSender;
 import org.zexnocs.teanekocore.command.CommandData;
@@ -24,7 +25,8 @@ import org.zexnocs.teanekocore.framework.description.Description;
 @Command(value = {"/setTitle", "/st", "/头衔"},
         scope = CommandScope.GROUP,
         permission = CommandPermission.ALL,
-        permissionPackage = "onebot.group.set-title")
+        permissionPackage = "onebot.group.set-title",
+        supportedClients = {OnebotTeaNekoClient.class})
 public class SetSpecialTitleCommand {
     private final SetSpecialTitleService setGroupSpecialTitleService;
     // 用于强制设置头衔的发送器

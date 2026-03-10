@@ -3,6 +3,8 @@ package org.zexnocs.teanekoclient.onebot.sender.message;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -27,10 +29,12 @@ import java.util.List;
 
 /**
  * 群消息发送器，负责发送群消息。
+ * <br>4.1.3: 新增使用 groupId 获取 builder 的方法，方便没有 repliedData 的情况下发送消息。
  *
  * @author zExNocs
  * @date 2026/03/04
  * @since 4.0.12
+ * @version 4.1.3
  */
 @Component("Onebot-GroupMessageSender")
 public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsData, OnebotMessageSendResponseData> {
@@ -65,7 +69,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
      * @return 发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
      */
     public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(String token,
-                                                                                    List<? extends ITeaNekoMessage> messageList,
+                                                                                    List<ITeaNekoMessage> messageList,
                                                                                     String groupId,
                                                                                     Duration delay,
                                                                                     int maxRetryCount,
@@ -79,13 +83,23 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
     }
 
     /**
-     * 获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
+     * 使用 {@link ITeaNekoMessageData} 获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
      * @param data  要回复的消息数据
      * @param token 发送器的 token，用于识别发送环境
      */
-    public GroupEasyMessageSenderBuilder getBuilder(ITeaNekoMessageData data, String token) {
+    public GroupEasyMessageSenderBuilder getBuilder(@NonNull ITeaNekoMessageData data, String token) {
         return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data, token);
+    }
+
+    /**
+     * 使用群号获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
+     *
+     * @param groupId 要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
+     * @param token 发送器的 token，用于识别发送环境
+     */
+    public GroupEasyMessageSenderBuilder getBuilder(String groupId, String token) {
+        return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), groupId, token);
     }
 
     /**
@@ -104,7 +118,11 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
 
         /// 当前发送器所回复的发送数据对象，用于获取发送相关的信息
         @Getter
+        @Nullable
         private final ITeaNekoMessageData repliedData;
+
+        /// 如果没有 repliedData，则需要提供 groupId 来发送消息
+        private final String groupId;
 
         /// token
         private final String token;
@@ -126,17 +144,34 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
         private boolean recordFailed = true;
 
         /**
-         * 构造函数，初始化构建器。
+         * 使用 data 的构造函数，初始化构建器。
          *
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param repliedData 要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
          */
         public GroupEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
-                                             ITeaNekoMessageData repliedData,
+                                             @NonNull ITeaNekoMessageData repliedData,
                                              String token) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
             this.token = token;
+            this.groupId = repliedData.getUserData().getGroupId();
+        }
+
+        /**
+         * 使用 group ID 的构造函数，初始化构建器。
+         *
+         * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
+         * @param groupId 要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
+         * @param token 发送器的 token，用于识别发送环境
+         */
+        public GroupEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+                                             String groupId,
+                                             String token) {
+            this.messageListBuilder = messageListBuilder;
+            this.repliedData = null;
+            this.token = token;
+            this.groupId = groupId;
         }
 
 
@@ -154,7 +189,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
             var future = GroupMessageSender.this.sendMessage(
                     token,
                     messages,
-                    repliedData.getUserData().getGroupId(),
+                    this.groupId,
                     delay,
                     retryCount,
                     retryInterval

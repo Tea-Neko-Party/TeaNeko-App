@@ -7,14 +7,13 @@ import org.zexnocs.teanekoclient.onebot.sender.group.GroupAddRequestSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
+import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
-
-import java.time.Duration;
 
 /**
  * 低QQ等级自动拒绝入群请求。
@@ -38,15 +37,17 @@ public class LowQQLevelAutoRejectRule {
     private final IConfigDataService configService;
     private final StrangerInfoGetSender strangerInfoGetSender;
     private final GroupMessageSender groupMessageSender;
+    private final OnebotScopeIdUtils onebotScopeIdUtils;
 
     @Autowired
     public LowQQLevelAutoRejectRule(GroupAddRequestSender groupAddRequestSender,
                                     IConfigDataService configService,
-                                    StrangerInfoGetSender strangerInfoGetSender, GroupMessageSender groupMessageSender) {
+                                    StrangerInfoGetSender strangerInfoGetSender, GroupMessageSender groupMessageSender, OnebotScopeIdUtils onebotScopeIdUtils) {
         this.groupAddRequestSender = groupAddRequestSender;
         this.configService = configService;
         this.strangerInfoGetSender = strangerInfoGetSender;
         this.groupMessageSender = groupMessageSender;
+        this.onebotScopeIdUtils = onebotScopeIdUtils;
     }
 
     @EventHandler(priority = 100000)
@@ -61,7 +62,8 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     var config = configService.getConfigData(this,
-                            LowQQLevelAutoRejectRuleConfig.class, String.valueOf(groupId)).orElse(null);
+                            LowQQLevelAutoRejectRuleConfig.class,
+                            onebotScopeIdUtils.getGroupConfigKey(groupId)).orElse(null);
                     if(config == null) {
                         // 如果没有配置数据，则不进行拒绝
                         return;
@@ -82,30 +84,23 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     for(var reportGroupId: list) {
-                        groupMessageSender.sendMessage(
-                            CommandData.getCommandToken(),
-                            OnebotMessageListBuilder.builder()
-                                    .addTextMessage(String.format("""
+                        groupMessageSender.getBuilder(String.valueOf(reportGroupId), AbstractEvent.getEventToken())
+                                .addTextMessage(String.format("""
                                             申请加入群组 %s 被自动拒绝喵。
                                             原因：低于要求的等级 %s
                                             
                                             用户详细信息：""", groupId, config.getLevelThreshold()))
-                                    .addImageMessage(AvatarUtils.Instance.getAvatarUrl(userId))
-                                    .addTextMessage(String.format("""
+                                .addImageMessage(AvatarUtils.Instance.getAvatarUrl(userId))
+                                .addTextMessage(String.format("""
                                             昵称：%s
                                             账号：%s
                                             年龄：%s
                                             等级：%s""",
-                                            strangerData.getNickname(),
-                                            userId,
-                                            strangerData.getAge(),
-                                            level))
-                                    .build(),
-                                    String.valueOf(reportGroupId),
-                                    Duration.ZERO,
-                                    8,
-                                    Duration.ofMillis(200)
-                            );
+                                        strangerData.getNickname(),
+                                        userId,
+                                        strangerData.getAge(),
+                                        level))
+                                .send();
                     }
                 }).finish();
     }

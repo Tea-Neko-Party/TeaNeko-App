@@ -54,6 +54,7 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
                 .permission(senderData.getRole())
                 .senderId(senderData.getUuid().toString())
                 .rawData(data)
+                .clientClass(data.getClient().getClass())
                 .build();
     }
 

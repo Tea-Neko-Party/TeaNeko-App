@@ -3,6 +3,7 @@ package org.zexnocs.teanekoplugin.onebot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContent;
 import org.zexnocs.teanekoclient.onebot.core.OnebotDebuggerService;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupBanSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.DeleteMessageSender;
@@ -25,7 +26,8 @@ import org.zexnocs.teanekocore.framework.description.Description;
 @Command(value = {"/delete", "/撤回"},
         permissionPackage = "permission.group.manager-delete",
         scope = CommandScope.GROUP,
-        permission = CommandPermission.ADMIN)
+        permission = CommandPermission.ADMIN,
+        supportedClients = {OnebotTeaNekoClient.class})
 public class MessageDeleteCommand {
     private final DeleteMessageSender deleteMessageSender;
     private final OnebotGetMsgSender getMsgSender;

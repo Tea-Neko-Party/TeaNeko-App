@@ -229,7 +229,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
          * @return 当前构造器实例
          */
         @Override
-        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<? extends ITeaNekoMessage> messageList) {
+        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoMessage> messageList) {
             this.messageList.add(OnebotMessage.builder()
                     .type(NodeTeaNekoContent.TYPE)
                     .content(NodeTeaNekoContent.builder()

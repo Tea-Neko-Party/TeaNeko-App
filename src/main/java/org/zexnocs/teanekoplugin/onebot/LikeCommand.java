@@ -3,6 +3,7 @@ package org.zexnocs.teanekoplugin.onebot;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.private_.LikeSender;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
@@ -33,7 +34,8 @@ import java.util.concurrent.ConcurrentLinkedQueue;
         """)
 @Command(value = {"/like", "like"},
         scope = CommandScope.ALL,
-        permission = CommandPermission.ALL)
+        permission = CommandPermission.ALL,
+        supportedClients = {OnebotTeaNekoClient.class})
 public class LikeCommand {
     /// 数据库相关常量
     public static final String DATABASE_NAMESPACE = "like_command";

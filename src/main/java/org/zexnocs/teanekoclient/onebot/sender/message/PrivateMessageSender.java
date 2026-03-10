@@ -4,6 +4,8 @@ package org.zexnocs.teanekoclient.onebot.sender.message;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
@@ -27,10 +29,12 @@ import java.util.List;
 
 /**
  * 符合 Onebot 协议的私聊消息发送器，负责发送私聊消息。
+ * <br>4.1.3: 新增根据 userId 获取 builder 的方法，方便在没有消息数据的情况下发送私聊消息。
  *
  * @author zExNocs
  * @date 2026/03/04
  * @since 4.0.12
+ * @version 4.1.3
  */
 @Service("Onebot-PrivateMessageSender")
 public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendParamsData, OnebotMessageSendResponseData> {
@@ -79,13 +83,23 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
     }
 
     /**
-     * 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
+     * 根据 {@link ITeaNekoMessageData} 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
      * @param data  要回复的消息数据
      * @param token 发送器的 token，用于识别发送环境
      */
     public PrivateEasyMessageSenderBuilder getBuilder(ITeaNekoMessageData data, String token) {
         return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data, token);
+    }
+
+    /**
+     * 根据 userId 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
+     *
+     * @param userId 用户 ID，用于发送消息
+     * @param token 发送器的 token，用于识别发送环境
+     */
+    public PrivateEasyMessageSenderBuilder getBuilder(String userId, String token) {
+        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), userId, token);
     }
 
     /**
@@ -104,7 +118,11 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
 
         /// 当前发送器所回复的发送数据对象，用于获取发送相关的信息
         @Getter
+        @Nullable
         private final ITeaNekoMessageData repliedData;
+
+        /// 用户 ID
+        private final String userId;
 
         /// token
         private final String token;
@@ -126,16 +144,34 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
         private boolean recordFailed = true;
 
         /**
-         * 构造函数，初始化构建器。
+         * 使用 data 构造函数，初始化构建器。
          *
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
-         * @param repliedData 要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
+         * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
+         * @param token              发送器的 token，用于识别发送环境
          */
         public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
-                                               ITeaNekoMessageData repliedData,
+                                               @NonNull ITeaNekoMessageData repliedData,
                                                String token) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
+            this.userId = repliedData.getUserData().getUserIdInPlatform();
+            this.token = token;
+        }
+
+        /**
+         * 使用 user Id 构造函数，初始化构建器。
+         *
+         * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
+         * @param userId             用户 ID，用于发送消息
+         * @param token              发送器的 token，用于识别发送环境
+         */
+        public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+                                               String userId,
+                                               String token) {
+            this.messageListBuilder = messageListBuilder;
+            this.repliedData = null;
+            this.userId = userId;
             this.token = token;
         }
 
@@ -154,7 +190,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
             var future = PrivateMessageSender.this.sendMessage(
                     token,
                     messages,
-                    repliedData.getUserData().getUserIdInPlatform(),
+                    userId,
                     delay,
                     retryCount,
                     retryInterval

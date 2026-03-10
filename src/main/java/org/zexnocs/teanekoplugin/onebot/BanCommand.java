@@ -2,6 +2,7 @@ package org.zexnocs.teanekoplugin.onebot;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoclient.onebot.core.OnebotDebuggerService;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupBanSender;
 import org.zexnocs.teanekocore.command.CommandData;
@@ -23,7 +24,8 @@ import java.util.regex.Pattern;
 @Command(value = {"/ban", "/禁言", "/口球"},
         permission = CommandPermission.OWNER,
         scope = CommandScope.GROUP,
-        permissionPackage = "permission.group.ban")
+        permissionPackage = "permission.group.ban",
+        supportedClients = {OnebotTeaNekoClient.class})
 public class BanCommand {
     private static final Pattern TIME_PATTERN = Pattern.compile("(\\d+)([dhms])");
 

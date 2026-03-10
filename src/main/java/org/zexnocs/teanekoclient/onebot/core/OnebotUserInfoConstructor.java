@@ -25,7 +25,7 @@ public class OnebotUserInfoConstructor implements IPlatformUserInfoConstructor {
      * @return 用户信息列表的 future
      */
     @Override
-    public List<? extends ITeaNekoMessage> getSimpleInfo(String platformId) {
+    public List<ITeaNekoMessage> getSimpleInfo(String platformId) {
         return OnebotMessageListBuilder.builder()
                 .addImageMessage(AvatarUtils.Instance.getAvatarUrl(Long.parseLong(platformId)))
                 .addTextMessage("QQ号: " + platformId)

@@ -99,4 +99,25 @@ public class ItemDataTest {
         Assertions.assertEquals(taskCount - itemCount, counter.get());
         System.out.println("====================================");
     }
+
+    /**
+     * 测试多任务并发创建同一条数据时，应该正确处理并发冲突，最终结果应该是正确的。
+     */
+    @Test
+    public void testConcurrentCreate() {
+        var number = 100;
+        var randomId = UUID.randomUUID();
+        List<CompletableFuture<?>> futures = new ArrayList<>();
+        for(int i = 0; i < number; i++) {
+            var future = iItemDataService.get("test", randomId, "test")
+                    .getDatabaseTaskConfig("test")
+                    .addCount(1)
+                    .pushWithFuture()
+                    .finish();
+            futures.add(future);
+        }
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+        var dto = iItemDataService.get("test", randomId, "test");
+        Assertions.assertEquals(number, dto.getCount());
+    }
 }

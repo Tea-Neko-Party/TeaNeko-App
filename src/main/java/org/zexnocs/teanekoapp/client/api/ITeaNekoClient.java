@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.client.api;
 
 import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
+import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
 
 /**
  * Tea Neko 客户端
@@ -11,7 +12,7 @@ import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
  * @date 2026/02/21
  * @since 4.0.8
  */
-public interface ITeaNekoClient {
+public interface ITeaNekoClient extends ICommandClient {
     /**
      * 获取 Client ID，用于标识客户端，也用作 群组 Command Scope 的作用域 ID 前缀。
      * <p>Client ID 改变会导致之前 {@link org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager} 群组相关设置失效。
