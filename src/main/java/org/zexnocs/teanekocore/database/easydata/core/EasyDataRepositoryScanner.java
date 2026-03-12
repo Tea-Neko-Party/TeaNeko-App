@@ -50,8 +50,6 @@ public class EasyDataRepositoryScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        repositories.clear();
-
         var beans = beanScanner.getBeansOfType(BaseEasyDataRepository.class);
         for (var repository: beans.values()) {
             var clazz = repository.getClass();
@@ -98,6 +96,15 @@ public class EasyDataRepositoryScanner extends AbstractScanner {
                         "类" + clazz.getName() + "没有泛型参数，无法注册到EasyDataRepositoryScanner。");
             }
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        repositories.clear();
     }
 
     /**

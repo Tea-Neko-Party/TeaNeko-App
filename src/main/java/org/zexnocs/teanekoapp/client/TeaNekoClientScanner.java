@@ -40,7 +40,6 @@ public class TeaNekoClientScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        handlerMap.clear();
         var beanPairs = iBeanScanner.getBeansWithAnnotationAndInterface(TeaNekoClient.class, ITeaNekoClient.class);
         for (var pair : beanPairs.values()) {
             var beanAnnotation = pair.first();
@@ -49,5 +48,14 @@ public class TeaNekoClientScanner extends AbstractScanner {
             }
             handlerMap.put(beanAnnotation.value(), pair);
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        handlerMap.clear();
     }
 }

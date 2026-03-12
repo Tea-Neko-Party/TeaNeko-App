@@ -40,7 +40,6 @@ public class ContentScanner extends AbstractScanner {
      */
     @Override
     protected void _scan() {
-        contentClassMap.clear();
         var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContent.class, ITeaNekoContent.class);
         for (var entry : map.entrySet()) {
             var clazz = entry.getKey();
@@ -59,6 +58,15 @@ public class ContentScanner extends AbstractScanner {
                                 .formatted(existing.getName(), clazz.getName(), key));
             }
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        contentClassMap.clear();
     }
 
     /**

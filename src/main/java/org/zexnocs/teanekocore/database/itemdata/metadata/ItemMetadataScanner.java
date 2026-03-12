@@ -40,7 +40,6 @@ public class ItemMetadataScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        type2Class.clear();
         var map = iClassScanner.getClassesWithAnnotation(ItemMetadata.class);
         for(var entry : map.entrySet()) {
             var annotation = entry.getValue();
@@ -55,6 +54,15 @@ public class ItemMetadataScanner extends AbstractScanner {
                 type2Class.put(annotation.value(), clazz);
             }
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        type2Class.clear();
     }
 
     /**

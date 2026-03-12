@@ -91,9 +91,6 @@ public class CommandScanner extends AbstractScanner {
      *
      */
     protected synchronized void _scan() {
-        prefixCommandMap.clear();
-        regexpCommandMap.clear();
-
         var beanPairs = iBeanScanner.getBeansWithAnnotation(Command.class);
         for(var pair: beanPairs.values()) {
             var annotation = pair.first();
@@ -161,5 +158,15 @@ public class CommandScanner extends AbstractScanner {
                 commandMap.put(command, commandMapData);
             }
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        prefixCommandMap.clear();
+        regexpCommandMap.clear();
     }
 }

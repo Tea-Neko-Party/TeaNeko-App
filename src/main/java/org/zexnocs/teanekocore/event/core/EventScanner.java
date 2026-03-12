@@ -35,7 +35,6 @@ public class EventScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        eventMap.clear();
         var map = iClassScanner.getClassesWithAnnotationAndInterface(Event.class, IEvent.class);
         for(var entry : map.entrySet()) {
             var clazz = entry.getKey();
@@ -48,6 +47,15 @@ public class EventScanner extends AbstractScanner {
             // 将事件类型和数据类型添加到 eventMap 中
             eventMap.put(key, clazz);
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        eventMap.clear();
     }
 
     /**

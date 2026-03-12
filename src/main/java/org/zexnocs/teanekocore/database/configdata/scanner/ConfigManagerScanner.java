@@ -47,8 +47,6 @@ public class ConfigManagerScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        configManagerMap.clear();
-        namespaceToConfigManagerList.clear();
         // 遍历所有注册的包下的 ConfigManager 类，将其添加到 eventMap 中
         var beanPairs = iBeanScanner.getBeansWithAnnotation(ConfigManager.class);
         for (var beanPair : beanPairs.values()) {
@@ -87,6 +85,16 @@ public class ConfigManagerScanner extends AbstractScanner {
                         .add(managerAnnotation);
             }
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        configManagerMap.clear();
+        namespaceToConfigManagerList.clear();
     }
 
     /**

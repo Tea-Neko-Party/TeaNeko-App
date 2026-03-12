@@ -44,7 +44,6 @@ public class CommandDescriptionScanner extends AbstractScanner {
 
     @Override
     protected synchronized void _scan() {
-        descriptionDataMap.clear();
         // 获取所有前缀指令集
         var commandMap = commandScanner.getPrefixCommandMap();
         for(var data: commandMap.values()) {
@@ -56,6 +55,15 @@ public class CommandDescriptionScanner extends AbstractScanner {
                     .defaultCommandDescription(defaultCommandDescription)
                     .build());
         }
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        descriptionDataMap.clear();
     }
 
     /**

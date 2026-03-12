@@ -23,10 +23,17 @@ public abstract class AbstractScanner implements IScanner {
     protected abstract void _scan();
 
     /**
+     * 清理原始数据的方法。
+     *
+     */
+    protected abstract void _clear();
+
+    /**
      * 热重载方法。
      */
     @Override
     public void reload() {
+        _clear();
         _scan();
     }
 

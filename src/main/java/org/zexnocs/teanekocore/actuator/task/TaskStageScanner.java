@@ -60,8 +60,6 @@ public class TaskStageScanner extends AbstractScanner {
 
     @Override
     protected synchronized void _scan() {
-        // 清理之前的扫描结果
-        taskStages.clear();
         // 获取所有带有TaskStage注解的Bean
         Map<String, Pair<TaskStage, ITaskStage>> taskStageBeans;
         try {
@@ -88,6 +86,15 @@ public class TaskStageScanner extends AbstractScanner {
 
         // 根据优先级排序
         taskStages.values().forEach(list -> list.sort(TaskStageWrapper::compareTo));
+    }
+
+    /**
+     * 清理原始数据的方法。
+     *
+     */
+    @Override
+    protected void _clear() {
+        taskStages.clear();
     }
 
     /**

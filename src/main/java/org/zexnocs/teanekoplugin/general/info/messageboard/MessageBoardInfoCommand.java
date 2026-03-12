@@ -87,9 +87,9 @@ public class MessageBoardInfoCommand {
     }
 
     @Description("""
-            管理员指令。获取详细的留言信息。
+            debugger 指令。获取详细的留言信息。
             格式：/留言 admin-get <?目标ID>""")
-    @SubCommand(value = {"admin-get"}, permission = CommandPermission.ADMIN)
+    @SubCommand(value = {"admin-get"}, permission = CommandPermission.DEBUG)
     public void adminGet(CommandData<ITeaNekoMessageData> commandData,
                     @DefaultValue("0") long targetId) {
         var data = commandData.getRawData();
