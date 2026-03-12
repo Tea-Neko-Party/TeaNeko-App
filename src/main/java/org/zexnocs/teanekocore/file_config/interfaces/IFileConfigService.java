@@ -3,6 +3,9 @@ package org.zexnocs.teanekocore.file_config.interfaces;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundException;
+import org.zexnocs.teanekocore.reload.api.IReloadable;
+
+import java.io.IOException;
 
 /**
  * 使用 {@link IFileConfigData} 的类来获取实例。
@@ -12,7 +15,7 @@ import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundExcep
  * @date 2026/03/12
  * @since 4.2.0
  */
-public interface IFileConfigService {
+public interface IFileConfigService extends IReloadable {
     /**
      * 获取 config 实例
      *
@@ -28,6 +31,7 @@ public interface IFileConfigService {
      *
      * @param data 需要写入的 config data
      * @throws FileConfigDataNotFoundException 因为异常原因未找到该 config data 的信息
+     * @throws IOException 写入失败
      */
-    void write(IFileConfigData data) throws FileConfigDataNotFoundException;
+    void write(IFileConfigData data) throws FileConfigDataNotFoundException, IOException;
 }

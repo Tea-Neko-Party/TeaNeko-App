@@ -32,7 +32,7 @@ public class JsonFileTypeParser implements IFileTypeParser {
      * @return {@link T }
      */
     @Override
-    public <T extends IFileConfigData> T fromFile(InputStream stream, Class<T> clazz) {
+    public <T extends IFileConfigData> T fromFileToData(InputStream stream, Class<T> clazz) {
         return customObjectMapper.readValue(stream, clazz);
     }
 
@@ -43,9 +43,20 @@ public class JsonFileTypeParser implements IFileTypeParser {
      * @param data 数据
      */
     @Override
-    public void fromData(Path path, IFileConfigData data) {
+    public void fromDataToWrite(Path path, IFileConfigData data) {
         customObjectMapper
                 .writerWithDefaultPrettyPrinter()
                 .writeValue(path.toFile(), data);
+    }
+
+    /**
+     * 获取该数据的后缀名，不包括 "."。
+     * <br>例如 JSON 则返回 "json"
+     *
+     * @return 后缀名
+     */
+    @Override
+    public String getSuffix() {
+        return "json";
     }
 }

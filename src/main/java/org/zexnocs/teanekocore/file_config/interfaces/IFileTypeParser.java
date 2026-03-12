@@ -23,13 +23,21 @@ public interface IFileTypeParser {
      * @param clazz  要解析的类
      * @return {@link T }
      */
-    <T extends IFileConfigData> T fromFile(InputStream stream, Class<T> clazz);
+    <T extends IFileConfigData> T fromFileToData(InputStream stream, Class<T> clazz);
 
     /**
      * 根据 IFileConfigData 来写入到文件中。
      *
-     * @param path     路径
-     * @param data     数据
+     * @param path 路径
+     * @param data 数据
      */
-    void fromData(Path path, IFileConfigData data);
+    void fromDataToWrite(Path path, IFileConfigData data);
+
+    /**
+     * 获取该数据的后缀名，不包括 "."。
+     * <br>例如 JSON 则返回 "json"
+     *
+     * @return 后缀名
+     */
+    String getSuffix();
 }

@@ -63,6 +63,16 @@ public class FileTypeScanner extends AbstractScanner {
     }
 
     /**
+     * 优先级要比 {@link FileConfigService} 高
+     *
+     * @return int 优先级
+     */
+    @Override
+    public int getPriority() {
+        return 1000;
+    }
+
+    /**
      * 根据 type 获取相应的解析器。
      *
      * @see FileConfigType
