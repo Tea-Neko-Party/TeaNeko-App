@@ -4,6 +4,7 @@ import com.sun.management.OperatingSystemMXBean;
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.utils.VersionUtil;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.command.CommandData;
@@ -43,26 +44,23 @@ public class StatusCommand {
     /// 记录开启时间
     private final long startTime;
 
-    /// 当前版本号
-    private final String version;
-
     /// 应用名称
     private final String applicationName;
 
     /// 用于监控 CPU 和内存使用率的定时任务服务
     private final ITimerService iTimerService;
     private final ILogger logger;
+    private final VersionUtil versionUtil;
 
     public StatusCommand(ITimerService iTimerService,
                          ILogger logger,
-                         @Value("${app.version}") String version,
-                         @Value("${spring.application.name}") String applicationName) {
+                         @Value("${spring.application.name}") String applicationName, VersionUtil versionUtil) {
         this.osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
         this.startTime = System.currentTimeMillis();
         this.iTimerService = iTimerService;
         this.logger = logger;
-        this.version = version;
         this.applicationName = applicationName;
+        this.versionUtil = versionUtil;
     }
 
     /**
@@ -145,7 +143,8 @@ public class StatusCommand {
                     虚拟内存使用率: %.2fGB / %.0f.0GB (%.2f%%)
                     总计内存使用率: %.2fGB / %.0f.0GB (%.2f%%)
                     磁盘使用率: %s""",
-                version, this.applicationName,
+                versionUtil.getVersion(),
+                this.applicationName,
                 runningDays, runningHours, runningMinutes, runningSeconds,
                 systemCpuLoad, cpuCount,
                 usedPhysicalMemoryGB, totalPhysicalMemoryGB, physicalMemoryUsagePercentage,

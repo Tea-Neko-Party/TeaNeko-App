@@ -113,11 +113,18 @@ tasks {
     // ========= bootRun 配置 =========
 
     withType<BootRun> {
-        // 自动配置内存:
+        // 注入版本号
+        systemProperty("version", project.version.toString())
+
+        // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
+        systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
+
+        /* 配置内存
         // 4G: -Xms512m -Xmx3072m
         // 8G: -Xms1024m -Xmx6144m
         // 16G: -Xms2048m -Xmx12,288m
         // max: 12,288m
+        */
         doFirst {
             val osBean = ManagementFactory.getOperatingSystemMXBean() as? OperatingSystemMXBean
             val totalMemMb: Long = if (osBean != null) {
@@ -140,13 +147,11 @@ tasks {
 
             jvmArgs("-Xms${xms}m", "-Xmx${xmx}m")
         }
-
-        // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
-        systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
     }
 
     // ========= bootJar 配置 =========
     named<BootJar>("bootJar") {
+        mainClass.set("org.zexnocs.teanekoapp.TeaNekoAppApplication")
         manifest {
             attributes(
                 "Implementation-Title" to project.name,

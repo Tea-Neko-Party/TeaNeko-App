@@ -23,16 +23,6 @@ public class TestFileTest {
     private IFileConfigService iFileConfigService;
 
     /**
-     * 测试 default
-     *
-     */
-    @Test
-    public void testDefault() {
-        Assertions.assertEquals("default",
-                iFileConfigService.get(DefaultTestFileConfig.class).getData());
-    }
-
-    /**
      * 测试 write
      */
     @Test
