@@ -40,7 +40,10 @@ public class DefaultTestFileConfig implements IFileConfigData {
         var file = FileConfigService.ROOT_PATH.resolve("test")
                 .resolve("default_config.json");
         try {
+            // 删除文件
             Files.deleteIfExists(file);
+            // 删除 test 目录
+            Files.deleteIfExists(file.getParent());
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
