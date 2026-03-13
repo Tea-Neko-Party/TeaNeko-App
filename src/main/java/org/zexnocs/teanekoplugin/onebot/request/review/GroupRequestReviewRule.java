@@ -88,7 +88,7 @@ public class GroupRequestReviewRule {
                         .build();
                 messageList.addFirst(textMessage);
                 for(var review: list) {
-                    groupMessageSender.getBuilder(String.valueOf(review), AbstractEvent.getEventToken())
+                    groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(review))
                                     .addMessages(messageList)
                                     .send();
                 }
@@ -119,7 +119,7 @@ public class GroupRequestReviewRule {
                     return;
                 }
                 for(var review: list) {
-                    groupMessageSender.getBuilder(String.valueOf(review), AbstractEvent.getEventToken())
+                    groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(review))
                             .sendTextMessage("""
                                 请求ID：%s
                                 已经被管理员同意该请求。无需再处理喵。""");

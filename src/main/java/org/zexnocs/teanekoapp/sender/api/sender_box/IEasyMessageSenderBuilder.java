@@ -211,7 +211,7 @@ public interface IEasyMessageSenderBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     default IEasyMessageSenderBuilder addAtReplyTextMessage(String text) {
-        return addReplyMessage().addAtMessage().addTextMessage(text);
+        return addReplyMessage().addAtMessage().addTextMessage(" " + text);
     }
 
     /**

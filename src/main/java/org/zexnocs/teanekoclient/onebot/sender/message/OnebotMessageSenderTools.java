@@ -75,7 +75,7 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
     public IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data) {
         return switch (data.getMessageType()) {
             case PRIVATE, PRIVATE_TEMP -> privateMessageSender.getBuilder(data, token);
-            case GROUP -> groupMessageSender.getBuilder(data, token);
+            case GROUP -> groupMessageSender.getBuilder(token, data);
             default -> null;
         };
     }

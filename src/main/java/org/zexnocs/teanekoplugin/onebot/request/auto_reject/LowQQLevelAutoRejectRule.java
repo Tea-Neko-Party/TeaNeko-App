@@ -84,7 +84,7 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     for(var reportGroupId: list) {
-                        groupMessageSender.getBuilder(String.valueOf(reportGroupId), AbstractEvent.getEventToken())
+                        groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(reportGroupId))
                                 .addTextMessage(String.format("""
                                             申请加入群组 %s 被自动拒绝喵。
                                             原因：低于要求的等级 %s

@@ -31,7 +31,7 @@ public class MeowPokeService {
         var data = event.getData();
         if (data.getTargetID() == data.getSelfID()) {
             if(data.getGroupID() != 0) {
-                groupMessageSender.getBuilder(String.valueOf(data.getGroupID()), AbstractEvent.getEventToken())
+                groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(data.getGroupID()))
                         .sendTextMessage("喵呜~");
             } else {
                 privateMessageSender.getBuilder(String.valueOf(data.getUserID()), AbstractEvent.getEventToken())

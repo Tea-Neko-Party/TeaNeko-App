@@ -85,20 +85,20 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
     /**
      * 使用 {@link ITeaNekoMessageData} 获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
-     * @param data  要回复的消息数据
      * @param token 发送器的 token，用于识别发送环境
+     * @param data  要回复的消息数据
      */
-    public GroupEasyMessageSenderBuilder getBuilder(@NonNull ITeaNekoMessageData data, String token) {
+    public GroupEasyMessageSenderBuilder getBuilder(String token, @NonNull ITeaNekoMessageData data) {
         return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data, token);
     }
 
     /**
      * 使用群号获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
+     * @param token   发送器的 token，用于识别发送环境
      * @param groupId 要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
-     * @param token 发送器的 token，用于识别发送环境
      */
-    public GroupEasyMessageSenderBuilder getBuilder(String groupId, String token) {
+    public GroupEasyMessageSenderBuilder getBuilder(String token, String groupId) {
         return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), groupId, token);
     }
 
