@@ -19,6 +19,7 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageDataConvertUtils;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import tools.jackson.databind.ObjectMapper;
@@ -39,6 +40,7 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
 
     private final ITeaUserService iTeaUserService;
     private final OnebotTeaNekoClient onebotTeaNekoClient;
+    private final IFileConfigService iFileConfigService;
 
     /**
      * 构造函数，初始化发送器。
@@ -52,10 +54,11 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
                               OnebotClient client,
                               @Qualifier("onebotObjectMapper") ObjectMapper mapper,
                               ITeaUserService iTeaUserService,
-                              OnebotTeaNekoClient onebotTeaNekoClient) {
+                              OnebotTeaNekoClient onebotTeaNekoClient, IFileConfigService iFileConfigService) {
         super(senderService, client, mapper);
         this.iTeaUserService = iTeaUserService;
         this.onebotTeaNekoClient = onebotTeaNekoClient;
+        this.iFileConfigService = iFileConfigService;
     }
 
     /**
@@ -100,7 +103,8 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
                                             .uuid(pair.second())
                                             .userIdInPlatform(String.valueOf(senderData.getUserId()))
                                             .nickname(senderData.getNickname())
-                                            .role(OnebotMessageDataConvertUtils.Instance.getCommandPermission(messageType, senderData))
+                                            .role(OnebotMessageDataConvertUtils
+                                                    .Instance.getCommandPermission(messageType, senderData, iFileConfigService))
                                             .groupId(String.valueOf(senderData.getGroupId()))
                                             .build())
                                     .client(onebotTeaNekoClient)

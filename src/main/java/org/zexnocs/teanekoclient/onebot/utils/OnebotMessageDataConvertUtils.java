@@ -3,11 +3,13 @@ package org.zexnocs.teanekoclient.onebot.utils;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
+import org.zexnocs.teanekoclient.onebot.config.OnebotMainFileConfig;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
@@ -15,10 +17,12 @@ import java.util.UUID;
 
 /**
  * 将 onebot 消息数据转换为 TeaNeko 消息数据的工具类。
+ * <br>4.2.2: 添加解析 debugger
  *
  * @author zExNocs
  * @date 2026/03/04
  * @since 4.0.12
+ * @version 4.2.2
  */
 public enum OnebotMessageDataConvertUtils {
     Instance;
@@ -35,7 +39,8 @@ public enum OnebotMessageDataConvertUtils {
                                    OnebotEventShareComponent eventShareComponent,
                                    UUID uuid) {
         // 构造 teaNekoData，使用 onebotData 中的字段进行转换
-        var userData = getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData), uuid);
+        var userData = getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData),
+                uuid, eventShareComponent.iFileConfigService);
         var messageType = getTeaNekoMessageType(onebotData);
         var client = eventShareComponent.onebotTeaNekoClient;
         return OnebotMessageData.builder()
@@ -83,28 +88,35 @@ public enum OnebotMessageDataConvertUtils {
      */
     public TeaNekoUserData getTeaNekoUserData(OnebotRawMessageData onebotData,
                                               TeaNekoMessageType teaNekoMessageType,
-                                              UUID uuid) {
+                                              UUID uuid,
+                                              IFileConfigService fileConfigService) {
         var senderData = onebotData.getSender();
         var nickname = senderData.getNickname() == null ? "user" : senderData.getNickname();
         return TeaNekoUserData.builder()
                 .uuid(uuid)
                 .userIdInPlatform(String.valueOf(onebotData.getUserId()))
                 .nickname(nickname)
-                .role(getCommandPermission(teaNekoMessageType, senderData))
+                .role(getCommandPermission(teaNekoMessageType, senderData, fileConfigService))
                 .groupId(String.valueOf(onebotData.getGroupId()))
                 .build();
     }
 
     /**
      * 根据消息类型和 senderData 中的 role 字段，转换成对应的 CommandPermission 枚举值
-     * todo: 构造 debugger 权限
      *
      * @param teaNekoMessageType 消息类型，用于判断默认权限
      * @param senderData onebot 消息中的 sender 字段数据，用于获取 role 字段
      * @return {@link CommandPermission } 转换后的 CommandPermission 枚举值
      */
     public @NonNull CommandPermission getCommandPermission(TeaNekoMessageType teaNekoMessageType,
-                                                                   OnebotSenderData senderData) {
+                                                           OnebotSenderData senderData,
+                                                           IFileConfigService fileConfigService) {
+        // 判断是否是 debug
+        var config = fileConfigService.get(OnebotMainFileConfig.class);
+        if(config.getDebugger().getDebuggerId() == senderData.getUserId()) {
+            return CommandPermission.DEBUG;
+        }
+
         return switch (teaNekoMessageType) {
             // 如果是私聊消息或者临时消息，默认权限是 OWNER
             case PRIVATE, PRIVATE_TEMP -> CommandPermission.OWNER;

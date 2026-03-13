@@ -8,6 +8,7 @@ import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekocore.event.core.EventScanner;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
@@ -41,6 +42,9 @@ public class OnebotEventShareComponent {
     /// tea neko converter
     public final TeaNekoCommandConverter teaNekoCommandConverter;
 
+    /// file config service
+    public final IFileConfigService iFileConfigService;
+
     @Autowired
     public OnebotEventShareComponent(ILogger logger,
                                      EventScanner eventScanner,
@@ -48,7 +52,8 @@ public class OnebotEventShareComponent {
                                      OnebotTeaNekoClient onebotTeaNekoClient,
                                      ITeaUserService iTeaUserService,
                                      IEventService iEventService,
-                                     TeaNekoCommandConverter teaNekoCommandConverter) {
+                                     TeaNekoCommandConverter teaNekoCommandConverter,
+                                     IFileConfigService iFileConfigService) {
         this.logger = logger;
         this.eventScanner = eventScanner;
         this.objectMapper = customObjectMapper;
@@ -56,5 +61,6 @@ public class OnebotEventShareComponent {
         this.iTeaUserService = iTeaUserService;
         this.iEventService = iEventService;
         this.teaNekoCommandConverter = teaNekoCommandConverter;
+        this.iFileConfigService = iFileConfigService;
     }
 }
