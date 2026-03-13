@@ -2,12 +2,13 @@ package org.zexnocs.teanekocore.file_config.interfaces;
 
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 
 /**
  * 根据 {@link}
- * 需要加上 {@link FileTypeParser} 注解来标注解析的哪一种类型。
+ * <br>需要加上 {@link FileTypeParser} 注解来标注解析的哪一种类型。
  *
  * @author zExNocs
  * @date 2026/03/12
@@ -31,7 +32,7 @@ public interface IFileTypeParser {
      * @param path 路径
      * @param data 数据
      */
-    void fromDataToWrite(Path path, IFileConfigData data);
+    void fromDataToWrite(Path path, IFileConfigData data) throws IOException;
 
     /**
      * 获取该数据的后缀名，不包括 "."。

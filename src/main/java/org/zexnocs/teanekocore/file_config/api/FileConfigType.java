@@ -10,6 +10,12 @@ package org.zexnocs.teanekocore.file_config.api;
 public enum FileConfigType {
     /**
      * .json 文件
+     * <br>允许解析时使用 "#" 注释
      */
     JSON,
+
+    /**
+     * .yaml 文件
+     */
+    YAML,
 }

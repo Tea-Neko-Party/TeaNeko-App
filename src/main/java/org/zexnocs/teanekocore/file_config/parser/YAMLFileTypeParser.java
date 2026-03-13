@@ -4,29 +4,29 @@ import org.zexnocs.teanekocore.file_config.api.FileConfigType;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.interfaces.FileTypeParser;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileTypeParser;
-import tools.jackson.core.json.JsonReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.dataformat.yaml.YAMLMapper;
 
 import java.io.InputStream;
 import java.nio.file.Path;
 
 /**
- * 用于解析 {@link FileConfigType#JSON} 的解析器。
+ * 用于解析 {@link FileConfigType#YAML} 的解析器。
  *
  * @author zExNocs
  * @date 2026/03/13
- * @since 4.2.0
+ * @since 4.2.1
  */
-@FileTypeParser(FileConfigType.JSON)
-public class JsonFileTypeParser implements IFileTypeParser {
-    /// object mapper，支持注释。
-    private final ObjectMapper objectMapper = JsonMapper.builder()
+@FileTypeParser(FileConfigType.YAML)
+public class YAMLFileTypeParser implements IFileTypeParser {
+
+    private final ObjectMapper objectMapper = YAMLMapper.builder()
+            .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
             .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
             .enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
-            .enable(JsonReadFeature.ALLOW_YAML_COMMENTS)
             .findAndAddModules()
             .build();
 
@@ -55,14 +55,8 @@ public class JsonFileTypeParser implements IFileTypeParser {
                 .writeValue(path.toFile(), data);
     }
 
-    /**
-     * 获取该数据的后缀名，不包括 "."。
-     * <br>例如 JSON 则返回 "json"
-     *
-     * @return 后缀名
-     */
     @Override
     public String getSuffix() {
-        return "json";
+        return "yml";
     }
 }

@@ -8,6 +8,7 @@ plugins {
     java                                                    // 基础插件
     id("org.springframework.boot") version "4.0.3"          // spring boot 插件
     id("io.spring.dependency-management") version "1.1.7"   // spring 依赖管理插件
+    id("com.github.ben-manes.versions") version "0.53.0"    // gradle version 插件
 }
 
 // 版本信息
@@ -49,6 +50,10 @@ dependencies {
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
     runtimeOnly("com.mysql:mysql-connector-j")
+
+    // ====== jackson ======
+    implementation("tools.jackson.core:jackson-databind")
+    implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
 
     // ====== development ======
     developmentOnly("org.springframework.boot:spring-boot-devtools")
