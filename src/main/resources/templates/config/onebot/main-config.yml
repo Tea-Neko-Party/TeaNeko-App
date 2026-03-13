@@ -1,0 +1,6 @@
+---
+# OneBot debugger 配置
+debugger:
+  # debugger 的 qq 号
+  # 默认为 -1，表示没有 debugger
+  debugger-id: -1
