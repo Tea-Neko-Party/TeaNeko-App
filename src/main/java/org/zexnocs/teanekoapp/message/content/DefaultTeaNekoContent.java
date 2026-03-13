@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.message;
+package org.zexnocs.teanekoapp.message.content;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

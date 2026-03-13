@@ -34,6 +34,6 @@ public interface ITextTeaNekoContent extends ITeaNekoContent {
         if(text.isEmpty()) {
             return new String[0];
         }
-        return text.split("\\s+");
+        return text.split(" +");
     }
 }

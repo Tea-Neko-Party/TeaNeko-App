@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoclient.onebot.core;
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberInfoSender;
-import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
@@ -18,6 +18,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * @since 4.0.11
  */
 @Component
+@RequiredArgsConstructor
 public class OnebotToolbox implements ITeaNekoToolbox {
     @Getter
     private final OnebotGetMsgSender getMsgSender;
@@ -36,18 +37,4 @@ public class OnebotToolbox implements ITeaNekoToolbox {
 
     @Getter
     private final IGetGroupMemberInfoSender groupInfoGetSender;
-
-    public OnebotToolbox(OnebotGetMsgSender getMsgSender,
-                         OnebotMessageSenderTools messageSenderTools,
-                         StrangerInfoGetSender platformUserGetSender,
-                         ILogger logger,
-                         OnebotUserInfoConstructor platformUserInfoConstructorSender,
-                         GetGroupMemberInfoSender groupInfoGetSender) {
-        this.getMsgSender = getMsgSender;
-        this.messageSenderTools = messageSenderTools;
-        this.platformUserGetSender = platformUserGetSender;
-        this.logger = logger;
-        this.platformUserInfoConstructorSender = platformUserInfoConstructorSender;
-        this.groupInfoGetSender = groupInfoGetSender;
-    }
 }

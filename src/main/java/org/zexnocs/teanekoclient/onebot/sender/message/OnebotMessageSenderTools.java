@@ -1,4 +1,5 @@
 package org.zexnocs.teanekoclient.onebot.sender.message;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
@@ -16,22 +17,16 @@ import java.util.Objects;
  * @date 2026/03/04
  * @since 4.0.12
  */
+@RequiredArgsConstructor
 @Component("Onebot-MessageSender")
 public class OnebotMessageSenderTools implements IMessageSenderTools {
+    /// 私人消息发送器
     private final PrivateForwardMessageSender privateForwardMessageSender;
-    private final GroupForwardMessageSender groupForwardMessageSender;
     private final PrivateMessageSender privateMessageSender;
-    private final GroupMessageSender groupMessageSender;
 
-    public OnebotMessageSenderTools(PrivateForwardMessageSender privateForwardMessageSender,
-                                    GroupForwardMessageSender groupForwardMessageSender,
-                                    PrivateMessageSender privateMessageSender,
-                                    GroupMessageSender groupMessageSender) {
-        this.privateForwardMessageSender = privateForwardMessageSender;
-        this.groupForwardMessageSender = groupForwardMessageSender;
-        this.privateMessageSender = privateMessageSender;
-        this.groupMessageSender = groupMessageSender;
-    }
+    /// 群组消息发送器
+    private final GroupForwardMessageSender groupForwardMessageSender;
+    private final GroupMessageSender groupMessageSender;
 
     /**
      * 获取一个
