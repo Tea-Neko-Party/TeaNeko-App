@@ -9,13 +9,13 @@ import java.nio.file.StandardCopyOption
  *
  * @author zExNocs
  * @date 2026/03/13
- * @constructor 创建[CopyConfigToResources]
+ * @constructor 创建[CopyConfigToTemplates]
  */
-abstract class CopyConfigToResources : DefaultTask() {
+abstract class CopyConfigToTemplates : DefaultTask() {
 
     init {
-        group = "build"
-        description = "Copy config files to resources/templates/config if template does not exist"
+        group = "scripts"
+        description = "如果模板不存在，将配置文件复制到 resources/templates/config。"
     }
 
     @TaskAction

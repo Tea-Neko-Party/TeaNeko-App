@@ -114,10 +114,9 @@ tasks.register<BumpVersionTask>("bumpPatch") {
     patchInc = true
 }
 
-tasks.register<CopyConfigToResources>("copyConfigToResources") {
-    description = "复制 config 文件夹中的文件到 resources/templates/config 中，如果模板不存在"
-    group = "scripts"
-}
+tasks.register<CopyConfigToTemplates>("copyConfigToTemplates")
+
+tasks.register<CopyTemplatesToConfig>("copyTemplatesToConfig")
 
 tasks {
     // ========= bootRun 配置 =========
