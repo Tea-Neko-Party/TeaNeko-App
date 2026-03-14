@@ -54,7 +54,7 @@ public class AutoDeleteRule {
                     return;
                 }
                 if(list.contains(Long.parseLong(data.getUserData().getUserIdInPlatform()))) {
-                    deleteMessageSender.delete("config", Long.parseLong(data.getMessageId()));
+                    deleteMessageSender.delete(Long.parseLong(data.getMessageId()));
                 }
             });
     }

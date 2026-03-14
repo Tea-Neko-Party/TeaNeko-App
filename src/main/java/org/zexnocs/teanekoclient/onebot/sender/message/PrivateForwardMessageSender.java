@@ -66,12 +66,11 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * 获取一个新的构造器，用于快速添加新的消息。
      * 不应该在多线程中使用同一个实例。
      *
-     * @param token 发送器发送环境的标识符，例如可以是一个用户 ID，用于标识发送的目标用户
      * @param userId 用户 ID，表示要发送消息的目标用户
      * @return {@link PrivateForwardMessageBuilder }
      */
-    public PrivateForwardMessageBuilder getBuilder(String token, long userId) {
-        return new PrivateForwardMessageBuilder(token, userId);
+    public PrivateForwardMessageBuilder getBuilder(long userId) {
+        return new PrivateForwardMessageBuilder(userId);
     }
 
     /**
@@ -89,9 +88,6 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
 
         /// 消息列表
         private final List<OnebotMessage> messageList = new ArrayList<>();
-
-        /// token
-        private final String token;
 
         /// 外显
         @Setter
@@ -121,9 +117,8 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
         @Setter
         private boolean recordFailed = true;
 
-        public PrivateForwardMessageBuilder(String token, long userId) {
+        public PrivateForwardMessageBuilder(long userId) {
             this.userId = userId;
-            this.token = token;
         }
 
         /**
@@ -160,7 +155,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
                     .source(source)
                     .summary(summary)
                     .build();
-            var future = PrivateForwardMessageSender.this.sendWithFuture(token, data, delay, retryCount, retryInterval);
+            var future = PrivateForwardMessageSender.this.sendWithFuture(data, delay, retryCount, retryInterval);
             if(recordFailed) {
                 future = onebotMessageFailSendHandler.recordFailed(PrivateForwardMessageSender.class.getSimpleName(),
                         messageList,
@@ -193,7 +188,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
                         .source(source)
                         .summary(summary)
                         .build();
-                PrivateForwardMessageSender.this.send(token, data, delay, retryCount, retryInterval);
+                PrivateForwardMessageSender.this.send(data, delay, retryCount, retryInterval);
             }
         }
 

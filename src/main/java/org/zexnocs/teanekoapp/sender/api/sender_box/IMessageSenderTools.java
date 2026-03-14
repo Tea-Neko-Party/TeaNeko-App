@@ -24,18 +24,16 @@ public interface IMessageSenderTools {
     /**
      * 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
      *
-     * @param token 发送器的 token，用于识别发送环境
-     * @param data  要回复的消息数据
+     * @param data 要回复的消息数据
      * @return 转发消息构建器
      */
-    IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data);
+    IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data);
 
     /**
      * 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
      *
-     * @param token 发送器的 token，用于识别发送环境
-     * @param data  要回复的消息数据
+     * @param data 要回复的消息数据
      * @return 一般消息构建器
      */
-    IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data);
+    IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data);
 }

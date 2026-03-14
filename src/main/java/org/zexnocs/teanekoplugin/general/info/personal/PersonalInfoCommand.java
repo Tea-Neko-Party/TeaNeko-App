@@ -42,7 +42,7 @@ public class PersonalInfoCommand {
         var infoString = String.join(" ", personalInfo);
         // 预处理一下 personalInfo，删除所有的换行符
         infoString = infoString.replaceAll("\\r?\\n", "");
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendTextMessage(personalInfoService.setPersonInfo(teaUser, infoString));
     }
 }

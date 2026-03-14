@@ -40,12 +40,10 @@ public class DeleteMessageSender extends AbstractOnebotSender<DeleteMessageSendP
     /**
      * 撤回消息
      *
-     * @param token     发送器发送环境的标识符
      * @param messageId 消息ID
      */
-    public void delete(String token, long messageId) {
-        send(token,
-            DeleteMessageSendParamsData.builder()
+    public void delete(long messageId) {
+        send(DeleteMessageSendParamsData.builder()
                     .messageId(messageId)
                     .build(),
             Duration.ZERO,

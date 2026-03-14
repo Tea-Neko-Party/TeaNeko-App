@@ -53,19 +53,17 @@ public class AbstractOnebotSender<S extends ISendParamsData<R>, R> extends Abstr
      * {@link TaskFuture}
      * ，该任务将在指定的延迟后执行，并返回一个包含响应数据列表的任务结果。
      *
-     * @param token 发送器发送环境的标识符
      * @param sendParamsData 发送数据参数，包含了发送数据的具体内容和相关配置
-     * @param delay 发送延迟
-     * @param maxRetryCount 最大重试次数
-     * @param retryDelay 重试间隔
+     * @param delay          发送延迟
+     * @param maxRetryCount  最大重试次数
+     * @param retryDelay     重试间隔
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>
      */
-    public TaskFuture<ITaskResult<List<R>>> sendWithFuture(String token,
-                                                           S sendParamsData,
+    public TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendParamsData,
                                                            Duration delay,
                                                            int maxRetryCount,
                                                            Duration retryDelay) {
-        return sendWithFuture(new OnebotSendData<>(sendParamsData, client, mapper, token),
+        return sendWithFuture(new OnebotSendData<>(sendParamsData, client, mapper),
                 delay,
                 maxRetryCount,
                 retryDelay);
@@ -76,18 +74,16 @@ public class AbstractOnebotSender<S extends ISendParamsData<R>, R> extends Abstr
      * {@link ISendParamsData}
      * 发送数据
      *
-     * @param token 发送器发送环境的标识符
      * @param sendParamsData 发送数据参数，包含了发送数据的具体内容和相关配置
-     * @param delay 发送延迟
-     * @param maxRetryCount 最大重试次数
-     * @param retryDelay 重试间隔
+     * @param delay          发送延迟
+     * @param maxRetryCount  最大重试次数
+     * @param retryDelay     重试间隔
      */
-    public void send(String token,
-                     S sendParamsData,
+    public void send(S sendParamsData,
                      Duration delay,
                      int maxRetryCount,
                      Duration retryDelay) {
-        sendWithFuture(token, sendParamsData, delay, maxRetryCount, retryDelay)
+        sendWithFuture(sendParamsData, delay, maxRetryCount, retryDelay)
                 .finish();
     }
 }

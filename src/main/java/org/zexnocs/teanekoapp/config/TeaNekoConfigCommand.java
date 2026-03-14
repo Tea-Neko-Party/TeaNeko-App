@@ -52,7 +52,7 @@ public class TeaNekoConfigCommand {
     public void queryCurrentConfig(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var namespaces = buildNamespaces(commandData);
         var scopeId = commandData.getScopeId();
         if(ruleName.isBlank()) {
@@ -63,7 +63,7 @@ public class TeaNekoConfigCommand {
                     return;
                 }
                 data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                        .getForwardBuilder(CommandData.getCommandToken(), data)
+                        .getForwardBuilder(data)
                         .addBotAllText(textList)
                         .sendByPart(10);
             } catch (IllegalAccessException e) {
@@ -93,7 +93,7 @@ public class TeaNekoConfigCommand {
                                                  @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var namespaces = buildNamespaces(commandData);
         if(ruleName.isBlank()) {
             var textList = iConfigDataQueryService.queryAllConfigManagerDetails(namespaces);
@@ -102,7 +102,7 @@ public class TeaNekoConfigCommand {
                 return;
             }
             data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                    .getForwardBuilder(CommandData.getCommandToken(), data)
+                    .getForwardBuilder(data)
                     .addBotAllText(textList)
                     .send();
         } else {
@@ -125,7 +125,7 @@ public class TeaNekoConfigCommand {
                                            String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var namespaces = buildNamespaces(commandData);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -151,7 +151,7 @@ public class TeaNekoConfigCommand {
                                              String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             if (iConfigDataService.unregisterConfig(rule, commandData.getScopeId())) {
@@ -172,7 +172,7 @@ public class TeaNekoConfigCommand {
                                             String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -204,7 +204,7 @@ public class TeaNekoConfigCommand {
                                                 String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
@@ -238,7 +238,7 @@ public class TeaNekoConfigCommand {
                                                    String ruleName, String configField, int index) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.removeFromRuleConfigListFiled(rule, commandData.getScopeId(), configField, index);
@@ -271,7 +271,7 @@ public class TeaNekoConfigCommand {
                                                   String ruleName, String configField) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
             iConfigDataService.clearRuleConfigListFiled(rule, commandData.getScopeId(), configField);

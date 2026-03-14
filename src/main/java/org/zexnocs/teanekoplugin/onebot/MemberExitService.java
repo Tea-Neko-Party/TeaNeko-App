@@ -9,7 +9,6 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.StringDefaultConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -48,7 +47,7 @@ public class MemberExitService {
                 if(memberName == null || memberName.isBlank()) {
                     memberName = "成员";
                 }
-                groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(data.getGroupId()))
+                groupMessageSender.getBuilder(String.valueOf(data.getGroupId()))
                                 .addImageMessage(AvatarUtils.Instance.getAvatarUrl(data.getUserId()))
                                 .addTextMessage(String.format("""
                                     有%s离开了猫猫茶馆喵！

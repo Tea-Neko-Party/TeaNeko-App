@@ -35,10 +35,10 @@ public class StrangerGetCommand {
     @DefaultCommand
     public void execute(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
-        strangerInfoGetSender.getPlatformUserInfo(CommandData.getCommandToken(), String.valueOf(userId))
+        strangerInfoGetSender.getPlatformUserInfo(String.valueOf(userId))
                         .thenAccept(strangerInfo -> {
                             if(strangerInfo == null) {
-                                data.getMessageSender(CommandData.getCommandToken())
+                                data.getMessageSender()
                                         .sendAtReplyMessage("无法获取该用户的信息！");
                                 return;
                             }
@@ -82,7 +82,7 @@ public class StrangerGetCommand {
                                             strangerInfo.getBirthdayMonth(),
                                             strangerInfo.getBirthdayDay()))
                                     .build();
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .addMessages(messageList)
                                     .send();
                         }).finish();

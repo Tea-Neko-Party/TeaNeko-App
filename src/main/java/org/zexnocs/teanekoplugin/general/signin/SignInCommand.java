@@ -29,7 +29,7 @@ public class SignInCommand {
     @DefaultCommand
     public void signIn(CommandData<ITeaNekoMessageData> data) {
         var messageData = data.getRawData();
-        messageData.getMessageSender(CommandData.getCommandToken())
+        messageData.getMessageSender()
                 .sendAtReplyMessage(signInService
                         .signIn(messageData.getUserData().getUuid(),
                                 System.currentTimeMillis()));

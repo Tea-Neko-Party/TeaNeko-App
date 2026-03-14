@@ -43,14 +43,13 @@ public class LikeSender extends AbstractOnebotSender<LikeSendParamsData, Map> {
     /**
      * 给用户点赞
      *
-     * @param token  发送器发送环境的标识符
      * @param userId 用户ID
      * @param times  点赞次数
      * @return 点赞结果的任务未来对象，完成时包含一个列表，每个元素是一个包含点赞结果信息的映射
      */
-    public TaskFuture<ITaskResult<List<Map>>> like(String token, long userId, int times) {
-        return sendWithFuture(token,
-            LikeSendParamsData.builder()
+    public TaskFuture<ITaskResult<List<Map>>> like(long userId, int times) {
+        return sendWithFuture(
+                LikeSendParamsData.builder()
                     .userId(userId)
                     .times(times)
                     .build(),

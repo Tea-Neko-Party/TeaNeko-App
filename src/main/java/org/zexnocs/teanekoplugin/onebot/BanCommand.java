@@ -53,7 +53,7 @@ public class BanCommand {
         // 最大禁言时间为一个月 - 1 秒
         long maxBanTime = Duration.ofDays(30).minusSeconds(1).getSeconds();
         long timeInSeconds = parseTimeToSeconds(time);
-        groupBanSender.ban(CommandData.getCommandToken(), onebotData.getGroupId(),
+        groupBanSender.ban(onebotData.getGroupId(),
                 targetId, Math.min(maxBanTime, timeInSeconds));
     }
 

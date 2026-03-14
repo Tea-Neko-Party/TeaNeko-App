@@ -59,7 +59,7 @@ public class GroupRequestReviewCommand {
         var data = commandData.getRawData();
         __doSomethingUsingConfig(data, groupId, finalGroupId -> {
             var messageListList = groupRequestReviewService.showAllDetailRequest(finalGroupId);
-            data.getForwardMessageSender(CommandData.getCommandToken())
+            data.getForwardMessageSender()
                     .addBotAllList(messageListList)
                     .sendByPart(8);
         });
@@ -85,13 +85,13 @@ public class GroupRequestReviewCommand {
             } else {
                 finalRequestId = requestId;
             }
-            var messageList = groupRequestReviewService.accept(CommandData.getCommandToken(),
+            var messageList = groupRequestReviewService.accept(
                     finalGroupId, finalRequestId, Long.parseLong(Objects.requireNonNull(senderData.getGroupId())),
                     Long.parseLong(senderData.getUserIdInPlatform()));
             if(messageList == null) {
                 return;
             }
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .addMessages(messageList)
                     .send();
         });
@@ -117,13 +117,13 @@ public class GroupRequestReviewCommand {
             } else {
                 finalRequestId = requestId;
             }
-            var messageList = groupRequestReviewService.reject(CommandData.getCommandToken(),
+            var messageList = groupRequestReviewService.reject(
                     finalGroupId, finalRequestId, Long.parseLong(Objects.requireNonNull(senderData.getGroupId())),
                     Long.parseLong(senderData.getUserIdInPlatform()));
             if(messageList == null) {
                 return;
             }
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .addMessages(messageList)
                     .send();
         });
@@ -149,7 +149,7 @@ public class GroupRequestReviewCommand {
                 finalRequestId = requestId;
             }
             var messageList = groupRequestReviewService.showOneDetailRequest(finalGroupId, finalRequestId);
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .addMessages(messageList)
                     .send();
         });
@@ -172,13 +172,13 @@ public class GroupRequestReviewCommand {
                 .ifPresentOrElse(config -> {
                     var configId = config.getValue();
                     if(configId == 0) {
-                        data.getMessageSender(CommandData.getCommandToken())
+                        data.getMessageSender()
                                 .sendAtReplyMessage("没有配置默认被审核的群ID喵！");
                         return;
                     }
                     // 否则使用配置中的默认群ID
                     __doSomethingUsingConfig(data, configId, callback);
-                }, () -> data.getMessageSender(CommandData.getCommandToken())
+                }, () -> data.getMessageSender()
                         .sendAtReplyMessage("没有配置默认被审核的群ID喵！"));
             return;
         }
@@ -190,13 +190,13 @@ public class GroupRequestReviewCommand {
             .ifPresentOrElse(config -> {
                         var list = config.getReviewGroupList();
                         if(list == null || list.isEmpty() || !list.contains(currentGroupId)) {
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .sendAtReplyMessage("当前群不在被审核的群的审核列表中喵！");
                             return;
                         }
                         callback.accept(reviewedGroupId);
                     },
-                    () -> data.getMessageSender(CommandData.getCommandToken())
+                    () -> data.getMessageSender()
                             .sendAtReplyMessage("该群没有开启群申请审核喵！"));
     }
 }

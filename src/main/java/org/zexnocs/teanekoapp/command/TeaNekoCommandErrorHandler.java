@@ -42,7 +42,7 @@ public class TeaNekoCommandErrorHandler implements ICommandErrorHandler {
         return data.getClient()
                 .getTeaNekoToolbox()
                 .getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
     }
 
     /**

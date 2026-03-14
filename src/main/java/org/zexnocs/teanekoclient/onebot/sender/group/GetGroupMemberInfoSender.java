@@ -42,13 +42,11 @@ public class GetGroupMemberInfoSender extends AbstractOnebotSender<GetGroupMembe
     /**
      * 获取群成员信息。
      *
-     * @param token 发送器发送环境的标识符
      * @param groupId 群号
-     * @param userId 成员QQ号
+     * @param userId  成员QQ号
      */
-    public TaskFuture<GroupMemberResponseData> get(String token, String groupId, String userId) {
+    public TaskFuture<GroupMemberResponseData> get(String groupId, String userId) {
         return sendWithFuture(
-                token,
                 GetGroupMemberInfoParamsData
                     .builder()
                     .groupId(Long.parseLong(groupId))

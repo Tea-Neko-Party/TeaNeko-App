@@ -81,11 +81,11 @@ public interface ITeaNekoMessageData {
      * @return 消息发送器构建器
      */
     @NonNull
-    default IEasyMessageSenderBuilder getMessageSender(String token) {
+    default IEasyMessageSenderBuilder getMessageSender() {
         return getClient()
                 .getTeaNekoToolbox()
                 .getMessageSenderTools()
-                .getEasyBuilder(token, this);
+                .getEasyBuilder(this);
     }
 
     /**
@@ -94,10 +94,10 @@ public interface ITeaNekoMessageData {
      * @return forward 消息发送器构建器
      */
     @NonNull
-    default IForwardMessageSenderBuilder getForwardMessageSender(String token) {
+    default IForwardMessageSenderBuilder getForwardMessageSender() {
         return getClient()
                 .getTeaNekoToolbox()
                 .getMessageSenderTools()
-                .getForwardBuilder(token, this);
+                .getForwardBuilder(this);
     }
 }

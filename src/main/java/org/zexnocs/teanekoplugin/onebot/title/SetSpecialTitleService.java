@@ -51,18 +51,17 @@ public class SetSpecialTitleService {
     /**
      * 直接设置特殊头衔。
      *
-     * @param token 发送器的环境 token
      * @param groupId 群号
      * @param userId  用户号
      * @param title   特殊头衔
      * @return 返回要回复的消息内容。
      */
     @Nullable
-    public String setGroupSpecialTitle(String token, long groupId, long userId, String title) {
+    public String setGroupSpecialTitle(long groupId, long userId, String title) {
         if(title.length() > 6) {
             return "头衔长度不能超过6个字符喵！";
         }
-        setGroupSpecialTitleSender.setGroupSpecialTitle(token, groupId, userId, title);
+        setGroupSpecialTitleSender.setGroupSpecialTitle(groupId, userId, title);
         var debugDto = DebugEasyData
                 .of(DEBUG_NAMESPACE)
                 .get(groupId + "_" + userId);
@@ -93,14 +92,13 @@ public class SetSpecialTitleService {
      * 限制设置特殊头衔。
      * 每日只能设置一次。
      *
-     * @param token 发送器的环境 token
      * @param groupId 群号
      * @param userId  用户号
      * @param title   特殊头衔
      * @return 返回要回复的消息内容。
      */
     @Nullable
-    public String setGroupSpecialTitleWithLimit(String token, long groupId, long userId, String title) {
+    public String setGroupSpecialTitleWithLimit(long groupId, long userId, String title) {
         // 检测是否有 “猫、喵、🐱"
         if (!title.contains("猫") && !title.contains("喵") && !title.contains("🐱")) {
             title += "猫"; // 如果没有包含，则添加 "猫"
@@ -112,6 +110,6 @@ public class SetSpecialTitleService {
         if (closedMap.putIfAbsent(key, true) != null) {
             return "主人今天已经设置过头衔了喵~ 明天再来吧！";
         }
-        return setGroupSpecialTitle(token, groupId, userId, title);
+        return setGroupSpecialTitle(groupId, userId, title);
     }
 }

@@ -43,17 +43,16 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
     /**
      * 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
      *
-     * @param token 发送器的 token，用于识别发送环境
-     * @param data  要回复的消息数据
+     * @param data 要回复的消息数据
      * @return 转发消息构建器
      */
     @Override
-    public IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data) {
+    public IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data) {
         var userData = data.getUserData();
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> privateForwardMessageSender.getBuilder(token,
+            case PRIVATE, PRIVATE_TEMP -> privateForwardMessageSender.getBuilder(
                     Long.parseLong(Objects.requireNonNull(userData.getUserIdInPlatform())));
-            case GROUP -> groupForwardMessageSender.getBuilder(token,
+            case GROUP -> groupForwardMessageSender.getBuilder(
                     Long.parseLong(Objects.requireNonNull(userData.getGroupId())));
             default -> null;
         };
@@ -62,15 +61,14 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
     /**
      * 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
      *
-     * @param token 发送器的 token，用于识别发送环境
-     * @param data  要回复的消息数据
+     * @param data 要回复的消息数据
      * @return 一般消息构建器
      */
     @Override
-    public IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data) {
+    public IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data) {
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> privateMessageSender.getBuilder(data, token);
-            case GROUP -> groupMessageSender.getBuilder(token, data);
+            case PRIVATE, PRIVATE_TEMP -> privateMessageSender.getBuilder(data);
+            case GROUP -> groupMessageSender.getBuilder(data);
             default -> null;
         };
     }

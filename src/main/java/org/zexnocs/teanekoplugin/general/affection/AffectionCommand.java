@@ -53,7 +53,7 @@ public class AffectionCommand {
         var data = commandData.getRawData();
         var senderUUID = data.getUserData().getUuid();
         var client = data.getClient();
-        var forwardSender = data.getForwardMessageSender(CommandData.getCommandToken());
+        var forwardSender = data.getForwardMessageSender();
         if(targetId.equals("null")) {
             // 获取到前 5 个好感度最高的用户
             var affectionList = iAffectionService.getTopKAffectionTargets(senderUUID, 100);
@@ -62,7 +62,7 @@ public class AffectionCommand {
             // 获取到目标用户的 UUID
             var targetUUID = iTeaUserService.get(client, targetId);
             if(targetUUID == null) {
-                data.getMessageSender(CommandData.getCommandToken())
+                data.getMessageSender()
                         .sendReplyMessage("未找到用户 " + targetId);
                 return;
             }
@@ -78,7 +78,7 @@ public class AffectionCommand {
                     .addAtMessage(data.getUserData().getUserIdInPlatform())
                     .addTextMessage(" 的好感度为 " + targetToCurrent)
                     .build();
-            data.getMessageSender(CommandData.getCommandToken()).addMessages(builder).send();
+            data.getMessageSender().addMessages(builder).send();
         }
     }
 
@@ -90,7 +90,7 @@ public class AffectionCommand {
         var senderUUID = data.getUserData().getUuid();
         var client = data.getClient();
         var affectionList = iAffectionService.getTopKAffectionSenders(senderUUID, 100);
-        var forwardSender = data.getForwardMessageSender(CommandData.getCommandToken());
+        var forwardSender = data.getForwardMessageSender();
 
         sendAffectionDetail(affectionList, senderUUID, client, forwardSender, data, "对我好感度");
     }
@@ -132,7 +132,7 @@ public class AffectionCommand {
         }
         // 如果没有记录，说明没有好感度数据
         if(record == 0) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("暂时还没有哦");
             return;
         }

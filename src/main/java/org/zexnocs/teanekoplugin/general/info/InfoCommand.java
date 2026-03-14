@@ -50,7 +50,7 @@ public class InfoCommand {
             uuid = iTeaUserService.get(data.getClient(), userId);
         }
         if(uuid == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("用户不存在喵！");
             return;
         }
@@ -65,13 +65,13 @@ public class InfoCommand {
         try {
             teaUserId = iTeaUserService.getPlatformId(data.getClient(), UUID.fromString(uuid));
         } catch (IllegalArgumentException e) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendTextMessage("uuid 格式错误喵！");
             return;
         }
         var userInfo = data.getClient().getTeaNekoToolbox().getPlatformUserInfoConstructorSender();
 
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .addReplyMessage()
                 .addMessages(userInfo.getSimpleInfo(teaUserId))
                 .send();

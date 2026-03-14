@@ -4,7 +4,6 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.utils.RandomUtil;
 import org.zexnocs.teanekoplugin.general.dice.data.DiceAttemptData;
@@ -103,7 +102,7 @@ public class DiceService {
         diceCount = Math.min(diceCount, MAX_DICE_COUNT);
         var scopeId = data.getScopeId();
         diceDataMap.put(scopeId, new DiceData(scopeId, diceCount, diceMaxValue));
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendReplyMessage("设置成功，当前投掷次数：" + diceCount + "，最大值：" + diceMaxValue);
     }
 

@@ -32,7 +32,7 @@ public class SayCommand {
                 指令操作者：%s (%s)
                 """.formatted(senderData.getNickname(), senderData.getUserIdInPlatform()));
         extracted(messageList, result);
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                         .sendTextMessage(result.toString());
     }
 
@@ -42,7 +42,7 @@ public class SayCommand {
         var data = commandData.getRawData();
         StringBuilder result = new StringBuilder();
         extracted(messageList, result);
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendTextMessage(result.toString());
     }
 

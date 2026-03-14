@@ -55,30 +55,30 @@ public class MessageDeleteCommand {
             return;
         }
         // 发送撤回消息的请求
-        getMsgSender.getMsg(CommandData.getCommandToken(), reply.getId())
+        getMsgSender.getMsg(reply.getId())
             .thenAccept(result -> {
                 if(!result.isSuccess()) {
-                    data.getMessageSender(CommandData.getCommandToken())
+                    data.getMessageSender()
                             .sendReplyMessage("获取消息信息失败，可能该消息已经被撤回。");
                     return;
                 }
                 var responseData = result.getResult();
                 if(responseData == null) {
-                    data.getMessageSender(CommandData.getCommandToken())
+                    data.getMessageSender()
                             .sendReplyMessage("意外的错误：获取消息数据为 NULL。");
                     return;
                 }
                 // 如果是 debugger id，则不进行删除
                 if(onebotDebuggerService.isDebugger(Long.parseLong(responseData.getUserData().getUserIdInPlatform()))) {
-                    data.getMessageSender(CommandData.getCommandToken())
+                    data.getMessageSender()
                             .sendAtReplyMessage("大胆喵！无耻狂徒竟敢撤回群主的消息！");
-                    groupBanSender.ban(CommandData.getCommandToken(),
+                    groupBanSender.ban(
                             onebotData.getGroupId(), onebotData.getUserId(),
                             60);
                     return;
                 }
                 // 否则进行删除
-                deleteMessageSender.delete(CommandData.getCommandToken(), Long.parseLong(reply.getId()));
+                deleteMessageSender.delete(Long.parseLong(reply.getId()));
             }).finish();
     }
 }

@@ -40,12 +40,10 @@ public class GroupAddRequestSender extends AbstractOnebotSender<GroupAddRequestS
     /**
      * 同意加群请求
      *
-     * @param token 发送器发送环境的标识符
-     * @param flag  请求标识
+     * @param flag 请求标识
      */
-    public void approve(String token, String flag) {
-        send(token,
-            GroupAddRequestSendParamsData.builder()
+    public void approve(String flag) {
+        send(GroupAddRequestSendParamsData.builder()
                     .flag(flag)
                     .approve(true)
                     .build(),
@@ -57,13 +55,11 @@ public class GroupAddRequestSender extends AbstractOnebotSender<GroupAddRequestS
     /**
      * 拒绝加群请求
      *
-     * @param token  发送器发送环境的标识符
      * @param flag   请求标识
      * @param reason 拒绝理由
      */
-    public void reject(String token, String flag, String reason) {
-        send(token,
-            GroupAddRequestSendParamsData.builder()
+    public void reject(String flag, String reason) {
+        send(GroupAddRequestSendParamsData.builder()
                     .flag(flag)
                     .approve(false)
                     .reason(reason)

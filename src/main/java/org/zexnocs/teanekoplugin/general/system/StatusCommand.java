@@ -151,7 +151,7 @@ public class StatusCommand {
                 usedVirtualMemoryGB, totalVirtualMemoryGB, virtualMemoryUsagePercentage,
                 usedMemoryGB, totalMemoryGB, memoryUsagePercentage,
                 getDiskUsage());
-        data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage(statusMessage);
+        data.getMessageSender().sendReplyMessage(statusMessage);
     }
 
     /**

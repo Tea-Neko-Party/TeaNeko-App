@@ -42,12 +42,10 @@ public class GetGroupListSender extends AbstractOnebotSender<GetGroupListParamsD
     /**
      * 获取群列表。
      *
-     * @param token 发送器发送环境的标识符
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link GroupListResponseData }>>>
      */
-    public TaskFuture<ITaskResult<List<GroupListResponseData>>> get(String token) {
+    public TaskFuture<ITaskResult<List<GroupListResponseData>>> get() {
         return sendWithFuture(
-                token,
                 GetGroupListParamsData.builder()
                     .noCache(true)
                     .build(),

@@ -8,10 +8,8 @@ import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -55,7 +53,7 @@ public class LowQQLevelAutoRejectRule {
         var requestData = event.getData();
         var userId = requestData.getUserId();
         var groupId = requestData.getGroupId();
-        strangerInfoGetSender.getPlatformUserInfo(CommandData.getCommandToken(), String.valueOf(userId))
+        strangerInfoGetSender.getPlatformUserInfo(String.valueOf(userId))
                 .thenAccept(strangerData -> {
                     // 如果无法获取用户信息或者用户等级为0，则不进行拒绝（可能是因为用户隐私设置导致无法获取信息）
                     if(strangerData == null || strangerData.getLevel() == 0) {
@@ -74,7 +72,7 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     // 否则拒绝入群请求
-                    groupAddRequestSender.reject(CommandData.getCommandToken(), requestData.getFlag(),
+                    groupAddRequestSender.reject(requestData.getFlag(),
                             config.getRejectMessage());
                     // 取消事件，防止后续的处理器继续处理这个请求
                     event.setCancelled(true);
@@ -84,7 +82,7 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     for(var reportGroupId: list) {
-                        groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(reportGroupId))
+                        groupMessageSender.getBuilder(String.valueOf(reportGroupId))
                                 .addTextMessage(String.format("""
                                             申请加入群组 %s 被自动拒绝喵。
                                             原因：低于要求的等级 %s

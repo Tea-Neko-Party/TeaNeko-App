@@ -53,7 +53,7 @@ public class SauceNAOCommand {
         var config = iConfigDataService.getConfigData(this, SauceNAORuleConfig.class, data.getScopeId())
                 .orElse(null);
         if(config == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("当前范围未开启 SauceNAO 搜图功能。");
             return;
         }
@@ -71,7 +71,7 @@ public class SauceNAOCommand {
         var api = config.getApi();
         // 判断 api
         if(api == null || api.isBlank()) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("未配置 SauceNAO API。");
             return;
         }
@@ -87,17 +87,17 @@ public class SauceNAOCommand {
                 }
             }
             if(replyContext == null) {
-                data.getMessageSender(CommandData.getCommandToken())
+                data.getMessageSender()
                         .sendReplyMessage("指令使用错误：未输入正确的图片URL地址 / 未回复信息");
                 return;
             }
             data.getClient().getTeaNekoToolbox()
                     .getGetMsgSender()
-                    .getMsg(CommandData.getCommandToken(), replyContext.getId())
+                    .getMsg(replyContext.getId())
                     .thenAccept(result -> {
                         var msg = result.getResult();
                         if(!result.isSuccess() || msg == null) {
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .sendReplyMessage("获取回复消息失败，可能该消息已被撤回。");
                             return;
                         }
@@ -110,7 +110,7 @@ public class SauceNAOCommand {
                             }
                         }
                         if(imageContent == null) {
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .sendReplyMessage("回复的消息中未包含图片。");
                             return;
                         }
@@ -150,7 +150,7 @@ public class SauceNAOCommand {
                     }
                     boolean success = header.getStatus() == 0;
                     double maxSimilarity = 0.0;
-                    var builder = data.getForwardMessageSender(CommandData.getCommandToken());
+                    var builder = data.getForwardMessageSender();
                     int size = 0;
                     for(var resultData: results) {
                         var similarity = Double.parseDouble(resultData.getHeader().getSimilarity());
@@ -184,7 +184,7 @@ public class SauceNAOCommand {
                         builder.addBotList(messageBuilder.build());
                         size++;
                     }
-                    data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage(String.format("""
+                    data.getMessageSender().sendReplyMessage(String.format("""
                             == 搜索结果 ==
                             状态：%s
                             查询图片数量：%d
@@ -208,10 +208,10 @@ public class SauceNAOCommand {
                             source = source.getCause();
                         }
                         if(source == null) {
-                            data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("查询失败，未知报错信息。");
+                            data.getMessageSender().sendReplyMessage("查询失败，未知报错信息。");
                         } else {
-                            data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("查询失败，报错信息：");
-                            var builder = data.getForwardMessageSender(CommandData.getCommandToken());
+                            data.getMessageSender().sendReplyMessage("查询失败，报错信息：");
+                            var builder = data.getForwardMessageSender();
                             for(var stack : source.getStackTrace()) {
                                 builder.addBotText(stack.toString());
                             }

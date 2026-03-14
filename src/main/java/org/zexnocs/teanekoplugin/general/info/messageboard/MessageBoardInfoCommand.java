@@ -50,18 +50,18 @@ public class MessageBoardInfoCommand {
             target = iTeaUserService.get(data.getClient(), targetId);
         }
         if(target == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("用户尚未注册喵~");
             return;
         }
         if(messages.isEmpty()) {
             var list = messageBoardInfoService.getMessageList(target);
             if(list.isEmpty()) {
-                data.getMessageSender(CommandData.getCommandToken())
+                data.getMessageSender()
                         .sendReplyMessage("没有留言喵~");
                 return;
             }
-            var builder = data.getForwardMessageSender(CommandData.getCommandToken());
+            var builder = data.getForwardMessageSender();
             int index = 1;
             int size = list.size();
             for(var messageData: list) {
@@ -76,13 +76,13 @@ public class MessageBoardInfoCommand {
         // 否则是给予留言
         var first = messages.getFirst();
         if(first.equals("给予") || first.equals("give")) {
-            data.getMessageSender(CommandData.getCommandToken()).sendReplyMessage("""
+            data.getMessageSender().sendReplyMessage("""
                 请使用 "/留言 @ xxx" 来给别人留言。
                 删除 "给予" 或者 "give" 即可。""");
             return;
         }
         var message = String.join(" ", messages);
-        data.getMessageSender(CommandData.getCommandToken()).
+        data.getMessageSender().
                 sendAtReplyMessage(messageBoardInfoService.setMessage(sender, target, message));
     }
 
@@ -100,18 +100,18 @@ public class MessageBoardInfoCommand {
             target = iTeaUserService.get(data.getClient(), String.valueOf(targetId));
         }
         if(target == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("用户尚未注册喵~");
             return;
         }
 
         var list = messageBoardInfoService.getMessageList(target);
         if(list.isEmpty()) {
-            data.getMessageSender(CommandData.getCommandToken()).
+            data.getMessageSender().
                     sendReplyMessage("没有留言喵~");
             return;
         }
-        var builder = data.getForwardMessageSender(CommandData.getCommandToken());
+        var builder = data.getForwardMessageSender();
         for(var message: list) {
             var sender = data.getUserData().getUuid();
             String senderPlatformId = iTeaUserService.getPlatformId(data.getClient(), sender);

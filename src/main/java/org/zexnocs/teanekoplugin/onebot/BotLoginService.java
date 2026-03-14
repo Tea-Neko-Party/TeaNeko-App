@@ -9,7 +9,6 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.StringDefaultConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -42,8 +41,7 @@ public class BotLoginService {
      */
     @EventHandler
     public void onBotLogin(BotOnlineNoticeEvent event) {
-        var token = AbstractEvent.getEventToken();
-        getGroupListSender.get(token)
+        getGroupListSender.get()
             .thenAccept(result -> {
                if(!result.isSuccess()) {
                    iLogger.warn(BotLoginService.class.getName(), "获取群列表失败");
@@ -57,7 +55,7 @@ public class BotLoginService {
                    .ifPresent(config -> {
                        var message = config.getValue();
                        if (message != null && !message.isBlank()) {
-                           groupMessageSender.getBuilder(token, String.valueOf(groupId))
+                           groupMessageSender.getBuilder(String.valueOf(groupId))
                                    .sendTextMessage(message);
                        }
                    });

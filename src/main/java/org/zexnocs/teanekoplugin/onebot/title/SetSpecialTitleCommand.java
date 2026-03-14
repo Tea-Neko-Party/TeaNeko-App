@@ -51,9 +51,9 @@ public class SetSpecialTitleCommand {
         var groupId = onebotData.getGroupId();
         var userId = onebotData.getUserId();
         var message = setGroupSpecialTitleService.setGroupSpecialTitleWithLimit(
-                CommandData.getCommandToken(), groupId, userId, title);
+                groupId, userId, title);
         if(message != null) {
-            rawData.getMessageSender(CommandData.getCommandToken())
+            rawData.getMessageSender()
                     .sendReplyMessage(message);
         }
     }
@@ -69,9 +69,9 @@ public class SetSpecialTitleCommand {
         var onebotData = rawData.getOnebotRawMessageData();
         var groupId = onebotData.getGroupId();
         var message = setGroupSpecialTitleService.setGroupSpecialTitle(
-                CommandData.getCommandToken(), groupId, targetId, title);
+                groupId, targetId, title);
         if (message != null) {
-            rawData.getMessageSender(CommandData.getCommandToken())
+            rawData.getMessageSender()
                     .sendReplyMessage(message);
         }
     }
@@ -87,7 +87,7 @@ public class SetSpecialTitleCommand {
         var groupId = onebotData.getGroupId();
         var message = setGroupSpecialTitleService.removeLimit(groupId, targetId);
         if (message != null) {
-            rawData.getMessageSender(CommandData.getCommandToken())
+            rawData.getMessageSender()
                     .sendReplyMessage(message);
         }
     }
@@ -100,6 +100,6 @@ public class SetSpecialTitleCommand {
         var rawData = data.getRawData();
         var onebotData = rawData.getOnebotRawMessageData();
         var groupId = onebotData.getGroupId();
-        setGroupSpecialTitleSender.setGroupSpecialTitle(CommandData.getCommandToken(), groupId, targetId, title);
+        setGroupSpecialTitleSender.setGroupSpecialTitle(groupId, targetId, title);
     }
 }

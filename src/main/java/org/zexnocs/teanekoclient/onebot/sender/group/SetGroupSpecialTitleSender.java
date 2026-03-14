@@ -40,13 +40,12 @@ public class SetGroupSpecialTitleSender extends AbstractOnebotSender<SetGroupSpe
     /**
      * 设置群头衔
      *
-     * @param token        发送器发送环境的标识符
      * @param groupId      群号
      * @param userId       成员QQ号
      * @param specialTitle 头衔，长度限制为6个汉字
      * @param duration     头衔有效期，单位为秒
      */
-    public void setGroupSpecialTitle(String token, long groupId, long userId, String specialTitle, long duration) {
+    public void setGroupSpecialTitle(long groupId, long userId, String specialTitle, long duration) {
         if (specialTitle == null) {
             specialTitle = "";
         }
@@ -61,18 +60,17 @@ public class SetGroupSpecialTitleSender extends AbstractOnebotSender<SetGroupSpe
                 .specialTitle(specialTitle)
                 .duration(duration)
                 .build();
-        send(token, paramsData, Duration.ZERO, 3, Duration.ofMillis(200));
+        send(paramsData, Duration.ZERO, 3, Duration.ofMillis(200));
     }
 
     /**
      * 设置群头衔
      *
-     * @param token        发送器发送环境的标识符
      * @param groupId      群号
      * @param userId       成员QQ号
      * @param specialTitle 头衔，长度限制为6个汉字
      */
-    public void setGroupSpecialTitle(String token, long groupId, long userId, String specialTitle) {
-        setGroupSpecialTitle(token, groupId, userId, specialTitle, 0);
+    public void setGroupSpecialTitle(long groupId, long userId, String specialTitle) {
+        setGroupSpecialTitle(groupId, userId, specialTitle, 0);
     }
 }

@@ -199,7 +199,7 @@ public class GroupRequestReviewService {
      * @param opId    操作者ID
      */
     @Nullable
-    public List<ITeaNekoMessage> reject(String token, long groupId, long userId, long opGroupId, long opId) {
+    public List<ITeaNekoMessage> reject(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
@@ -214,7 +214,6 @@ public class GroupRequestReviewService {
 
         if (rejectNum >= value.requestRejectNum) {
             groupAddRequestSender.reject(
-                    token,
                     value.getRequestData().getFlag(),
                     "群成员投票拒绝了您的入群请求。"
             );
@@ -237,7 +236,7 @@ public class GroupRequestReviewService {
      * @param opId    操作者ID
      */
     @Nullable
-    public List<ITeaNekoMessage> accept(String token, long groupId, long userId, long opGroupId, long opId) {
+    public List<ITeaNekoMessage> accept(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
@@ -251,7 +250,7 @@ public class GroupRequestReviewService {
         int acceptNum = value.accept(opGroupId, opId);
 
         if (acceptNum >= value.requestAcceptNum) {
-            groupAddRequestSender.approve(token, value.getRequestData().getFlag());
+            groupAddRequestSender.approve(value.getRequestData().getFlag());
             requestMap.remove(key);
             return OnebotMessageListBuilder.builder().addTextMessage(String.format("""
                     入群请求ID：%d

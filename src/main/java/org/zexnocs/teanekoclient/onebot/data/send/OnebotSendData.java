@@ -3,7 +3,6 @@ package org.zexnocs.teanekoclient.onebot.data.send;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
-import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.IClient;
 import org.zexnocs.teanekoapp.sender.AbstractJsonSendData;
 import tools.jackson.databind.ObjectMapper;
@@ -31,16 +30,14 @@ public class OnebotSendData<S extends ISendParamsData<R>, R> extends AbstractJso
     /**
      * 构造函数，初始化发送数据的内容、mapper 和响应类型，并生成一个唯一的 echo 以标识这条发送数据。
      *
-     * @param params       发送数据的参数，包含了具体的操作细节
-     * @param client       发送数据的客户端
-     * @param mapper       用于翻译成 json 的 mapper
-     * @param senderToken  发送器的 token，可以用于标识发送器身份
+     * @param params 发送数据的参数，包含了具体的操作细节
+     * @param client 发送数据的客户端
+     * @param mapper 用于翻译成 json 的 mapper
      */
     public OnebotSendData(S params,
                           @NonNull IClient client,
-                          @NonNull ObjectMapper mapper,
-                          @Nullable String senderToken) {
-        super(client, mapper, params.getResponseDataType(), senderToken);
+                          @NonNull ObjectMapper mapper) {
+        super(client, mapper, params.getResponseDataType());
         this.params = params;
         this.action = params.getAction();
     }

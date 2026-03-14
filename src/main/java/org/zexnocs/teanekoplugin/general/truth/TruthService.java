@@ -8,7 +8,6 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekoplugin.general.dice.DiceService;
 
 import java.time.Duration;
@@ -62,7 +61,7 @@ public class TruthService {
         // 先创建一个新的 TruthGroupData
         var newGroupData = new TruthGroupData(data);
         if(truthGroupDataMap.putIfAbsent(scopeId, newGroupData) != null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("真心话已经在进行中喵！");
             return;
         }
@@ -74,7 +73,7 @@ public class TruthService {
                 真心话将会在 %d 秒后自动结束喵。
                 具体规则请看群公告喵。
                 当前骰子最大值：%d""".formatted(autoEndTime, diceData.getDiceMaxValue());
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendTextMessage(OPEN_TEXT);
         // 创建一个自动停止的定时器
         var taskConfig = TaskConfig.<Void>builder()
@@ -104,7 +103,7 @@ public class TruthService {
         var groupData = truthGroupDataMap.get(scopeId);
         // 判断真心话是否正在运行
         if (groupData == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("真心话还没开始喵！");
             return;
         }
@@ -112,10 +111,10 @@ public class TruthService {
         var userId = data.getUserData().getUuid();
         if (groupData.userDataMap.putIfAbsent(userId,
                 new TruthUserData(data.getUserData().getUserIdInPlatform(), value, time)) == null) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("投掷成功喵！点数是：" + value);
         } else {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("你已经投掷过了喵！");
         }
     }
@@ -137,7 +136,7 @@ public class TruthService {
         if(groupData == null) {
             // 如果是自动结束，则不需要发送消息；如果是手动结束，则需要发送消息
             if(data != null) {
-                data.getMessageSender(CommandData.getCommandToken())
+                data.getMessageSender()
                         .sendTextMessage("真心话还没开始喵！");
             }
             return;
@@ -219,7 +218,7 @@ public class TruthService {
 
         /// 发送消息
         public IEasyMessageSenderBuilder getMessageSender() {
-            return data.getMessageSender(CommandData.getCommandToken());
+            return data.getMessageSender();
         }
     }
 }

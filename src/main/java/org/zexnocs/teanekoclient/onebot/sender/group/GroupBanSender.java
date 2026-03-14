@@ -40,14 +40,12 @@ public class GroupBanSender extends AbstractOnebotSender<GroupBanParamsData, Map
     /**
      * 禁言群成员
      *
-     * @param token              发送器发送环境的标识符
-     * @param groupId            群号
-     * @param userId             成员QQ号
-     * @param durationInSeconds  禁言时长（秒）
+     * @param groupId           群号
+     * @param userId            成员QQ号
+     * @param durationInSeconds 禁言时长（秒）
      */
-    public void ban(String token, long groupId, long userId, long durationInSeconds) {
-        send(token,
-            GroupBanParamsData.builder()
+    public void ban(long groupId, long userId, long durationInSeconds) {
+        send(GroupBanParamsData.builder()
                     .groupId(groupId)
                     .userId(userId)
                     .duration(durationInSeconds)
@@ -60,13 +58,11 @@ public class GroupBanSender extends AbstractOnebotSender<GroupBanParamsData, Map
     /**
      * 取消禁言群成员
      *
-     * @param token   发送器发送环境的标识符
      * @param groupId 群号
      * @param userId  成员QQ号
      */
-    public void unban(String token, long groupId, long userId) {
-        send(token,
-            GroupBanParamsData.builder()
+    public void unban(long groupId, long userId) {
+        send(GroupBanParamsData.builder()
                     .groupId(groupId)
                     .userId(userId)
                     .duration(0)

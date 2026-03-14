@@ -1,7 +1,6 @@
 package org.zexnocs.teanekoplugin.general.truth;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekoplugin.general.dice.event.DiceAfterEvent;
@@ -65,7 +64,7 @@ public class TruthRegisterService {
         // 取消该事件
         event.setCancelled(true);
         data.getMessageReceiveData()
-                .getMessageSender(CommandData.getCommandToken())
+                .getMessageSender()
                 .sendReplyMessage("真心话游戏期间禁止设置骰子！");
     }
 }

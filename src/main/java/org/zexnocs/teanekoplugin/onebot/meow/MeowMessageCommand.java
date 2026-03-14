@@ -23,7 +23,7 @@ import org.zexnocs.teanekocore.command.api.DefaultCommand;
 public class MeowMessageCommand {
     @DefaultCommand
     public void meow(CommandData<ITeaNekoMessageData> commandData) {
-        commandData.getRawData().getMessageSender(CommandData.getCommandToken())
+        commandData.getRawData().getMessageSender()
                         .sendTextMessage("喵呜~");
     }
 }

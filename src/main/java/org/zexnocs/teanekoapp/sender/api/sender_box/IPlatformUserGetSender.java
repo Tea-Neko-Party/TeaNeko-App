@@ -14,9 +14,8 @@ public interface IPlatformUserGetSender {
     /**
      * 获取平台用户信息。
      *
-     * @param token 发送器发送环境的标识符
      * @param userId 用户ID
      * @return 包含用户信息的发送数据对象
      */
-    TaskFuture<? extends IPlatformUserResponseData> getPlatformUserInfo(String token, String userId);
+    TaskFuture<? extends IPlatformUserResponseData> getPlatformUserInfo(String userId);
 }

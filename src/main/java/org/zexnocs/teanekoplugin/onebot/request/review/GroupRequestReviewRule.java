@@ -12,7 +12,6 @@ import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -61,7 +60,6 @@ public class GroupRequestReviewRule {
         var userId = requestData.getUserId();
         var groupId = requestData.getGroupId();
         strangerInfoGetSender.getPlatformUserInfo(
-                AbstractEvent.getEventToken(),
                 String.valueOf(userId)).thenAccept(strangerData -> {
                 var config = iConfigService.getConfigData(this,
                                 GroupRequestReviewRuleConfig.class,
@@ -88,7 +86,7 @@ public class GroupRequestReviewRule {
                         .build();
                 messageList.addFirst(textMessage);
                 for(var review: list) {
-                    groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(review))
+                    groupMessageSender.getBuilder(String.valueOf(review))
                                     .addMessages(messageList)
                                     .send();
                 }
@@ -119,7 +117,7 @@ public class GroupRequestReviewRule {
                     return;
                 }
                 for(var review: list) {
-                    groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(review))
+                    groupMessageSender.getBuilder(String.valueOf(review))
                             .sendTextMessage("""
                                 请求ID：%s
                                 已经被管理员同意该请求。无需再处理喵。""");

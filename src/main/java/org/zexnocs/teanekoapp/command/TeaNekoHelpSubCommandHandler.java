@@ -67,7 +67,7 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
         var messageSender = data.getClient()
                 .getTeaNekoToolbox()
                 .getMessageSenderTools()
-                .getEasyBuilder(CommandData.getCommandToken(), data);
+                .getEasyBuilder(data);
         var commandAnnotation = mapData.getCommandAnnotation();
         var descriptionData = commandDescriptionScanner.getDescriptionData(commandAnnotation);
         if(descriptionData == null ||
@@ -77,7 +77,7 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
             messageSender.addReplyTextMessage("该指令没有帮助信息").send();
             return;
         }
-        var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getForwardBuilder(CommandData.getCommandToken(), data);
+        var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getForwardBuilder(data);
         StringBuilder mainTitle = new StringBuilder();
         mainTitle.append("指令{");
         for(var name: commandAnnotation.value()) {

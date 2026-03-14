@@ -60,7 +60,6 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
     /**
      * 发送私聊信息
      *
-     * @param token        发送器发送环境的标识符
      * @param messageList   消息列表
      * @param userId        用户 ID
      * @param delay         发送延迟
@@ -68,13 +67,12 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      * @param retryDelay    重试间隔
      * @return 发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
      */
-    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(String token,
-                                                                                    List<? extends ITeaNekoMessage> messageList,
+    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(List<? extends ITeaNekoMessage> messageList,
                                                                                     String userId,
                                                                                     Duration delay,
                                                                                     int maxRetryCount,
                                                                                     Duration retryDelay) {
-        return sendWithFuture(token,
+        return sendWithFuture(
                 PrivateMsgSendParamsData.builder()
                         .userId(Long.parseLong(userId))
                         .messageList(messageList)
@@ -85,21 +83,19 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
     /**
      * 根据 {@link ITeaNekoMessageData} 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
-     * @param data  要回复的消息数据
-     * @param token 发送器的 token，用于识别发送环境
+     * @param data 要回复的消息数据
      */
-    public PrivateEasyMessageSenderBuilder getBuilder(ITeaNekoMessageData data, String token) {
-        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data, token);
+    public PrivateEasyMessageSenderBuilder getBuilder(ITeaNekoMessageData data) {
+        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data);
     }
 
     /**
      * 根据 userId 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
      * @param userId 用户 ID，用于发送消息
-     * @param token 发送器的 token，用于识别发送环境
      */
-    public PrivateEasyMessageSenderBuilder getBuilder(String userId, String token) {
-        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), userId, token);
+    public PrivateEasyMessageSenderBuilder getBuilder(String userId) {
+        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), userId);
     }
 
     /**
@@ -124,9 +120,6 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
         /// 用户 ID
         private final String userId;
 
-        /// token
-        private final String token;
-
         /// 发送延迟
         @Setter
         private Duration delay = Duration.ZERO;
@@ -148,15 +141,12 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          *
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
-         * @param token              发送器的 token，用于识别发送环境
          */
         public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
-                                               @NonNull ITeaNekoMessageData repliedData,
-                                               String token) {
+                                               @NonNull ITeaNekoMessageData repliedData) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
             this.userId = repliedData.getUserData().getUserIdInPlatform();
-            this.token = token;
         }
 
         /**
@@ -164,15 +154,12 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          *
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param userId             用户 ID，用于发送消息
-         * @param token              发送器的 token，用于识别发送环境
          */
         public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
-                                               String userId,
-                                               String token) {
+                                               String userId) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = null;
             this.userId = userId;
-            this.token = token;
         }
 
 
@@ -188,7 +175,6 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
         public TaskFuture<? extends IMessageSendResponseData> sendWithFuture() {
             var messages = messageListBuilder.build();
             var future = PrivateMessageSender.this.sendMessage(
-                    token,
                     messages,
                     userId,
                     delay,

@@ -40,13 +40,11 @@ public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsDat
     /**
      * 踢出群成员。但是群成员可以重新加回来。
      *
-     * @param token   发送器发送环境的标识符
      * @param groupId 群号
      * @param userId  用户号
      */
-    public void kick(String token, long groupId, long userId) {
-        send(token,
-            GroupKickSendParamsData.builder()
+    public void kick(long groupId, long userId) {
+        send(GroupKickSendParamsData.builder()
                     .groupId(groupId)
                     .userId(userId)
                     .rejectAddRequest(false)
@@ -59,13 +57,11 @@ public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsDat
     /**
      * 踢出群成员，并且拒绝该成员重新加回来。
      *
-     * @param token   发送器发送环境的标识符
      * @param groupId 群号
      * @param userId  用户号
      */
-    public void kickReject(String token, long groupId, long userId) {
-        send(token,
-            GroupKickSendParamsData.builder()
+    public void kickReject(long groupId, long userId) {
+        send(GroupKickSendParamsData.builder()
                     .groupId(groupId)
                     .userId(userId)
                     .rejectAddRequest(true)

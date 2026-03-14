@@ -44,12 +44,11 @@ public class StrangerInfoGetSender extends AbstractOnebotSender<StrangerInfoPara
     /**
      * 获取陌生人信息
      *
-     * @param token  发送器发送环境的标识符
      * @param userId 用户ID
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link StrangerInfoGetResponseData }>>>
      */
-    public TaskFuture<StrangerInfoGetResponseData> getPlatformUserInfo(String token, String userId) {
-        return sendWithFuture(token,
+    public TaskFuture<StrangerInfoGetResponseData> getPlatformUserInfo(String userId) {
+        return sendWithFuture(
                 StrangerInfoParamsData.builder()
                     .userId(Long.parseLong(userId))
                     .noCache(true)

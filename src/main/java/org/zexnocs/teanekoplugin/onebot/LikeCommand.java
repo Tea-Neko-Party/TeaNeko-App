@@ -109,7 +109,7 @@ public class LikeCommand {
         // 遍历队列中的用户ID
         for (long userId : copy) {
             // 进行点赞
-            likeSender.like(CommandData.getCommandToken(), userId, 10);
+            likeSender.like(userId, 10);
             likedUserIds.add(userId);
         }
         // 将点赞成功记录到数据库
@@ -132,7 +132,7 @@ public class LikeCommand {
         var userId = data.getOnebotRawMessageData().getUserId();
 
         if(!likedUserIds.add(userId)) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("你已经点赞过了喵！");
             return;
         }
@@ -142,13 +142,13 @@ public class LikeCommand {
         } else if(times > 10) {
             times = 10;
         }
-        likeSender.like(CommandData.getCommandToken(), userId, times)
+        likeSender.like(userId, times)
                 .thenAccept(result -> {
                     if(result.isSuccess()) {
-                        data.getMessageSender(CommandData.getCommandToken())
+                        data.getMessageSender()
                                         .sendAtReplyMessage("点赞成功了喵！");
                     } else {
-                        data.getMessageSender(CommandData.getCommandToken())
+                        data.getMessageSender()
                                 .sendAtReplyMessage("已经点赞过了喵！");
                     }
                 });
@@ -163,7 +163,7 @@ public class LikeCommand {
     public void addToQueue(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
         if(userIdQueue.contains(userId)) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("该用户已经在队列中了喵！");
             return;
         }
@@ -174,7 +174,7 @@ public class LikeCommand {
         var task = dto.getTaskConfig("用户添加到点赞队列的数据库");
         task.set(DATABASE_LIST_KEY, list);
         task.push();
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendAtReplyMessage("添加成功了喵！");
     }
 
@@ -187,7 +187,7 @@ public class LikeCommand {
     public void removeFromQueue(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
         if(!userIdQueue.contains(userId)) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("该用户已经不在队列中了喵！");
             return;
         }
@@ -198,7 +198,7 @@ public class LikeCommand {
         var task = dto.getTaskConfig("用户从点赞队列移除的数据库");
         task.set(DATABASE_LIST_KEY, list);
         task.push();
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendAtReplyMessage("移除成功了喵！");
     }
 
@@ -213,7 +213,7 @@ public class LikeCommand {
         var data = commandData.getRawData();
         long userId = data.getOnebotRawMessageData().getUserId();
         if(userIdQueue.contains(userId)) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendAtReplyMessage("你已经在队列中了喵！");
             return;
         }
@@ -224,7 +224,7 @@ public class LikeCommand {
         var task = dto.getTaskConfig("用户添加到点赞队列的数据库");
         task.set(DATABASE_LIST_KEY, list);
         task.push();
-        data.getMessageSender(CommandData.getCommandToken())
+        data.getMessageSender()
                 .sendAtReplyMessage("添加成功了喵！");
     }
 }

@@ -14,9 +14,8 @@ public interface IGetGroupMemberInfoSender {
     /**
      * 获取群成员信息。
      *
-     * @param token 发送器发送环境的标识符
      * @param groupId 群号
-     * @param userId 成员QQ号
+     * @param userId  成员QQ号
      */
-    TaskFuture<? extends IGroupMemberResponseData> get(String token, String groupId, String userId);
+    TaskFuture<? extends IGroupMemberResponseData> get(String groupId, String userId);
 }

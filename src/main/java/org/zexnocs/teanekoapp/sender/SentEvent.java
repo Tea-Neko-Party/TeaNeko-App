@@ -22,19 +22,6 @@ public class SentEvent<T extends ISendData<?>> extends AbstractEvent<T> {
     }
 
     /**
-     * 获取 token
-     *
-     * @return token
-     */
-    public String getToken() {
-        var data = getData();
-        if (data == null) {
-            return "";
-        }
-        return data.getSenderToken();
-    }
-
-    /**
      * 向客户端发送信息。
      */
     @Override

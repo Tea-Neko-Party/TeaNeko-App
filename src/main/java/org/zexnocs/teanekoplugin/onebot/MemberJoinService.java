@@ -8,7 +8,6 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.StringDefaultConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -44,7 +43,7 @@ public class MemberJoinService {
                 if(welcomeMessage == null || welcomeMessage.isBlank()) {
                     return;
                 }
-                groupMessageSender.getBuilder(AbstractEvent.getEventToken(), String.valueOf(data.getGroupId()))
+                groupMessageSender.getBuilder(String.valueOf(data.getGroupId()))
                         .addAtMessage(String.valueOf(data.getUserId()))
                         .addTextMessage(" " + welcomeMessage)
                         .send();

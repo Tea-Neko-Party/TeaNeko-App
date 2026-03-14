@@ -57,11 +57,11 @@ public class KickCommand {
                 groupId, k -> new ConcurrentHashMap<>());
         var kickData = groupData.get(userId);
         if(kickData == null) {
-            groupMemberInfoSender.get(CommandData.getCommandToken(),
-                    String.valueOf(groupId), String.valueOf(userId))
+            groupMemberInfoSender.get(
+                            String.valueOf(groupId), String.valueOf(userId))
                     .thenAccept(userData -> {
                 if(userData == null) {
-                    data.getMessageSender(CommandData.getCommandToken())
+                    data.getMessageSender()
                             .sendReplyMessage("不存在用户 %d".formatted(userId));
                     return;
                 }
@@ -69,13 +69,13 @@ public class KickCommand {
                 if( (userData.getRole() != null) &&
                     (userData.getRole().equalsIgnoreCase("admin") ||
                      userData.getRole().equalsIgnoreCase("owner"))) {
-                    data.getMessageSender(CommandData.getCommandToken())
+                    data.getMessageSender()
                             .sendReplyMessage("用户 %d 是管理员，无法踢出。".formatted(userId));
                     return;
                 }
                 // 用户存在
                 groupData.put(userId, new KickData(reason));
-                data.getMessageSender(CommandData.getCommandToken())
+                data.getMessageSender()
                         .sendReplyMessage("""
                     请输入 /kick %d 确认提出该成员：
                     理由：%s""".formatted(userId, reason));
@@ -83,9 +83,9 @@ public class KickCommand {
             return;
         }
         // 如果已经存在踢出数据，则直接执行踢出操作
-        groupKickSender.kick(CommandData.getCommandToken(), groupId, userId);
+        groupKickSender.kick(groupId, userId);
         if(kickData.reason != null && !kickData.reason.isEmpty()) {
-            data.getMessageSender(CommandData.getCommandToken())
+            data.getMessageSender()
                     .sendReplyMessage("""
                     成功将用户 %d 踢出群聊。
                     理由：%s""".formatted(userId, kickData.reason));

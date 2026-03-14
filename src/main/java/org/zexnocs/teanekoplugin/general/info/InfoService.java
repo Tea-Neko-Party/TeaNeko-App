@@ -5,7 +5,6 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import org.zexnocs.teanekocore.utils.RandomUtil;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
@@ -64,10 +63,10 @@ public class InfoService {
         if(data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             // 如果是群组，则只显示群组消息
             data.getClient().getTeaNekoToolbox().getGroupInfoGetSender()
-                    .get(CommandData.getCommandToken(), data.getUserData().getGroupId(), targetId)
+                    .get(data.getUserData().getGroupId(), targetId)
                     .thenAccept(r -> {
                         if(r == null) {
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())
                                     .addTextMessage("未找到用户信息")
                                     .send();
@@ -100,7 +99,7 @@ public class InfoService {
                                         coinInt,
                                         personalInfoService.getPersonInfo(target),
                                         randomMessage));
-                        data.getMessageSender(CommandData.getCommandToken())
+                        data.getMessageSender()
                                 .addMessages(builder.build())
                                 .send();
                     })
@@ -108,10 +107,10 @@ public class InfoService {
         } else {
             // 否则显示个人信息
             data.getClient().getTeaNekoToolbox().getPlatformUserGetSender()
-                    .getPlatformUserInfo(CommandData.getCommandToken(), targetId)
+                    .getPlatformUserInfo(targetId)
                     .thenAccept(r -> {
                         if(r == null) {
-                            data.getMessageSender(CommandData.getCommandToken())
+                            data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())
                                     .addTextMessage("未找到用户信息")
                                     .send();
@@ -136,7 +135,7 @@ public class InfoService {
                                         coinInt,
                                         personalInfoService.getPersonInfo(target),
                                         randomMessage));
-                        data.getMessageSender(CommandData.getCommandToken())
+                        data.getMessageSender()
                                 .addMessages(builder.build())
                                 .send();
                     })

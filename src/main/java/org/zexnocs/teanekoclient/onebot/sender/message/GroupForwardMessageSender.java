@@ -63,12 +63,11 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
      * 获取一个新的构造器，用于快速添加新的消息。
      * 不应该在多线程中使用同一个实例。
      *
-     * @param token 发送器发送环境的标识符，例如可以是一个用户 ID，用于标识发送的目标用户
      * @param groupId 群组 ID，表示要发送消息的目标群组
      * @return {@link GroupForwardMessageBuilder }
      */
-    public GroupForwardMessageBuilder getBuilder(String token, long groupId) {
-        return new GroupForwardMessageBuilder(token, groupId);
+    public GroupForwardMessageBuilder getBuilder(long groupId) {
+        return new GroupForwardMessageBuilder(groupId);
     }
 
     /**
@@ -86,9 +85,6 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
 
         /// 消息列表
         private final List<OnebotMessage> messageList = new ArrayList<>();
-
-        /// token
-        private final String token;
 
         /// 外显
         @Setter
@@ -118,9 +114,8 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
         @Setter
         private boolean recordFailed = true;
 
-        public GroupForwardMessageBuilder(String token, long groupId) {
+        public GroupForwardMessageBuilder(long groupId) {
             this.groupId = groupId;
-            this.token = token;
         }
 
         /**
@@ -157,7 +152,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                     .source(source)
                     .summary(summary)
                     .build();
-            var future = GroupForwardMessageSender.this.sendWithFuture(token, data, delay, retryCount, retryInterval);
+            var future = GroupForwardMessageSender.this.sendWithFuture(data, delay, retryCount, retryInterval);
             if(recordFailed) {
                 future = onebotMessageFailSendHandler.recordFailed(GroupForwardMessageSender.class.getSimpleName(),
                         messageList,
@@ -190,7 +185,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                         .source(source)
                         .summary(summary)
                         .build();
-                GroupForwardMessageSender.this.send(token, data, delay, retryCount, retryInterval);
+                GroupForwardMessageSender.this.send(data, delay, retryCount, retryInterval);
             }
         }
 

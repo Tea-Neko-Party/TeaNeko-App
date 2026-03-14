@@ -43,7 +43,7 @@ public class TeaNekoPermissionCommand {
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
             var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                    .getEasyBuilder(CommandData.getCommandToken(), data);
+                    .getEasyBuilder(data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
@@ -60,7 +60,7 @@ public class TeaNekoPermissionCommand {
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
             var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                    .getEasyBuilder(CommandData.getCommandToken(), data);
+                    .getEasyBuilder(data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
@@ -77,7 +77,7 @@ public class TeaNekoPermissionCommand {
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
             var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                    .getEasyBuilder(CommandData.getCommandToken(), data);
+                    .getEasyBuilder(data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }
@@ -94,7 +94,7 @@ public class TeaNekoPermissionCommand {
         var user = iTeaUserService.get(data.getClient(), userId);
         if(user == null) {
             var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
-                    .getEasyBuilder(CommandData.getCommandToken(), data);
+                    .getEasyBuilder(data);
             messageSender.addReplyTextMessage("用户不存在喵").send();
             return;
         }

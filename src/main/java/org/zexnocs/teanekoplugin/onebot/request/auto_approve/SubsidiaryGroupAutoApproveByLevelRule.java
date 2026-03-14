@@ -6,7 +6,6 @@ import org.zexnocs.teanekoclient.onebot.event.request.GroupRequestEvent;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupAddRequestSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.event.core.EventHandler;
@@ -60,7 +59,7 @@ public class SubsidiaryGroupAutoApproveByLevelRule {
                 if(blackList != null && blackList.contains(userId)) {
                     // 如果配置自动拒绝黑名单中的入群申请，则拒绝。
                     if(config.isRejectIfInBlackList()) {
-                        groupAddRequestSender.reject(CommandData.getCommandToken(), flag, config.getRejectReason());
+                        groupAddRequestSender.reject(flag, config.getRejectReason());
                         event.setCancelled(true);
                     }
                     // 否则就不处理，直接返回。
@@ -69,12 +68,12 @@ public class SubsidiaryGroupAutoApproveByLevelRule {
                 // 判断是否在白名单中。
                 var whiteList = config.getWhiteList();
                 if(whiteList != null && whiteList.contains(userId)) {
-                    groupAddRequestSender.approve(CommandData.getCommandToken(), flag);
+                    groupAddRequestSender.approve(flag);
                     event.setCancelled(true);
                     return;
                 }
                 // 从主群中获取该用户信息，审查是否满足自动批准条件。这个是异步的。
-                getGroupMemberInfoSender.get(CommandData.getCommandToken(),
+                getGroupMemberInfoSender.get(
                                 String.valueOf(config.getMainGroupId()),
                                 String.valueOf(userId))
                     .thenAccept(memberInfo -> {
@@ -82,7 +81,7 @@ public class SubsidiaryGroupAutoApproveByLevelRule {
                             // 获取群成员信息失败，例如不在主群中，或者主群配置失败。
                             // 视为不满足自动批准条件。
                             if(config.isRejectIfNotMeetLevel()) {
-                                groupAddRequestSender.reject(CommandData.getCommandToken(),
+                                groupAddRequestSender.reject(
                                         flag, config.getRejectReason());
                                 // 如果配置了人工审核，则将入群申请从人工审核中删除。
                                 groupRequestReviewService.removeRequest(groupId, userId);
@@ -92,7 +91,7 @@ public class SubsidiaryGroupAutoApproveByLevelRule {
                         if(memberInfo.getLevel() == null) {
                             // 如果群成员信息中没有等级字段，视为不满足自动批准条件。
                             if(config.isRejectIfNotMeetLevel()) {
-                                groupAddRequestSender.reject(CommandData.getCommandToken(),
+                                groupAddRequestSender.reject(
                                         flag, config.getRejectReason());
                                 // 如果配置了人工审核，则将入群申请从人工审核中删除。
                                 groupRequestReviewService.removeRequest(groupId, userId);
@@ -101,9 +100,9 @@ public class SubsidiaryGroupAutoApproveByLevelRule {
                         }
                         // 根据群等级判断是否批准入群申请。
                         if(memberInfo.getLevel() >= config.getLevelThreshold()) {
-                            groupAddRequestSender.approve(CommandData.getCommandToken(), flag);
+                            groupAddRequestSender.approve(flag);
                         } else if (config.isRejectIfNotMeetLevel()) {
-                            groupAddRequestSender.reject(CommandData.getCommandToken(), flag, config.getRejectReason());
+                            groupAddRequestSender.reject(flag, config.getRejectReason());
                             // 如果配置了人工审核，则将入群申请从人工审核中删除。
                             groupRequestReviewService.removeRequest(groupId, userId);
                         }

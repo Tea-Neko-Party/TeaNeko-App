@@ -56,7 +56,7 @@ public class DiceCommand {
 
         // 如果解析失败，发送错误消息
         if (diceArray.length != 2) {
-            messageData.getMessageSender(CommandData.getCommandToken())
+            messageData.getMessageSender()
                     .sendReplyMessage(ERROR_MESSAGE);
             return;
         }
@@ -67,7 +67,7 @@ public class DiceCommand {
             int diceMaxValue = Integer.parseInt(diceArray[1]);
             // 如果不为正整数，发送错误消息
             if (diceCount <= 0 || diceMaxValue <= 0) {
-                messageData.getMessageSender(CommandData.getCommandToken())
+                messageData.getMessageSender()
                         .sendReplyMessage(ERROR_MESSAGE);
                 return;
             }
@@ -75,7 +75,7 @@ public class DiceCommand {
                                     diceService));
         } catch (NumberFormatException e) {
             // 解析失败，发送错误消息
-            messageData.getMessageSender(CommandData.getCommandToken())
+            messageData.getMessageSender()
                     .sendReplyMessage(ERROR_MESSAGE);
         }
     }

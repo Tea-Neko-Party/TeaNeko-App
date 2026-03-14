@@ -1,6 +1,5 @@
 package org.zexnocs.teanekoplugin.general.dice.event;
 
-import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekoplugin.general.dice.data.DiceResultData;
 
@@ -30,7 +29,7 @@ public class DiceAfterEvent extends AbstractEvent<DiceResultData> {
         // 获取话术
         var message = _generateDiceMessage(data);
         data.getAttemptDiceData().getMessageData()
-                .getMessageSender(CommandData.getCommandToken())
+                .getMessageSender()
                 .sendReplyMessage(message);
     }
 

@@ -64,12 +64,11 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
     /**
      * 获取消息
      *
-     * @param token     发送器发送环境的标识符
      * @param messageId 消息ID
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link GroupMsgResponseData }>>>
      */
-    public TaskFuture<ITaskResult<ITeaNekoMessageData>> getMsg(String token, String messageId) {
-        return sendWithFuture(token, GetMessageSendParamsData.builder().messageId(Long.parseLong(messageId)).build(),
+    public TaskFuture<ITaskResult<ITeaNekoMessageData>> getMsg(String messageId) {
+        return sendWithFuture(GetMessageSendParamsData.builder().messageId(Long.parseLong(messageId)).build(),
                 Duration.ZERO, 3, Duration.ofMillis(200))
                 // 转化成 result 和 uuid
                 .thenComposeTask(result -> {

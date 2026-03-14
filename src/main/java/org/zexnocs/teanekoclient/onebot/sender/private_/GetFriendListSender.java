@@ -42,12 +42,10 @@ public class GetFriendListSender extends AbstractOnebotSender<GetFriendListParam
     /**
      * 获取好友列表
      *
-     * @param token 发送器发送环境的标识符
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link GetFriendListResponseData }>>>
      */
-    public TaskFuture<ITaskResult<List<GetFriendListResponseData>>> get(String token) {
+    public TaskFuture<ITaskResult<List<GetFriendListResponseData>>> get() {
         return sendWithFuture(
-                token,
                 GetFriendListParamsData.builder().build(),
                 Duration.ZERO,
                 3,

@@ -115,16 +115,6 @@ public class ResponseTest {
         }
 
         /**
-         * 获取发送消息的 token，用于标记不同的消息来源。
-         * <p>如果为 null，则表示通用的消息来源。
-         * <p>如果要解析成 json，需要标注为 {@link JsonIgnore}，以避免被当做发送数据的一部分。
-         */
-        @Override
-        public @Nullable String getSenderToken() {
-            return "";
-        }
-
-        /**
          * 获取解析 response data 的 object mapper
          *
          * <p>如果为 null，则表示使用默认的 object mapper。
