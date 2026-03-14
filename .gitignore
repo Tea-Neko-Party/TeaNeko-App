@@ -39,7 +39,7 @@ out/
 ### application-dev ###
 /src/main/resources/application-dev.properties
 /src/main/java/org/zexnocs/**/test/
-gradle.properties
+.gradle.properties
 
 ### file config ###
 /config/
