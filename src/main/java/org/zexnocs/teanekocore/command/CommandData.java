@@ -24,13 +24,13 @@ public class CommandData<T> {
     /// 指令参数
     private final String[] args;
 
-    /// 指令的实际作用域
+    /// 指令的执行作用域
     private final CommandScope scope;
 
-    /// 指令所属的 client
+    /// 指令的执行所属的 client
     private final Class<? extends ICommandClient> clientClass;
 
-    /// 作用域的 ID。
+    /// 指令的执行作用域的 ID。
     /// 例如如果是群聊，则是 clintId + group@groupId
     /// 如果是私聊，则是 private@userId
     private final String scopeId;

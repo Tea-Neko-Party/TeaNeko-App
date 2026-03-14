@@ -1,13 +1,16 @@
 package org.zexnocs.teanekocore.command;
 
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
+import org.zexnocs.teanekocore.command.event.CommandDispatchEvent;
+import org.zexnocs.teanekocore.command.event.CommandExecuteEvent;
 import org.zexnocs.teanekocore.command.exception.CommandDataTypeMismatchException;
 import org.zexnocs.teanekocore.command.interfaces.*;
+import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.lang.reflect.Method;
@@ -24,6 +27,7 @@ import java.lang.reflect.Method;
  * @since 4.0.0
  */
 @Service
+@RequiredArgsConstructor
 public class CommandDispatcher implements ICommandDispatcher {
     private final ILogger logger;
     private final ICommandPermissionManager permissionManager;
@@ -31,30 +35,26 @@ public class CommandDispatcher implements ICommandDispatcher {
     private final ICommandExecutor commandExecutor;
     private final ICommandArgumentProcessor argumentProcessor;
     private final CommandScanner commandScanner;
-
-    @Autowired
-    public CommandDispatcher(ILogger logger,
-                             ICommandPermissionManager permissionManager,
-                             ICommandScopeManager scopeManager,
-                             ICommandExecutor commandExecutor,
-                             ICommandArgumentProcessor argumentProcessor,
-                             CommandScanner commandScanner) {
-        this.permissionManager = permissionManager;
-        this.scopeManager = scopeManager;
-        this.commandExecutor = commandExecutor;
-        this.commandScanner = commandScanner;
-        this.argumentProcessor = argumentProcessor;
-        this.logger = logger;
-    }
+    private final IEventService iEventService;
 
     /**
-     * 指令调度器。
+     * 指令调度器，先推送事件
+     *
      * @param data 指令数据
      * @param errorHandler 错误处理器
      * @param helpSubCommandHandler 帮助子指令处理器
      */
     @Override
     public void dispatch(@NonNull CommandData<?> data, ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpSubCommandHandler) {
+        // 推送事件
+        iEventService.pushEvent(new CommandDispatchEvent(this, data, errorHandler, helpSubCommandHandler));
+    }
+
+    /**
+     * 实际调度方法，在事件中执行
+     *
+     */
+    public void __dispatchForEvent(@NonNull CommandData<?> data, ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpSubCommandHandler) {
         var commandBody = data.getBody();
         // 首先尝试解析成前缀指令
         var prefixMapData = commandScanner.getPrefixCommand(commandBody);
@@ -224,7 +224,14 @@ public class CommandDispatcher implements ICommandDispatcher {
             return;
         }
         // 执行指令
-        commandExecutor.execute(mapData.getCommand(), commandMethod, args, commandAnnotation.taskNamespace());
+        iEventService.pushEvent(new CommandExecuteEvent(
+                commandExecutor,
+                data,
+                mapData,
+                subCommand.value()[0],
+                commandMethod,
+                args
+        ));
 
         logger.info(this.getClass().getName(), """
                 执行指令 %s 中子指令 %s, 执行ID: %s, 权限: %s / %s"""
@@ -262,7 +269,14 @@ public class CommandDispatcher implements ICommandDispatcher {
             return;
         }
         // 执行指令
-        commandExecutor.execute(mapData.getCommand(), commandMethod, args, commandAnnotation.taskNamespace());
+        iEventService.pushEvent(new CommandExecuteEvent(
+                commandExecutor,
+                data,
+                mapData,
+                null,
+                commandMethod,
+                args
+        ));
 
         logger.info(this.getClass().getName(), """
                 执行指令 %s 中默认指令, 执行ID: %s, 权限: %s / %s"""
@@ -272,4 +286,8 @@ public class CommandDispatcher implements ICommandDispatcher {
                         defaultCommand.permission().equals(CommandPermission.DEFAULT) ?
                                 mapData.getCommandAnnotation().permission() : defaultCommand.permission()));
     }
+
+    /**
+     * 执行指令。
+     */
 }
