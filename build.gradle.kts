@@ -1,44 +1,46 @@
 import com.sun.management.OperatingSystemMXBean
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 import org.springframework.boot.gradle.tasks.run.BootRun
+import se.bjurr.gitchangelog.plugin.gradle.GitChangelogTask
 import java.lang.management.ManagementFactory
+import java.time.LocalDate
 
-// 插件
+// ========= 插件 =========
 plugins {
     java                                                    // 基础插件
     id("org.springframework.boot") version "4.0.3"          // spring boot 插件
     id("io.spring.dependency-management") version "1.1.7"   // spring 依赖管理插件
     id("com.github.ben-manes.versions") version "0.53.0"    // gradle version 插件
+    id("se.bjurr.gitchangelog.git-changelog-gradle-plugin") version "3.1.2" // 根据 git 自动写入 changelog
 }
 
-// 版本信息
+// ========= 版本信息 =========
 val vm = VersionManager(project)
 version = vm.currentVersion.toString()
 
-// 组织信息
+// ========= 组织信息 =========
 group = "org.zExNocs"
 description = "TeaNeko-App 专注于机器人聊天的项目"
 
-// java 版本
+// ========= java 版本 =========
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
-// 配置
+// ========= 编译配置 =========
 configurations {
     compileOnly {
         extendsFrom(configurations.annotationProcessor.get())
     }
 }
 
-// 仓库
+// ========= 仓库与依赖 =========
 repositories {
     mavenCentral()
 }
 
-// 依赖
 dependencies {
     // framework
     // implementation("org.springframework.boot:spring-boot-starter-data-redis")
@@ -66,12 +68,12 @@ dependencies {
     testAnnotationProcessor("org.projectlombok:lombok")
 }
 
-// 主类配置
+// ========= 主类配置 =========
 springBoot {
     mainClass.set("org.zexnocs.teanekoapp.TeaNekoAppApplication")
 }
 
-// 测试配置
+// ========= 测试配置 =========
 tasks.withType<Test> {
     useJUnitPlatform()
 
@@ -89,7 +91,7 @@ tasks.withType<Test> {
 }
 
 // ========== 注册任务 ==========
-
+// -------- versioning and changelog --------
 tasks.register<BumpVersionTask>("bumpMajor") {
     description = "增加主版本号 (major)"
     group = "versioning"
@@ -114,13 +116,92 @@ tasks.register<BumpVersionTask>("bumpPatch") {
     patchInc = true
 }
 
+tasks.register("createGitTag") {
+    group = "versioning"
+    description = "自动根据当前 version 属性打 Git Tag"
+
+    doLast {
+        val currentVersion = project.version.toString()
+        val tagName = "v$currentVersion"
+
+        try {
+            // 使用原生 ProcessBuilder 检查 tag 是否存在
+            val checkProcess = ProcessBuilder("git", "rev-parse", "-q", "--verify", "refs/tags/$tagName")
+                .directory(project.projectDir)
+                .start()
+            checkProcess.waitFor()
+
+            if (checkProcess.exitValue() == 0) {
+                println("⚠️ Tag $tagName 已经存在，跳过创建。")
+            } else {
+                println("📦 正在为当前版本创建 Git Tag: $tagName")
+                // 使用原生 ProcessBuilder 创建 tag
+                val tagProcess = ProcessBuilder("git", "tag", "-a", tagName, "-m", "Release version $tagName")
+                    .directory(project.projectDir)
+                    .start()
+                tagProcess.waitFor()
+
+                if (tagProcess.exitValue() == 0) {
+                    println("✅ Tag $tagName 创建成功！记得 push 代码时带上 tag。")
+                } else {
+                    val errorMsg = tagProcess.errorStream.bufferedReader().readText()
+                    println("❌ 创建 Tag 失败: $errorMsg")
+                }
+            }
+        } catch (e: Exception) {
+            println("❌ 执行 Git 命令失败，请确认环境: ${e.message}")
+        }
+    }
+}
+
+tasks.register<GitChangelogTask>("generateGitChangelog") {
+    group = "changelog"
+    description = "Generate changelog for the current version only"
+
+    file.set(File(project.projectDir, "docs/changelog/${project.version}.md"))
+
+    // 动态获取上一个 Git Tag 作为起点
+    fromRevision.set(project.provider {
+        try {
+            // 使用原生 ProcessBuilder 获取上一个 tag
+            val process = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
+                .directory(project.projectDir)
+                .start()
+
+            // 读取标准输出
+            val output = process.inputStream.bufferedReader().readText().trim()
+            process.waitFor()
+
+            if (process.exitValue() == 0) output else ""
+        } catch (_: Exception) {
+            "" // 如果报错（比如没有任何 tag），就返回空，让插件从头开始抓取
+        }
+    })
+
+    toRevision.set("HEAD")
+
+    // 过滤掉没意义的提交（基于约定式提交规范）
+    ignoreCommitsIfMessageMatches.set("^chore:.*|^test:.*|^style:.*|^build:.*|^Merge.*")
+
+    templateContent.set("""
+        # [${project.version}] - ${LocalDate.now()}
+        
+        ### 更新内容
+        {{#commits}}
+        * `{{shortHash}}` {{messageTitle}} - *{{authorName}}*
+        {{/commits}}
+    """.trimIndent())
+}
+
+// --------- file config 模板任务 ---------
 tasks.register<CopyConfigToTemplates>("copyConfigToTemplates")
 
 tasks.register<CopyTemplatesToConfig>("copyTemplatesToConfig")
 
+// --------- 其他配置 ---------
+
 tasks {
     // ========= bootRun 配置 =========
-
     withType<BootRun> {
         // 注入版本号
         systemProperty("version", project.version.toString())
