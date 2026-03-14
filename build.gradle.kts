@@ -188,7 +188,7 @@ tasks.register<GitChangelogTask>("generateGitChangelog") {
         
         ### 更新内容
         {{#commits}}
-        * `{{shortHash}}` {{messageTitle}} - *{{authorName}}*
+        * [{{authorName}}] - {{messageTitle}} - `{{hash}}`
         {{/commits}}
     """.trimIndent())
 }
