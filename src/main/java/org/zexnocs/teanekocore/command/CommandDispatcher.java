@@ -286,8 +286,4 @@ public class CommandDispatcher implements ICommandDispatcher {
                         defaultCommand.permission().equals(CommandPermission.DEFAULT) ?
                                 mapData.getCommandAnnotation().permission() : defaultCommand.permission()));
     }
-
-    /**
-     * 执行指令。
-     */
 }
