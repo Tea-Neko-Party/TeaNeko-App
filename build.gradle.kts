@@ -155,7 +155,7 @@ tasks.register("createGitTag") {
 }
 
 tasks.register<GitChangelogTask>("generateGitChangelog") {
-    group = "changelog"
+    group = "versioning"
     description = "Generate changelog for the current version only"
 
     file.set(File(project.projectDir, "docs/changelog/${project.version}.md"))
