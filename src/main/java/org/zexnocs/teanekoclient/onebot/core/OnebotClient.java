@@ -14,6 +14,7 @@ import org.zexnocs.teanekoapp.response.ResponseEvent;
 import org.zexnocs.teanekoclient.onebot.data.response.OnebotRawResponseData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekoclient.onebot.event.PostReceiveEvent;
+import org.zexnocs.teanekoclient.onebot.event.teaneko.OnebotConnectEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -75,6 +76,7 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient {
                 session, 10000, 5 * 1024 * 1024);
 
         sessions.put(safeSession.getId(), safeSession);
+        eventService.pushEvent(new OnebotConnectEvent(safeSession.getId()));
         logger.info(TAG, "连接新的 session: %s。总连接个数: %d".formatted(safeSession.getId(), sessions.size()));
     }
 

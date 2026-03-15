@@ -2,7 +2,7 @@ package org.zexnocs.teanekoplugin.onebot;
 
 import lombok.RequiredArgsConstructor;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
-import org.zexnocs.teanekoclient.onebot.event.notice.BotOnlineNoticeEvent;
+import org.zexnocs.teanekoclient.onebot.event.teaneko.OnebotConnectEvent;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupListSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
@@ -41,7 +41,7 @@ public class BotLoginService {
      * @param event 事件
      */
     @EventHandler
-    public void onBotLogin(BotOnlineNoticeEvent event) {
+    public void onBotLogin(OnebotConnectEvent event) {
         getGroupListSender.get()
             .thenAccept(result -> {
                if(!result.isSuccess()) {

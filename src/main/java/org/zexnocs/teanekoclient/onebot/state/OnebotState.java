@@ -31,4 +31,12 @@ public enum OnebotState implements IState {
      */
     @JsonProperty("debug")
     DEBUG,
+
+    /**
+     * LLM 状态；
+     * 允许 LLM 对话；
+     * 除了 debugger 以外不允许使用指令。
+     */
+    @JsonProperty("llm")
+    LLM,
 }
