@@ -14,6 +14,8 @@ import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.logger.ILogger;
 
+import java.time.Duration;
+
 /**
  * 当 bot 上线时进行喊话
  *
@@ -57,6 +59,7 @@ public class BotLoginService {
                        var message = config.getValue();
                        if (message != null && !message.isBlank()) {
                            groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(groupId))
+                                   .setDelay(Duration.ofSeconds(2))
                                    .sendTextMessage(message);
                        }
                    });
