@@ -3,13 +3,12 @@ package org.zexnocs.teanekoclient.onebot.utils;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
-import org.zexnocs.teanekoclient.onebot.config.OnebotMainFileConfig;
+import org.zexnocs.teanekoclient.onebot.core.OnebotDebuggerService;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageData;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
-import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
@@ -40,7 +39,7 @@ public enum OnebotMessageDataConvertUtils {
                                    UUID uuid) {
         // 构造 teaNekoData，使用 onebotData 中的字段进行转换
         var userData = getTeaNekoUserData(onebotData, getTeaNekoMessageType(onebotData),
-                uuid, eventShareComponent.iFileConfigService);
+                uuid, eventShareComponent.onebotDebuggerService);
         var messageType = getTeaNekoMessageType(onebotData);
         var client = eventShareComponent.onebotTeaNekoClient;
         return OnebotMessageData.builder()
@@ -89,14 +88,14 @@ public enum OnebotMessageDataConvertUtils {
     public TeaNekoUserData getTeaNekoUserData(OnebotRawMessageData onebotData,
                                               TeaNekoMessageType teaNekoMessageType,
                                               UUID uuid,
-                                              IFileConfigService fileConfigService) {
+                                              OnebotDebuggerService debuggerService) {
         var senderData = onebotData.getSender();
         var nickname = senderData.getNickname() == null ? "user" : senderData.getNickname();
         return TeaNekoUserData.builder()
                 .uuid(uuid)
                 .userIdInPlatform(String.valueOf(onebotData.getUserId()))
                 .nickname(nickname)
-                .role(getCommandPermission(teaNekoMessageType, senderData, fileConfigService))
+                .role(getCommandPermission(teaNekoMessageType, senderData, debuggerService))
                 .groupId(String.valueOf(onebotData.getGroupId()))
                 .build();
     }
@@ -110,10 +109,9 @@ public enum OnebotMessageDataConvertUtils {
      */
     public @NonNull CommandPermission getCommandPermission(TeaNekoMessageType teaNekoMessageType,
                                                            OnebotSenderData senderData,
-                                                           IFileConfigService fileConfigService) {
+                                                           OnebotDebuggerService debuggerService) {
         // 判断是否是 debug
-        var config = fileConfigService.get(OnebotMainFileConfig.class);
-        if(config.getDebugger().getDebuggerId() == senderData.getUserId()) {
+        if(debuggerService.isDebugger(senderData.getUserId())) {
             return CommandPermission.DEBUG;
         }
 

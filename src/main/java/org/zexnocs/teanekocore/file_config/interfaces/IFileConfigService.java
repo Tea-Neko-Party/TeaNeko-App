@@ -9,6 +9,8 @@ import java.io.IOException;
 
 /**
  * 使用 {@link IFileConfigData} 的类来获取实例。
+ * <br>如果要在构造器里寻找 config，需要依赖类 {@link org.zexnocs.teanekocore.reload.interfaces.IReloadService}
+ * <br>或者使用 {@code @EventListener(ApplicationReadyEvent.class)}
  *
  * @see IFileConfigData
  * @author zExNocs

@@ -66,6 +66,10 @@ public class SenderService implements ISenderService {
             // 如果 echo 不是一个合法的 UUID，则生成一个新的 UUID 作为 key
             key = UUID.randomUUID();
         }
+        // 如果是 sent event，则设置 key
+        if(event instanceof SentEvent<?> sentEvent) {
+            sentEvent.setTaskKey(key);
+        }
         // 注册到 ResponseService 中
         iResponseService.register(echo, key, sendData);
 

@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.command.TeaNekoCommandConverter;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
+import org.zexnocs.teanekoclient.onebot.core.OnebotDebuggerService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekocore.event.core.EventScanner;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
@@ -45,6 +46,9 @@ public class OnebotEventShareComponent {
     /// file config service
     public final IFileConfigService iFileConfigService;
 
+    /// debugger service
+    public final OnebotDebuggerService onebotDebuggerService;
+
     @Autowired
     public OnebotEventShareComponent(ILogger logger,
                                      EventScanner eventScanner,
@@ -53,7 +57,8 @@ public class OnebotEventShareComponent {
                                      ITeaUserService iTeaUserService,
                                      IEventService iEventService,
                                      TeaNekoCommandConverter teaNekoCommandConverter,
-                                     IFileConfigService iFileConfigService) {
+                                     IFileConfigService iFileConfigService,
+                                     OnebotDebuggerService onebotDebuggerService) {
         this.logger = logger;
         this.eventScanner = eventScanner;
         this.objectMapper = customObjectMapper;
@@ -62,5 +67,6 @@ public class OnebotEventShareComponent {
         this.iEventService = iEventService;
         this.teaNekoCommandConverter = teaNekoCommandConverter;
         this.iFileConfigService = iFileConfigService;
+        this.onebotDebuggerService = onebotDebuggerService;
     }
 }

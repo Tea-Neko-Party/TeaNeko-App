@@ -6,6 +6,8 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 import org.zexnocs.teanekoclient.onebot.data.send.OnebotSendData;
+import org.zexnocs.teanekocore.actuator.task.TaskResult;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 
 /**
  * 发送 onebot message 事件
@@ -35,5 +37,16 @@ public class OnebotMessageSentEvent<S extends ISendParamsData<OnebotMessageSendR
         super(data);
         this.token = token;
         this.messageData = messageData;
+    }
+
+    /**
+     * 安全地设置事件被取消
+     *
+     * @param taskService 用于取消事件监听。
+     */
+    public void safeSetCancelled(ITaskService taskService) {
+        setCancelled(true);
+        // 使用一个假的 result 完成
+        taskService.complete(getTaskKey(), new TaskResult<>(true ,null));
     }
 }

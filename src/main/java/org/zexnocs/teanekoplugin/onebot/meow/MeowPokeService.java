@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoplugin.onebot.meow;
 
+import lombok.RequiredArgsConstructor;
 import org.zexnocs.teanekoclient.onebot.event.notice.NotifyNoticeReceiveEvent;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.PrivateMessageSender;
+import org.zexnocs.teanekoclient.onebot.state.OnebotStateMachine;
 import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
@@ -16,18 +18,18 @@ import org.zexnocs.teanekocore.event.core.EventListener;
  * @since 4.1.0
  */
 @EventListener
+@RequiredArgsConstructor
 public class MeowPokeService {
 
     private final PrivateMessageSender privateMessageSender;
     private final GroupMessageSender groupMessageSender;
-
-    public MeowPokeService(PrivateMessageSender privateMessageSender, GroupMessageSender groupMessageSender) {
-        this.privateMessageSender = privateMessageSender;
-        this.groupMessageSender = groupMessageSender;
-    }
+    private final OnebotStateMachine onebotStateMachine;
 
     @EventHandler
     public void handle(NotifyNoticeReceiveEvent event) {
+        if(doNotHandle()) {
+            return;
+        }
         var data = event.getData();
         if (data.getTargetID() == data.getSelfID()) {
             if(data.getGroupID() != 0) {
@@ -40,5 +42,16 @@ public class MeowPokeService {
                         .sendTextMessage("喵呜~");
             }
         }
+    }
+
+    /**
+     * 是否要处理
+     *
+     */
+    private boolean doNotHandle() {
+        return switch (onebotStateMachine.getCurrentState()) {
+            case DEFAULT -> false;
+            default -> true;
+        };
     }
 }

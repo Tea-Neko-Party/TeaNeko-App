@@ -78,14 +78,41 @@ public interface ITeaNekoMessageData {
     /**
      * 快速获取一个消息发送器构建器，使用当前消息数据作为上下文。
      *
+     * @param token 发送器环境
      * @return 消息发送器构建器
      */
     @NonNull
+    default IEasyMessageSenderBuilder getMessageSender(String token) {
+        return getClient()
+                .getTeaNekoToolbox()
+                .getMessageSenderTools()
+                .getEasyBuilder(token, this);
+    }
+
+    /**
+     * 使用默认 token 构造一个消息发送器构建器。
+     *
+     * @return {@link IEasyMessageSenderBuilder }
+     */
     default IEasyMessageSenderBuilder getMessageSender() {
         return getClient()
                 .getTeaNekoToolbox()
                 .getMessageSenderTools()
                 .getEasyBuilder(this);
+    }
+
+    /**
+     * 快速获取一个 forward 消息发送器构建器，使用当前消息数据作为上下文。
+     *
+     * @param token 发送器环境
+     * @return forward 消息发送器构建器
+     */
+    @NonNull
+    default IForwardMessageSenderBuilder getForwardMessageSender(String token) {
+        return getClient()
+                .getTeaNekoToolbox()
+                .getMessageSenderTools()
+                .getForwardBuilder(token, this);
     }
 
     /**

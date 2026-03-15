@@ -1,8 +1,12 @@
 package org.zexnocs.teanekoapp.sender;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import org.zexnocs.teanekocore.event.AbstractEvent;
+
+import java.util.UUID;
 
 /**
  * 用于发送消息的事件类。
@@ -12,6 +16,12 @@ import org.zexnocs.teanekocore.event.AbstractEvent;
  * @since 4.0.8
  */
 public class SentEvent<T extends ISendData<?>> extends AbstractEvent<T> {
+
+    /// 注册到 task 的 key
+    @Setter
+    @Getter
+    private UUID taskKey;
+
     /**
      * 事件的构造函数。
      *

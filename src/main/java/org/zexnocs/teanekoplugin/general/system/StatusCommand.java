@@ -28,7 +28,7 @@ import java.time.Duration;
  * @since 4.1.0
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
-@Command(value = {"/status", "/状态"},
+@Command(value = {"/status"},
         permission = CommandPermission.ALL,
         scope = CommandScope.ALL)
 public class StatusCommand {

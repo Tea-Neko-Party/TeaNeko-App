@@ -168,7 +168,9 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
             }
             return future.thenApply(r -> {
                 if(r.isSuccess()) {
-                    return r.getResult().getFirst();
+                    var resultData = r.getResult();
+                    return resultData == null ? null :
+                            (resultData.isEmpty() ? null : resultData.getFirst());
                 } else {
                     return null;
                 }
