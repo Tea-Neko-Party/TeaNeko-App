@@ -1,6 +1,16 @@
 ---
-# OneBot debugger 配置
+# Onebot 配置文件
+## OneBot debugger 配置
 debugger:
-  # debugger 的 qq 号
-  # 默认为 -1，表示没有 debugger
+  ### debugger 的 qq 号
+  ### 默认为 -1，表示没有 debugger
   debugger-id: -1
+
+## Onebot state 配置
+state:
+  ### 初始状态
+  ### 支持的状态有：
+  ### - default: 默认状态，打开所有的 command、sender 发送器
+  ### - stop: 停止状态，只有切换状态的指令允许使用，其他状态和发送器停止使用
+  ### - debug: 只允许 debugger 使用指令和发送器，其他用户无法使用指令和发送器
+  initial-state: "default"

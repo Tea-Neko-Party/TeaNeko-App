@@ -9,6 +9,7 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.StringDefaultConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
+import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -55,7 +56,7 @@ public class BotLoginService {
                    .ifPresent(config -> {
                        var message = config.getValue();
                        if (message != null && !message.isBlank()) {
-                           groupMessageSender.getBuilder(String.valueOf(groupId))
+                           groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(groupId))
                                    .sendTextMessage(message);
                        }
                    });

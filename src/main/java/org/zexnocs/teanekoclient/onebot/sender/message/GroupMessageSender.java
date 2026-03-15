@@ -8,7 +8,6 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
@@ -17,15 +16,14 @@ import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupMsgSendParamsData;
+import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * 群消息发送器，负责发送群消息。
@@ -58,35 +56,12 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
     }
 
     /**
-     * 发送群消息
-     *
-     * @param messageList   消息列表
-     * @param groupId       群号
-     * @param delay         发送延迟
-     * @param maxRetryCount 最大重试次数
-     * @param retryDelay    重试间隔
-     * @return 发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
-     */
-    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(List<ITeaNekoMessage> messageList,
-                                                                                    String groupId,
-                                                                                    Duration delay,
-                                                                                    int maxRetryCount,
-                                                                                    Duration retryDelay) {
-        return sendWithFuture(
-                GroupMsgSendParamsData.builder()
-                        .groupId(Long.parseLong(groupId))
-                        .messageList(messageList)
-                        .build(),
-                delay, maxRetryCount, retryDelay);
-    }
-
-    /**
      * 使用 {@link ITeaNekoMessageData} 获取一个 {@link GroupEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
      * @param data 要回复的消息数据
      */
-    public GroupEasyMessageSenderBuilder getBuilder(@NonNull ITeaNekoMessageData data) {
-        return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data);
+    public GroupEasyMessageSenderBuilder getBuilder(String token, @NonNull ITeaNekoMessageData data) {
+        return new GroupEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), data);
     }
 
     /**
@@ -94,8 +69,8 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
      *
      * @param groupId 要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
      */
-    public GroupEasyMessageSenderBuilder getBuilder(String groupId) {
-        return new GroupEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), groupId);
+    public GroupEasyMessageSenderBuilder getBuilder(String token, String groupId) {
+        return new GroupEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), groupId);
     }
 
     /**
@@ -107,6 +82,8 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
      */
     @Accessors(chain = true)
     public class GroupEasyMessageSenderBuilder implements IEasyMessageSenderBuilder {
+        /// 发送器所处的环境
+        private final String token;
 
         /// 消息构建器
         @Getter
@@ -142,11 +119,13 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
          */
-        public GroupEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+        public GroupEasyMessageSenderBuilder(String token,
+                                             ITeaNekoMessageListBuilder messageListBuilder,
                                              @NonNull ITeaNekoMessageData repliedData) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
             this.groupId = repliedData.getUserData().getGroupId();
+            this.token = token;
         }
 
         /**
@@ -155,11 +134,13 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param groupId            要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
          */
-        public GroupEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+        public GroupEasyMessageSenderBuilder(String token,
+                                             ITeaNekoMessageListBuilder messageListBuilder,
                                              String groupId) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = null;
             this.groupId = groupId;
+            this.token = token;
         }
 
 
@@ -174,13 +155,14 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
         @Override
         public TaskFuture<? extends IMessageSendResponseData> sendWithFuture() {
             var messages = messageListBuilder.build();
-            var future = GroupMessageSender.this.sendMessage(
-                    messages,
-                    this.groupId,
-                    delay,
-                    retryCount,
-                    retryInterval
-            );
+            var paramsData = GroupMsgSendParamsData.builder()
+                    .groupId(Long.parseLong(groupId))
+                    .messageList(messages)
+                    .build();
+            var sendData = buildSendData(paramsData);
+            var future = GroupMessageSender.this.sendWithFuture(
+                    new OnebotMessageSentEvent<>(token, sendData, repliedData),
+                    delay, retryCount, retryInterval);
             if(recordFailed) {
                 future = onebotMessageFailSendHandler.recordFailed(GroupMessageSender.class.getSimpleName(), messages, future);
             }

@@ -3,6 +3,7 @@ package org.zexnocs.teanekoplugin.onebot.meow;
 import org.zexnocs.teanekoclient.onebot.event.notice.NotifyNoticeReceiveEvent;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.PrivateMessageSender;
+import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -30,10 +31,12 @@ public class MeowPokeService {
         var data = event.getData();
         if (data.getTargetID() == data.getSelfID()) {
             if(data.getGroupID() != 0) {
-                groupMessageSender.getBuilder(String.valueOf(data.getGroupID()))
+                groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(),
+                                String.valueOf(data.getGroupID()))
                         .sendTextMessage("喵呜~");
             } else {
-                privateMessageSender.getBuilder(String.valueOf(data.getUserID()))
+                privateMessageSender.getBuilder(AbstractEvent.getTokenForSender(),
+                                String.valueOf(data.getUserID()))
                         .sendTextMessage("喵呜~");
             }
         }

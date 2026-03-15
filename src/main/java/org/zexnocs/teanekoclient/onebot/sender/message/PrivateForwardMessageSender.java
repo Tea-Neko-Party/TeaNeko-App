@@ -2,10 +2,12 @@ package org.zexnocs.teanekoclient.onebot.sender.message;
 
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContent;
 import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
@@ -16,6 +18,7 @@ import org.zexnocs.teanekoclient.onebot.core.OnebotIdService;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.PrivateForwardMessageSendParamsData;
+import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -66,11 +69,22 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * 获取一个新的构造器，用于快速添加新的消息。
      * 不应该在多线程中使用同一个实例。
      *
+     * @param data 要回复的消息数据
+     * @return {@link PrivateForwardMessageBuilder }
+     */
+    public PrivateForwardMessageBuilder getBuilder(String token, ITeaNekoMessageData data) {
+        return new PrivateForwardMessageBuilder(token, data);
+    }
+
+    /**
+     * 获取一个新的构造器，用于快速添加新的消息。
+     * 不应该在多线程中使用同一个实例。
+     *
      * @param userId 用户 ID，表示要发送消息的目标用户
      * @return {@link PrivateForwardMessageBuilder }
      */
-    public PrivateForwardMessageBuilder getBuilder(long userId) {
-        return new PrivateForwardMessageBuilder(userId);
+    public PrivateForwardMessageBuilder getBuilder(String token, long userId) {
+        return new PrivateForwardMessageBuilder(token, userId);
     }
 
     /**
@@ -83,6 +97,12 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      */
     @Accessors(chain = true)
     public class PrivateForwardMessageBuilder implements IForwardMessageSenderBuilder {
+        /// 发送区域
+        private final String token;
+
+        /// tea neko data
+        private final ITeaNekoMessageData messageData;
+
         /// 用户 id
         private final long userId;
 
@@ -117,8 +137,16 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
         @Setter
         private boolean recordFailed = true;
 
-        public PrivateForwardMessageBuilder(long userId) {
+        public PrivateForwardMessageBuilder(String token, long userId) {
             this.userId = userId;
+            this.token = token;
+            this.messageData = null;
+        }
+
+        public PrivateForwardMessageBuilder(String token, @NonNull ITeaNekoMessageData messageData) {
+            this.userId = Long.parseLong(messageData.getUserData().getUserIdInPlatform());
+            this.token = token;
+            this.messageData = messageData;
         }
 
         /**
@@ -155,7 +183,10 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
                     .source(source)
                     .summary(summary)
                     .build();
-            var future = PrivateForwardMessageSender.this.sendWithFuture(data, delay, retryCount, retryInterval);
+            var sendData = PrivateForwardMessageSender.this.buildSendData(data);
+            var future = PrivateForwardMessageSender.this.sendWithFuture(
+                    new OnebotMessageSentEvent<>(token, sendData, messageData),
+                    delay, retryCount, retryInterval);
             if(recordFailed) {
                 future = onebotMessageFailSendHandler.recordFailed(PrivateForwardMessageSender.class.getSimpleName(),
                         messageList,
@@ -188,7 +219,10 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
                         .source(source)
                         .summary(summary)
                         .build();
-                PrivateForwardMessageSender.this.send(data, delay, retryCount, retryInterval);
+                var sendData = PrivateForwardMessageSender.this.buildSendData(data);
+                PrivateForwardMessageSender.this.send(
+                        new OnebotMessageSentEvent<>(token, sendData, messageData),
+                        delay, retryCount, retryInterval);
             }
         }
 

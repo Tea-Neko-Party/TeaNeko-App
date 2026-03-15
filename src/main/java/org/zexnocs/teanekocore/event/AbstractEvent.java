@@ -86,4 +86,13 @@ public abstract class AbstractEvent<T> implements IEvent<T> {
     public boolean getAndSetCancelled(boolean cancelled) {
         return isCancelled.getAndSet(cancelled);
     }
+
+    /**
+     * 获取事件环境下的发送器的 token。
+     *
+     * @return token
+     */
+    public static String getTokenForSender() {
+        return "event";
+    }
 }

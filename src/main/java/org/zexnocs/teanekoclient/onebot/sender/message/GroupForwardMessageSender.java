@@ -2,10 +2,13 @@ package org.zexnocs.teanekoclient.onebot.sender.message;
 
 import lombok.Setter;
 import lombok.experimental.Accessors;
+import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContent;
 import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
@@ -16,6 +19,7 @@ import org.zexnocs.teanekoclient.onebot.core.OnebotIdService;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupForwardMessageSendParamsData;
+import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -24,6 +28,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 群转发消息发送器
@@ -58,6 +63,16 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
         this.onebotIdService = onebotIdService;
     }
 
+    /**
+     * 获取一个新的构造器，用于快速添加新的消息。
+     * 不应该在多线程中使用同一个实例。
+     *
+     * @param data 要回复的消息数据
+     * @return {@link GroupForwardMessageBuilder }
+     */
+    public GroupForwardMessageBuilder getBuilder(String token, @NonNull ITeaNekoMessageData data) {
+        return new GroupForwardMessageBuilder(token, data);
+    }
 
     /**
      * 获取一个新的构造器，用于快速添加新的消息。
@@ -66,8 +81,8 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
      * @param groupId 群组 ID，表示要发送消息的目标群组
      * @return {@link GroupForwardMessageBuilder }
      */
-    public GroupForwardMessageBuilder getBuilder(long groupId) {
-        return new GroupForwardMessageBuilder(groupId);
+    public GroupForwardMessageBuilder getBuilder(String token, long groupId) {
+        return new GroupForwardMessageBuilder(token, groupId);
     }
 
     /**
@@ -80,6 +95,13 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
      */
     @Accessors(chain = true)
     public class GroupForwardMessageBuilder implements IForwardMessageSenderBuilder {
+        /// 发送区域
+        private final String token;
+
+        /// tea neko data
+        @Nullable
+        private final ITeaNekoMessageData messageData;
+
         /// 用户 id
         private final long groupId;
 
@@ -114,8 +136,16 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
         @Setter
         private boolean recordFailed = true;
 
-        public GroupForwardMessageBuilder(long groupId) {
+        public GroupForwardMessageBuilder(String token, long groupId) {
+            this.token = token;
             this.groupId = groupId;
+            this.messageData = null;
+        }
+
+        public GroupForwardMessageBuilder(String token, @NonNull ITeaNekoMessageData messageData) {
+            this.token = token;
+            this.groupId = Long.parseLong(Objects.requireNonNull(messageData.getUserData().getGroupId()));
+            this.messageData = messageData;
         }
 
         /**
@@ -152,7 +182,10 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                     .source(source)
                     .summary(summary)
                     .build();
-            var future = GroupForwardMessageSender.this.sendWithFuture(data, delay, retryCount, retryInterval);
+            var sendData = GroupForwardMessageSender.this.buildSendData(data);
+            var future = GroupForwardMessageSender.this.sendWithFuture(
+                    new OnebotMessageSentEvent<>(token, sendData, messageData),
+                    delay, retryCount, retryInterval);
             if(recordFailed) {
                 future = onebotMessageFailSendHandler.recordFailed(GroupForwardMessageSender.class.getSimpleName(),
                         messageList,
@@ -185,7 +218,10 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                         .source(source)
                         .summary(summary)
                         .build();
-                GroupForwardMessageSender.this.send(data, delay, retryCount, retryInterval);
+                var sendData = GroupForwardMessageSender.this.buildSendData(data);
+                GroupForwardMessageSender.this.send(
+                        new OnebotMessageSentEvent<>(token, sendData, messageData),
+                        delay, retryCount, retryInterval);
             }
         }
 

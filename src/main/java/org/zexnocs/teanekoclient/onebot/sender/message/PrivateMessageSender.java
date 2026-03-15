@@ -8,7 +8,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
@@ -17,15 +16,14 @@ import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.PrivateMsgSendParamsData;
+import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.List;
 
 /**
  * 符合 Onebot 协议的私聊消息发送器，负责发送私聊消息。
@@ -56,37 +54,13 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
         this.onebotMessageFailSendHandler = onebotMessageFailSendHandler;
     }
 
-
-    /**
-     * 发送私聊信息
-     *
-     * @param messageList   消息列表
-     * @param userId        用户 ID
-     * @param delay         发送延迟
-     * @param maxRetryCount 最大重试次数
-     * @param retryDelay    重试间隔
-     * @return 发送结果的 future，可以通过该 future 来获取发送结果或者进行后续操作
-     */
-    public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> sendMessage(List<? extends ITeaNekoMessage> messageList,
-                                                                                    String userId,
-                                                                                    Duration delay,
-                                                                                    int maxRetryCount,
-                                                                                    Duration retryDelay) {
-        return sendWithFuture(
-                PrivateMsgSendParamsData.builder()
-                        .userId(Long.parseLong(userId))
-                        .messageList(messageList)
-                        .build(),
-                delay, maxRetryCount, retryDelay);
-    }
-
     /**
      * 根据 {@link ITeaNekoMessageData} 获取一个 {@link PrivateEasyMessageSenderBuilder}，用于构建一般 message 信息并发送。
      *
      * @param data 要回复的消息数据
      */
-    public PrivateEasyMessageSenderBuilder getBuilder(ITeaNekoMessageData data) {
-        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), data);
+    public PrivateEasyMessageSenderBuilder getBuilder(String token, ITeaNekoMessageData data) {
+        return new PrivateEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), data);
     }
 
     /**
@@ -94,8 +68,8 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      *
      * @param userId 用户 ID，用于发送消息
      */
-    public PrivateEasyMessageSenderBuilder getBuilder(String userId) {
-        return new PrivateEasyMessageSenderBuilder(OnebotMessageListBuilder.builder(), userId);
+    public PrivateEasyMessageSenderBuilder getBuilder(String token, String userId) {
+        return new PrivateEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), userId);
     }
 
     /**
@@ -107,6 +81,8 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      */
     @Accessors(chain = true)
     public class PrivateEasyMessageSenderBuilder implements IEasyMessageSenderBuilder {
+        /// 发送器所处的环境
+        private final String token;
 
         /// 消息构建器
         @Getter
@@ -142,11 +118,13 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
          */
-        public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+        public PrivateEasyMessageSenderBuilder(String token,
+                                               ITeaNekoMessageListBuilder messageListBuilder,
                                                @NonNull ITeaNekoMessageData repliedData) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
             this.userId = repliedData.getUserData().getUserIdInPlatform();
+            this.token = token;
         }
 
         /**
@@ -155,11 +133,13 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          * @param messageListBuilder 消息列表构建器，用于构建要发送的消息列表
          * @param userId             用户 ID，用于发送消息
          */
-        public PrivateEasyMessageSenderBuilder(ITeaNekoMessageListBuilder messageListBuilder,
+        public PrivateEasyMessageSenderBuilder(String token,
+                                               ITeaNekoMessageListBuilder messageListBuilder,
                                                String userId) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = null;
             this.userId = userId;
+            this.token = token;
         }
 
 
@@ -174,13 +154,16 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
         @Override
         public TaskFuture<? extends IMessageSendResponseData> sendWithFuture() {
             var messages = messageListBuilder.build();
-            var future = PrivateMessageSender.this.sendMessage(
-                    messages,
-                    userId,
-                    delay,
-                    retryCount,
-                    retryInterval
-            );
+            var paramsData = PrivateMsgSendParamsData.builder()
+                    .userId(Long.parseLong(userId))
+                    .messageList(messages)
+                    .build();
+            var sendData = buildSendData(paramsData);
+
+            var future = PrivateMessageSender.this.sendWithFuture(
+                    new OnebotMessageSentEvent<>(token, sendData, repliedData),
+                    delay, retryCount, retryInterval);
+
             if(recordFailed) {
                 future = onebotMessageFailSendHandler
                         .recordFailed(GroupMessageSender.class.getSimpleName(), messages, future);

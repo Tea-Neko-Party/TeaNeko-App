@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp.sender.api;
 
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.event.interfaces.IEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -9,6 +10,7 @@ import java.util.List;
 /**
  * 发送器接口，用于定义发送器的基本功能和行为。
  * <p>发送器负责将数据转化成 {@link ISendData} 推送给 {@link org.zexnocs.teanekoapp.sender.interfaces.ISenderService}。
+ * <br>4.3.2: 新增允许自定义事件发送
  *
  * @see ISendData
  * @see org.zexnocs.teanekoapp.sender.interfaces.ISenderService
@@ -17,6 +19,7 @@ import java.util.List;
  * @author zExNocs
  * @date 2026/02/24
  * @since 4.0.9
+ * @version 4.3.2
  */
 public interface ISender<S extends ISendData<R>, R> {
     /**
@@ -31,42 +34,6 @@ public interface ISender<S extends ISendData<R>, R> {
     TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendData, Duration delay, int maxRetryCount, Duration retryDelay);
 
     /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 不进行重试，默认重试次数为 0。
-     *
-     * @param sendData      要发送的数据
-     * @param delay         发送延迟的时间
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>
-     */
-    default TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendData, Duration delay) {
-        return sendWithFuture(sendData, delay, 0, Duration.ZERO);
-    }
-
-    /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 默认不 delay、不进行重试，默认重试次数为 0。
-     *
-     * @param sendData      要发送的数据
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>
-     */
-    default TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendData) {
-        return sendWithFuture(sendData, Duration.ZERO, 0, Duration.ZERO);
-    }
-
-    /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 默认不 delay>
-     *
-     * @param sendData      要发送的数据
-     * @param maxRetryCount 最大重试次数
-     * @param retryDelay    重试延迟的时间
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>
-     */
-    default TaskFuture<ITaskResult<List<R>>> sendWithFuture(S sendData, int maxRetryCount, Duration retryDelay) {
-        return sendWithFuture(sendData, Duration.ZERO, maxRetryCount, retryDelay);
-    }
-
-    /**
      * 发送信息，不返回 future，适用于不需要处理响应信息的场景。
      *
      * @param sendData 要发送的数据
@@ -79,37 +46,27 @@ public interface ISender<S extends ISendData<R>, R> {
                 .finish();
     }
 
-
     /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 不进行重试，默认重试次数为 0。
+     * 使用自定义事件发送信息，并返回 future 来允许处理响应信息。
      *
-     * @param sendData      要发送的数据
+     * @param event         要发送的数据事件
      * @param delay         发送延迟的时间
+     * @param maxRetryCount 最大重试次数
+     * @param retryDelay    重试延迟的时间
+     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>
      */
-    default void send(S sendData, Duration delay) {
-        send(sendData, delay, 0, Duration.ZERO);
-    }
+    TaskFuture<ITaskResult<List<R>>> sendWithFuture(IEvent<S> event, Duration delay, int maxRetryCount, Duration retryDelay);
 
     /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 默认不 delay、不进行重试，默认重试次数为 0。
+     * 使用自定义事件发送信息，不返回 future，适用于不需要处理响应信息的场景。
      *
-     * @param sendData      要发送的数据
-     */
-    default void send(S sendData) {
-        send(sendData, Duration.ZERO, 0, Duration.ZERO);
-    }
-
-    /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * 默认不 delay>
-     *
-     * @param sendData      要发送的数据
+     * @param event         要发送的数据事件
+     * @param delay         发送延迟的时间
      * @param maxRetryCount 最大重试次数
      * @param retryDelay    重试延迟的时间
      */
-    default void send(S sendData, int maxRetryCount, Duration retryDelay) {
-        send(sendData, Duration.ZERO, maxRetryCount, retryDelay);
+    default void send(IEvent<S> event, Duration delay, int maxRetryCount, Duration retryDelay) {
+        sendWithFuture(event, delay, maxRetryCount, retryDelay)
+                .finish();
     }
 }

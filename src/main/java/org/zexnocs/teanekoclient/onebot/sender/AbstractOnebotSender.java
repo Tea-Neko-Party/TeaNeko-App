@@ -5,6 +5,7 @@ import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 import org.zexnocs.teanekoclient.onebot.data.send.OnebotSendData;
+import org.zexnocs.teanekoclient.onebot.event.sent.OnebotSentEvent;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import tools.jackson.databind.ObjectMapper;
@@ -63,7 +64,7 @@ public class AbstractOnebotSender<S extends ISendParamsData<R>, R> extends Abstr
                                                            Duration delay,
                                                            int maxRetryCount,
                                                            Duration retryDelay) {
-        return sendWithFuture(new OnebotSendData<>(sendParamsData, client, mapper),
+        return sendWithFuture(new OnebotSentEvent<>(buildSendData(sendParamsData)),
                 delay,
                 maxRetryCount,
                 retryDelay);
@@ -85,5 +86,14 @@ public class AbstractOnebotSender<S extends ISendParamsData<R>, R> extends Abstr
                      Duration retryDelay) {
         sendWithFuture(sendParamsData, delay, maxRetryCount, retryDelay)
                 .finish();
+    }
+
+    /**
+     * 构造一个 {@link OnebotSendData} 对象
+     *
+     *
+     */
+    public OnebotSendData<S, R> buildSendData(S sendParamsData) {
+        return new OnebotSendData<>(sendParamsData, client, mapper);
     }
 }

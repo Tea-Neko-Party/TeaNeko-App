@@ -27,4 +27,7 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 public class OnebotMainFileConfig implements IFileConfigData {
     /// debugger 配置
     private OnebotDebuggerConfig debugger = new OnebotDebuggerConfig();
+
+    /// state 配置
+    private OnebotStateConfig state = new OnebotStateConfig();
 }

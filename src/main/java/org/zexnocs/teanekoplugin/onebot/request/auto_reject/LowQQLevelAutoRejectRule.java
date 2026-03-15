@@ -10,6 +10,7 @@ import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
+import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 
@@ -82,7 +83,7 @@ public class LowQQLevelAutoRejectRule {
                         return;
                     }
                     for(var reportGroupId: list) {
-                        groupMessageSender.getBuilder(String.valueOf(reportGroupId))
+                        groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(reportGroupId))
                                 .addTextMessage(String.format("""
                                             申请加入群组 %s 被自动拒绝喵。
                                             原因：低于要求的等级 %s

@@ -1,9 +1,11 @@
 package org.zexnocs.teanekoapp.sender.interfaces;
 
 import org.zexnocs.teanekoapp.response.exception.ResponseEchoDuplicateException;
+import org.zexnocs.teanekoapp.sender.SentEvent;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.event.interfaces.IEvent;
 
 import java.time.Duration;
 import java.util.List;
@@ -28,6 +30,7 @@ import java.util.List;
 public interface ISenderService {
     /**
      * 发送信息，并返回 future 来允许处理响应信息。
+     * <br>默认使用 {@link SentEvent} 来处理该消息。
      *
      * @param <R>           响应数据类型
      * @param <S>           发送数据类型，必须实现 {@link ISendData} 接口
@@ -41,8 +44,31 @@ public interface ISenderService {
      * @see TaskFuture
      * @see ITaskResult
      */
-    <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(
+    default <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(
             S sendData,
+            Duration delay,
+            int maxRetryCount,
+            Duration retryDelay) throws ResponseEchoDuplicateException {
+        return send(new SentEvent<>(sendData), delay, maxRetryCount, retryDelay);
+    }
+
+    /**
+     * 使用指定的
+     * {@link org.zexnocs.teanekoapp.sender.SentEvent}
+     * 来发送信息
+     *
+     *
+     * @param <R>           响应数据类型
+     * @param <S>           发送数据类型，必须实现 {@link ISendData} 接口
+     * @param event         包含该数据的事件
+     * @param delay         发送延迟的时间，单位毫秒
+     * @param maxRetryCount 最大重试次数
+     * @param retryDelay    重试延迟的时间，单位毫秒
+     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>}
+     * @throws ResponseEchoDuplicateException 如果 echo 已经存在于注册表中，则抛出该异常
+     */
+    <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(
+            IEvent<S> event,
             Duration delay,
             int maxRetryCount,
             Duration retryDelay) throws ResponseEchoDuplicateException;

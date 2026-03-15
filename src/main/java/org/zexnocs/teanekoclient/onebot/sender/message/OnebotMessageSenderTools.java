@@ -1,4 +1,5 @@
 package org.zexnocs.teanekoclient.onebot.sender.message;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -7,8 +8,6 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
-
-import java.util.Objects;
 
 /**
  * 符合 Onebot 规范的消息发送器。
@@ -47,13 +46,11 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
      * @return 转发消息构建器
      */
     @Override
-    public IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data) {
+    public IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data) {
         var userData = data.getUserData();
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> privateForwardMessageSender.getBuilder(
-                    Long.parseLong(Objects.requireNonNull(userData.getUserIdInPlatform())));
-            case GROUP -> groupForwardMessageSender.getBuilder(
-                    Long.parseLong(Objects.requireNonNull(userData.getGroupId())));
+            case PRIVATE, PRIVATE_TEMP -> privateForwardMessageSender.getBuilder(token, data);
+            case GROUP -> groupForwardMessageSender.getBuilder(token, data);
             default -> null;
         };
     }
@@ -65,10 +62,10 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
      * @return 一般消息构建器
      */
     @Override
-    public IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data) {
+    public IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data) {
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> privateMessageSender.getBuilder(data);
-            case GROUP -> groupMessageSender.getBuilder(data);
+            case PRIVATE, PRIVATE_TEMP -> privateMessageSender.getBuilder(token, data);
+            case GROUP -> groupMessageSender.getBuilder(token, data);
             default -> null;
         };
     }

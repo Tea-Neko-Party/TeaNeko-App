@@ -22,18 +22,38 @@ public interface IMessageSenderTools {
     ITeaNekoMessageListBuilder getMsgListBuilder();
 
     /**
-     * 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
+     * 使用默认 token 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
      *
      * @param data 要回复的消息数据
      * @return 转发消息构建器
      */
-    IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data);
+    IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data);
 
     /**
-     * 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
+     * 使用默认 token 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
      *
      * @param data 要回复的消息数据
      * @return 一般消息构建器
      */
-    IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data);
+    IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data);
+
+    /**
+     * 使用默认 token 获取一个 {@link IForwardMessageSenderBuilder}，用于构建 node 消息。
+     *
+     * @param data 要回复的消息数据
+     * @return 转发消息构建器
+     */
+    default IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data) {
+        return getForwardBuilder("default",  data);
+    }
+
+    /**
+     * 使用默认 token 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
+     *
+     * @param data 要回复的消息数据
+     * @return 一般消息构建器
+     */
+    default IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data) {
+        return getEasyBuilder("default",  data);
+    }
 }

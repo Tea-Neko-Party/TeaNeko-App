@@ -10,6 +10,7 @@ import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
+import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 
 import java.time.Duration;
@@ -42,14 +43,11 @@ public class SenderService implements ISenderService {
     }
 
     /**
-     * 发送信息，并返回 future 来允许处理响应信息。
-     * <p>请务必保证客户端实现了 {@link org.zexnocs.teanekoapp.response.ResponseEvent} 事件来处理发送信息的响应，否则 future 将永远不会完成。
+     * 使用指定的
+     * {@link SentEvent}
+     * 来发送信息
      *
-     * @see ISendData
-     * @see TaskFuture
-     * @see ITaskResult
-     *
-     * @param sendData      要发送的数据
+     * @param event         包含该数据的事件
      * @param delay         发送延迟的时间，单位毫秒
      * @param maxRetryCount 最大重试次数
      * @param retryDelay    重试延迟的时间，单位毫秒
@@ -57,11 +55,8 @@ public class SenderService implements ISenderService {
      * @throws ResponseEchoDuplicateException 如果 echo 已经存在于注册表中，则抛出该异常
      */
     @Override
-    public <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(S sendData,
-                                                                             Duration delay,
-                                                                             int maxRetryCount,
-                                                                             Duration retryDelay)
-            throws ResponseEchoDuplicateException {
+    public <R, S extends ISendData<R>> TaskFuture<ITaskResult<List<R>>> send(IEvent<S> event, Duration delay, int maxRetryCount, Duration retryDelay) throws ResponseEchoDuplicateException {
+        var sendData = event.getData();
         var echo = sendData.getEcho();
         // 尝试将 echo 转化为 UUID
         UUID key;
@@ -79,7 +74,7 @@ public class SenderService implements ISenderService {
                 .name("注册 sendData 的响应 future")
                 .callable(() -> {
                     // 推送事件
-                    iEventService.pushEvent(new SentEvent<>(sendData));
+                    iEventService.pushEvent(event);
                     return null;
                 })
                 .delayDuration(delay)
