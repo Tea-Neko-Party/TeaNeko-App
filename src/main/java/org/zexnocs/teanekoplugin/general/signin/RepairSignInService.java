@@ -15,6 +15,7 @@ import org.zexnocs.teanekoplugin.general.signin.data.SignInChunkData;
 import org.zexnocs.teanekoplugin.general.signin.data.SignInData;
 
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -104,7 +105,7 @@ public class RepairSignInService {
             var prevLast = ChinaDateUtil.Instance.convertToChinaDate(prev.getLastTimeMs());
             var currLast = ChinaDateUtil.Instance.convertToChinaDate(curr.getLastTimeMs());
             var currFirst = currLast.minusDays(curr.getContinuous() - 1);
-            int gapDays = prevLast.until(currFirst).getDays() - 1;
+            int gapDays = Math.toIntExact(ChronoUnit.DAYS.between(prevLast, currFirst) - 1);
             // 从后往前取该区间的日期，要么全部取完，要么取到最大值
             if(gapDays <= 0) {
                 // 一般不会发生，但是防止鲁棒性
