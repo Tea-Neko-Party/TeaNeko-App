@@ -1,10 +1,6 @@
-# TeaNeko-App
-
-<div style="text-align:center">
-  <img src="docs/img/cover.jpg" alt="TeaNeko-App Cover" width="1377" />
-</div>
-
-<div style="text-align:center">
+<p align="center">
+<img src="docs/img/cover.jpg" alt="TeaNeko-App Cover" width="1377" />
+<br>
 
 <!-- 项目信息 -->
 <a href="LICENSE">
@@ -13,14 +9,12 @@
 <img src="https://img.shields.io/github/repo-size/Tea-Neko-Party/TeaNeko-App" alt="Repo Size">
 <img src="https://img.shields.io/github/v/tag/Tea-Neko-Party/TeaNeko-App?style=flat-square" alt="Version">
 
-<br>
-
 <!-- 技术栈 -->
 <img src="https://img.shields.io/badge/Java-21-orange" alt="Java 21">
 <img src="https://img.shields.io/badge/Spring_Boot-4.0.3-brightgreen" alt="Spring Boot 4.0.3">
 <img src="https://img.shields.io/badge/Gradle-9.3.0-02303A" alt="Gradle 9.3.0">
 
-</div>
+</p>
 
 TeaNeko-App 是专注于多平台聊天机器人的高性能架构，允许快速扩展多平台适配器和插件，提供稳定的核心功能和丰富的开发工具。此外，TeaNeko-App 未来将会扩展 LLM-Agent 相关功能。
 
