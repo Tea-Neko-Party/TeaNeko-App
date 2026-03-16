@@ -125,7 +125,7 @@ public class RepairSignInService {
                 // 只补一部分 gap，扩展当前 chunk
                 curr.setContinuous(curr.getContinuous() + remain);
                 // 记录补签区间
-                LocalDate start = currFirst.minusDays(remain - 1);
+                LocalDate start = currFirst.minusDays(remain);
                 LocalDate end = currFirst.minusDays(1);
                 String range = formatRange(start, end);
                 repairedRanges.addFirst(range);
