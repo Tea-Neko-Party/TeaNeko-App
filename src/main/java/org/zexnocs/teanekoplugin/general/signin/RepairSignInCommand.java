@@ -53,9 +53,10 @@ public class RepairSignInCommand {
         if(k == 0) {
             data.getMessageSender()
                     .sendAtReplyMessage("""
+                
                 主人您有 %d 张补签卡喵！
                 输入 /补签 <天数> 来进行补签！
-                如果天数超过数量，则会使用数量进行补签""".formatted(card.getCount()));
+                如果天数超过数量，则会使用补签卡最大数量进行补签""".formatted(card.getCount()));
             return;
         }
         // 如果补签卡为 0，则补签失败
