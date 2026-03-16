@@ -1,9 +1,11 @@
 package org.zexnocs.teanekoapp.teauser.interfaces;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -45,4 +47,12 @@ public interface ITeaUserService {
      */
     @Nullable
     String getPlatformId(ITeaNekoClient client, UUID uuid);
+
+    /**
+     * 获取客户端平台下所有的 UUID
+     *
+     * @param client 客户端
+     */
+    @NonNull
+    List<UUID> getAll(ITeaNekoClient client);
 }

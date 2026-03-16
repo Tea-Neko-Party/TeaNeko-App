@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
 /**
  * 常规测试类，用于测试任何想要测试的功能。
@@ -15,5 +16,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 public class NormalTest {
     @Test
     public void run() {
+        var util = ChinaDateUtil.Instance;
+        System.out.println(util.getNowDate().plusDays(1).until(util.getNowDate()).getDays());
     }
 }

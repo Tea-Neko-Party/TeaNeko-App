@@ -32,7 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class SignInService {
     /// 存储签到数据的命名空间
-    protected static final String NAMESPACE = "sign_in";
+    public static final String NAMESPACE = "sign_in";
 
     /// 签到领取的最小金币数
     private static final int MIN_COIN = 10;
@@ -110,7 +110,7 @@ public class SignInService {
      * @param target 签到数据所在的 EasyDataDto 对象
      * @return {@link SignInData } 签到数据
      */
-    private SignInData getSignInData(IEasyDataDto target) {
+    public SignInData getSignInData(IEasyDataDto target) {
         return target.get(SignInData.KEY,
                 SignInData.builder()
                         .totalDays(0)

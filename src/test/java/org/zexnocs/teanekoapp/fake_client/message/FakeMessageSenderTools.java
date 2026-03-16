@@ -9,8 +9,6 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSenderTools;
 
-import java.util.Objects;
-
 /**
  * fake message sender 工具箱
  *
@@ -40,13 +38,11 @@ public class FakeMessageSenderTools implements IMessageSenderTools {
      * @return 转发消息构建器
      */
     @Override
-    public IForwardMessageSenderBuilder getForwardBuilder(ITeaNekoMessageData data) {
+    public IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data) {
         var userData = data.getUserData();
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> privateForwardMessageSender.getBuilder(token,
-                    Long.parseLong(Objects.requireNonNull(userData.getUserIdInPlatform())));
-            case GROUP -> groupForwardMessageSender.getBuilder(token,
-                    Long.parseLong(Objects.requireNonNull(userData.getGroupId())));
+            case PRIVATE, PRIVATE_TEMP -> null;
+            case GROUP -> null;
             default -> null;
         };
     }
@@ -58,10 +54,10 @@ public class FakeMessageSenderTools implements IMessageSenderTools {
      * @return 一般消息构建器
      */
     @Override
-    public IEasyMessageSenderBuilder getEasyBuilder(ITeaNekoMessageData data) {
+    public IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data) {
         return switch (data.getMessageType()) {
-            case PRIVATE, PRIVATE_TEMP -> NormalMessageSender.getBuilder(data, token);
-            case GROUP -> groupMessageSender.getBuilder(token, data);
+            case PRIVATE, PRIVATE_TEMP -> null;
+            case GROUP -> null;
             default -> null;
         };
     }

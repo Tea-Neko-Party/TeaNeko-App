@@ -59,7 +59,7 @@ public class BotLoginService {
                        var message = config.getValue();
                        if (message != null && !message.isBlank()) {
                            groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(groupId))
-                                   .setDelay(Duration.ofSeconds(2))
+                                   .setDelay(Duration.ofSeconds(1))
                                    .sendTextMessage(message);
                        }
                    });

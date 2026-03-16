@@ -14,13 +14,18 @@ import java.util.List;
 
 /**
  * 是一个一次性构造消息发送器的构建器接口，提供了构建消息发送器所需的方法。
- * <br> 与 {@link org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder}
- * 不同的是，前者只是构造 list，后者构造 list 后包装成 {@link org.zexnocs.teanekoapp.sender.api.ISendData} 并推送事件。
- * <br> 该类与 {@link org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder} 是 combination 依赖关系
+ * <br> 与
+ * {@link ITeaNekoMessageListBuilder}
+ * 不同的是，前者只是构造 list，后者构造 list 后包装成
+ * {@link org.zexnocs.teanekoapp.sender.api.ISendData}
+ * 并推送事件。
+ * <br> 该类与
+ * {@link ITeaNekoMessageListBuilder}
+ * 是 combination 依赖关系
  *
  * @author zExNocs
  * @date 2026/03/04
- * @since 4.0.11
+ *
  */
 public interface IEasyMessageSenderBuilder {
 
@@ -162,13 +167,12 @@ public interface IEasyMessageSenderBuilder {
      * 根据 data 添加一个 at 消息。
      *
      * @return 当前的构造器对象，以便于链式调用
-     * @throws IllegalStateException 如果没有 repliedData 可供获取被 at 的用户 ID，或者消息类型不是群消息
      */
-    default IEasyMessageSenderBuilder addAtMessage() throws IllegalStateException {
+    default IEasyMessageSenderBuilder addAtMessage() {
         var data = getRepliedData();
         if(data == null) {
-            // 如果没有 repliedData，则无法添加 at 消息，因为无法获取被 at 的用户 ID
-            throw new IllegalStateException("无法添加 at 消息，因为没有 repliedData 可供获取被 at 的用户 ID");
+            // 如果没有 repliedData，则不添加
+            return this;
         }
         var senderData = data.getUserData();
         // 如果有 platformId 且是群消息，则添加 at 消息
@@ -183,12 +187,11 @@ public interface IEasyMessageSenderBuilder {
      * 根据 data 添加一个 reply 消息。
      *
      * @return 当前的构造器对象，以便于链式调用
-     * @throws IllegalStateException 如果没有 repliedData 可供获取被回复的消息 ID
      */
-    default IEasyMessageSenderBuilder addReplyMessage() throws IllegalStateException  {
+    default IEasyMessageSenderBuilder addReplyMessage() {
         if(getRepliedData() == null) {
-            // 如果没有 repliedData，则无法添加 reply 消息，因为无法获取被回复的消息 ID
-            throw new IllegalStateException("无法添加 reply 消息，因为没有 repliedData 可供获取被回复的消息 ID");
+            // 如果没有 repliedData，则不添加
+            return this;
         }
         getMessageListBuilder().addReplyMessage(getRepliedData().getMessageId());
         return this;

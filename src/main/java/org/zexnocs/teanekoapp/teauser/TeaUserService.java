@@ -14,6 +14,7 @@ import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -137,6 +138,20 @@ public class TeaUserService implements ITeaUserService {
             cache.put(cacheKey, userId);
             return userId;
         }
+    }
+
+    /**
+     * 获取客户端平台下所有的 UUID
+     *
+     * @param client 客户端
+     */
+    @Override
+    public @NonNull List<UUID> getAll(ITeaNekoClient client) {
+        var target = getToTeaUserTarget(client);
+        return target.keySet()
+                .stream()
+                .map(key -> get(client, key))
+                .toList();
     }
 
     /**
