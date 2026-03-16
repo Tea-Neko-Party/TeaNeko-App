@@ -1,10 +1,13 @@
 package org.zexnocs.teanekoplugin.general.signin;
 
+import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
+import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.easydata.cleanable.CleanableEasyData;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
@@ -42,6 +45,10 @@ public class SignInService {
 
     /// 用来缓存用户签到，防止用户重复签到
     private final Map<UUID, Boolean> todaySignInSet = new ConcurrentHashMap<>();
+
+    /// 锁，防止同一时间签到，UUID -> 锁对象
+    private final ConcurrentHashMap<UUID, Object> userLocks = new ConcurrentHashMap<>();
+
     private final ITimerService iTimerService;
     private final RandomUtil randomUtil;
     private final ITeaUserCoinService iTeaUserCoinService;
@@ -70,13 +77,31 @@ public class SignInService {
     }
 
     /**
+     * 线性安全的签到
+     *
+     * @param userId 用户 ID
+     * @param nowMs  当前时间戳（毫秒）
+     * @param sender 消息发送器
+     */
+    public void signIn(UUID userId, long nowMs, @Nullable IEasyMessageSenderBuilder sender) {
+        Object lock = userLocks.computeIfAbsent(userId, key -> new Object());
+        synchronized (lock) {
+            try {
+                __signIn(userId, nowMs, sender);
+            }finally {
+                userLocks.remove(userId, lock);
+            }
+        }
+    }
+
+    /**
      * 签到
      *
      * @param userId 用户 ID
-     * @param nowMs 当前时间戳（毫秒）
-     * @return {@link String } 要发送的消息
+     * @param nowMs  当前时间戳（毫秒）
+     * @param sender 消息发送器
      */
-    public String signIn(UUID userId, long nowMs) {
+    public void __signIn(UUID userId, long nowMs, @Nullable IEasyMessageSenderBuilder sender) {
         // 获取当前时间和日期
         var currentDate = ChinaDateUtil.Instance.convertToChinaDate(nowMs);
 
@@ -86,7 +111,10 @@ public class SignInService {
         // 检查用户是否在缓存中已经签到过了，如果是则直接返回签到过的消息
         String repeatMsg = checkRepeatSignIn(userId, currentDate, data);
         if (repeatMsg != null) {
-            return repeatMsg;
+            if(sender != null) {
+                sender.sendAtReplyMessage(repeatMsg);
+            }
+            return;
         }
 
         // 计算签到奖励
@@ -99,9 +127,16 @@ public class SignInService {
         var newData = buildNewSignInData(data, nowMs, luckyNumber, continuous);
         var record = buildRecord(nowMs, luckyNumber, coin);
         // 更新数据库
-        pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate);
-        // 构建并返回签到成功消息
-        return buildSuccessMessage(currentDate, nowMs, luckyNumber, coin, continuous, newData.getTotalDays());
+        pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate)
+                .pushWithFuture()
+                .thenAccept(r -> {
+                    if(sender != null) {
+                        sender.sendAtReplyMessage(
+                                buildSuccessMessage(currentDate, nowMs, luckyNumber,
+                                        coin, continuous, newData.getTotalDays())
+                        );
+                    }
+                }).finish();
     }
 
     /**
@@ -260,13 +295,13 @@ public class SignInService {
      * 将更新后的签到数据、签到记录和用户猫猫币数量推送到数据库中。
      *
      */
-    private void pushDatabaseUpdate(UUID userId,
-                                    IEasyDataDto target,
-                                    List<SignInChunkData> chunks,
-                                    SignInData newData,
-                                    SignInRecordData record,
-                                    int coin,
-                                    LocalDate currentDate) {
+    private IDatabaseTaskConfig pushDatabaseUpdate(UUID userId,
+                                                   IEasyDataDto target,
+                                                   List<SignInChunkData> chunks,
+                                                   SignInData newData,
+                                                   SignInRecordData record,
+                                                   int coin,
+                                                   LocalDate currentDate) {
 
         var targetTask = target.getTaskConfig("签到数据更新")
                 .set(SignInData.KEY, newData)
@@ -277,12 +312,11 @@ public class SignInService {
                 .getTaskConfig("签到记录数据更新")
                 .set(ChinaDateUtil.Instance.convertToString(currentDate), record);
 
-        iTeaUserCoinService.getCoin(userId)
+        return iTeaUserCoinService.getCoin(userId)
                 .getDatabaseTaskConfig("签到金币更新")
                 .addCount(coin)
                 .merge(targetTask)
-                .merge(recordTask)
-                .push();
+                .merge(recordTask);
     }
 
     /**
