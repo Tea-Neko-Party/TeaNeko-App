@@ -1,9 +1,10 @@
 package org.zexnocs.teanekoclient.onebot.utils;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.command.TeaNekoCommandConverter;
 import org.zexnocs.teanekoapp.config.TeaNekoConfigKey;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
+import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
 
@@ -14,16 +15,11 @@ import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
  * @date 2026/03/10
  */
 @Service
+@RequiredArgsConstructor
 public class OnebotScopeIdUtils {
-    private final TeaNekoCommandConverter teaNekoCommandConverter;
     private final OnebotTeaNekoClient onebotTeaNekoClient;
     private final ITeaUserService iTeaUserService;
-
-    public OnebotScopeIdUtils(TeaNekoCommandConverter teaNekoCommandConverter, OnebotTeaNekoClient onebotTeaNekoClient, ITeaUserService iTeaUserService) {
-        this.teaNekoCommandConverter = teaNekoCommandConverter;
-        this.onebotTeaNekoClient = onebotTeaNekoClient;
-        this.iTeaUserService = iTeaUserService;
-    }
+    private final TeaNekoScopeService teaNekoScopeService;
 
     /**
      * 根据 group id 获取 scope id
@@ -32,7 +28,7 @@ public class OnebotScopeIdUtils {
      * @return scope id
      */
     public String getGroupScopeId(long groupId) {
-        return teaNekoCommandConverter.getGroupScopeId(onebotTeaNekoClient, String.valueOf(groupId));
+        return teaNekoScopeService.getGroupScopeId(onebotTeaNekoClient, String.valueOf(groupId));
     }
 
     /**
@@ -42,7 +38,7 @@ public class OnebotScopeIdUtils {
      * @return scope id
      */
     public String getGroupScopeId(String groupId) {
-        return teaNekoCommandConverter.getGroupScopeId(onebotTeaNekoClient, groupId);
+        return teaNekoScopeService.getGroupScopeId(onebotTeaNekoClient, groupId);
     }
 
     /**
@@ -57,7 +53,7 @@ public class OnebotScopeIdUtils {
         if(uuid == null) {
             throw new IllegalArgumentException("无法获取用户 UUID，用户 ID: " + userId);
         }
-        return teaNekoCommandConverter.getPrivateScopeId(uuid);
+        return teaNekoScopeService.getPrivateScopeId(uuid);
     }
 
     /**

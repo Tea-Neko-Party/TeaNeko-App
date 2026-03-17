@@ -9,7 +9,6 @@ import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerF
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataGetService;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataSetService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 import tools.jackson.databind.ObjectMapper;
@@ -31,6 +30,7 @@ public class ConfigDataSetService implements IConfigDataSetService {
     private final ILogger logger;
     private final ObjectMapper objectMapper;
     private final IConfigFieldCheckerScanner iConfigFieldCheckerScanner;
+    private final ConfigDataRegisterService configDataRegisterService;
 
     /**
      * 使用字段的方法设置群管理规则的配置。
@@ -69,11 +69,9 @@ public class ConfigDataSetService implements IConfigDataSetService {
         checkField(configManager, fieldName, value);
 
         // 更新数据库
-        var name = configManager.value();
-        GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                .get(key)
-                .getTaskConfig("更新群管理规则配置: " + name)
-                .set(name, ObjectFieldUtil.Instance.setFieldValue(objectMapper, config, fieldName, value))
+        configDataRegisterService.getDto(configManager)
+                .getTaskConfig("更新群管理规则配置: " + configManager.value())
+                .set(key, ObjectFieldUtil.Instance.setFieldValue(objectMapper, config, fieldName, value))
                 .push();
     }
 
@@ -116,12 +114,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
         checkField(configManager, fieldName, value);
 
         // 更新数据库
-        var name = configManager.value();
-        var task = GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                .get(key)
-                .getTaskConfig("更新群管理规则配置: " + name);
-        task.set(name, ObjectFieldUtil.Instance.addToListField(objectMapper, config, fieldName, value));
-        task.push();
+        configDataRegisterService.getDto(configManager)
+                .getTaskConfig("更新群管理规则配置: " + configManager.value())
+                .set(key, ObjectFieldUtil.Instance.addToListField(objectMapper, config, fieldName, value))
+                .push();
     }
 
     /**
@@ -161,12 +157,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
         }
 
         // 更新数据库
-        var name = configManager.value();
-        var task = GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                .get(key)
-                .getTaskConfig("更新群管理规则配置: " + name);
-        task.set(name, ObjectFieldUtil.Instance.removeFromListField(config, fieldName, index));
-        task.push();
+        configDataRegisterService.getDto(configManager)
+                .getTaskConfig("更新群管理规则配置: " + configManager.value())
+                .set(key, ObjectFieldUtil.Instance.removeFromListField(config, fieldName, index))
+                .push();
     }
 
     /**
@@ -200,12 +194,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
         }
 
         // 更新数据库
-        var name = configManager.value();
-        var task = GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                .get(key)
-                .getTaskConfig("更新群管理规则配置: " + name);
-        task.set(name, ObjectFieldUtil.Instance.clearListField(config, fieldName));
-        task.push();
+        configDataRegisterService.getDto(configManager)
+                .getTaskConfig("更新群管理规则配置: " + configManager.value())
+                .set(key, ObjectFieldUtil.Instance.clearListField(config, fieldName))
+                .push();
     }
 
     /**

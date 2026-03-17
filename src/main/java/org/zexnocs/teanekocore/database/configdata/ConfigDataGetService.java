@@ -1,12 +1,13 @@
 package org.zexnocs.teanekocore.database.configdata;
 
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataGetService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -16,7 +17,10 @@ import java.util.Optional;
  * @date 2026/02/16
  */
 @Service
+@RequiredArgsConstructor
 public class ConfigDataGetService implements IConfigDataGetService {
+    private final ConfigDataRegisterService configDataRegisterService;
+
     /**
      * 获取配置数据
      *
@@ -44,11 +48,8 @@ public class ConfigDataGetService implements IConfigDataGetService {
         if (!configClazz.isAssignableFrom(configClass)) {
             throw new IllegalArgumentException("配置类不匹配。请检查规则实现。");
         }
-        return Optional.ofNullable(
-                GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                .get(key)
-                .get(configManager.value(), configClass)
-        );
+        return Optional.ofNullable(configDataRegisterService.getDto(configManager)
+                .get(key, configClass));
     }
 
     /**
@@ -74,12 +75,19 @@ public class ConfigDataGetService implements IConfigDataGetService {
             throw new IllegalArgumentException("规则注解中的配置类为空。请检查规则实现。");
         }
 
-        return Optional.ofNullable(
-                GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
-                        .get(key)
-                        .get(configManager.value(), configClazz)
-        );
+        return Optional.ofNullable(configDataRegisterService.getDto(configManager)
+                .get(key, configClazz));
     }
 
+    /**
+     * 获取某一个 ConfigManager 下所有注册的 key
+     *
+     * @param configManager configManager
+     * @return key list
+     */
+    @Override
+    public List<String> getAllConfigKeys(@NonNull ConfigManager configManager) {
+        return configDataRegisterService.getDto(configManager).keySet().stream().toList();
+    }
 
 }

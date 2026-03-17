@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.database.configdata;
 
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
@@ -11,6 +12,7 @@ import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataSetServ
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -23,18 +25,11 @@ import java.util.Optional;
  * @version 4.3.4
  */
 @Service
+@RequiredArgsConstructor
 public class ConfigDataService implements IConfigDataService {
     private final IConfigDataRegisterService iConfigDataRegisterService;
     private final IConfigDataGetService iConfigDataGetService;
     private final IConfigDataSetService iConfigDataSetService;
-
-    public ConfigDataService(IConfigDataRegisterService iConfigDataRegisterService,
-                             IConfigDataGetService iConfigDataGetService,
-                             IConfigDataSetService iConfigDataSetService) {
-        this.iConfigDataRegisterService = iConfigDataRegisterService;
-        this.iConfigDataGetService = iConfigDataGetService;
-        this.iConfigDataSetService = iConfigDataSetService;
-    }
 
     /**
      * 获取配置数据。
@@ -49,6 +44,17 @@ public class ConfigDataService implements IConfigDataService {
                                                              Class<T> configClass,
                                                              String key) {
         return iConfigDataGetService.getConfigData(configManager, configClass, key);
+    }
+
+    /**
+     * 获取注册该 config 的所有 key
+     *
+     * @param configManager manager
+     * @return key
+     */
+    @Override
+    public List<String> getAllConfigKeys(ConfigManager configManager) {
+        return iConfigDataGetService.getAllConfigKeys(configManager);
     }
 
     /**

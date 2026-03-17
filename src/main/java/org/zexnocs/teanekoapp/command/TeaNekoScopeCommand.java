@@ -1,6 +1,8 @@
 package org.zexnocs.teanekoapp.command;
 
+import lombok.RequiredArgsConstructor;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.CommandScopeManager;
 import org.zexnocs.teanekocore.command.api.*;
@@ -19,12 +21,9 @@ import org.zexnocs.teanekocore.framework.description.Description;
 @Command(value = "/scope",
         permission = CommandPermission.DEBUG,
         scope = CommandScope.ALL)
+@RequiredArgsConstructor
 public class TeaNekoScopeCommand {
-    private final TeaNekoCommandConverter teaNekoCommandConverter;
-
-    public TeaNekoScopeCommand(TeaNekoCommandConverter teaNekoCommandConverter) {
-        this.teaNekoCommandConverter = teaNekoCommandConverter;
-    }
+    private final TeaNekoScopeService teaNekoScopeService;
 
     @Description("""
             允许群组使用原本不可使用的命令。
@@ -37,7 +36,7 @@ public class TeaNekoScopeCommand {
         var data = commandData.getRawData();
         String scopeId = groupId.equals("0") ?
                 commandData.getScopeId() :
-                teaNekoCommandConverter.getGroupScopeId(data.getClient(), groupId);
+                teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
         CommandEasyData.of(CommandScopeManager.ENABLE_NAMESPACE)
                 .get(commandId)
                 .getTaskConfig("添加区域")
@@ -56,7 +55,7 @@ public class TeaNekoScopeCommand {
         var data = commandData.getRawData();
         String scopeId = groupId.equals("0") ?
                 commandData.getScopeId() :
-                teaNekoCommandConverter.getGroupScopeId(data.getClient(), groupId);
+                teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
         CommandEasyData.of(CommandScopeManager.ENABLE_NAMESPACE)
                 .get(commandId)
                 .getTaskConfig("删除区域")
@@ -75,7 +74,7 @@ public class TeaNekoScopeCommand {
         var data = commandData.getRawData();
         String scopeId = groupId.equals("0") ?
                 commandData.getScopeId() :
-                teaNekoCommandConverter.getGroupScopeId(data.getClient(), groupId);
+                teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
         CommandEasyData.of(CommandScopeManager.DISABLE_NAMESPACE)
                 .get(commandId).getTaskConfig("禁止区域")
                 .setBoolean(scopeId, true)
@@ -93,7 +92,7 @@ public class TeaNekoScopeCommand {
         var data = commandData.getRawData();
         String scopeId = groupId.equals("0") ?
                 commandData.getScopeId() :
-                teaNekoCommandConverter.getGroupScopeId(data.getClient(), groupId);
+                teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
         CommandEasyData.of(CommandScopeManager.DISABLE_NAMESPACE)
                 .get(commandId).getTaskConfig("取消禁止区域")
                 .setBoolean(scopeId, false)

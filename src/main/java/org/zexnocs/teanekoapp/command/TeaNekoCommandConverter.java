@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoapp.command;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
@@ -7,6 +8,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
+import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.interfaces.ICommandConverter;
@@ -14,7 +16,6 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandConverter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
 
 /**
  * TeaNekoApp 的指令转换器。将 ITeaNekoMessageData 转化成 CommandData。
@@ -24,7 +25,10 @@ import java.util.UUID;
  * @since 4.0.9
  */
 @Service
+@RequiredArgsConstructor
 public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessageData> {
+    private final TeaNekoScopeService teaNekoScopeService;
+
     /**
      * 将数据解析成指令数据对象。
      * 用于子类的实现。
@@ -124,30 +128,9 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
                              ITeaNekoClient client) {
         // 构造作用域 ID
         return switch (type) {
-            case PRIVATE, PRIVATE_TEMP -> getPrivateScopeId(userData.getUuid());
-            case GROUP   -> getGroupScopeId(client, userData.getGroupId());
+            case PRIVATE, PRIVATE_TEMP -> teaNekoScopeService.getPrivateScopeId(userData.getUuid());
+            case GROUP -> teaNekoScopeService.getGroupScopeId(client, userData.getGroupId());
             default -> "other@" + userData.getUuid();
         };
-    }
-
-    /**
-     * 根据用户 UUID 获取作用域 ID。
-     *
-     * @param uuid 用户 UUID
-     * @return {@link String } 作用域 ID
-     */
-    public String getPrivateScopeId(UUID uuid) {
-        return "private@" + uuid;
-    }
-
-    /**
-     * 根据 client 和 groupId 获取作用域 ID。
-     *
-     * @param client  客户端
-     * @param groupId 群 ID
-     * @return 作用域 ID
-     */
-    public String getGroupScopeId(ITeaNekoClient client, String groupId) {
-        return client.getClientId() + "-group@" + groupId;
     }
 }

@@ -1,9 +1,11 @@
 package org.zexnocs.teanekocore.database.configdata;
 
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataRegisterService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -14,21 +16,13 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * @date 2026/02/16
  */
 @Service
+@RequiredArgsConstructor
 public class ConfigDataRegisterService implements IConfigDataRegisterService {
     /// 数据库命名空间，所有配置数据都将存储在这个命名空间下。
     public final static String DATABASE_NAMESPACE = "config";
 
     /// 日志记录器，用于在注册过程中记录日志。
     private final ILogger logger;
-
-    /**
-     * 构造函数，注入 ILogger 以便在注册过程中记录日志。
-     *
-     * @param generalLogger ILogger 实例，用于记录日志。
-     */
-    public ConfigDataRegisterService(ILogger generalLogger) {
-        this.logger = generalLogger;
-    }
 
     /**
      * 注册配置数据到数据库中。该方法会根据 ConfigManager 注解中的信息创建一个新的配置实例，并将其存储在数据库中。
@@ -60,10 +54,9 @@ public class ConfigDataRegisterService implements IConfigDataRegisterService {
             return;
         }
         // 写入数据库
-        var task = GeneralEasyData.of(DATABASE_NAMESPACE)
-                .get(key)
+        var task = getDto(configManager)
                 .getTaskConfig("注册配置管理: " + name);
-        task.set(name, configData);
+        task.set(key, configData);
         task.push();
     }
 
@@ -83,16 +76,26 @@ public class ConfigDataRegisterService implements IConfigDataRegisterService {
             return false;
         }
         // 从数据库中删除
-        var dto = GeneralEasyData.of(DATABASE_NAMESPACE)
-                .get(String.valueOf(key));
-        if(dto.has(configManager.value())) {
-            var task = dto.getTaskConfig("注销配置管理: " + name);
-            task.remove(name);
-            task.push();
+        var dto = getDto(configManager);
+        if(dto.has(key)) {
+            dto.getTaskConfig("注销配置管理: " + name)
+                    .remove(key)
+                    .push();
             return true;
         } else {
             // 如果配置不存在，则不进行任何操作
             return false;
         }
+    }
+
+    /**
+     * 获取一个 dto 对象
+     *
+     * @param configManager 配置管理器实例，包含了配置数据类和配置名称等信息。
+     * @return {@link IEasyDataDto } dto
+     */
+    public IEasyDataDto getDto(ConfigManager configManager) {
+        return GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
+                .get(configManager.value());
     }
 }

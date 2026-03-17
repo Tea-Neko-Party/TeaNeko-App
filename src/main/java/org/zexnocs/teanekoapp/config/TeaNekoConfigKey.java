@@ -1,9 +1,10 @@
 package org.zexnocs.teanekoapp.config;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
-import org.zexnocs.teanekoapp.command.TeaNekoCommandConverter;
+import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
 
 import java.util.UUID;
@@ -19,17 +20,18 @@ import java.util.UUID;
  * @since 4.1.3
  */
 @Service
+@RequiredArgsConstructor
 public class TeaNekoConfigKey implements IConfigKey {
     /// 当前配置的 scope ID。
     private String scopeId = null;
-    private static TeaNekoCommandConverter teaNekoCommandConverter = null;
+    private static TeaNekoScopeService teaNekoScopeService = null;
 
     /**
      * 用于注入 scope 解析服务。
      */
     @Autowired
-    public TeaNekoConfigKey(TeaNekoCommandConverter teaNekoCommandConverter) {
-        TeaNekoConfigKey.teaNekoCommandConverter = teaNekoCommandConverter;
+    public TeaNekoConfigKey(TeaNekoScopeService teaNekoScopeService) {
+        TeaNekoConfigKey.teaNekoScopeService = teaNekoScopeService;
     }
 
     /**
@@ -38,10 +40,10 @@ public class TeaNekoConfigKey implements IConfigKey {
      * @param groupId 群 ID
      */
     public TeaNekoConfigKey(ITeaNekoClient client, String groupId) {
-        if(teaNekoCommandConverter == null) {
+        if(teaNekoScopeService == null) {
             throw new IllegalStateException("TeaNekoCommandConverter is not initialized");
         }
-        this.scopeId = teaNekoCommandConverter.getGroupScopeId(client, groupId);
+        this.scopeId = teaNekoScopeService.getGroupScopeId(client, groupId);
     }
 
     /**
@@ -59,10 +61,10 @@ public class TeaNekoConfigKey implements IConfigKey {
      * @param userId 用户 ID
      */
     public TeaNekoConfigKey(UUID userId) {
-        if(teaNekoCommandConverter == null) {
+        if(teaNekoScopeService == null) {
             throw new IllegalStateException("TeaNekoCommandConverter is not initialized");
         }
-        this.scopeId = teaNekoCommandConverter.getPrivateScopeId(userId);
+        this.scopeId = teaNekoScopeService.getPrivateScopeId(userId);
     }
 
     /**

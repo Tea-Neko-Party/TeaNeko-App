@@ -35,6 +35,16 @@ public class TeaNekoClientScanner extends AbstractScanner {
     }
 
     /**
+     * 从 handler map 获取到 pair
+     *
+     * @param key 客户端名称
+     * @return pair of {@link TeaNekoClient}, {@link ITeaNekoClient}
+     */
+    public Pair<TeaNekoClient, ITeaNekoClient> getPair(String key) {
+        return handlerMap.get(key);
+    }
+
+    /**
      * 扫描方法。
      *
      */

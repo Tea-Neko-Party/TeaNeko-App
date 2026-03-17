@@ -8,6 +8,7 @@ import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerF
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -46,6 +47,29 @@ public interface IConfigDataService {
     <T extends IConfigData> Optional<T> getConfigData(Object configManager,
                                                       Class<T> configClass,
                                                       String key);
+
+    /**
+     * 获取注册该 config 的所有 key
+     *
+     * @param configManager manager
+     * @return key
+     * @throws IllegalArgumentException 如果找不到规则注解
+     */
+    default List<String> getAllConfigKeys(Object configManager) {
+        var annotation = configManager.getClass().getAnnotation(ConfigManager.class);
+        if(annotation == null) {
+            throw new IllegalArgumentException("无法获取配置数据：找不到规则注解");
+        }
+        return getAllConfigKeys(annotation);
+    }
+
+    /**
+     * 获取注册该 config 的所有 key
+     *
+     * @param configManager manager
+     * @return key
+     */
+    List<String> getAllConfigKeys(ConfigManager configManager);
 
     /**
      * 使用默认配置注册 configData。

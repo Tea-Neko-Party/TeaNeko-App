@@ -5,6 +5,7 @@ import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -75,4 +76,12 @@ public interface IConfigDataGetService {
      */
     Optional<IConfigData> getConfigData(@NonNull ConfigManager configManager, @NonNull String key)
             throws IllegalArgumentException;
+
+    /**
+     * 获取某一个 ConfigManager 下所有注册的 key
+     *
+     * @param configManager configManager
+     * @return key list
+     */
+    List<String> getAllConfigKeys(@NonNull ConfigManager configManager);
 }
