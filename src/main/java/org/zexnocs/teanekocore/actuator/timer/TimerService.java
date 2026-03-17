@@ -201,7 +201,7 @@ public class TimerService implements ITimerService {
      * @param cronExpression 定时器的 cron 表达式
      * @param resultType     任务结果类型
      * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
-     * @see FixedPointTimer
+     * @see CronTimer
      */
     @Override
     public <T> ITimerTaskConfig<T> registerByCron(String taskName,
@@ -217,7 +217,7 @@ public class TimerService implements ITimerService {
         var timerTaskConfig = TimerTaskConfig.<T>builder()
                 .taskConfig(taskConfig)
                 .build();
-        var timer = new FixedPointTimer<>(timerTaskConfig, cronExpression, resultType);
+        var timer = new CronTimer<>(timerTaskConfig, cronExpression, resultType);
         register(timer);
         return timerTaskConfig;
     }

@@ -2,9 +2,9 @@ package org.zexnocs.teanekoapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekocore.utils.ChinaDateUtil;
-
-import java.time.temporal.ChronoUnit;
+import org.springframework.expression.Expression;
+import org.springframework.expression.spel.standard.SpelExpressionParser;
+import org.springframework.expression.spel.support.StandardEvaluationContext;
 
 /**
  * 常规测试类，用于测试任何想要测试的功能。
@@ -18,19 +18,11 @@ import java.time.temporal.ChronoUnit;
 public class NormalTest {
     @Test
     public void run() {
-        var prevLast = ChinaDateUtil.Instance.convertToChinaDate(1743354000000L);
-        var currLast = ChinaDateUtil.Instance.convertToChinaDate(1746550800000L);
-        var currFirst = currLast.minusDays(0);
-        long gapDays = ChronoUnit.DAYS.between(prevLast, currFirst) - 1;
-        var a = prevLast.plusDays(1);
-        var b = currFirst.minusDays(1);
-        System.out.printf("""
-                prevLast: %s
-                currLast: %s
-                currFirst: %s
-                gapDays: %s
-                a: %s
-                b: %s
-                %n""", prevLast, currLast, currFirst, gapDays, a, b);
+        SpelExpressionParser parser = new SpelExpressionParser();
+        StandardEvaluationContext context = new StandardEvaluationContext();
+        context.setVariable("a", true);
+        context.setVariable("b", false);
+        Expression expression = parser.parseExpression("!#a");
+        System.out.println(expression.getValue(context));
     }
 }

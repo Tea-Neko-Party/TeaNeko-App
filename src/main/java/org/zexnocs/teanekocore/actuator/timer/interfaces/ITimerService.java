@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.actuator.timer.interfaces;
 
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.timer.CronTimer;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
@@ -91,7 +92,7 @@ public interface ITimerService {
     /**
      * 使用一个 cron 表达式和一个 callable 注册一个默认规则的定时器。
      *
-     * @see org.zexnocs.teanekocore.actuator.timer.FixedPointTimer
+     * @see CronTimer
      * @param taskName 任务名称
      * @param taskStage 任务阶段
      * @param callable 任务执行的 Callable

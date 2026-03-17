@@ -39,7 +39,7 @@ import java.time.LocalDateTime;
  * @author zExNocs
  * @date 2026/02/14
  */
-public class FixedPointTimer<T> implements ITimer<T>  {
+public class CronTimer<T> implements ITimer<T>  {
     /// 任务配置
     private final ITimerTaskConfig<T> timerTaskConfig;
 
@@ -59,9 +59,9 @@ public class FixedPointTimer<T> implements ITimer<T>  {
      * @param timerTaskConfig 任务配置
      * @param cronExpression  Cron 表达式
      */
-    public FixedPointTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig,
-                           @NonNull String cronExpression,
-                           @NonNull Class<T> resultType) {
+    public CronTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig,
+                     @NonNull String cronExpression,
+                     @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;
         this.cron = CronExpression.parse(cronExpression);
         this.nextTriggerTime = ChinaDateUtil.Instance.getNextTriggerTime(cron, LocalDateTime.now());
