@@ -56,6 +56,34 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
     }
 
     /**
+     * 使用 token 获取一个 group
+     * {@link IForwardMessageSenderBuilder}
+     * ，用于构建 node 消息。
+     *
+     * @param token   token
+     * @param groupId 群组 ID
+     * @return 转发消息构建器
+     */
+    @Override
+    public IForwardMessageSenderBuilder getGroupForwardBuilder(String token, String groupId) {
+        return groupForwardMessageSender.getBuilder(token, Long.parseLong(groupId));
+    }
+
+    /**
+     * 使用 token 获取一个 private
+     * {@link IForwardMessageSenderBuilder}
+     * ，用于构建 node 消息。
+     *
+     * @param token      token
+     * @param platformId 平台用户 ID
+     * @return 转发消息构建器
+     */
+    @Override
+    public IForwardMessageSenderBuilder getPrivateForwardBuilder(String token, String platformId) {
+        return privateForwardMessageSender.getBuilder(token, Long.parseLong(platformId));
+    }
+
+    /**
      * 获取一个 {@link IEasyMessageSenderBuilder}，用于构造一般 message 信息并发送。
      *
      * @param data 要回复的消息数据
@@ -68,5 +96,29 @@ public class OnebotMessageSenderTools implements IMessageSenderTools {
             case GROUP -> groupMessageSender.getBuilder(token, data);
             default -> null;
         };
+    }
+
+    /**
+     * 根据平台 ID 获取 private message sender
+     *
+     * @param token      token
+     * @param platformId 平台用户 ID
+     * @return 一般消息构建器
+     */
+    @Override
+    public IEasyMessageSenderBuilder getPrivateBuilder(String token, String platformId) {
+        return privateMessageSender.getBuilder(token, platformId);
+    }
+
+    /**
+     * 根据平台 ID 获取 group message sender
+     *
+     * @param token   token
+     * @param groupId 群组 ID
+     * @return 一般消息构建器
+     */
+    @Override
+    public IEasyMessageSenderBuilder getGroupBuilder(String token, String groupId) {
+        return groupMessageSender.getBuilder(token, groupId);
     }
 }

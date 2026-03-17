@@ -5,10 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.fake_client.message.FakeMessageSenderTools;
 import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberInfoSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IGetMessageSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserInfoConstructor;
+import org.zexnocs.teanekoapp.sender.api.sender_box.*;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
@@ -45,7 +42,17 @@ public class FakeTeaNekoToolbox implements ITeaNekoToolbox {
      * @return 获取平台用户在指定群组中的信息的发送器
      */
     @Override
-    public IGetGroupMemberInfoSender getGroupInfoGetSender() {
+    public IGetGroupMemberInfoSender getGroupMemberInfoSender() {
+        return null;
+    }
+
+    /**
+     * 获取指定群组中所有成员信息的发送器。
+     *
+     * @return 获取指定群组中所有成员信息的发送器。
+     */
+    @Override
+    public IGetGroupMemberListSender getGroupMemberListSender() {
         return null;
     }
 

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.response.api.IGroupMemberResponseData;
 
 /**
@@ -76,4 +77,32 @@ public class GroupMemberResponseData implements IGroupMemberResponseData {
     /// 是否可以更改群名片
     @JsonProperty("card_changeable")
     private boolean cardChangeable;
+
+    /**
+     * 用户 ID
+     */
+    @Override
+    public String getUserId() {
+        return String.valueOf(userId);
+    }
+
+    /**
+     * 加入时间 (单位毫秒)
+     *
+     * @return {@link Long }
+     */
+    @Override
+    public Long getJoinTimeMs() {
+        return joinTime * 1000L;
+    }
+
+    /**
+     * 上次发言时间 (单位秒)
+     *
+     * @return {@link Long }
+     */
+    @Override
+    public @Nullable Long getLastSentTimeMs() {
+        return lastSentTime * 1000L;
+    }
 }

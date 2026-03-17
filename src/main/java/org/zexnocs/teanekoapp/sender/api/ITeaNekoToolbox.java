@@ -31,7 +31,14 @@ public interface ITeaNekoToolbox {
      *
      * @return 获取平台用户在指定群组中的信息的发送器
      */
-    IGetGroupMemberInfoSender getGroupInfoGetSender();
+    IGetGroupMemberInfoSender getGroupMemberInfoSender();
+
+    /**
+     * 获取指定群组中所有成员信息的发送器。
+     *
+     * @return 获取指定群组中所有成员信息的发送器。
+     */
+    IGetGroupMemberListSender getGroupMemberListSender();
 
     /**
      * 获取平台用户信息的发送器

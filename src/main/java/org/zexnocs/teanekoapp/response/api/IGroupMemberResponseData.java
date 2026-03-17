@@ -11,7 +11,7 @@ import org.jspecify.annotations.Nullable;
  */
 public interface IGroupMemberResponseData {
     /**
-     * qq昵称
+     * 用户昵称
      *
      * @return {@link String }
      */
@@ -19,7 +19,15 @@ public interface IGroupMemberResponseData {
     String getNickname();
 
     /**
-     * 群内名片
+     * 用户 ID
+     *
+     * @return {@link String }
+     */
+    @Nullable
+    String getUserId();
+
+    /**
+     * 群昵称
      *
      * @return {@link String }
      */
@@ -27,12 +35,12 @@ public interface IGroupMemberResponseData {
     String getCard();
 
     /**
-     * 加入时间 (单位秒)
+     * 加入时间 (单位毫秒)
      *
      * @return {@link Long }
      */
     @Nullable
-    Long getJoinTime();
+    Long getJoinTimeMs();
 
     /**
      * 上次发言时间 (单位秒)
@@ -40,7 +48,7 @@ public interface IGroupMemberResponseData {
      * @return {@link Long }
      */
     @Nullable
-    Long getLastSentTime();
+    Long getLastSentTimeMs();
 
     /**
      * 群等级

@@ -3,6 +3,8 @@ package org.zexnocs.teanekoclient.onebot.sender.group;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.response.api.IGroupMemberResponseData;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberListSender;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.response.params.GroupMemberResponseData;
@@ -23,7 +25,8 @@ import java.util.List;
  * @since 4.0.12
  */
 @Component("GroupMemberListSender")
-public class GetGroupMemberListSender extends AbstractOnebotSender<GetGroupMemberListParamsData, GroupMemberResponseData> {
+public class GetGroupMemberListSender extends AbstractOnebotSender<GetGroupMemberListParamsData, GroupMemberResponseData>
+    implements IGetGroupMemberListSender {
 
     /**
      * 构造函数，初始化发送器。
@@ -54,5 +57,20 @@ public class GetGroupMemberListSender extends AbstractOnebotSender<GetGroupMembe
                 Duration.ZERO,
                 3,
                 Duration.ofMillis(200));
+    }
+
+    /**
+     * 获取所有群成员信息。
+     *
+     * @param groupId 群号
+     */
+    @Override
+    public TaskFuture<List<? extends IGroupMemberResponseData>> get(String groupId) {
+        return get(Long.parseLong(groupId)).thenApply(r -> {
+            if(!r.isSuccess()) {
+                return List.of();
+            }
+            return r.getResult();
+        });
     }
 }

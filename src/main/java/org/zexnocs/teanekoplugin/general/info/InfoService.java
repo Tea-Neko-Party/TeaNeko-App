@@ -62,7 +62,7 @@ public class InfoService {
 
         if(data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             // 如果是群组，则只显示群组消息
-            data.getClient().getTeaNekoToolbox().getGroupInfoGetSender()
+            data.getClient().getTeaNekoToolbox().getGroupMemberInfoSender()
                     .get(data.getUserData().getGroupId(), targetId)
                     .thenAccept(r -> {
                         if(r == null) {
@@ -72,10 +72,10 @@ public class InfoService {
                                     .send();
                             return;
                         }
-                        var joinTime = r.getJoinTime() == null ?
-                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getJoinTime() * 1000L);
-                        var lastSpeakTime = r.getLastSentTime() == null ?
-                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getLastSentTime() * 1000L);
+                        var joinTime = r.getJoinTimeMs() == null ?
+                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getJoinTimeMs());
+                        var lastSpeakTime = r.getLastSentTimeMs() == null ?
+                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getLastSentTimeMs());
                         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
                                 .addReplyMessage(data.getMessageId())
                                 .addTextMessage(String.format("""
