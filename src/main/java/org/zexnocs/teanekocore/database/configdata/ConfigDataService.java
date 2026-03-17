@@ -15,9 +15,12 @@ import java.util.Optional;
 
 /**
  * 配置数据服务，提供对配置数据的注册、获取和设置功能。
+ * <br>4.3.4: 支持 filed checker
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
+ * @version 4.3.4
  */
 @Service
 public class ConfigDataService implements IConfigDataService {

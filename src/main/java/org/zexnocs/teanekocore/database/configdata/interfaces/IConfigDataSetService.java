@@ -3,30 +3,37 @@ package org.zexnocs.teanekocore.database.configdata.interfaces;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
+import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerFailureException;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
 /**
  * 配置数据修改服务接口，提供修改配置数据的方法。
+ * <br>4.3.4: 支持 checker 检测域设置，并自定义失败语言。
  *
  * @author zExNocs
  * @date 2026/02/16
+ * @since 4.0.0
+ * @version 4.3.4
  */
 public interface IConfigDataSetService {
 
     /**
      * 使用字段的方法设置群管理规则的配置。
+     *
      * @param configManager 配置管理器
-     * @param key 规则配置的键
-     * @param fieldName  字段名称
-     * @param value 字段值
+     * @param key           规则配置的键
+     * @param fieldName     字段名称
+     * @param value         字段值
      * @throws ConfigDataNotFoundException 如果未找到规则配置
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
+     * @throws ConfigFieldCheckerFailureException 如果检测器检测失败
      */
     default void setRuleConfigField(@NonNull ConfigManager configManager, IConfigKey key, String fieldName, String value)
-            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalArgumentException, IllegalAccessException {
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalArgumentException,
+            IllegalAccessException, ConfigFieldCheckerFailureException {
         setRuleConfigField(configManager, key.getKey(), fieldName, value);
     }
 
@@ -40,12 +47,14 @@ public interface IConfigDataSetService {
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
+     * @throws ConfigFieldCheckerFailureException 如果检测器检测失败
      */
     void setRuleConfigField(@NonNull ConfigManager configManager, String key, String fieldName, String value)
             throws ConfigDataNotFoundException,
             NoSuchFieldException,
             IllegalArgumentException,
-            IllegalAccessException;
+            IllegalAccessException,
+            ConfigFieldCheckerFailureException;
 
     /**
      * 为 Config 中 List 的字段添加一个值。
@@ -58,26 +67,31 @@ public interface IConfigDataSetService {
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
      * @throws ObjectFieldUtil.FieldNotListException 如果指定字段不是 List 类型
+     * @throws ConfigFieldCheckerFailureException 如果检测器检测失败
      */
     default void addToRuleConfigListFiled(@NonNull ConfigManager configManager, IConfigKey key, String fieldName, String value)
             throws ConfigDataNotFoundException,
             NoSuchFieldException,
             IllegalArgumentException,
             IllegalAccessException,
-            ObjectFieldUtil.FieldNotListException {
+            ObjectFieldUtil.FieldNotListException,
+            ConfigFieldCheckerFailureException {
         addToRuleConfigListFiled(configManager, key.getKey(), fieldName, value);
     }
 
     /**
      * 为 Config 中 List 的字段添加一个值。
+     *
      * @param configManager 配置管理器
-     * @param key 规则配置的键
-     * @param fieldName 字段名称
-     * @param value 字段值
+     * @param key           规则配置的键
+     * @param fieldName     字段名称
+     * @param value         字段值
+     * @throws ConfigDataNotFoundException        当未找到指定的ConfigData时抛出此异常。
+     * @throws ConfigFieldCheckerFailureException 如果
      * @throws ConfigDataNotFoundException 如果未找到规则配置
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
-     * @throws IllegalAccessException 如果无法访问字段
+      @throws IllegalAccessException 如果无法访问字段
      * @throws ObjectFieldUtil.FieldNotListException 如果指定字段不是 List 类型
      */
     void addToRuleConfigListFiled(@NonNull ConfigManager configManager, String key, String fieldName, String value)
@@ -85,7 +99,8 @@ public interface IConfigDataSetService {
             NoSuchFieldException,
             IllegalArgumentException,
             IllegalAccessException,
-            ObjectFieldUtil.FieldNotListException;
+            ObjectFieldUtil.FieldNotListException,
+            ConfigFieldCheckerFailureException;
 
     /**
      * 为 Config 中 List 的字段移除一个值。

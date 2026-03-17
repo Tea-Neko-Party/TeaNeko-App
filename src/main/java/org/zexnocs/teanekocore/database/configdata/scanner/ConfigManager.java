@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.database.configdata.scanner;
 import org.springframework.core.annotation.AliasFor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
+import org.zexnocs.teanekocore.database.configdata.api.IConfigFieldChecker;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.BooleanDefaultConfigData;
 
 import java.lang.annotation.ElementType;
@@ -43,6 +44,14 @@ public @interface ConfigManager {
      * @return 规则配置类型
      */
     Class<? extends IConfigData> configType() default BooleanDefaultConfigData.class;
+
+    /**
+     * 域检测器。
+     * <br>要求该检测器是 bean 且能搜索出来。
+     * <br>如果不是 bean 则应当能由无参构造器创建实例。
+     * <br>如果默认 {@link IConfigFieldChecker} 接口则没有任何检测器。
+     */
+    Class<? extends IConfigFieldChecker> fieldChecker() default IConfigFieldChecker.class;
 
     /**
      * @return 规则总开关

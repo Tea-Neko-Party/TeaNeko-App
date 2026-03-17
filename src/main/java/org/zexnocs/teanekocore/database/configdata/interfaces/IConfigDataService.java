@@ -4,6 +4,7 @@ import lombok.NonNull;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigKey;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
+import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerFailureException;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
@@ -96,9 +97,11 @@ public interface IConfigDataService {
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
+     * @throws ConfigFieldCheckerFailureException 如果字段值未通过检查器验证
      */
     default void setRuleConfigField(@NonNull ConfigManager configManager, IConfigKey key, String fieldName, String value)
-            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalArgumentException, IllegalAccessException {
+            throws ConfigDataNotFoundException, NoSuchFieldException,
+            IllegalArgumentException, IllegalAccessException, ConfigFieldCheckerFailureException {
         setRuleConfigField(configManager, key.getKey(), fieldName, value);
     }
 
@@ -113,12 +116,14 @@ public interface IConfigDataService {
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
+     * @throws ConfigFieldCheckerFailureException 如果字段值未通过检查器验证
      */
     void setRuleConfigField(@NonNull ConfigManager configManager, String key, String fieldName, String value)
             throws ConfigDataNotFoundException,
             NoSuchFieldException,
             IllegalArgumentException,
-            IllegalAccessException;
+            IllegalAccessException,
+            ConfigFieldCheckerFailureException;
 
     /**
      * 为 Config 中 List 的字段添加一个值。
@@ -132,13 +137,15 @@ public interface IConfigDataService {
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
      * @throws ObjectFieldUtil.FieldNotListException 如果指定字段不是 List 类型
+     * @throws ConfigFieldCheckerFailureException 如果字段值未通过检查器验证
      */
     default void addToRuleConfigListFiled(@NonNull ConfigManager configManager, IConfigKey key, String fieldName, String value)
             throws ConfigDataNotFoundException,
             NoSuchFieldException,
             IllegalArgumentException,
             IllegalAccessException,
-            ObjectFieldUtil.FieldNotListException {
+            ObjectFieldUtil.FieldNotListException,
+            ConfigFieldCheckerFailureException {
         addToRuleConfigListFiled(configManager, key.getKey(), fieldName, value);
     }
 
@@ -154,13 +161,15 @@ public interface IConfigDataService {
      * @throws IllegalArgumentException 如果字段值不合法
      * @throws IllegalAccessException 如果无法访问字段
      * @throws ObjectFieldUtil.FieldNotListException 如果指定字段不是 List 类型
+     * @throws ConfigFieldCheckerFailureException 如果字段值未通过检查器验证
      */
     void addToRuleConfigListFiled(@NonNull ConfigManager configManager, String key, String fieldName, String value)
             throws ConfigDataNotFoundException,
             NoSuchFieldException,
             IllegalArgumentException,
             IllegalAccessException,
-            ObjectFieldUtil.FieldNotListException;
+            ObjectFieldUtil.FieldNotListException,
+            ConfigFieldCheckerFailureException;
 
     /**
      * 为 Config 中 List 的字段移除一个值。

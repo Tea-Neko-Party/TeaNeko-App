@@ -4,6 +4,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
+import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerFailureException;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigManagerNotFoundException;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataQueryService;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
@@ -89,7 +90,7 @@ public class TeaNekoConfigCommand {
             规格：/cfg all <?配置名称>
             如果配置名称为空，则以转发的形式显示所有配置。""")
     @SubCommand(value = {"all"})
-    public void queryExistingPrivateManagerRules(CommandData<ITeaNekoMessageData> commandData,
+    public void queryExistingConfig(CommandData<ITeaNekoMessageData> commandData,
                                                  @DefaultValue("") String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -121,7 +122,7 @@ public class TeaNekoConfigCommand {
             规格：/pm reg <配置名称>
             重复注册将重置该配置。""")
     @SubCommand(value = {"reg", "register"})
-    public void registerPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
+    public void registerConfig(CommandData<ITeaNekoMessageData> commandData,
                                            String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -147,7 +148,7 @@ public class TeaNekoConfigCommand {
            规格：/cfg unreg <配置名称>
            注销后会删除该配置的所有数据，且不可撤回。""")
     @SubCommand(value = {"unreg"})
-    public void unregisterPrivateManagerRule(CommandData<ITeaNekoMessageData> commandData,
+    public void unregisterConfig(CommandData<ITeaNekoMessageData> commandData,
                                              String ruleName) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -168,7 +169,7 @@ public class TeaNekoConfigCommand {
             修改某一个配置字段的值。
             规格：/cfg set <配置名称> <配置字段> <配置值>""")
     @SubCommand(value = {"set"})
-    public void setPrivateManagerRuleConfig(CommandData<ITeaNekoMessageData> commandData,
+    public void setConfig(CommandData<ITeaNekoMessageData> commandData,
                                             String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -189,7 +190,10 @@ public class TeaNekoConfigCommand {
         } catch (IllegalAccessException e) {
             messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
-        } catch (Exception e) {
+        } catch (ConfigFieldCheckerFailureException e) {
+            messageSender.sendReplyMessage("配置字段" + configField + "失败喵，原因：" + e.getText());
+        }
+        catch (Exception e) {
             messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
         }
@@ -200,7 +204,7 @@ public class TeaNekoConfigCommand {
             规格：/cfg add <配置名称> <配置字段> <配置值>
             注意：配置字段必须是 list 类型的字段。""")
     @SubCommand(value = {"add"})
-    public void addPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
+    public void addToConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                 String ruleName, String configField, List<String> configValueList) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -223,6 +227,8 @@ public class TeaNekoConfigCommand {
         } catch (IllegalAccessException e) {
             messageSender.sendReplyMessage("配置字段 " + configField + " 无法访问喵。");
             logger.errorWithReport(this.getClass().getName(), "配置字段 " + configField + " 无法访问喵。", e);
+        } catch (ConfigFieldCheckerFailureException e) {
+            messageSender.sendReplyMessage("配置字段" + configField + "失败喵，原因：" + e.getText());
         } catch (Exception e) {
             messageSender.sendReplyMessage("发生未知错误喵，请联系开发者。");
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
@@ -234,7 +240,7 @@ public class TeaNekoConfigCommand {
             规格：/cfg remove <配置名称> <配置字段> <index>
             注意：配置字段必须是 list 类型的字段。""")
     @SubCommand(value = {"remove"})
-    public void removePrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
+    public void removeFromConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                    String ruleName, String configField, int index) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -267,7 +273,7 @@ public class TeaNekoConfigCommand {
             规格：/cfg clear <配置名称> <配置字段>
             注意：配置字段必须是 list 类型的字段。""")
     @SubCommand(value = {"clear"})
-    public void clearPrivateManagerRuleConfigList(CommandData<ITeaNekoMessageData> commandData,
+    public void clearFromConfigList(CommandData<ITeaNekoMessageData> commandData,
                                                   String ruleName, String configField) {
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
