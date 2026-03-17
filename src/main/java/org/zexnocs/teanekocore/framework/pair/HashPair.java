@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.framework.pair;
 
+import org.jspecify.annotations.NonNull;
+
 /**
  * 哈希对数据的容器。
  * @param <F> 第一个元素的类型
@@ -12,5 +14,16 @@ package org.zexnocs.teanekocore.framework.pair;
 public record HashPair<F, S>(F first, S second) implements Pair<F, S> {
     public static <F, S> HashPair<F, S> of(F first, S second) {
         return new HashPair<>(first, second);
+    }
+
+    /**
+     * 转化为 string，格式为 (first, second)
+     *
+     * @return string
+     */
+    @Override
+    @NonNull
+    public String toString() {
+        return "(%s, %s)".formatted(first, second);
     }
 }
