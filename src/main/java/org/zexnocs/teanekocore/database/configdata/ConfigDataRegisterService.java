@@ -16,7 +16,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
 @Service
 public class ConfigDataRegisterService implements IConfigDataRegisterService {
     /// 数据库命名空间，所有配置数据都将存储在这个命名空间下。
-    public final static String DATABASE_NAMESPACE = "group_manager";
+    public final static String DATABASE_NAMESPACE = "config";
 
     /// 日志记录器，用于在注册过程中记录日志。
     private final ILogger logger;

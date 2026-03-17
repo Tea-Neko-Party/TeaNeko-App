@@ -213,6 +213,9 @@ public enum ObjectFieldUtil {
                         .constructCollectionType(List.class, elementType != null ? elementType : Object.class);
                 List<?> tempList = objectMapper.readValue(value, javaType);
                 return new CopyOnWriteArrayList<>(tempList);
+            } else if (String.class.isAssignableFrom(targetType)) {
+                // 如果是 string，则直接返回
+                return value;
             } else {
                 // 否则直接解析为目标类型
                 return objectMapper.readValue(value, targetType);

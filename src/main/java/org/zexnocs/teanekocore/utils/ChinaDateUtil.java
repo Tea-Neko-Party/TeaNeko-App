@@ -120,6 +120,15 @@ public enum ChinaDateUtil {
     }
 
     /**
+     * 获取当前时间的 {@link ZonedDateTime}
+     *
+     * @return 当前域日期时间
+     */
+    public ZonedDateTime getNowZonedDateTime() {
+        return ZonedDateTime.now(zoneId);
+    }
+
+    /**
      * 将现在的时间转换为不带有时分秒的日期
      * e.g. 2024-06-01
      *
