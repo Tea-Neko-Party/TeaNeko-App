@@ -1,0 +1,23 @@
+package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
+
+/**
+ * LLM 用户发送的消息
+ * <br>用于指定 LLM 需要回答的内容
+ *
+ * @author zExNocs
+ * @date 2026/03/19
+ * @since 4.4.0
+ */
+public interface ILLMUserMessage extends ILLMMessage {
+    /// system 角色
+    String ROLE = "user";
+
+    /**
+     * 返回角色
+     *
+     * @return {@link String }
+     */
+    default String getRole() {
+        return ROLE;
+    }
+}
