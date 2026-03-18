@@ -1,5 +1,5 @@
 <p align="center">
-<img src="docs/img/cover.jpg" alt="TeaNeko-App Cover" width="1377" />
+<img src="docs/img/cover.png" alt="TeaNeko-App Cover" width="1441" />
 <br>
 
 <!-- 项目信息 -->
