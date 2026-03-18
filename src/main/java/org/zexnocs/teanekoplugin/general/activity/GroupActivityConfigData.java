@@ -20,7 +20,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 @Getter
 @NoArgsConstructor
 @AllArgsConstructor
-public class GroupActivityManagerConfig implements IConfigData {
+public class GroupActivityConfigData implements IConfigData {
     @Description("发送活跃度消息的群ID列表，即监控该群的群。")
     private List<String> groups = new CopyOnWriteArrayList<>();
 
@@ -47,6 +47,17 @@ public class GroupActivityManagerConfig implements IConfigData {
             例如 "0 50 17 * * *" 表示每日 17:50:00 触发。
             要求间隔时间至少为 2 小时。
             如果为 null 则表示不触发。
-            详细请自行搜索 Cron 表达式""")
+            详细请自行搜索 Cron 表达式。
+            请使用 /ga update-cron 更新计时器""")
     private String cron = null;
+
+    @Description("""
+            踢出低活跃度至少需要多少成员确认
+            至少为 1""")
+    private int kick = 2;
+
+    @Description("""
+            警告低活跃度至少需要多少成员确认
+            至少为 1""")
+    private int remind = 2;
 }

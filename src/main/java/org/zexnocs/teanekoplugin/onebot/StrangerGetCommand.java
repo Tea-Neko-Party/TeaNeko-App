@@ -46,7 +46,7 @@ public class StrangerGetCommand {
                             var regTimeStr = ChinaDateUtil.Instance.convertToString(date);
                             var messageList = OnebotMessageListBuilder.builder()
                                     .addReplyMessage(data.getMessageId())
-                                    .addImageMessage(AvatarUtils.Instance.getAvatarUrl(userId))
+                                    .addImageMessage(AvatarUtils.Instance.getUrl(userId))
                                     .addTextMessage(String.format("""
                                             QQ号: %d
                                             QID: %s

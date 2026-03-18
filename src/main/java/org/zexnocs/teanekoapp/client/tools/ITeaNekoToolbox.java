@@ -1,6 +1,9 @@
-package org.zexnocs.teanekoapp.sender.api;
+package org.zexnocs.teanekoapp.client.tools;
 
-import org.zexnocs.teanekoapp.sender.api.sender_box.*;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberInfoSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetGroupMemberListSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IGetMessageSender;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IPlatformUserGetSender;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
@@ -59,4 +62,18 @@ public interface ITeaNekoToolbox {
      * @return 符合当前适配器实现类的 logger
      */
     ILogger getLogger();
+
+    /**
+     * 获取可以根据用户平台 ID 获取头像 url 的工具
+     *
+     * @return 头像 url 工具
+     */
+    IAvatarGetter getAvatarGetter();
+
+    /**
+     * 群组成员踢出器
+     *
+     * @return {@link IGroupKickSender }
+     */
+    IGroupKickSender getGroupKickSender();
 }

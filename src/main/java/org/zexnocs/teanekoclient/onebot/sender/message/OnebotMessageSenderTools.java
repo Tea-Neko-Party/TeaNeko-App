@@ -2,11 +2,11 @@ package org.zexnocs.teanekoclient.onebot.sender.message;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.client.tools.IMessageSenderTools;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
-import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 
 /**

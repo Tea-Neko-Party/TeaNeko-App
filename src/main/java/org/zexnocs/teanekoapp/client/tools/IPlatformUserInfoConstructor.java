@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp.sender.api.sender_box;
+package org.zexnocs.teanekoapp.client.tools;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 

@@ -2,11 +2,13 @@ package org.zexnocs.teanekoplugin.general.activity;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
+import org.zexnocs.teanekoapp.client.tools.ITeaNekoToolbox;
 import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.response.api.IGroupMemberResponseData;
-import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
@@ -33,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
         description = """
                 群活跃度检测。监控该群中成员活跃度情况，并发送到指定的监控群中。
                 请在被监控的群中注册。""",
-        configType = GroupActivityManagerConfig.class,
+        configType = GroupActivityConfigData.class,
         namespaces = {TeaNekoConfigNamespaces.GROUP},
         fieldChecker = GroupActivityFieldChecker.class
 )
@@ -54,23 +56,27 @@ public class GroupActivityService {
      * 线程安全的扫描指定群中所有成员活跃度，扫描完成后会将结果保存在 activityDataMap 中
      *
      * @param scopeId 区域 ID
+     * @return {@link TaskFuture }<{@link ? }> 扫描完 future，包含 (userID → (活跃度数据, 违反的活跃度规则))
      * @throws ConfigDataNotFoundException 当未找到指定的ConfigData时抛出此异常。
      */
-    public void scan(String scopeId) throws ConfigDataNotFoundException {
+    @Nullable
+    public TaskFuture<Map<String, Pair<GroupActivityData, GroupActivityRule>>> scanWithFuture(String scopeId) throws ConfigDataNotFoundException {
         long currentTimeMs = System.currentTimeMillis();
         var activityMap = activityDataMap.computeIfAbsent(scopeId, k -> new ConcurrentHashMap<>());
         synchronized (activityMap) {
-            _scan(scopeId, currentTimeMs, activityMap);
+            return _scan(scopeId, currentTimeMs, activityMap);
         }
     }
 
     /**
      * 正式扫描方法
      *
-     * @param scopeId 区域 ID
+     * @param scopeId       区域 ID
+     * @return {@link TaskFuture }<{@link ? }> 扫描完 future
      * @throws ConfigDataNotFoundException 当未找到指定的ConfigData时抛出此异常。
      */
-    public void _scan(String scopeId,
+    @Nullable
+    public TaskFuture<Map<String, Pair<GroupActivityData, GroupActivityRule>>> _scan(String scopeId,
                       long currentTimeMs,
                       Map<String, Pair<GroupActivityData, GroupActivityRule>> map)
             throws ConfigDataNotFoundException {
@@ -81,12 +87,12 @@ public class GroupActivityService {
             clientPair = teaNekoScopeService.fromGroupScopeId(scopeId);
         } catch (IllegalArgumentException e) {
             logger.error(this.getClass().getName(), "解析失败的 scopeID" + scopeId, e);
-            return;
+            return null;
         }
         var client = clientPair.first();
         var groupId = clientPair.second();
         var tools = client.getTeaNekoToolbox();
-        var config = iConfigDataService.getConfigData(this, GroupActivityManagerConfig.class, scopeId)
+        var config = iConfigDataService.getConfigData(this, GroupActivityConfigData.class, scopeId)
                 .orElseThrow(() -> new ConfigDataNotFoundException("该 scope 未注册: %s".formatted(scopeId)));
         // 获取缓存 rules
         var rules = getRules(scopeId, config, tools);
@@ -98,15 +104,15 @@ public class GroupActivityService {
         }
 
         // 开始扫描
-        tools.getGroupMemberListSender().get(groupId)
+        return tools.getGroupMemberListSender().get(groupId)
                 .thenAccept(list -> processList(list, scopeId, currentTimeMs, rules, map))
-                .thenAccept(v -> {
+                .thenApply(v -> {
                     for(var monitorGroupId : config.getGroups()) {
                         tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
                                 .sendTextMessage("扫描完毕，扫描出 %d 低活跃度成员".formatted(map.size()));
                     }
-                })
-                .finish();
+                    return map;
+                });
     }
 
     /**
@@ -123,6 +129,8 @@ public class GroupActivityService {
                 continue;
             }
             // 构造信息
+            long joinTimeMs = member.getJoinTimeMs() == null ? 0 : member.getJoinTimeMs();
+            long lastSpeakTimeMs = member.getLastSentTimeMs() == null ? 0 : member.getLastSentTimeMs();
             int joinTime = member.getJoinTimeMs() == null ? 0 :
                     Math.toIntExact(Duration.ofMillis(currentTimeMs - member.getJoinTimeMs()).toDays());
             int speak = member.getLastSentTimeMs() == null ? 0 :
@@ -134,6 +142,9 @@ public class GroupActivityService {
                     .speak(speak)
                     .level(member.getLevel() == null ? 0 : member.getLevel())
                     .hasTitle(member.getTitle() != null)
+                    .joinTimeMs(joinTimeMs)
+                    .lastSpeakTimeMs(lastSpeakTimeMs)
+                    .title(member.getTitle())
                     .build();
             // 开始检测
             for(var rule : rules) {
@@ -149,7 +160,7 @@ public class GroupActivityService {
      * 缓存所有的 rules；同时检测不合法的 rule 并删除
      *
      */
-    private List<GroupActivityRule> getRules(String scopeId, GroupActivityManagerConfig config, ITeaNekoToolbox tools) {
+    private List<GroupActivityRule> getRules(String scopeId, GroupActivityConfigData config, ITeaNekoToolbox tools) {
         // 提前缓存所有的 rule
         List<GroupActivityRule> rules = new ArrayList<>();
 
@@ -171,14 +182,7 @@ public class GroupActivityService {
                 continue;
             }
             // 构造一个假 GroupActivityData 对象用于检测是否能够检测通过
-            var fakeData = GroupActivityData.builder()
-                    .nickname("user")
-                    .card("group_member")
-                    .join(30)
-                    .speak(10)
-                    .level(20)
-                    .hasTitle(true)
-                    .build();
+            var fakeData = GroupActivityData.getFakeData();
             try {
                 rule.isValid(fakeData);
                 // 能够通过

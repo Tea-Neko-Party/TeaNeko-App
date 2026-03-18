@@ -3,6 +3,7 @@ package org.zexnocs.teanekoclient.onebot.sender.group;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.client.tools.IGroupKickSender;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.data.send.params.group.GroupKickSendParamsData;
@@ -21,7 +22,8 @@ import java.util.Map;
  */
 @SuppressWarnings("rawtypes")
 @Component("GroupKickSender")
-public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsData, Map> {
+public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsData, Map>
+    implements IGroupKickSender {
 
     /**
      * 构造函数，初始化发送器。
@@ -69,5 +71,16 @@ public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsDat
             Duration.ZERO,
             3,
             Duration.ofMillis(200));
+    }
+
+    /**
+     * 将用户踢出群组。
+     *
+     * @param groupId 群组平台 ID
+     * @param userId  用户平台 ID
+     */
+    @Override
+    public void kick(String groupId, String userId) {
+        kick(Long.parseLong(groupId), Long.parseLong(userId));
     }
 }

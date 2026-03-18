@@ -3,12 +3,14 @@ package org.zexnocs.teanekoclient.onebot.core;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
+import org.zexnocs.teanekoapp.client.tools.ITeaNekoToolbox;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberListSender;
+import org.zexnocs.teanekoclient.onebot.sender.group.GroupKickSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotMessageSenderTools;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
+import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
@@ -41,4 +43,10 @@ public class OnebotToolbox implements ITeaNekoToolbox {
 
     @Getter
     private final GetGroupMemberListSender groupMemberListSender;
+
+    @Getter
+    private final AvatarUtils avatarGetter = AvatarUtils.Instance;
+
+    @Getter
+    private final GroupKickSender groupKickSender;
 }

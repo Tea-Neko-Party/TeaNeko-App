@@ -27,17 +27,44 @@ public class GroupActivityFieldChecker implements IConfigFieldChecker {
     @Override
     public String isValid(String field, String value) {
         // rules
-        if(field.equals("rules")) {
-            return checkRules(value);
-        }
+        return switch (field) {
+            case "rules" -> checkRules(value);
+            case "cron" -> checkCron(value);
+            case "kick" -> checkKick(value);
+            case "remind" -> checkRemind(value);
+            default -> null;
+        };
 
-        // cron
-        if(field.equals("cron")) {
-            return checkCron(value);
-        }
+    }
 
-        // 否则返回 null
-        return null;
+    /**
+     * 检测 kick >= 1
+     */
+    private String checkKick(String value) {
+        try {
+            var intValue = Integer.parseInt(value);
+            if(intValue < 1) {
+                return "kick 的值必须大于等于 1。";
+            }
+            return null;
+        } catch (NumberFormatException e) {
+            return "kick 的值应为整数。";
+        }
+    }
+
+    /**
+     * 检测 remind >= 1
+     */
+    private String checkRemind(String value) {
+        try {
+            var intValue = Integer.parseInt(value);
+            if(intValue < 1) {
+                return "remind 的值必须大于等于 1。";
+            }
+            return null;
+        } catch (NumberFormatException e) {
+            return "remind 的值应为整数。";
+        }
     }
 
     /**
@@ -46,14 +73,7 @@ public class GroupActivityFieldChecker implements IConfigFieldChecker {
      */
     private String checkRules(String value) {
         // 构造一个假 GroupActivityData 对象用于解析
-        var fakeData = GroupActivityData.builder()
-                .nickname("user")
-                .card("group_member")
-                .join(30)
-                .speak(10)
-                .level(20)
-                .hasTitle(true)
-                .build();
+        var fakeData = GroupActivityData.getFakeData();
         try {
             // 检测是否能通过假数据
             new GroupActivityRule(value).isValid(fakeData);

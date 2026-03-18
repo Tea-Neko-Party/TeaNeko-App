@@ -30,4 +30,33 @@ public class GroupActivityData {
 
     /// 是否有头衔
     private final boolean hasTitle;
+
+    /// 其 title
+    private final String title;
+
+    /// 实际加入时间的时间戳 (ms)
+    private final long joinTimeMs;
+
+    /// 实际上次说话的时间戳 (ms)
+    private final long lastSpeakTimeMs;
+
+    /**
+     * 获取一个 fake data
+     *
+     * @return fake data
+     */
+    public static GroupActivityData getFakeData() {
+        var currentTime = System.currentTimeMillis();
+        return builder()
+                .nickname("user")
+                .card("group_member")
+                .join(30)
+                .speak(10)
+                .level(20)
+                .hasTitle(true)
+                .joinTimeMs(currentTime)
+                .lastSpeakTimeMs(currentTime)
+                .title("title")
+                .build();
+    }
 }

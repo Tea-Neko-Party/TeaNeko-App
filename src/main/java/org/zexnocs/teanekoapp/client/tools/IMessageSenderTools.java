@@ -1,7 +1,9 @@
-package org.zexnocs.teanekoapp.sender.api.sender_box;
+package org.zexnocs.teanekoapp.client.tools;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 
 /**
  * 根据接收到的 {@link ITeaNekoMessageData} 类型来快速发送消息的发送器接口。

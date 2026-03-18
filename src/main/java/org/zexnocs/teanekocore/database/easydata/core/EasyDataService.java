@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.database.easydata.core;
 
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
@@ -40,7 +41,6 @@ public class EasyDataService implements IEasyDataService {
     /// EasyData 的 task stage chain 执行缓存
     private final Map<Class<? extends BaseEasyDataObject>, String> taskStageNamespaceCache = new ConcurrentHashMap<>();
 
-    /// object mapper
     private final ObjectMapper objectMapper;
 
     /**
@@ -49,8 +49,9 @@ public class EasyDataService implements IEasyDataService {
     @Autowired
     public EasyDataService(ICacheService cacheService,
                            IDatabaseService databaseService,
-                           EasyDataRepositoryScanner easyDataRepositoryScanner) {
-        this.objectMapper = new ObjectMapper();
+                           EasyDataRepositoryScanner easyDataRepositoryScanner,
+                           @Qualifier("customObjectMapper") ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
         this.databaseService = databaseService;
         this.easyDataRepositoryScanner = easyDataRepositoryScanner;
         this.easyDataCache = ConcurrentMapCacheContainer.of(cacheService);

@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.response.api;
 
-import org.zexnocs.teanekoapp.sender.api.sender_box.IMessageSenderTools;
+import org.zexnocs.teanekoapp.client.tools.IMessageSenderTools;
 
 /**
  * 用于接收消息后回复消息的数据接口。

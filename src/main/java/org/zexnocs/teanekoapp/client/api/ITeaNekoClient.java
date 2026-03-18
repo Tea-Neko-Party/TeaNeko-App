@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.client.api;
 
-import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
+import org.zexnocs.teanekoapp.client.tools.ITeaNekoToolbox;
 import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
 
 /**

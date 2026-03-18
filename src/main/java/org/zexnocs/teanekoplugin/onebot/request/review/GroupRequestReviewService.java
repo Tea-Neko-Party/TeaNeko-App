@@ -3,8 +3,8 @@ package org.zexnocs.teanekoplugin.onebot.request.review;
 import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 import org.zexnocs.teanekoclient.onebot.data.receive.request.GroupRequestData;
@@ -12,10 +12,11 @@ import org.zexnocs.teanekoclient.onebot.data.response.params.StrangerInfoGetResp
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupAddRequestSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
-import org.zexnocs.teanekoplugin.onebot.servant.GroupSeniorServantRule;
+import org.zexnocs.teanekoplugin.general.servant.GroupSeniorServantRule;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @since 4.1.3
  */
 @Service("GroupRequestService")
+@RequiredArgsConstructor
 public class GroupRequestReviewService {
     private final static String TASK_NAMESPACE = "group-request-service-cleaner";
     /// 用于注册自动清理过期请求的定时器，单位为毫秒。默认为 1 小时。
@@ -49,15 +51,7 @@ public class GroupRequestReviewService {
 
     /// 群管理员规则，用于判断操作者是否为管理员。
     private final GroupSeniorServantRule groupSeniorServantRule;
-
-    @Autowired
-    public GroupRequestReviewService(ITimerService timerService,
-                                     GroupAddRequestSender groupAddRequestSender,
-                                     GroupSeniorServantRule groupSeniorServantRule) {
-        this.groupAddRequestSender = groupAddRequestSender;
-        this.timerService = timerService;
-        this.groupSeniorServantRule = groupSeniorServantRule;
-    }
+    private final OnebotScopeIdUtils onebotScopeIdUtils;
 
     /**
      * 创建定时器，定时清理过期的请求。
@@ -142,7 +136,7 @@ public class GroupRequestReviewService {
             var sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             sdf.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
             String regTimeStr = sdf.format(date);
-            builder.addImageMessage(AvatarUtils.Instance.getAvatarUrl(userId))
+            builder.addImageMessage(AvatarUtils.Instance.getUrl(userId))
                     .addTextMessage(String.format("""
                             昵称: %s
                             性别: %s
@@ -316,7 +310,8 @@ public class GroupRequestReviewService {
          */
         public int accept(long opGroupId, long opID) {
             // 如果是管理员，则直接返回最大值
-            if(groupSeniorServantRule.isAdmin(opGroupId, opID)) {
+            var scopeId = onebotScopeIdUtils.getGroupScopeId(opGroupId);
+            if(groupSeniorServantRule.isAdmin(scopeId, String.valueOf(opID))) {
                 return requestAcceptNum;
             }
             // 否则将该请求添加到处理过的集合中
@@ -334,7 +329,8 @@ public class GroupRequestReviewService {
          */
         public int reject(long opGroupId, long opID) {
             // 如果是管理员，则直接返回最大值
-            if(groupSeniorServantRule.isAdmin(opGroupId, opID)) {
+            var scopeId = onebotScopeIdUtils.getGroupScopeId(opGroupId);
+            if(groupSeniorServantRule.isAdmin(scopeId, String.valueOf(opID))) {
                 return requestRejectNum;
             }
             // 否则将该请求添加到处理过的集合中

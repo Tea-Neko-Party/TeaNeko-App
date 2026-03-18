@@ -3,7 +3,7 @@ package org.zexnocs.teanekoapp.response;
 import org.zexnocs.teanekoapp.client.api.IClient;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
-import org.zexnocs.teanekoapp.sender.api.ITeaNekoToolbox;
+import org.zexnocs.teanekoapp.client.tools.ITeaNekoToolbox;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
 /**

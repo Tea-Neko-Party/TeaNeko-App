@@ -1,15 +1,14 @@
 package org.zexnocs.teanekoplugin.onebot.request.review;
 
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.RequiredArgsConstructor;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
-import org.zexnocs.teanekocore.database.configdata.api.default_config.LongDefaultConfigData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
-import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekoplugin.general.MainGroupConfigManager;
 
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -21,33 +20,19 @@ import java.util.function.Consumer;
  * @date 2026/03/10
  * @since 4.1.4
  */
-@ConfigManager(value = "group-request-review-default-id", description = """
-        审核群设置默认被审核的群ID。
-        配置：默认被审核的群ID。""",
-        configType = LongDefaultConfigData.class,
-        namespaces = {OnebotTeaNekoClient.GROUP_NAMESPACE})
-@Description("管理群入群请求的指令。")
 @Command(
         value = {"/gr"},
         scope = CommandScope.GROUP,
         permission = CommandPermission.ALL,
         supportedClients = {OnebotTeaNekoClient.class}
 )
+@RequiredArgsConstructor
 public class GroupRequestReviewCommand {
-    private final IConfigDataService iConfigService;
     private final GroupRequestReviewRule groupRequestReviewRule;
     private final GroupRequestReviewService groupRequestReviewService;
     private final OnebotScopeIdUtils onebotScopeIdUtils;
-
-    @Autowired
-    public GroupRequestReviewCommand(GroupRequestReviewService groupRequestReviewService,
-                                     GroupRequestReviewRule groupRequestReviewRule,
-                                     IConfigDataService iConfigService, OnebotScopeIdUtils onebotScopeIdUtils) {
-        this.groupRequestReviewService = groupRequestReviewService;
-        this.groupRequestReviewRule = groupRequestReviewRule;
-        this.iConfigService = iConfigService;
-        this.onebotScopeIdUtils = onebotScopeIdUtils;
-    }
+    private final MainGroupConfigManager mainGroupConfigManager;
+    private final IConfigDataService iConfigDataService;
 
     @Description("""
             显示指定群的所有入群请求。
@@ -167,10 +152,16 @@ public class GroupRequestReviewCommand {
         var currentGroupId = Long.parseLong(Objects.requireNonNull(data.getUserData().getGroupId()));
         if(reviewedGroupId == 0) {
             // 如果没有指定群ID，则尝试使用配置中的默认群ID
-            iConfigService.getConfigData(this, LongDefaultConfigData.class,
-                            onebotScopeIdUtils.getGroupConfigKey(currentGroupId))
+            mainGroupConfigManager.getConfig(onebotScopeIdUtils.getGroupConfigKey(currentGroupId))
                 .ifPresentOrElse(config -> {
-                    var configId = config.getValue();
+                    final long configId;
+                    try {
+                        configId = Long.parseLong(config.getValue());
+                    } catch (NumberFormatException e) {
+                        data.getMessageSender()
+                                .sendAtReplyMessage("配置中的默认群ID不合法喵！");
+                        return;
+                    }
                     if(configId == 0) {
                         data.getMessageSender()
                                 .sendAtReplyMessage("没有配置默认被审核的群ID喵！");
@@ -184,7 +175,7 @@ public class GroupRequestReviewCommand {
         }
 
         // 判断当前审核群ID 是否在 被审核的群的审核列表中
-        iConfigService.getConfigData(groupRequestReviewRule,
+        iConfigDataService.getConfigData(groupRequestReviewRule,
                         GroupRequestReviewRuleConfig.class,
                         onebotScopeIdUtils.getGroupConfigKey(reviewedGroupId))
             .ifPresentOrElse(config -> {

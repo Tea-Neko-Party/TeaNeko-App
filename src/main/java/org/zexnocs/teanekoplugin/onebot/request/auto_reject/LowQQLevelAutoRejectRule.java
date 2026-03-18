@@ -89,7 +89,7 @@ public class LowQQLevelAutoRejectRule {
                                             原因：低于要求的等级 %s
                                             
                                             用户详细信息：""", groupId, config.getLevelThreshold()))
-                                .addImageMessage(AvatarUtils.Instance.getAvatarUrl(userId))
+                                .addImageMessage(AvatarUtils.Instance.getUrl(userId))
                                 .addTextMessage(String.format("""
                                             昵称：%s
                                             账号：%s

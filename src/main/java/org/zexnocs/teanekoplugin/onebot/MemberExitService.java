@@ -49,7 +49,7 @@ public class MemberExitService {
                     memberName = "成员";
                 }
                 groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(data.getGroupId()))
-                                .addImageMessage(AvatarUtils.Instance.getAvatarUrl(data.getUserId()))
+                                .addImageMessage(AvatarUtils.Instance.getUrl(data.getUserId()))
                                 .addTextMessage(String.format("""
                                     有%s离开了猫猫茶馆喵！
                                     离开的%s是：%s
