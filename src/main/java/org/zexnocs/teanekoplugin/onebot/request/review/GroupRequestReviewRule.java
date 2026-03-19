@@ -121,7 +121,7 @@ public class GroupRequestReviewRule {
                     groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(review))
                             .sendTextMessage("""
                                 请求ID：%s
-                                已经被管理员同意该请求。无需再处理喵。""");
+                                已经被管理员同意该请求。无需再处理喵。""".formatted(userId));
                 }
             });
     }
