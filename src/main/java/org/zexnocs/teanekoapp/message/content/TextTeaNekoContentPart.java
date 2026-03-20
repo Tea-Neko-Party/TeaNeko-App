@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContentPart;
 
 /**
@@ -22,7 +23,7 @@ import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContentPart;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + ITextTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(TeaNekoContent.PREFIX + ITextTeaNekoContentPart.TYPE)
 public class TextTeaNekoContentPart implements ITextTeaNekoContentPart {
     /// 文本内容
     @JsonProperty("text")

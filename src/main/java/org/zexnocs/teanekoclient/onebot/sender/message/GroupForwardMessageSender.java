@@ -240,7 +240,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                     .contentPart(NodeTeaNekoContentPart.builder()
                             .userId(userId)
                             .nickname(nickname)
-                            .messages(List.of(OnebotContent.builder()
+                            .contents(List.of(OnebotContent.builder()
                                     .type(TextTeaNekoContentPart.TYPE)
                                     .contentPart(TextTeaNekoContentPart.builder()
                                             .text(message)
@@ -266,7 +266,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
                     .contentPart(NodeTeaNekoContentPart.builder()
                             .userId(userId)
                             .nickname(nickname)
-                            .messages(messageList)
+                            .contents(messageList)
                             .build())
                     .build());
             return this;

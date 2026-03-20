@@ -32,4 +32,15 @@ public interface IReplyTeaNekoContentPart extends ITeaNekoContentPart {
     default String[] toCommandArgs() {
         return new String[0];
     }
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @NonNull
+    @Override
+    default String toRawString() {
+        return "{reply: " + getId() + "}";
+    }
 }

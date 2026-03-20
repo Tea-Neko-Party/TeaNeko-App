@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
@@ -25,7 +25,7 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotContent.PREFIX + IAtTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(OnebotContent.PREFIX + IAtTeaNekoContentPart.TYPE)
 public class AtOnebotContentPart implements IAtTeaNekoContentPart {
     /// 被@的用户的 QQ 号
     /// 如果 @ 全体成员，则为 "all"

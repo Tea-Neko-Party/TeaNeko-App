@@ -17,7 +17,7 @@ import java.lang.annotation.Target;
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
-public @interface TeaNekoContent {
+public @interface TeaNekoContentPart {
     /**
      * 消息内容类型，建议的命名规范为：
      * <pre> "平台前缀-消息类型" </pre>

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
 
 /**
@@ -22,7 +23,7 @@ import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + IAtTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(TeaNekoContent.PREFIX + IAtTeaNekoContentPart.TYPE)
 public class AtTeaNekoContentPart implements IAtTeaNekoContentPart {
     /// 被 @ 用户的平台 ID
     /// 如果是 @ 全体成员，则为 "all"

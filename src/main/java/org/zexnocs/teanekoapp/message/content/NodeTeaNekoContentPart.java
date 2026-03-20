@@ -8,6 +8,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContentPart;
 
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.List;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + INodeTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(TeaNekoContent.PREFIX + INodeTeaNekoContentPart.TYPE)
 public class NodeTeaNekoContentPart implements INodeTeaNekoContentPart {
     /// 被转发消息的用户 ID
     @JsonProperty("userId")
@@ -36,5 +37,5 @@ public class NodeTeaNekoContentPart implements INodeTeaNekoContentPart {
 
     /// 被转发消息的内容列表
     @JsonProperty("content")
-    private List<? extends ITeaNekoContent> messages;
+    private List<? extends ITeaNekoContent> contents;
 }

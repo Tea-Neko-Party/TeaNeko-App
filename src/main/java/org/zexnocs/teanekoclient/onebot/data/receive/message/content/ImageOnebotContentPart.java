@@ -6,7 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
@@ -22,7 +22,7 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotContent.PREFIX + IImageTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(OnebotContent.PREFIX + IImageTeaNekoContentPart.TYPE)
 public class ImageOnebotContentPart implements IImageTeaNekoContentPart {
     // 图片文件名
     @JsonProperty("file")

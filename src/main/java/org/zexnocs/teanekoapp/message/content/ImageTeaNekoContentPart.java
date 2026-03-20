@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 
 /**
@@ -20,7 +21,7 @@ import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + IImageTeaNekoContentPart.TYPE)
+@TeaNekoContentPart(TeaNekoContent.PREFIX + IImageTeaNekoContentPart.TYPE)
 public class ImageTeaNekoContentPart implements IImageTeaNekoContentPart {
     /// 图片来源 URL（file/http/base64）
     @JsonProperty("url")

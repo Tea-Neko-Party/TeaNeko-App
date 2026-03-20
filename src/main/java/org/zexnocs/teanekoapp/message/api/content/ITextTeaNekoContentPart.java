@@ -36,4 +36,15 @@ public interface ITextTeaNekoContentPart extends ITeaNekoContentPart {
         }
         return text.split(" +");
     }
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @NonNull
+    @Override
+    default String toRawString() {
+        return getText();
+    }
 }

@@ -32,4 +32,15 @@ public interface IAtTeaNekoContentPart extends ITeaNekoContentPart {
     default String[] toCommandArgs() {
         return new String[]{getId()};
     }
+
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @Override
+    default @NonNull String toRawString() {
+        return "@" + (getId().equalsIgnoreCase("all") ? "全体成员" : getId());
+    }
 }

@@ -3,7 +3,7 @@ package org.zexnocs.teanekoapp.message;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
@@ -12,9 +12,9 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 用于扫描带有 {@link TeaNekoContent} 和实现了 {@link ITeaNekoContentPart} 的类。
+ * 用于扫描带有 {@link TeaNekoContentPart} 和实现了 {@link ITeaNekoContentPart} 的类。
  *
- * @see TeaNekoContent
+ * @see TeaNekoContentPart
  * @author zExNocs
  * @date 2026/02/27
  * @since 4.0.10
@@ -40,7 +40,7 @@ public class ContentPartScanner extends AbstractScanner {
      */
     @Override
     protected void _scan() {
-        var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContent.class, ITeaNekoContentPart.class);
+        var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContentPart.class, ITeaNekoContentPart.class);
         for (var entry : map.entrySet()) {
             var clazz = entry.getKey();
             var annotation = entry.getValue();

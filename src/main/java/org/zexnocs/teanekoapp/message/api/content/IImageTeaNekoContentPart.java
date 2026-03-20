@@ -39,4 +39,16 @@ public interface IImageTeaNekoContentPart extends ITeaNekoContentPart {
     default String[] toCommandArgs() {
         return new String[]{getUrl()};
     }
+
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @Override
+    @NonNull
+    default String toRawString() {
+        return "{image url: %s}".formatted(getUrl());
+    }
 }

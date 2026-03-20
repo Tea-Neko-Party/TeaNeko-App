@@ -8,7 +8,7 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
@@ -23,7 +23,7 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotContent.PREFIX + FaceOnebotContentPart.TYPE)
+@TeaNekoContentPart(OnebotContent.PREFIX + FaceOnebotContentPart.TYPE)
 public class FaceOnebotContentPart implements ITeaNekoContentPart {
     public static final String TYPE = "face";
 
@@ -42,5 +42,15 @@ public class FaceOnebotContentPart implements ITeaNekoContentPart {
     @Override
     public @NonNull String[] toCommandArgs() {
         return new String[]{"[CQ:face,id=" + id + "]"};
+    }
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @Override
+    public @NonNull String toRawString() {
+        return "[CQ:face,id=" + id + "]";
     }
 }

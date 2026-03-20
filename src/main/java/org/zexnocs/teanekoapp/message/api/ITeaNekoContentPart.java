@@ -18,4 +18,12 @@ public interface ITeaNekoContentPart {
      */
     @NonNull
     String[] toCommandArgs();
+
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @NonNull
+    String toRawString();
 }

@@ -36,4 +36,14 @@ public class DefaultTeaNekoContentPart implements ITeaNekoContentPart {
         return new String[0];
     }
 
+    /**
+     * 获取到原始文本。
+     *
+     * @return {@link String} 原始文本。
+     */
+    @Override
+    public @NonNull String toRawString() {
+        return "";
+    }
+
 }

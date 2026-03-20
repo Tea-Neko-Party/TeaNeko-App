@@ -38,7 +38,7 @@ public interface INodeTeaNekoContentPart extends ITeaNekoContentPart {
      *
      * @return {@link List }<{@link ? } {@link extends } {@link ITeaNekoContent }>
      */
-    List<? extends ITeaNekoContent> getMessages();
+    List<? extends ITeaNekoContent> getContents();
 
     /**
      * 默认不转化成指令。
@@ -50,4 +50,23 @@ public interface INodeTeaNekoContentPart extends ITeaNekoContentPart {
         return new String[0];
     }
 
+    /**
+     * 默认将所有的 contents 的 raw message
+     */
+    @Override
+    @NonNull
+    default String toRawString() {
+        StringBuilder sb = new StringBuilder();
+        boolean flag = false;
+        for(var content : getContents()) {
+            if(flag) {
+                sb.append("\n");
+            }
+            flag = true;
+            sb.append("%s (%s): %s".formatted(getNickname(),
+                    getUserId(),
+                    content.getContentPart().toRawString()));
+        }
+        return sb.toString();
+    }
 }
