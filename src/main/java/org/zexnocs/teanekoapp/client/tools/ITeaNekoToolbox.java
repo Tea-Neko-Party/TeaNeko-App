@@ -20,41 +20,72 @@ public interface ITeaNekoToolbox {
      *
      * @return {@link IMessageSenderTools }
      */
-    IMessageSenderTools getMessageSenderTools();
+    default IMessageSenderTools getMessageSenderTools() {
+        throw new UnsupportedOperationException("该 client 不支持消息发送器工具。");
+    }
 
     /**
      * 获取根据消息 ID 获取消息的发送器工具。
      *
      * @return {@link IGetMessageSender }
      */
-    IGetMessageSender getGetMsgSender();
+    default IGetMessageSender getGetMsgSender() {
+        throw new UnsupportedOperationException("该 client 不支持根据消息 ID 获取消息的发送器工具。");
+    }
 
     /**
      * 获取平台用户在指定群组中的信息的发送器。
      *
      * @return 获取平台用户在指定群组中的信息的发送器
      */
-    IGetGroupMemberInfoSender getGroupMemberInfoSender();
+    default IGetGroupMemberInfoSender getGroupMemberInfoSender() {
+        throw new UnsupportedOperationException("该 client 不支持获取平台用户在指定群组中的信息的发送器。");
+    }
 
     /**
      * 获取指定群组中所有成员信息的发送器。
      *
      * @return 获取指定群组中所有成员信息的发送器。
      */
-    IGetGroupMemberListSender getGroupMemberListSender();
+    default IGetGroupMemberListSender getGroupMemberListSender() {
+        throw new UnsupportedOperationException("该 client 不支持获取指定群组中所有成员信息的发送器。");
+    }
 
     /**
      * 获取平台用户信息的发送器
      *
      * @return 获取平台用户信息的发送器
      */
-    IPlatformUserGetSender getPlatformUserGetSender();
+    default IPlatformUserGetSender getPlatformUserGetSender() {
+        throw new UnsupportedOperationException("该 client 不支持获取平台用户信息的发送器。");
+    }
 
     /**
      * 获取构造平台用户信息的发送器。
      * 该发射器可以根据平台 ID 构造出用户的信息列表。
      */
-    IPlatformUserInfoConstructor getPlatformUserInfoConstructorSender();
+    default IPlatformUserInfoConstructor getPlatformUserInfoConstructorSender() {
+        throw new UnsupportedOperationException("该 client 不支持获取构造平台用户信息的发送器。");
+    }
+
+
+    /**
+     * 获取可以根据用户平台 ID 获取头像 url 的工具
+     *
+     * @return 头像 url 工具
+     */
+    default IAvatarGetter getAvatarGetter() {
+        throw new UnsupportedOperationException("该 client 不支持获取头像 url 的工具。");
+    }
+
+    /**
+     * 群组成员踢出器
+     *
+     * @return {@link IGroupKickSender }
+     */
+    default IGroupKickSender getGroupKickSender() {
+        throw new UnsupportedOperationException("该 client 不支持群组成员踢出器。");
+    }
 
     /**
      * 获取符合当前适配器实现类的 logger。
@@ -63,17 +94,4 @@ public interface ITeaNekoToolbox {
      */
     ILogger getLogger();
 
-    /**
-     * 获取可以根据用户平台 ID 获取头像 url 的工具
-     *
-     * @return 头像 url 工具
-     */
-    IAvatarGetter getAvatarGetter();
-
-    /**
-     * 群组成员踢出器
-     *
-     * @return {@link IGroupKickSender }
-     */
-    IGroupKickSender getGroupKickSender();
 }

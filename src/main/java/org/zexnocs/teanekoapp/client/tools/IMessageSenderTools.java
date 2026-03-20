@@ -21,7 +21,9 @@ public interface IMessageSenderTools {
      *
      * @return {@link ITeaNekoMessageListBuilder }
      */
-    ITeaNekoMessageListBuilder getMsgListBuilder();
+    default ITeaNekoMessageListBuilder getMsgListBuilder() {
+        throw new UnsupportedOperationException("该 client 不支持 msg list builder");
+    }
 
     /**
      * 使用 token 获取一个
@@ -32,7 +34,9 @@ public interface IMessageSenderTools {
      * @param data  要回复的消息数据
      * @return 转发消息构建器
      */
-    IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data);
+    default IForwardMessageSenderBuilder getForwardBuilder(String token, ITeaNekoMessageData data) {
+        throw new UnsupportedOperationException("该 client 不支持获取转发消息构建器");
+    }
 
     /**
      * 使用 token 获取一个 group
@@ -43,7 +47,9 @@ public interface IMessageSenderTools {
      * @param groupId 群组 ID
      * @return 转发消息构建器
      */
-    IForwardMessageSenderBuilder getGroupForwardBuilder(String token, String groupId);
+    default IForwardMessageSenderBuilder getGroupForwardBuilder(String token, String groupId) {
+        throw new UnsupportedOperationException("该 client 不支持获取群组转发消息构建器");
+    }
 
     /**
      * 使用 token 获取一个 private
@@ -54,7 +60,9 @@ public interface IMessageSenderTools {
      * @param platformId 平台用户 ID
      * @return 转发消息构建器
      */
-    IForwardMessageSenderBuilder getPrivateForwardBuilder(String token, String platformId);
+    default IForwardMessageSenderBuilder getPrivateForwardBuilder(String token, String platformId) {
+        throw new UnsupportedOperationException("该 client 不支持获取私聊转发消息构建器");
+    }
 
     /**
      * 使用 token 获取一个
@@ -65,7 +73,9 @@ public interface IMessageSenderTools {
      * @param data  要回复的消息数据
      * @return 一般消息构建器
      */
-    IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data);
+    default IEasyMessageSenderBuilder getEasyBuilder(String token, ITeaNekoMessageData data) {
+        throw new UnsupportedOperationException("该 client 不支持获取一般消息构建器");
+    }
 
     /**
      * 根据平台 ID 获取 private message sender
@@ -74,7 +84,9 @@ public interface IMessageSenderTools {
      * @param platformId 平台用户 ID
      * @return 一般消息构建器
      */
-    IEasyMessageSenderBuilder getPrivateBuilder(String token, String platformId);
+    default IEasyMessageSenderBuilder getPrivateBuilder(String token, String platformId) {
+        throw new UnsupportedOperationException("该 client 不支持根据平台 ID 获取私聊发送器");
+    }
 
     /**
      * 根据平台 ID 获取 group message sender
@@ -83,7 +95,9 @@ public interface IMessageSenderTools {
      * @param groupId 群组 ID
      * @return 一般消息构建器
      */
-    IEasyMessageSenderBuilder getGroupBuilder(String token, String groupId);
+    default IEasyMessageSenderBuilder getGroupBuilder(String token, String groupId) {
+        throw new UnsupportedOperationException("该 client 不支持根据平台 ID 获取群组发送器");
+    }
 
     // ---------------------- 默认 token 获取发射器 ----------------------
 
