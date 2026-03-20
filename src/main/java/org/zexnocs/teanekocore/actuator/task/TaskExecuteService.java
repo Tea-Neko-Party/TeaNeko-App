@@ -81,11 +81,14 @@ public class TaskExecuteService implements ITaskExecuteService {
      */
     @Override
     public void __executeTaskRetry(ITask<?> task) {
-        logger.warn(this.getClass().getSimpleName(),
-                "尝试重试任务：%s，当前重试次数：%d / %d"
-                        .formatted(task.getConfig().getName(),
-                                task.getCurrentRetryCount(),
-                                task.getConfig().getMaxRetries()));
+        // 第一次重试不再 warn；超过再 warn
+        if(task.getCurrentRetryCount() >= 2) {
+            logger.warn(this.getClass().getSimpleName(),
+                    "尝试重试任务：%s，当前重试次数：%d / %d"
+                            .formatted(task.getConfig().getName(),
+                                    task.getCurrentRetryCount(),
+                                    task.getConfig().getMaxRetries()));
+        }
         // 任务处于 Created 状态才允许执行
         if(!task.switchStateUnderExpected(TaskCreatedState.class, new TaskSubmittedState())) {
             logger.errorWithReport(this.getClass().getSimpleName(),
