@@ -62,8 +62,7 @@ public class StrangerGetCommand {
                                             城市: %s
                                             地址: %s
                                             注册时间: %s
-                                            生日: %d-%d-%d
-                                            """,
+                                            生日: %d-%d-%d""",
                                             userId,
                                             strangerInfo.getQid(),
                                             strangerInfo.getNickname(),
