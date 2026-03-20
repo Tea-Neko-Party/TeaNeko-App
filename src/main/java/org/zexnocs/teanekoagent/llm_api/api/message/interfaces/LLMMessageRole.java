@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.Getter;
 
 /**
@@ -10,7 +12,7 @@ import lombok.Getter;
  * @since 4.4.0
  */
 @Getter
-public enum LLMMessageType {
+public enum LLMMessageRole {
     /**
      * 由用户层面发送的消息。
      * <br>主要用于向 LLM 提问
@@ -35,9 +37,26 @@ public enum LLMMessageType {
     /**
      * 类型转化成 string
      */
+    @JsonValue
     private final String value;
 
-    LLMMessageType(String value) {
+    LLMMessageRole(String value) {
         this.value = value;
+    }
+
+    /**
+     * 用于反序列化。
+     *
+     * @param value value 值
+     * @return {@link LLMMessageRole }
+     */
+    @JsonCreator
+    public static LLMMessageRole fromValue(String value) {
+        for (LLMMessageRole role : values()) {
+            if (role.value.equals(value)) {
+                return role;
+            }
+        }
+        throw new IllegalArgumentException("Unknown role: " + value);
     }
 }

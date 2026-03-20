@@ -2,9 +2,9 @@ package org.zexnocs.teanekoapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.expression.Expression;
-import org.springframework.expression.spel.standard.SpelExpressionParser;
-import org.springframework.expression.spel.support.StandardEvaluationContext;
+import org.zexnocs.teanekoagent.llm_api.api.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm_api.api.message.content.LLMContentListBuilder;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * 常规测试类，用于测试任何想要测试的功能。
@@ -18,11 +18,14 @@ import org.springframework.expression.spel.support.StandardEvaluationContext;
 public class NormalTest {
     @Test
     public void run() {
-        SpelExpressionParser parser = new SpelExpressionParser();
-        StandardEvaluationContext context = new StandardEvaluationContext();
-        context.setVariable("a", true);
-        context.setVariable("b", false);
-        Expression expression = parser.parseExpression("!#a");
-        System.out.println(expression.getValue(context));
+        var mapper = new ObjectMapper();
+        var messageA = LLMAssistantMessage.builder()
+                .contents(LLMContentListBuilder.builder().addText("hello").build())
+                .build();
+        var messageB = LLMAssistantMessage.builder()
+                .contents(LLMContentListBuilder.builder().addText("hello").addText("world").build())
+                .build();
+        System.out.println(mapper.writeValueAsString(messageA));
+        System.out.println(mapper.writeValueAsString(messageB));
     }
 }

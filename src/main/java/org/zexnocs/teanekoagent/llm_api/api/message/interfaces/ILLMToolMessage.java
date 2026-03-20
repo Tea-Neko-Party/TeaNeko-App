@@ -8,15 +8,12 @@ package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
  * @since 4.4.0
  */
 public interface ILLMToolMessage extends ILLMMessage {
-    /// system 角色
-    String ROLE = "tool";
-
     /**
      * 返回角色
      *
-     * @return {@link String }
+     * @return {@link LLMMessageRole }
      */
-    default String getRole() {
-        return ROLE;
+    default LLMMessageRole getRole() {
+        return LLMMessageRole.TOOL;
     }
 }

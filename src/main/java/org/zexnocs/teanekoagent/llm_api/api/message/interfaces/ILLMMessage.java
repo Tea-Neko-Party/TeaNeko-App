@@ -15,15 +15,15 @@ public interface ILLMMessage {
     /**
      * 获取 message 类型。
      *
-     * @see LLMMessageType
-     * @return {@link LLMMessageType }
+     * @see LLMMessageRole
+     * @return {@link LLMMessageRole }
      */
-    LLMMessageType getMessageType();
+    LLMMessageRole getRole();
 
     /**
      * 获取 content 列表
      *
      * @return {@link List }<{@link ILLMContent }>
      */
-    List<ILLMContent> getContent();
+    List<ILLMContent> getContents();
 }
