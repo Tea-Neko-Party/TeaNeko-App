@@ -3,7 +3,8 @@ package org.zexnocs.teanekoclient.onebot.data.send.params.message;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Getter;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContentPart;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
@@ -46,10 +47,10 @@ public class GroupForwardMessageSendParamsData implements ISendParamsData<Onebot
 
     /**
      * 应该添加 node 节点。
-     * 详细见 {@link org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContent}
+     * 详细见 {@link INodeTeaNekoContentPart}
      */
     @JsonProperty("messages")
-    private final List<OnebotMessage> messages;
+    private final List<OnebotContent> messages;
 
     @Override
     public String getAction() {

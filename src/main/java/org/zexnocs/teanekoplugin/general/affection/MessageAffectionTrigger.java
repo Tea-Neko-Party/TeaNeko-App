@@ -3,7 +3,7 @@ package org.zexnocs.teanekoplugin.general.affection;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.TeaNekoMessageReceiveEvent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
@@ -149,11 +149,11 @@ public class MessageAffectionTrigger {
      */
     private boolean handleAt(ITeaNekoMessageData data) {
         var messages = data.getMessages();
-        IAtTeaNekoContent atMessageContent = null;
+        IAtTeaNekoContentPart atMessageContent = null;
         // 查找 @ 子数据
         for(var message : messages) {
-            var content = message.getContent();
-            if(content instanceof IAtTeaNekoContent atContent) {
+            var content = message.getContentPart();
+            if(content instanceof IAtTeaNekoContentPart atContent) {
                 atMessageContent = atContent;
                 if(atMessageContent.getId().equalsIgnoreCase("all")) {
                     // @全体成员 不触发好感度增加

@@ -7,9 +7,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
  * 符合 onebot 规范的表情消息数据类。
@@ -23,24 +23,15 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + MFaceOnebotContent.TYPE)
-public class MFaceOnebotContent implements ITeaNekoContent {
-    public static final String TYPE = "mface";
+@TeaNekoContent(OnebotContent.PREFIX + FaceOnebotContentPart.TYPE)
+public class FaceOnebotContentPart implements ITeaNekoContentPart {
+    public static final String TYPE = "face";
 
-    @JsonProperty("url")
-    private String url;
+    @JsonProperty("id")
+    private String id;
 
-    @JsonProperty("emoji_package_id")
-    private String emojiPackageId;
-
-    @JsonProperty("emoji_id")
-    private String emojiId;
-
-    @JsonProperty("key")
-    private String key;
-
-    @JsonProperty("summary")
-    private String summary;
+    @JsonProperty("large")
+    private String large;
 
     /**
      * 转化成命令解析的字符串表示。
@@ -50,6 +41,6 @@ public class MFaceOnebotContent implements ITeaNekoContent {
      */
     @Override
     public @NonNull String[] toCommandArgs() {
-        return new String[]{"[CQ:mface,url=" + url + "]"};
+        return new String[]{"[CQ:face,id=" + id + "]"};
     }
 }

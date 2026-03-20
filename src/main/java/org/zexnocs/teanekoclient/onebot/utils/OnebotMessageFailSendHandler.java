@@ -2,7 +2,7 @@ package org.zexnocs.teanekoclient.onebot.utils;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
@@ -38,7 +38,7 @@ public class OnebotMessageFailSendHandler {
      */
     public TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> recordFailed(
             String namespace,
-            List<? extends ITeaNekoMessage> messages,
+            List<? extends ITeaNekoContent> messages,
             TaskFuture<ITaskResult<List<OnebotMessageSendResponseData>>> future) {
         return future.whenComplete((result, throwable) -> {
             if(throwable == null && result.isSuccess()) {

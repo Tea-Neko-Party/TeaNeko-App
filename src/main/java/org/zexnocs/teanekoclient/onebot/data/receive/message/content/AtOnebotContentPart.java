@@ -10,8 +10,8 @@ import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContent;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
  * 符合 onebot 规范的 At 消息内容数据类。
@@ -25,8 +25,8 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + IAtTeaNekoContent.TYPE)
-public class AtOnebotContent implements IAtTeaNekoContent {
+@TeaNekoContent(OnebotContent.PREFIX + IAtTeaNekoContentPart.TYPE)
+public class AtOnebotContentPart implements IAtTeaNekoContentPart {
     /// 被@的用户的 QQ 号
     /// 如果 @ 全体成员，则为 "all"
     @JsonProperty("qq")

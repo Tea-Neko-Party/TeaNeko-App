@@ -2,7 +2,7 @@ package org.zexnocs.teanekoclient._app_config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageDeserializer;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
@@ -26,7 +26,7 @@ public class OnebotJacksonConfig {
     @Bean("onebotObjectMapper")
     public ObjectMapper onebotObjectMapper(OnebotMessageDeserializer deserializer) {
         SimpleModule module = new SimpleModule();
-        module.addDeserializer(OnebotMessage.class, deserializer);
+        module.addDeserializer(OnebotContent.class, deserializer);
         return JsonMapper.builder()
                 .enable(DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY)
                 .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)

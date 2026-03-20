@@ -2,9 +2,9 @@ package org.zexnocs.teanekoapp.sender.api.sender_box;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -15,12 +15,12 @@ import java.util.List;
 /**
  * 是一个一次性构造消息发送器的构建器接口，提供了构建消息发送器所需的方法。
  * <br> 与
- * {@link ITeaNekoMessageListBuilder}
+ * {@link ITeaNekoContentListBuilder}
  * 不同的是，前者只是构造 list，后者构造 list 后包装成
  * {@link org.zexnocs.teanekoapp.sender.api.ISendData}
  * 并推送事件。
  * <br> 该类与
- * {@link ITeaNekoMessageListBuilder}
+ * {@link ITeaNekoContentListBuilder}
  * 是 combination 依赖关系
  *
  * @author zExNocs
@@ -32,9 +32,9 @@ public interface IEasyMessageSenderBuilder {
     /**
      * 获取当前发送器的消息构建器，用于构建消息内容。
      *
-     * @return {@link ITeaNekoMessageListBuilder } 消息构建器
+     * @return {@link ITeaNekoContentListBuilder } 消息构建器
      */
-    ITeaNekoMessageListBuilder getMessageListBuilder();
+    ITeaNekoContentListBuilder getMessageListBuilder();
 
     /**
      * 获取当前发送器所回复的发送数据对象，用于获取发送相关的信息，例如消息类型、目标 ID 等。
@@ -95,24 +95,24 @@ public interface IEasyMessageSenderBuilder {
     IEasyMessageSenderBuilder setRecordFailed(boolean recordFailed);
 
     /**
-     * 添加一个构造好的 {@link ITeaNekoMessage}。
+     * 添加一个构造好的 {@link ITeaNekoContent}。
      *
      * @param message 已经构造好的消息对象
      * @return 当前的构造器对象，以便于链式调用
      */
-    default IEasyMessageSenderBuilder addMessage(@NonNull ITeaNekoMessage message) {
-        getMessageListBuilder().addMessage(message);
+    default IEasyMessageSenderBuilder addMessage(@NonNull ITeaNekoContent message) {
+        getMessageListBuilder().addContent(message);
         return this;
     }
 
     /**
-     * 添加一个构造好的 {@link ITeaNekoMessage} 列表。
+     * 添加一个构造好的 {@link ITeaNekoContent} 列表。
      *
      * @param messageList 已经构造好的消息对象列表
      * @return 当前的构造器对象，以便于链式调用
      */
-    default IEasyMessageSenderBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList) {
-        getMessageListBuilder().addMessages(messageList);
+    default IEasyMessageSenderBuilder addMessages(@NonNull List<ITeaNekoContent> messageList) {
+        getMessageListBuilder().addContents(messageList);
         return this;
     }
 
@@ -123,7 +123,7 @@ public interface IEasyMessageSenderBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     default IEasyMessageSenderBuilder addTextMessage(@Nullable String text) {
-        getMessageListBuilder().addTextMessage(text);
+        getMessageListBuilder().addText(text);
         return this;
     }
 
@@ -137,7 +137,7 @@ public interface IEasyMessageSenderBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     default IEasyMessageSenderBuilder addImageMessage(@Nullable String imageUrl) {
-        getMessageListBuilder().addImageMessage(imageUrl);
+        getMessageListBuilder().addImage(imageUrl);
         return this;
     }
 
@@ -148,7 +148,7 @@ public interface IEasyMessageSenderBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     default IEasyMessageSenderBuilder addAtMessage(@Nullable String atId) {
-        getMessageListBuilder().addAtMessage(atId);
+        getMessageListBuilder().addAt(atId);
         return this;
     }
 
@@ -159,7 +159,7 @@ public interface IEasyMessageSenderBuilder {
      * @return 当前的构造器对象，以便于链式调用
      */
     default IEasyMessageSenderBuilder addReplyMessage(@Nullable String replyId) {
-        getMessageListBuilder().addReplyMessage(replyId);
+        getMessageListBuilder().addReply(replyId);
         return this;
     }
 
@@ -178,7 +178,7 @@ public interface IEasyMessageSenderBuilder {
         // 如果有 platformId 且是群消息，则添加 at 消息
         if (data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             var userId = senderData.getUserIdInPlatform();
-            getMessageListBuilder().addAtMessage(userId);
+            getMessageListBuilder().addAt(userId);
         }
         return this;
     }
@@ -193,7 +193,7 @@ public interface IEasyMessageSenderBuilder {
             // 如果没有 repliedData，则不添加
             return this;
         }
-        getMessageListBuilder().addReplyMessage(getRepliedData().getMessageId());
+        getMessageListBuilder().addReply(getRepliedData().getMessageId());
         return this;
     }
 

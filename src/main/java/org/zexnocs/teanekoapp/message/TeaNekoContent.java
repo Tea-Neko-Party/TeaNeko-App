@@ -7,12 +7,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 
 /**
  * Tea Neko 消息实现类。
  *
- * @see ITeaNekoMessage
+ * @see ITeaNekoContent
  * @author zExNocs
  * @date 2026/02/27
  * @since 4.0.9
@@ -22,7 +22,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class TeaNekoMessage implements ITeaNekoMessage {
+public class TeaNekoContent implements ITeaNekoContent {
     /**
      * 消息内容前缀，用于注册消息内容类。
      */
@@ -40,5 +40,5 @@ public class TeaNekoMessage implements ITeaNekoMessage {
      */
     @Getter
     @JsonProperty("data")
-    protected ITeaNekoContent content;
+    protected ITeaNekoContentPart contentPart;
 }

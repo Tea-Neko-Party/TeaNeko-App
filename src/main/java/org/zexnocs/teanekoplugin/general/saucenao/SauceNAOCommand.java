@@ -4,8 +4,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
+import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContentPart;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
@@ -78,11 +78,11 @@ public class SauceNAOCommand {
         // 判断 url
         if(imageUrl.isBlank() || StringUtils.Instance.isValidUrl(imageUrl)) {
             // 如果没有提供图片链接，则尝试从回复的消息中获取图片
-            IReplyTeaNekoContent replyContext = null;
+            IReplyTeaNekoContentPart replyContext = null;
             for(var message: data.getMessages()) {
-                var context = message.getContent();
-                if(context instanceof IReplyTeaNekoContent) {
-                    replyContext = (IReplyTeaNekoContent) context;
+                var context = message.getContentPart();
+                if(context instanceof IReplyTeaNekoContentPart) {
+                    replyContext = (IReplyTeaNekoContentPart) context;
                     break;
                 }
             }
@@ -101,11 +101,11 @@ public class SauceNAOCommand {
                                     .sendReplyMessage("获取回复消息失败，可能该消息已被撤回。");
                             return;
                         }
-                        IImageTeaNekoContent imageContent = null;
+                        IImageTeaNekoContentPart imageContent = null;
                         for(var message: msg.getMessages()) {
-                            var context = message.getContent();
-                            if(context instanceof IImageTeaNekoContent) {
-                                imageContent = (IImageTeaNekoContent) context;
+                            var context = message.getContentPart();
+                            if(context instanceof IImageTeaNekoContentPart) {
+                                imageContent = (IImageTeaNekoContentPart) context;
                                 break;
                             }
                         }
@@ -164,21 +164,21 @@ public class SauceNAOCommand {
                         var resultHeader = resultData.getHeader();
                         var messageBuilder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder();
                         if(config.isPreview()) {
-                            messageBuilder.addImageMessage(resultHeader.getThumbnail());
+                            messageBuilder.addImage(resultHeader.getThumbnail());
                         }
-                        messageBuilder.addTextMessage(String.format("""
+                        messageBuilder.addText(String.format("""
                                相似度: %s%%
                                来源：%s""",
                                 resultHeader.getSimilarity(),
                                 resultHeader.getIndex_name()));
                         var extUrls = resultData.getData().get("ext_urls");
                         if(extUrls instanceof String) {
-                            messageBuilder.addTextMessage("\n链接：" + extUrls);
+                            messageBuilder.addText("\n链接：" + extUrls);
                         } else if(extUrls instanceof List<?> list) {
-                            messageBuilder.addTextMessage("\n链接列表：");
+                            messageBuilder.addText("\n链接列表：");
                             for(int i = 0; i < list.size(); i++) {
                                 var url = list.get(i);
-                                messageBuilder.addTextMessage("\n" + (i + 1) + ". " + url);
+                                messageBuilder.addText("\n" + (i + 1) + ". " + url);
                             }
                         }
                         builder.addBotList(messageBuilder.build());

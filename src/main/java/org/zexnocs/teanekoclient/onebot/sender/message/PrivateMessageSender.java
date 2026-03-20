@@ -8,8 +8,8 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
@@ -18,8 +18,8 @@ import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendRe
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.PrivateMsgSendParamsData;
 import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import tools.jackson.databind.ObjectMapper;
 
@@ -60,7 +60,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      * @param data 要回复的消息数据
      */
     public PrivateEasyMessageSenderBuilder getBuilder(String token, ITeaNekoMessageData data) {
-        return new PrivateEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), data);
+        return new PrivateEasyMessageSenderBuilder(token, OnebotContentListBuilder.builder(), data);
     }
 
     /**
@@ -69,7 +69,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
      * @param userId 用户 ID，用于发送消息
      */
     public PrivateEasyMessageSenderBuilder getBuilder(String token, String userId) {
-        return new PrivateEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), userId);
+        return new PrivateEasyMessageSenderBuilder(token, OnebotContentListBuilder.builder(), userId);
     }
 
     /**
@@ -86,7 +86,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
 
         /// 消息构建器
         @Getter
-        private final ITeaNekoMessageListBuilder messageListBuilder;
+        private final ITeaNekoContentListBuilder messageListBuilder;
 
         /// 当前发送器所回复的发送数据对象，用于获取发送相关的信息
         @Getter
@@ -119,7 +119,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
          */
         public PrivateEasyMessageSenderBuilder(String token,
-                                               ITeaNekoMessageListBuilder messageListBuilder,
+                                               ITeaNekoContentListBuilder messageListBuilder,
                                                @NonNull ITeaNekoMessageData repliedData) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
@@ -134,7 +134,7 @@ public class PrivateMessageSender extends AbstractOnebotSender<PrivateMsgSendPar
          * @param userId             用户 ID，用于发送消息
          */
         public PrivateEasyMessageSenderBuilder(String token,
-                                               ITeaNekoMessageListBuilder messageListBuilder,
+                                               ITeaNekoContentListBuilder messageListBuilder,
                                                String userId) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = null;

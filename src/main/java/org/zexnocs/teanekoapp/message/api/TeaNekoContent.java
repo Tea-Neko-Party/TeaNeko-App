@@ -1,12 +1,14 @@
 package org.zexnocs.teanekoapp.message.api;
 
+import org.zexnocs.teanekoapp.message.ContentPartScanner;
+
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * 标注在 {@link ITeaNekoContent} 实现类的注解，用于交给 {@link org.zexnocs.teanekoapp.message.ContentScanner} 扫描。
+ * 标注在 {@link ITeaNekoContentPart} 实现类的注解，用于交给 {@link ContentPartScanner} 扫描。
  * <p>用于 JSON 序列化时方便找到对应的类进行反序列化。
  *
  * @author zExNocs

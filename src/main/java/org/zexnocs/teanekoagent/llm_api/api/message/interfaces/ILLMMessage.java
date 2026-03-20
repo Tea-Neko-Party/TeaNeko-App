@@ -9,16 +9,6 @@ package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
  */
 public interface ILLMMessage {
     /**
-     * 消息角色
-     *
-     * @return {@link String}
+     * 获取
      */
-    String getRole();
-
-    /**
-     * 消息内容
-     *
-     * @return {@link String }
-     */
-    String getContent();
 }

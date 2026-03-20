@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 
 import java.util.List;
@@ -42,5 +42,5 @@ public class GroupMsgResponseData {
 
     /// message 消息数组
     @JsonProperty("message")
-    private List<OnebotMessage> message;
+    private List<OnebotContent> message;
 }

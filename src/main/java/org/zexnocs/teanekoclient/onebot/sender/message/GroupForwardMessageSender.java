@@ -7,16 +7,16 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContent;
-import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
+import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContentPart;
+import org.zexnocs.teanekoapp.message.content.TextTeaNekoContentPart;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
 import org.zexnocs.teanekoclient.onebot.core.OnebotIdService;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendResponseData;
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupForwardMessageSendParamsData;
 import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
@@ -106,7 +106,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
         private final long groupId;
 
         /// 消息列表
-        private final List<OnebotMessage> messageList = new ArrayList<>();
+        private final List<OnebotContent> messageList = new ArrayList<>();
 
         /// 外显
         @Setter
@@ -235,14 +235,14 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
          */
         @Override
         public IForwardMessageSenderBuilder addText(String userId, String nickname, String message) {
-            messageList.add(OnebotMessage.builder()
-                    .type(NodeTeaNekoContent.TYPE)
-                    .content(NodeTeaNekoContent.builder()
+            messageList.add(OnebotContent.builder()
+                    .type(NodeTeaNekoContentPart.TYPE)
+                    .contentPart(NodeTeaNekoContentPart.builder()
                             .userId(userId)
                             .nickname(nickname)
-                            .messages(List.of(OnebotMessage.builder()
-                                    .type(TextTeaNekoContent.TYPE)
-                                    .content(TextTeaNekoContent.builder()
+                            .messages(List.of(OnebotContent.builder()
+                                    .type(TextTeaNekoContentPart.TYPE)
+                                    .contentPart(TextTeaNekoContentPart.builder()
                                             .text(message)
                                             .build())
                                     .build()))
@@ -260,10 +260,10 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
          * @return 当前构造器实例
          */
         @Override
-        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoMessage> messageList) {
-            this.messageList.add(OnebotMessage.builder()
-                    .type(NodeTeaNekoContent.TYPE)
-                    .content(NodeTeaNekoContent.builder()
+        public IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoContent> messageList) {
+            this.messageList.add(OnebotContent.builder()
+                    .type(NodeTeaNekoContentPart.TYPE)
+                    .contentPart(NodeTeaNekoContentPart.builder()
                             .userId(userId)
                             .nickname(nickname)
                             .messages(messageList)

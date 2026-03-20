@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.client.tools;
 
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 
 import java.util.List;
 
@@ -19,5 +19,5 @@ public interface IPlatformUserInfoConstructor {
      * @param platformId 平台 ID
      * @return 用户信息列表的 future
      */
-    List<ITeaNekoMessage> getSimpleInfo(String platformId);
+    List<ITeaNekoContent> getSimpleInfo(String platformId);
 }

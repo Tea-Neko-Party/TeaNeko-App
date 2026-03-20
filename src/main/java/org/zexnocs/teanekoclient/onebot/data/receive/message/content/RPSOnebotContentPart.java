@@ -7,12 +7,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
- * onebot 协议中的骰子消息数据类。
+ * 符合 onebot 规范的猜拳消息数据类。
  *
  * @author zExNocs
  * @date 2026/03/01
@@ -23,12 +23,17 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + DiceOnebotContent.TYPE)
-public class DiceOnebotContent implements ITeaNekoContent {
-    public static final String TYPE = "dice";
+@TeaNekoContent(OnebotContent.PREFIX + RPSOnebotContentPart.TYPE)
+public class RPSOnebotContentPart implements ITeaNekoContentPart {
+    public static final String TYPE = "rps";
 
+    /**
+     * 1. 布
+     * 2. 剪刀
+     * 3. 石头
+     */
     @JsonProperty("result")
-    private int result;
+    private String result;
 
     /**
      * 转化成命令解析的字符串表示。
@@ -38,6 +43,6 @@ public class DiceOnebotContent implements ITeaNekoContent {
      */
     @Override
     public @NonNull String[] toCommandArgs() {
-        return new String[]{"[CQ:dice,result=" + result + "]"};
+        return new String[]{"[CQ:rps,result=" + result + "]"};
     }
 }

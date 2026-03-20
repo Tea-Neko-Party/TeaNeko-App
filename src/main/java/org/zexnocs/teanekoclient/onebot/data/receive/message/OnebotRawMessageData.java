@@ -89,7 +89,7 @@ public class OnebotRawMessageData {
 
     /// message 消息数组
     @JsonProperty("message")
-    private List<OnebotMessage> message;
+    private List<OnebotContent> message;
 
     @JsonProperty("real_seq")
     private Long realSeq;

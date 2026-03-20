@@ -4,12 +4,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoapp.message.TeaNekoMessage;
+import org.zexnocs.teanekoapp.message.TeaNekoContent;
 import tools.jackson.databind.ObjectMapper;
 
 /**
  * Onebot消息类，继承自TeaNekoMessage，但可以用 OnebotMessageDeserializer 进行反序列化。
- * <p>需要使用 spring 自带的 {@link ObjectMapper} 来反序列化 {@link OnebotMessage} 对象，以确保 {@link OnebotMessageDeserializer} 能够正确工作。
+ * <p>需要使用 spring 自带的 {@link ObjectMapper} 来反序列化 {@link OnebotContent} 对象，以确保 {@link OnebotMessageDeserializer} 能够正确工作。
  *
  * @author zExNocs
  * @date 2026/03/01
@@ -19,7 +19,7 @@ import tools.jackson.databind.ObjectMapper;
 @Setter
 @SuperBuilder
 @NoArgsConstructor
-public class OnebotMessage extends TeaNekoMessage {
+public class OnebotContent extends TeaNekoContent {
     /**
      * onebot 消息内容前缀，用于注册消息内容类。
      */

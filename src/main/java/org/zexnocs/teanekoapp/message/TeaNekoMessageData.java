@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
@@ -34,7 +34,7 @@ public class TeaNekoMessageData implements ITeaNekoMessageData {
     protected String messageId;
 
     /// 消息内容列表
-    protected List<? extends ITeaNekoMessage> messages;
+    protected List<? extends ITeaNekoContent> messages;
 
     /// 获取消息的类型。
     /// 包括私人消息、群组消息和群组的临时对话等不同类型。

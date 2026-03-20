@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoapp.message.api.content;
 
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 
 /**
  * 文本消息内容接口，表示一个文本消息的内容。
@@ -10,7 +10,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
  * @date 2026/02/27
  * @since 4.0.10
  */
-public interface ITextTeaNekoContent extends ITeaNekoContent {
+public interface ITextTeaNekoContentPart extends ITeaNekoContentPart {
     /// 类型字符串常量。
     String TYPE = "text";
 

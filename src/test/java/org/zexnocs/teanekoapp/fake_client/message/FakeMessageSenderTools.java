@@ -3,9 +3,9 @@ package org.zexnocs.teanekoapp.fake_client.message;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.client.tools.IMessageSenderTools;
-import org.zexnocs.teanekoapp.message.DefaultTeaNekoMessageListBuilder;
+import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 
@@ -21,14 +21,14 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder
 public class FakeMessageSenderTools implements IMessageSenderTools {
     /**
      * 获取一个
-     * {@link ITeaNekoMessageListBuilder}
+     * {@link ITeaNekoContentListBuilder}
      * 用于快速构造消息列表。
      *
-     * @return {@link ITeaNekoMessageListBuilder }
+     * @return {@link ITeaNekoContentListBuilder }
      */
     @Override
-    public ITeaNekoMessageListBuilder getMsgListBuilder() {
-        return DefaultTeaNekoMessageListBuilder.builder();
+    public ITeaNekoContentListBuilder getMsgListBuilder() {
+        return DefaultTeaNekoContentListBuilder.builder();
     }
 
     /**

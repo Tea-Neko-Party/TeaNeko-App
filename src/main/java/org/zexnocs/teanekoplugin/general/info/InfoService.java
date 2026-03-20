@@ -77,8 +77,8 @@ public class InfoService {
                         var lastSpeakTime = r.getLastSentTimeMs() == null ?
                                 "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getLastSentTimeMs());
                         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
-                                .addReplyMessage(data.getMessageId())
-                                .addTextMessage(String.format("""
+                                .addReply(data.getMessageId())
+                                .addText(String.format("""
                                         🍓昵称：%s
                                         🐰群昵称：%s
                                         🐱头衔：%s
@@ -117,8 +117,8 @@ public class InfoService {
                             return;
                         }
                         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
-                                .addReplyMessage(data.getMessageId())
-                                .addTextMessage(String.format("""
+                                .addReply(data.getMessageId())
+                                .addText(String.format("""
                                         🐱UUID：%s
                                         🐰账号ID：%s
                                         🍓昵称：%s

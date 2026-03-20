@@ -6,12 +6,13 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.data.receive.request.GroupRequestData;
 import org.zexnocs.teanekoclient.onebot.data.response.params.StrangerInfoGetResponseData;
 import org.zexnocs.teanekoclient.onebot.sender.group.GroupAddRequestSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
@@ -115,18 +116,18 @@ public class GroupRequestReviewService {
      * @param userId  请求者ID
      * @return 返回发送的消息列表。即一个 TextMessage。如果没有请求数据，则返回 null。
      */
-    public @NonNull List<ITeaNekoMessage> showOneDetailRequest(long groupId, long userId) {
+    public @NonNull List<ITeaNekoContent> showOneDetailRequest(long groupId, long userId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         if (value == null) {
-            return OnebotMessageListBuilder
+            return OnebotContentListBuilder
                     .builder()
-                    .addTextMessage("该请求不存在喵")
+                    .addText("该请求不存在喵")
                     .build();
         }
-        var builder = OnebotMessageListBuilder.builder();
+        var builder = OnebotContentListBuilder.builder();
         var invitorId = value.requestData.getInvitorId();
-        builder.addTextMessage(String.format("""
+        builder.addText(String.format("""
                 请求者的QQ号：%d
                 邀请者的QQ号：%s
                 """, userId, invitorId == 0 ? "无" : invitorId));
@@ -136,8 +137,8 @@ public class GroupRequestReviewService {
             var sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
             sdf.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
             String regTimeStr = sdf.format(date);
-            builder.addImageMessage(AvatarUtils.Instance.getUrl(userId))
-                    .addTextMessage(String.format("""
+            builder.addImage(AvatarUtils.Instance.getUrl(userId))
+                    .addText(String.format("""
                             昵称: %s
                             性别: %s
                             年龄: %d
@@ -149,10 +150,10 @@ public class GroupRequestReviewService {
                             info.getLevel(),
                             regTimeStr));
         } else {
-            builder.addTextMessage("""
+            builder.addText("""
                     请求者的资料获取失败了喵。""");
         }
-        builder.addTextMessage(String.format("""
+        builder.addText(String.format("""
                 
                 
                 请求者申请信息喵：
@@ -169,18 +170,18 @@ public class GroupRequestReviewService {
     /**
      * 展示一个详细的所有入群请求。
      * @param groupId 群聊ID
-     * @return 返回发送的消息列表，用于 {@link org.zexnocs.teanekoapp.message.api.content.INodeTeaNekoContent} 中的 content。
+     * @return 返回发送的消息列表，用于 {@link INodeTeaNekoContentPart} 中的 content。
      */
     @NonNull
-    public List<List<ITeaNekoMessage>> showAllDetailRequest(long groupId) {
-        var list = new ArrayList<List<ITeaNekoMessage>>();
+    public List<List<ITeaNekoContent>> showAllDetailRequest(long groupId) {
+        var list = new ArrayList<List<ITeaNekoContent>>();
         requestMap.keySet().forEach(key -> {
             if(key.first() == groupId) {
                 list.add(showOneDetailRequest(key.first(), key.second()));
             }
         });
         if(list.isEmpty()) {
-            return List.of(OnebotMessageListBuilder.builder().addTextMessage("暂无入群请求喵。").build());
+            return List.of(OnebotContentListBuilder.builder().addText("暂无入群请求喵。").build());
         }
         return list;
     }
@@ -193,16 +194,16 @@ public class GroupRequestReviewService {
      * @param opId    操作者ID
      */
     @Nullable
-    public List<ITeaNekoMessage> reject(long groupId, long userId, long opGroupId, long opId) {
+    public List<ITeaNekoContent> reject(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
         if (value == null) {
-            return OnebotMessageListBuilder.builder().addTextMessage("该请求不存在喵").build();
+            return OnebotContentListBuilder.builder().addText("该请求不存在喵").build();
         }
         // 如果已经处理过该请求
         if (value.isHandled(opId)) {
-            return OnebotMessageListBuilder.builder().addTextMessage("你已经处理过该请求了喵").build();
+            return OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build();
         }
         int rejectNum = value.reject(opGroupId, opId);
 
@@ -212,11 +213,11 @@ public class GroupRequestReviewService {
                     "群成员投票拒绝了您的入群请求。"
             );
             requestMap.remove(key);
-            return OnebotMessageListBuilder.builder().addTextMessage(String.format("""
+            return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     已经达到拒绝猫数上限喵，请求已被拒绝。""", userId)).build();
         } else {
-            return OnebotMessageListBuilder.builder().addTextMessage(String.format("""
+            return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     拒绝成功喵，目前还需要 %d 猫拒绝喵。""", userId, value.requestRejectNum - rejectNum)).build();
         }
@@ -230,27 +231,27 @@ public class GroupRequestReviewService {
      * @param opId    操作者ID
      */
     @Nullable
-    public List<ITeaNekoMessage> accept(long groupId, long userId, long opGroupId, long opId) {
+    public List<ITeaNekoContent> accept(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
         if (value == null) {
-            return OnebotMessageListBuilder.builder().addTextMessage("该请求不存在喵").build();
+            return OnebotContentListBuilder.builder().addText("该请求不存在喵").build();
         }
         // 如果已经处理过该请求
         if (value.isHandled(opId)) {
-            return OnebotMessageListBuilder.builder().addTextMessage("你已经处理过该请求了喵").build();
+            return OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build();
         }
         int acceptNum = value.accept(opGroupId, opId);
 
         if (acceptNum >= value.requestAcceptNum) {
             groupAddRequestSender.approve(value.getRequestData().getFlag());
             requestMap.remove(key);
-            return OnebotMessageListBuilder.builder().addTextMessage(String.format("""
+            return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     已经达到接受猫数上限喵，请求已被接受。""", userId)).build();
         } else {
-            return OnebotMessageListBuilder.builder().addTextMessage(String.format("""
+            return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     接受成功喵，目前还需要 %d 猫接受喵。""", userId, value.requestAcceptNum - acceptNum)).build();
         }

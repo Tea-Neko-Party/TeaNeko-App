@@ -8,8 +8,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
@@ -18,8 +18,8 @@ import org.zexnocs.teanekoclient.onebot.data.response.params.OnebotMessageSendRe
 import org.zexnocs.teanekoclient.onebot.data.send.params.message.GroupMsgSendParamsData;
 import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import tools.jackson.databind.ObjectMapper;
 
@@ -61,7 +61,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
      * @param data 要回复的消息数据
      */
     public GroupEasyMessageSenderBuilder getBuilder(String token, @NonNull ITeaNekoMessageData data) {
-        return new GroupEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), data);
+        return new GroupEasyMessageSenderBuilder(token, OnebotContentListBuilder.builder(), data);
     }
 
     /**
@@ -70,7 +70,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
      * @param groupId 要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
      */
     public GroupEasyMessageSenderBuilder getBuilder(String token, String groupId) {
-        return new GroupEasyMessageSenderBuilder(token, OnebotMessageListBuilder.builder(), groupId);
+        return new GroupEasyMessageSenderBuilder(token, OnebotContentListBuilder.builder(), groupId);
     }
 
     /**
@@ -87,7 +87,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
 
         /// 消息构建器
         @Getter
-        private final ITeaNekoMessageListBuilder messageListBuilder;
+        private final ITeaNekoContentListBuilder messageListBuilder;
 
         /// 当前发送器所回复的发送数据对象，用于获取发送相关的信息
         @Getter
@@ -120,7 +120,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
          * @param repliedData        要回复的消息数据对象，用于获取发送相关的信息，例如发送环境等
          */
         public GroupEasyMessageSenderBuilder(String token,
-                                             ITeaNekoMessageListBuilder messageListBuilder,
+                                             ITeaNekoContentListBuilder messageListBuilder,
                                              @NonNull ITeaNekoMessageData repliedData) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = repliedData;
@@ -135,7 +135,7 @@ public class GroupMessageSender extends AbstractOnebotSender<GroupMsgSendParamsD
          * @param groupId            要发送消息的群号，如果没有 repliedData，则需要提供 groupId 来发送消息
          */
         public GroupEasyMessageSenderBuilder(String token,
-                                             ITeaNekoMessageListBuilder messageListBuilder,
+                                             ITeaNekoContentListBuilder messageListBuilder,
                                              String groupId) {
             this.messageListBuilder = messageListBuilder;
             this.repliedData = null;

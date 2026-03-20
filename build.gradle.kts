@@ -13,6 +13,7 @@ plugins {
     id("com.github.ben-manes.versions") version "0.53.0"    // gradle version 插件
     id("se.bjurr.gitchangelog.git-changelog-gradle-plugin") version "3.1.2" // 根据 git 自动写入 changelog
 }
+val springAiVersion by extra("2.0.0-M3")
 
 // ========= 版本信息 =========
 val vm = VersionManager(project)
@@ -56,6 +57,9 @@ dependencies {
     // ====== jackson ======
     implementation("tools.jackson.core:jackson-databind")
     implementation("tools.jackson.dataformat:jackson-dataformat-yaml")
+
+    // ====== AI ======
+    implementation("org.springframework.ai:spring-ai-markdown-document-reader")
 
     // ====== development ======
     developmentOnly("org.springframework.boot:spring-boot-devtools")
@@ -197,6 +201,11 @@ tasks.register<GitChangelogTask>("generateGitChangelog") {
 tasks.register<CopyConfigToTemplates>("copyConfigToTemplates")
 
 tasks.register<CopyTemplatesToConfig>("copyTemplatesToConfig")
+dependencyManagement {
+    imports {
+        mavenBom("org.springframework.ai:spring-ai-bom:$springAiVersion")
+    }
+}
 
 // --------- 其他配置 ---------
 

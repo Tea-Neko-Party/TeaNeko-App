@@ -9,7 +9,7 @@ import java.util.List;
  * 一个快速构造
  * {@link List}
  * <
- * {@link ITeaNekoMessage}
+ * {@link ITeaNekoContent}
  * > 的工具类。
  * <p>记得处理 null 的情况，因为有些消息类型可能会返回 null，例如文本消息的文本内容可能为 null。</p>
  * <p>是一次性的构造器。
@@ -18,29 +18,29 @@ import java.util.List;
  * @date 2026/02/24
  *
  */
-public interface ITeaNekoMessageListBuilder {
+public interface ITeaNekoContentListBuilder {
     /**
      * 构造出一个最终结果。
      *
-     * @return {@link List }<{@link ITeaNekoMessage }>
+     * @return {@link List }<{@link ITeaNekoContent }>
      */
-    List<ITeaNekoMessage> build();
+    List<ITeaNekoContent> build();
 
     /**
-     * 添加一个构造好的 {@link ITeaNekoMessage}。
+     * 添加一个构造好的 {@link ITeaNekoContent}。
      *
      * @param message 已经构造好的消息对象
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addMessage(@NonNull ITeaNekoMessage message);
+    ITeaNekoContentListBuilder addContent(@NonNull ITeaNekoContent message);
 
     /**
-     * 添加一个构造好的 {@link ITeaNekoMessage} 列表。
+     * 添加一个构造好的 {@link ITeaNekoContent} 列表。
      *
      * @param messageList 已经构造好的消息对象列表
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addMessages(@NonNull List<ITeaNekoMessage> messageList);
+    ITeaNekoContentListBuilder addContents(@NonNull List<ITeaNekoContent> messageList);
 
     /**
      * 添加一个文本消息。
@@ -48,7 +48,7 @@ public interface ITeaNekoMessageListBuilder {
      * @param text 文本内容
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addTextMessage(@Nullable String text);
+    ITeaNekoContentListBuilder addText(@Nullable String text);
 
     /**
      * 使用图片路径发送：
@@ -59,7 +59,7 @@ public interface ITeaNekoMessageListBuilder {
      * @param imageUrl 图片的 URL 地址
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addImageMessage(@Nullable String imageUrl);
+    ITeaNekoContentListBuilder addImage(@Nullable String imageUrl);
 
     /**
      * 添加一个 at 消息。
@@ -67,7 +67,7 @@ public interface ITeaNekoMessageListBuilder {
      * @param atId 被 at 的用户 ID
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addAtMessage(@Nullable String atId);
+    ITeaNekoContentListBuilder addAt(@Nullable String atId);
 
     /**
      * 添加一个 reply 消息。
@@ -75,5 +75,5 @@ public interface ITeaNekoMessageListBuilder {
      * @param replyId 被回复的消息 ID
      * @return 当前的构造器对象，以便于链式调用
      */
-    ITeaNekoMessageListBuilder addReplyMessage(@Nullable String replyId);
+    ITeaNekoContentListBuilder addReply(@Nullable String replyId);
 }

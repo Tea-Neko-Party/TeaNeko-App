@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DefaultTeaNekoContent implements ITeaNekoContent {
+public class DefaultTeaNekoContentPart implements ITeaNekoContentPart {
     /// 转化后的数据 map
     private ConcurrentHashMap<String, Object> dataMap;
 

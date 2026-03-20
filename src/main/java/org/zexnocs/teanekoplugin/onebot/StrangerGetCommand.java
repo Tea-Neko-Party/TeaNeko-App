@@ -4,7 +4,7 @@ import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.private_.StrangerInfoGetSender;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.Command;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
@@ -44,10 +44,10 @@ public class StrangerGetCommand {
                             }
                             var date = ChinaDateUtil.Instance.convertToChinaDateTime(strangerInfo.getRegTime() * 1000);
                             var regTimeStr = ChinaDateUtil.Instance.convertToString(date);
-                            var messageList = OnebotMessageListBuilder.builder()
-                                    .addReplyMessage(data.getMessageId())
-                                    .addImageMessage(AvatarUtils.Instance.getUrl(userId))
-                                    .addTextMessage(String.format("""
+                            var messageList = OnebotContentListBuilder.builder()
+                                    .addReply(data.getMessageId())
+                                    .addImage(AvatarUtils.Instance.getUrl(userId))
+                                    .addText(String.format("""
                                             QQ号: %d
                                             QID: %s
                                             昵称: %s

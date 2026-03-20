@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoapp.client.tools;
 
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageListBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 
@@ -16,12 +16,12 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder
 public interface IMessageSenderTools {
     /**
      * 获取一个
-     * {@link ITeaNekoMessageListBuilder}
+     * {@link ITeaNekoContentListBuilder}
      * 用于快速构造消息列表。
      *
-     * @return {@link ITeaNekoMessageListBuilder }
+     * @return {@link ITeaNekoContentListBuilder }
      */
-    default ITeaNekoMessageListBuilder getMsgListBuilder() {
+    default ITeaNekoContentListBuilder getMsgListBuilder() {
         throw new UnsupportedOperationException("该 client 不支持 msg list builder");
     }
 

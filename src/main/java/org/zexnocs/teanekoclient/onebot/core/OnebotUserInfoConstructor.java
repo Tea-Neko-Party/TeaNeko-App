@@ -2,9 +2,9 @@ package org.zexnocs.teanekoclient.onebot.core;
 
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.tools.IPlatformUserInfoConstructor;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
-import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageListBuilder;
+import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 
 import java.util.List;
 
@@ -25,10 +25,10 @@ public class OnebotUserInfoConstructor implements IPlatformUserInfoConstructor {
      * @return 用户信息列表的 future
      */
     @Override
-    public List<ITeaNekoMessage> getSimpleInfo(String platformId) {
-        return OnebotMessageListBuilder.builder()
-                .addImageMessage(AvatarUtils.Instance.getUrl(Long.parseLong(platformId)))
-                .addTextMessage("QQ号: " + platformId)
+    public List<ITeaNekoContent> getSimpleInfo(String platformId) {
+        return OnebotContentListBuilder.builder()
+                .addImage(AvatarUtils.Instance.getUrl(Long.parseLong(platformId)))
+                .addText("QQ号: " + platformId)
                 .build();
     }
 }

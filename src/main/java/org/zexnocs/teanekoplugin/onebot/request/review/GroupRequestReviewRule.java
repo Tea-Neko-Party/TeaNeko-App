@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoplugin.onebot.request.review;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContent;
-import org.zexnocs.teanekoapp.message.content.TextTeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContentPart;
+import org.zexnocs.teanekoapp.message.content.TextTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 import org.zexnocs.teanekoclient.onebot.event.notice.GroupIncreaseNoticeEvent;
 import org.zexnocs.teanekoclient.onebot.event.request.GroupRequestEvent;
 import org.zexnocs.teanekoclient.onebot.sender.message.GroupMessageSender;
@@ -80,9 +80,9 @@ public class GroupRequestReviewRule {
                     return;
                 }
                 var messageList = groupRequestReviewService.showOneDetailRequest(groupId, userId);
-                var textMessage = OnebotMessage.builder()
-                        .type(ITextTeaNekoContent.TYPE)
-                        .content(TextTeaNekoContent.builder()
+                var textMessage = OnebotContent.builder()
+                        .type(ITextTeaNekoContentPart.TYPE)
+                        .contentPart(TextTeaNekoContentPart.builder()
                                 .text("群聊 " + groupId + " 有新成员申请入群啦：\n").build())
                         .build();
                 messageList.addFirst(textMessage);

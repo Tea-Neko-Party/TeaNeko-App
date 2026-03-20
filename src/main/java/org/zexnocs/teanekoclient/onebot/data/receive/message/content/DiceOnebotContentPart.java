@@ -7,12 +7,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
- * 符合 onebot 规范的表情消息数据类。
+ * onebot 协议中的骰子消息数据类。
  *
  * @author zExNocs
  * @date 2026/03/01
@@ -23,15 +23,12 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + FaceOnebotContent.TYPE)
-public class FaceOnebotContent implements ITeaNekoContent {
-    public static final String TYPE = "face";
+@TeaNekoContent(OnebotContent.PREFIX + DiceOnebotContentPart.TYPE)
+public class DiceOnebotContentPart implements ITeaNekoContentPart {
+    public static final String TYPE = "dice";
 
-    @JsonProperty("id")
-    private String id;
-
-    @JsonProperty("large")
-    private String large;
+    @JsonProperty("result")
+    private int result;
 
     /**
      * 转化成命令解析的字符串表示。
@@ -41,6 +38,6 @@ public class FaceOnebotContent implements ITeaNekoContent {
      */
     @Override
     public @NonNull String[] toCommandArgs() {
-        return new String[]{"[CQ:face,id=" + id + "]"};
+        return new String[]{"[CQ:dice,result=" + result + "]"};
     }
 }

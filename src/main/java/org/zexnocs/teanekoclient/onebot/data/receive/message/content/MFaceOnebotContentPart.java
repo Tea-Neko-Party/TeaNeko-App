@@ -7,12 +7,12 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotContent;
 
 /**
- * 符合 onebot 规范的猜拳消息数据类。
+ * 符合 onebot 规范的表情消息数据类。
  *
  * @author zExNocs
  * @date 2026/03/01
@@ -23,17 +23,24 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessage;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(OnebotMessage.PREFIX + RPSOnebotContent.TYPE)
-public class RPSOnebotContent implements ITeaNekoContent {
-    public static final String TYPE = "rps";
+@TeaNekoContent(OnebotContent.PREFIX + MFaceOnebotContentPart.TYPE)
+public class MFaceOnebotContentPart implements ITeaNekoContentPart {
+    public static final String TYPE = "mface";
 
-    /**
-     * 1. 布
-     * 2. 剪刀
-     * 3. 石头
-     */
-    @JsonProperty("result")
-    private String result;
+    @JsonProperty("url")
+    private String url;
+
+    @JsonProperty("emoji_package_id")
+    private String emojiPackageId;
+
+    @JsonProperty("emoji_id")
+    private String emojiId;
+
+    @JsonProperty("key")
+    private String key;
+
+    @JsonProperty("summary")
+    private String summary;
 
     /**
      * 转化成命令解析的字符串表示。
@@ -43,6 +50,6 @@ public class RPSOnebotContent implements ITeaNekoContent {
      */
     @Override
     public @NonNull String[] toCommandArgs() {
-        return new String[]{"[CQ:rps,result=" + result + "]"};
+        return new String[]{"[CQ:mface,url=" + url + "]"};
     }
 }

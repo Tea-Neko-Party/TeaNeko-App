@@ -6,13 +6,12 @@ import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoapp.message.TeaNekoMessage;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
+import org.zexnocs.teanekoapp.message.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 
 /**
  * 图片消息内容类，表示一个图片消息的内容。
- * <p>如果 api 不同，则平台自行实现 {@link IImageTeaNekoContent}</p>
+ * <p>如果 api 不同，则平台自行实现 {@link IImageTeaNekoContentPart}</p>
  *
  * @author zExNocs
  * @date 2026/02/27
@@ -21,8 +20,8 @@ import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContent;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(TeaNekoMessage.PREFIX + IImageTeaNekoContent.TYPE)
-public class ImageTeaNekoContent implements IImageTeaNekoContent {
+@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + IImageTeaNekoContentPart.TYPE)
+public class ImageTeaNekoContentPart implements IImageTeaNekoContentPart {
     /// 图片来源 URL（file/http/base64）
     @JsonProperty("url")
     @JsonInclude(JsonInclude.Include.NON_NULL)

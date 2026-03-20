@@ -69,14 +69,14 @@ public class AffectionCommand {
             long currentToTarget = iAffectionService.getAffection(senderUUID, targetUUID);
             long targetToCurrent = iAffectionService.getAffection(targetUUID, senderUUID);
             var builder = client.getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
-                    .addAtMessage(data.getUserData().getUserIdInPlatform())
-                    .addTextMessage(" 对 ")
-                    .addAtMessage(targetId)
-                    .addTextMessage(" 的好感度为 " + currentToTarget + "\n")
-                    .addAtMessage(targetId)
-                    .addTextMessage(" 对 ")
-                    .addAtMessage(data.getUserData().getUserIdInPlatform())
-                    .addTextMessage(" 的好感度为 " + targetToCurrent)
+                    .addAt(data.getUserData().getUserIdInPlatform())
+                    .addText(" 对 ")
+                    .addAt(targetId)
+                    .addText(" 的好感度为 " + currentToTarget + "\n")
+                    .addAt(targetId)
+                    .addText(" 对 ")
+                    .addAt(data.getUserData().getUserIdInPlatform())
+                    .addText(" 的好感度为 " + targetToCurrent)
                     .build();
             data.getMessageSender().addMessages(builder).send();
         }
@@ -119,12 +119,12 @@ public class AffectionCommand {
                 continue;
             }
             var messageBuilder = client.getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
-                    .addTextMessage("第 %d 名: ".formatted(++record))
-                    .addMessages(client
+                    .addText("第 %d 名: ".formatted(++record))
+                    .addContents(client
                             .getTeaNekoToolbox()
                             .getPlatformUserInfoConstructorSender()
                             .getSimpleInfo(thisTargetId))
-                    .addTextMessage("\n%s: %d".formatted(prompt, affectionValue));
+                    .addText("\n%s: %d".formatted(prompt, affectionValue));
             forwardSender.addBotList(messageBuilder.build());
             if(record == 5) {
                 break;

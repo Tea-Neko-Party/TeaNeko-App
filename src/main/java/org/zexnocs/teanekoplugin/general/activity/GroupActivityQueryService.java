@@ -3,7 +3,7 @@ package org.zexnocs.teanekoplugin.general.activity;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
@@ -33,7 +33,7 @@ public class GroupActivityQueryService {
      * @param userId 指定的用户号
      * @return 该成员的详细信息
      */
-    public List<ITeaNekoMessage> getOneDetail(
+    public List<ITeaNekoContent> getOneDetail(
             ITeaNekoClient client,
             String groupId,
             Map<String, Pair<GroupActivityData, GroupActivityRule>> map,
@@ -44,7 +44,7 @@ public class GroupActivityQueryService {
         var msgListBuilder = tools.getMessageSenderTools().getMsgListBuilder();
         if(pair == null) {
             return msgListBuilder
-                    .addTextMessage("该成员不是低活跃度成员喵。")
+                    .addText("该成员不是低活跃度成员喵。")
                     .build();
         }
         var activityData = pair.first();
@@ -55,7 +55,7 @@ public class GroupActivityQueryService {
         var joinTime = util.convertToDateTimeString(activityData.getJoinTimeMs());
         // 计算距离上次发言的时间
         var lastSpeakDelta = activityData.getSpeak();
-        msgListBuilder.addTextMessage(String.format("""
+        msgListBuilder.addText(String.format("""
                     群 %s 检测成员低活跃度
                     原因：%s
                     
@@ -74,9 +74,9 @@ public class GroupActivityQueryService {
                 activityData.getLevel(), joinTime, lastSpeakTime, lastSpeakDelta));
         var avatar = tools.getAvatarGetter().getUrl(userId);
         if(avatar != null) {
-            msgListBuilder.addImageMessage(avatar);
+            msgListBuilder.addImage(avatar);
         }
-        msgListBuilder.addTextMessage("""
+        msgListBuilder.addText("""
                     
                     /ga 踢出 %s %s
                     /ga 提醒 %s %s"""
@@ -91,18 +91,18 @@ public class GroupActivityQueryService {
      * @param client  用于获取各种工具类
      * @param groupId 指定的群号
      * @param map     指定 scopeID 中的活跃度信息，key 是 userID，value 是 (活跃度数据, 违反的活跃度规则)
-     * @return {@link List }<{@link List }<{@link ITeaNekoMessage }>>
+     * @return {@link List }<{@link List }<{@link ITeaNekoContent }>>
      */
-    public List<List<ITeaNekoMessage>> getAllDetail(
+    public List<List<ITeaNekoContent>> getAllDetail(
             ITeaNekoClient client,
             String groupId,
             Map<String, Pair<GroupActivityData, GroupActivityRule>> map) {
         if(map == null || map.isEmpty()) {
             var tools = client.getTeaNekoToolbox();
             var msgListBuilder = tools.getMessageSenderTools().getMsgListBuilder();
-            return List.of(msgListBuilder.addTextMessage("该群没有低活跃度成员或者还没有扫描喵。").build());
+            return List.of(msgListBuilder.addText("该群没有低活跃度成员或者还没有扫描喵。").build());
         }
-        List<List<ITeaNekoMessage>> messageList = new ArrayList<>();
+        List<List<ITeaNekoContent>> messageList = new ArrayList<>();
         for(var key: map.keySet()) {
             messageList.add(getOneDetail(client, groupId, map, key));
         }

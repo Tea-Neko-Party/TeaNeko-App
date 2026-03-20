@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
@@ -81,7 +81,7 @@ public class GroupActivityPunishService {
      * @param userId               被惩罚用户的平台 id
      * @return 给管理群发送的提醒消息
      */
-    public List<ITeaNekoMessage> kick(
+    public List<ITeaNekoContent> kick(
             GroupActivityConfigData activityConfigData,
             Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
             ITeaNekoClient client,
@@ -100,7 +100,7 @@ public class GroupActivityPunishService {
         var builder = tools.getMessageSenderTools().getMsgListBuilder();
         // 如果已经处理过，则不处理
         if (punishValue.isOped(opId)) {
-            return builder.addTextMessage("您已经处理过该用户了喵!").build();
+            return builder.addText("您已经处理过该用户了喵!").build();
         }
         // 处理该用户
         if (punishValue.kick(opScopeId, opId)) {
@@ -110,9 +110,9 @@ public class GroupActivityPunishService {
             });
             punishMap.remove(userId);
             tools.getGroupKickSender().kick(groupId, userId);
-            return builder.addTextMessage("将用户" + userId + "踢出群聊" + groupId + "成功喵").build();
+            return builder.addText("将用户" + userId + "踢出群聊" + groupId + "成功喵").build();
         }
-        return builder.addTextMessage("""
+        return builder.addText("""
                         处理用户 %s 在群聊 %s 成功喵！
                         还需要 %d 人选择踢出该用户喵
                         还需要 %d 人选择提醒该用户喵"""
@@ -127,7 +127,7 @@ public class GroupActivityPunishService {
      * @param userId 用户号
      * @return 给管理群发送的提醒消息
      */
-    public List<ITeaNekoMessage> remind(
+    public List<ITeaNekoContent> remind(
             GroupActivityConfigData activityConfigData,
             Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
             ITeaNekoClient client,
@@ -146,7 +146,7 @@ public class GroupActivityPunishService {
         var builder = tools.getMessageSenderTools().getMsgListBuilder();
         // 如果已经处理过，则不处理
         if (punishValue.isOped(opId)) {
-            return builder.addTextMessage("您已经处理过该用户了喵!").build();
+            return builder.addText("您已经处理过该用户了喵!").build();
         }
         if(punishValue.remind(opScopeId, opId)) {
             groupActivityExemptionService.addWithFuture(scopeId, userId, EXEMPTION_TIME)
@@ -164,9 +164,9 @@ public class GroupActivityPunishService {
                             请在一周内多发言，避免被踢出群聊。""".formatted(punishValue.reason))
                                 .send();
                     }).finish();
-            return builder.addTextMessage("将用户" + userId + "提醒成功喵").build();
+            return builder.addText("将用户" + userId + "提醒成功喵").build();
         }
-        return builder.addTextMessage("""
+        return builder.addText("""
                         处理用户 %s 在群聊 %s 成功喵！
                         还需要 %d 人选择踢出该用户喵
                         还需要 %d 人选择提醒该用户喵"""

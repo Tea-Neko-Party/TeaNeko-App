@@ -2,7 +2,7 @@ package org.zexnocs.teanekoapp.message.api.content;
 
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 
 import java.util.List;
 
@@ -13,7 +13,7 @@ import java.util.List;
  * @date 2026/02/27
  * @since 4.0.10
  */
-public interface INodeTeaNekoContent extends ITeaNekoContent {
+public interface INodeTeaNekoContentPart extends ITeaNekoContentPart {
     /**
      * 类型字符串常量。
      */
@@ -36,9 +36,9 @@ public interface INodeTeaNekoContent extends ITeaNekoContent {
     /**
      * 获取被转发消息的内容。
      *
-     * @return {@link List }<{@link ? } {@link extends } {@link ITeaNekoMessage }>
+     * @return {@link List }<{@link ? } {@link extends } {@link ITeaNekoContent }>
      */
-    List<? extends ITeaNekoMessage> getMessages();
+    List<? extends ITeaNekoContent> getMessages();
 
     /**
      * 默认不转化成指令。

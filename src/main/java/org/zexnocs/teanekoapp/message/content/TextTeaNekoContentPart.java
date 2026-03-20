@@ -6,13 +6,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoapp.message.TeaNekoMessage;
-import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
-import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContent;
+import org.zexnocs.teanekoapp.message.TeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContentPart;
 
 /**
  * 文本消息内容类，表示一个文本消息的内容。
- * <p>如果 api 不同，则平台自行实现 {@link ITextTeaNekoContent}</p>
+ * <p>如果 api 不同，则平台自行实现 {@link ITextTeaNekoContentPart}</p>
  *
  * @author zExNocs
  * @date 2026/02/27
@@ -23,8 +22,8 @@ import org.zexnocs.teanekoapp.message.api.content.ITextTeaNekoContent;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@TeaNekoContent(TeaNekoMessage.PREFIX + ITextTeaNekoContent.TYPE)
-public class TextTeaNekoContent implements ITextTeaNekoContent {
+@org.zexnocs.teanekoapp.message.api.TeaNekoContent(TeaNekoContent.PREFIX + ITextTeaNekoContentPart.TYPE)
+public class TextTeaNekoContentPart implements ITextTeaNekoContentPart {
     /// 文本内容
     @JsonProperty("text")
     private String text;

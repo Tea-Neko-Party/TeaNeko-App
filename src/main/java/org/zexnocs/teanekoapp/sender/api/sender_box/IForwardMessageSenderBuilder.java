@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoapp.sender.api.sender_box;
 
-import org.zexnocs.teanekoapp.message.api.ITeaNekoMessage;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
@@ -134,7 +134,7 @@ public interface IForwardMessageSenderBuilder {
      * @param messageList 消息内容列表
      * @return 当前构造器实例
      */
-    default IForwardMessageSenderBuilder addBotList(List<ITeaNekoMessage> messageList) {
+    default IForwardMessageSenderBuilder addBotList(List<ITeaNekoContent> messageList) {
         return addList(getBotId(), getBotName(), messageList);
     }
 
@@ -144,7 +144,7 @@ public interface IForwardMessageSenderBuilder {
      * @param messageListList 消息内容列表
      * @return {@link IForwardMessageSenderBuilder }
      */
-    default IForwardMessageSenderBuilder addBotAllList(List<List<ITeaNekoMessage>> messageListList) {
+    default IForwardMessageSenderBuilder addBotAllList(List<List<ITeaNekoContent>> messageListList) {
         return addAllList(getBotId(), getBotName(), messageListList);
     }
 
@@ -181,7 +181,7 @@ public interface IForwardMessageSenderBuilder {
      * @param messageList 消息内容列表
      * @return 当前构造器实例
      */
-    IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoMessage> messageList);
+    IForwardMessageSenderBuilder addList(String userId, String nickname, List<ITeaNekoContent> messageList);
 
     /**
      * 添加一群消息
@@ -191,7 +191,7 @@ public interface IForwardMessageSenderBuilder {
      * @param messageListList 消息内容列表
      * @return {@link IForwardMessageSenderBuilder }
      */
-    default IForwardMessageSenderBuilder addAllList(String userId, String nickname, List<List<ITeaNekoMessage>> messageListList) {
+    default IForwardMessageSenderBuilder addAllList(String userId, String nickname, List<List<ITeaNekoContent>> messageListList) {
         for (var item : messageListList) {
             addList(userId, nickname, item);
         }

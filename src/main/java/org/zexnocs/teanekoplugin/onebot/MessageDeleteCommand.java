@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoplugin.onebot;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.core.OnebotDebuggerService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
@@ -51,7 +51,7 @@ public class MessageDeleteCommand {
         var messageList = data.getMessages();
         var onebotData = data.getOnebotRawMessageData();
         // 判断第一个是不是 reply
-        if(messageList.isEmpty() || !(messageList.getFirst().getContent() instanceof IReplyTeaNekoContent reply)) {
+        if(messageList.isEmpty() || !(messageList.getFirst().getContentPart() instanceof IReplyTeaNekoContentPart reply)) {
             return;
         }
         // 发送撤回消息的请求

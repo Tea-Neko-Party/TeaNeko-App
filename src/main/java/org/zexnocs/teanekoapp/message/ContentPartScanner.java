@@ -2,7 +2,7 @@ package org.zexnocs.teanekoapp.message;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContent;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 用于扫描带有 {@link TeaNekoContent} 和实现了 {@link ITeaNekoContent} 的类。
+ * 用于扫描带有 {@link TeaNekoContent} 和实现了 {@link ITeaNekoContentPart} 的类。
  *
  * @see TeaNekoContent
  * @author zExNocs
@@ -20,15 +20,15 @@ import java.util.concurrent.ConcurrentHashMap;
  * @since 4.0.10
  */
 @Service
-public class ContentScanner extends AbstractScanner {
+public class ContentPartScanner extends AbstractScanner {
     /// key → contentType
-    private final Map<String, Class<? extends ITeaNekoContent>> contentClassMap = new ConcurrentHashMap<>();
+    private final Map<String, Class<? extends ITeaNekoContentPart>> contentClassMap = new ConcurrentHashMap<>();
 
     /// 类扫描器
     private final IClassScanner iClassScanner;
     private final ILogger logger;
 
-    public ContentScanner(IClassScanner iClassScanner, ILogger logger) {
+    public ContentPartScanner(IClassScanner iClassScanner, ILogger logger) {
         super();
         this.iClassScanner = iClassScanner;
         this.logger = logger;
@@ -40,7 +40,7 @@ public class ContentScanner extends AbstractScanner {
      */
     @Override
     protected void _scan() {
-        var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContent.class, ITeaNekoContent.class);
+        var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContent.class, ITeaNekoContentPart.class);
         for (var entry : map.entrySet()) {
             var clazz = entry.getKey();
             var annotation = entry.getValue();
@@ -76,7 +76,7 @@ public class ContentScanner extends AbstractScanner {
      * @return 对应的内容类，如果不存在则返回 null。
      */
     @Nullable
-    public Class<? extends ITeaNekoContent> getContentClass(String key) {
+    public Class<? extends ITeaNekoContentPart> getContentClass(String key) {
         if(key == null) return null;
         return contentClassMap.get(key);
     }
