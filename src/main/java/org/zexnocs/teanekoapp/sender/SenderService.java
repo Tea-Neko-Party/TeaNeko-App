@@ -75,7 +75,7 @@ public class SenderService implements ISenderService {
 
         // 注册 task
         var config = TaskConfig.<List<R>>builder()
-                .name("注册 sendData 的响应 future")
+                .name("注册 sendData 的响应 future: %s".formatted(sendData.toSendString()))
                 .callable(() -> {
                     // 推送事件
                     iEventService.pushEvent(event);
