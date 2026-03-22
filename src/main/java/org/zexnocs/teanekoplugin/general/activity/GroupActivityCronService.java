@@ -67,9 +67,11 @@ public class GroupActivityCronService {
                                 var client = pair.first();
                                 var groupId = pair.second();
                                 var messageLists = groupActivityQueryService.getAllDetail(client, groupId, result);
-                                client.getTeaNekoToolbox().getMessageSenderTools().getGroupForwardBuilder(groupId)
-                                        .addBotAllList(messageLists)
-                                        .sendByPart(8);
+                                for(var monitor : config.getGroups()) {
+                                    client.getTeaNekoToolbox().getMessageSenderTools().getGroupForwardBuilder(monitor)
+                                            .addBotAllList(messageLists)
+                                            .sendByPart(8);
+                                }
                             }).finish();
                         }
                         return EmptyTaskResult.INSTANCE;
