@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.llm_api_framework;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModelOptions;
 
