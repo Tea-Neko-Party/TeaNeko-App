@@ -26,7 +26,7 @@ description = "TeaNeko-App 专注于机器人聊天的项目"
 // ========= java 版本 =========
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
