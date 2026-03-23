@@ -1,7 +1,7 @@
-package org.zexnocs.teanekoagent.llm_api.api.message;
+package org.zexnocs.teanekoagent.llm_api_framework.message;
 
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMToolMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMToolMessage;
 
 /**
  * 用于返回给 LLM Tool 结果的消息

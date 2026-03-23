@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api.api.model.interfaces;
+package org.zexnocs.teanekoagent.llm_api_framework.model.interfaces;
 
 /**
  * 大语言模型的客户端接口。

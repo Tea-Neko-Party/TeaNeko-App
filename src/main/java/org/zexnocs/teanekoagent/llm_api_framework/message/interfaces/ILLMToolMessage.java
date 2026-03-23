@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
+package org.zexnocs.teanekoagent.llm_api_framework.message.interfaces;
 
 /**
  * 用于返回给 LLM Tool 结果的消息

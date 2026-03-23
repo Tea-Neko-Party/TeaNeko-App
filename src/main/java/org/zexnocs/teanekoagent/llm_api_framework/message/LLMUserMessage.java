@@ -1,8 +1,8 @@
-package org.zexnocs.teanekoagent.llm_api.api.message;
+package org.zexnocs.teanekoagent.llm_api_framework.message;
 
 
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMUserMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMUserMessage;
 
 /**
  * LLM 用户发送的消息

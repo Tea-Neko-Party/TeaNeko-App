@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api.api.message;
+package org.zexnocs.teanekoagent.llm_api_framework.message;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
@@ -7,9 +7,9 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoagent.llm_api.api.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMContent;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMMessage;
 import tools.jackson.core.JacksonException;
 import tools.jackson.core.JsonGenerator;
 import tools.jackson.databind.SerializationContext;

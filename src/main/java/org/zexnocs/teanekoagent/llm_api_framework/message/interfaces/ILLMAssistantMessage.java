@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api.api.message.interfaces;
+package org.zexnocs.teanekoagent.llm_api_framework.message.interfaces;
 
 /**
  * LLM 回复的消息。

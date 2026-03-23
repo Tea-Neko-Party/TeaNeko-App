@@ -1,7 +1,7 @@
-package org.zexnocs.teanekoagent.llm_api.api.message;
+package org.zexnocs.teanekoagent.llm_api_framework.message;
 
 import lombok.experimental.SuperBuilder;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMAssistantMessage;
 
 /**
  * LLM 回复的消息，即 LLM 给出的结果

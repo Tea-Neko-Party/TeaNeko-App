@@ -1,9 +1,9 @@
-package org.zexnocs.teanekoagent.llm_api.api;
+package org.zexnocs.teanekoagent.llm_api_framework;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.llm_api.api.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModelOptions;
 
 import java.util.List;
 

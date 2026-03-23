@@ -2,8 +2,8 @@ package org.zexnocs.teanekoapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekoagent.llm_api.api.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm_api.api.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm_api_framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.message.content.LLMContentListBuilder;
 import tools.jackson.databind.ObjectMapper;
 
 /**

@@ -1,7 +1,7 @@
-package org.zexnocs.teanekoagent.llm_api.api.message.content;
+package org.zexnocs.teanekoagent.llm_api_framework.message.content;
 
-import org.zexnocs.teanekoagent.llm_api.api.message.LLMContent;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.llm_api_framework.message.LLMContent;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMContent;
 
 import java.util.ArrayList;
 import java.util.List;

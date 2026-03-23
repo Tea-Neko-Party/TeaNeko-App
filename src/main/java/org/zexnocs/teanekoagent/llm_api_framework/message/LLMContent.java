@@ -1,12 +1,12 @@
-package org.zexnocs.teanekoagent.llm_api.api.message;
+package org.zexnocs.teanekoagent.llm_api_framework.message;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.annotation.JsonUnwrapped;
 import lombok.Getter;
 import lombok.experimental.SuperBuilder;
 import org.jspecify.annotations.NonNull;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMContent;
-import org.zexnocs.teanekoagent.llm_api.api.message.interfaces.ILLMContentPart;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMContentPart;
 
 /**
  * LLM Content 的实现类
