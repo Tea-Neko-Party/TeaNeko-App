@@ -26,16 +26,32 @@ public class LLMPrompt implements ILLMPrompt {
     @Nullable
     private final ILLMModelOptions options;
 
+    /**
+     * 使用默认 options 与指定的 message list 构造
+     *
+     * @param messages message list
+     */
     public LLMPrompt(List<ILLMMessage> messages) {
         this.messages = messages;
         this.options = null;
     }
 
+    /**
+     * 使用默认 options 与单个 message 构造
+     *
+     * @param message 单个 message
+     */
     public LLMPrompt(ILLMMessage message) {
         this.messages = List.of(message);
         this.options = null;
     }
 
+    /**
+     * 使用指定 options 与单个 message 构造
+     *
+     * @param message 单个 message
+     * @param options 输入选项
+     */
     public LLMPrompt(ILLMMessage message, @Nullable ILLMModelOptions options) {
         this.messages = List.of(message);
         this.options = options;
