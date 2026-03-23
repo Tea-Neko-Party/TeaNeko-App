@@ -6,6 +6,8 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 
@@ -49,6 +51,7 @@ public class ThreadPoolConfig {
 
     /**
      * 用于定时器的单线程 Scheduler。
+     *
      * @return 定时器 Scheduler
      */
     @Bean
@@ -61,7 +64,21 @@ public class ThreadPoolConfig {
     }
 
     /**
+     * 任务执行虚拟线程池，用于处理高并发吞吐的任务。
+     * <br>建议不要使用 {@code synchronized} 而是使用 {@link java.util.concurrent.locks.ReentrantLock}
+     *
+     * @return 虚拟线程池执行器
+     */
+    @Bean
+    public ExecutorService virtualExecutor() {
+        // 使用虚拟线程执行器，每个任务都是独立虚拟线程
+        return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
+    }
+
+    /**
      * 专门为 api 请求设计的 Scheduler
+     *
+     * @return {@link Scheduler }
      */
     @Bean
     public Scheduler apiScheduler() {

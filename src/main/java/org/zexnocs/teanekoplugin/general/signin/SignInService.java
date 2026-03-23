@@ -7,6 +7,8 @@ import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
+import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.easydata.cleanable.CleanableEasyData;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
@@ -24,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 签到服务
@@ -47,16 +50,20 @@ public class SignInService {
     private final Map<UUID, Boolean> todaySignInSet = new ConcurrentHashMap<>();
 
     /// 锁，防止同一时间签到，UUID -> 锁对象
-    private final ConcurrentHashMap<UUID, Object> userLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMapCacheContainer<UUID, ReentrantLock> userLocks;
 
     private final ITimerService iTimerService;
     private final RandomUtil randomUtil;
     private final ITeaUserCoinService iTeaUserCoinService;
 
-    public SignInService(ITimerService iTimerService, RandomUtil randomUtil, ITeaUserCoinService iTeaUserCoinService) {
+    public SignInService(ITimerService iTimerService,
+                         RandomUtil randomUtil,
+                         ITeaUserCoinService iTeaUserCoinService,
+                         ICacheService iCacheService) {
         this.iTimerService = iTimerService;
         this.randomUtil = randomUtil;
         this.iTeaUserCoinService = iTeaUserCoinService;
+        this.userLocks = ConcurrentMapCacheContainer.of(iCacheService);
     }
 
     /**
@@ -84,13 +91,12 @@ public class SignInService {
      * @param sender 消息发送器
      */
     public void signIn(UUID userId, long nowMs, @Nullable IEasyMessageSenderBuilder sender) {
-        Object lock = userLocks.computeIfAbsent(userId, key -> new Object());
-        synchronized (lock) {
-            try {
-                __signIn(userId, nowMs, sender);
-            }finally {
-                userLocks.remove(userId, lock);
-            }
+        var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            __signIn(userId, nowMs, sender);
+        } finally {
+            lock.unlock();
         }
     }
 

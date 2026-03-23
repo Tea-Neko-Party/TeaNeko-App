@@ -2,10 +2,11 @@ package org.zexnocs.teanekoplugin.general.signin;
 
 import lombok.Builder;
 import lombok.Data;
-import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
+import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.easydata.cleanable.CleanableEasyData;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.database.itemdata.exception.InsufficientItemCountException;
@@ -18,7 +19,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 补签系统。
@@ -28,13 +29,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * @since 4.3.4
  */
 @Service
-@RequiredArgsConstructor
 public class RepairSignInService {
     /// 签到服务
     private final SignInService signInService;
 
     /** UUID -> 锁对象 */
-    private final ConcurrentHashMap<UUID, Object> userLocks = new ConcurrentHashMap<>();
+    private final ConcurrentMapCacheContainer<UUID, ReentrantLock> userLocks;
+
+    public RepairSignInService(SignInService signInService, ICacheService iCacheService) {
+        this.signInService = signInService;
+        this.userLocks = ConcurrentMapCacheContainer.of(iCacheService);
+    }
 
     /**
      * 线性安全的补签
@@ -44,13 +49,12 @@ public class RepairSignInService {
                              long nowMs,
                              int k,
                              @Nullable IItemDataDTO<?> card) {
-        Object lock = userLocks.computeIfAbsent(userId, key -> new Object());
-        synchronized (lock) {
-            try {
-                __repairSignIn(sender, userId, nowMs, k, card);
-            }finally {
-                userLocks.remove(userId, lock);
-            }
+        var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            __repairSignIn(sender, userId, nowMs, k, card);
+        } finally {
+            lock.unlock();
         }
     }
 

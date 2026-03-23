@@ -13,7 +13,7 @@ import org.zexnocs.teanekocore.actuator.task.state.TaskExecutedState;
 import org.zexnocs.teanekocore.framework.state.LockStateMachine;
 
 import java.util.UUID;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -54,7 +54,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
     /// 任务执行的线程 Future，用于观察或者取消任务执行
     @Setter
     @Getter
-    private volatile ScheduledFuture<?> executingFuture = null;
+    private volatile CompletableFuture<?> executingFuture = null;
 
     /**
      * 构造函数，外部不可见。

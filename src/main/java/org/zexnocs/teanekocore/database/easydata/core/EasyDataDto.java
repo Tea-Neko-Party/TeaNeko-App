@@ -17,12 +17,16 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * EasyData 数据传输对象。
+ * <br> 4.4.0: 加锁
  *
  * @author zExNocs
  * @date 2026/02/15
+ * @since 4.0.0
+ * @version 4.4.0
  */
 @Getter
 public class EasyDataDto implements IEasyDataDto {
@@ -46,6 +50,9 @@ public class EasyDataDto implements IEasyDataDto {
 
     /// objectMapper
     private final ObjectMapper objectMapper;
+
+    /// 锁，防止多线程同时刷新数据导致重复刷新和数据不一致
+    private final ReentrantLock lock = new ReentrantLock();
 
     /**
      * 构造函数。
@@ -74,31 +81,40 @@ public class EasyDataDto implements IEasyDataDto {
      */
     @Override
     public void refresh() {
-        // 用临时局部变量构造新数据，避免构建过程中 data 被其他线程访问
-        Map<String, String> newData = new ConcurrentHashMap<>();
-
-        // 从数据库加载数据
-        var dataList = repository.findByNamespaceAndTarget(namespace, target);
-        for (var dto : dataList) {
-            newData.put(dto.getKey(), dto.getValue());
+        lock.lock();
+        try {
+            // 用临时局部变量构造新数据，避免构建过程中 data 被其他线程访问
+            Map<String, String> newData = new ConcurrentHashMap<>();
+            // 从数据库加载数据
+            var dataList = repository.findByNamespaceAndTarget(namespace, target);
+            for (var dto : dataList) {
+                newData.put(dto.getKey(), dto.getValue());
+            }
+            // 原子性地替换 data 引用
+            this.data = newData;
+        } finally {
+            lock.unlock();
         }
-
-        // 原子性地替换 data 引用
-        this.data = newData;
     }
 
     /**
      * 懒加载数据。
      * 如果数据为null，刷新数据。
      */
-    protected synchronized void refreshIfNecessary() {
-        if (data == null) {
-            refresh();
+    protected void refreshIfNecessary() {
+        lock.lock();
+        try {
+            if (data == null) {
+                refresh();
+            }
+        } finally {
+            lock.unlock();
         }
     }
 
     /**
      * 判断是否存在键。
+     *
      * @param key 键。
      * @return 是否存在。
      */
@@ -113,6 +129,7 @@ public class EasyDataDto implements IEasyDataDto {
     /**
      * 根据键获取字符串值。
      * 如果不存在则返回null。
+     *
      * @param key 键。
      * @return 字符串值。
      */
@@ -126,6 +143,7 @@ public class EasyDataDto implements IEasyDataDto {
 
     /**
      * 根据键尝试解析 Json 字符串为指定类型。
+     *
      * @param key 键。
      * @param clazz 类型。
      * @param defaultValue 默认值。

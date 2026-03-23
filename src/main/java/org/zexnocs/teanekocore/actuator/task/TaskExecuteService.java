@@ -15,7 +15,8 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
 import java.util.Optional;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -28,22 +29,24 @@ import java.util.concurrent.TimeUnit;
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {
-    /// 线程池
-    private final ScheduledThreadPoolExecutor taskExecutor;
+    /// 虚拟线程池
+    private final ExecutorService virtualExecutor;
 
     /// logger
     private final ILogger logger;
 
     /// task stage scanner
     private final TaskStageScanner taskStageScanner;
+
+    /// task service
     private final ITaskService iTaskService;
 
     @Autowired
-    public TaskExecuteService(ScheduledThreadPoolExecutor taskExecutor,
+    public TaskExecuteService(ExecutorService virtualExecutor,
                               ILogger logger,
                               TaskStageScanner taskStageScanner,
                               ITaskService iTaskService) {
-        this.taskExecutor = taskExecutor;
+        this.virtualExecutor = virtualExecutor;
         this.logger = logger;
         this.taskStageScanner = taskStageScanner;
         this.iTaskService = iTaskService;
@@ -68,9 +71,15 @@ public class TaskExecuteService implements ITaskExecuteService {
             return;
         }
         // 执行任务，间隔是 delayDuration
-        task.setExecutingFuture(
-                taskExecutor.schedule(() -> _executeTask(task, _getTaskStageChain(task)),
-                        task.getConfig().getDelayDuration().toMillis(), TimeUnit.MILLISECONDS));
+        var future = CompletableFuture.runAsync(
+                () -> _executeTask(task, _getTaskStageChain(task)),
+                CompletableFuture.delayedExecutor(
+                        task.getConfig().getDelayDuration().toMillis(),
+                        TimeUnit.MILLISECONDS,
+                        virtualExecutor
+                )
+        );
+        task.setExecutingFuture(future);
     }
 
     /**
@@ -98,9 +107,15 @@ public class TaskExecuteService implements ITaskExecuteService {
             return;
         }
         // 执行任务，间隔是 retryInterval
-        task.setExecutingFuture(
-                taskExecutor.schedule(() -> _executeTask(task, _getTaskStageChain(task)),
-                        task.getConfig().getRetryInterval().toMillis(), TimeUnit.MILLISECONDS));
+        var future = CompletableFuture.runAsync(
+                () -> _executeTask(task, _getTaskStageChain(task)),
+                CompletableFuture.delayedExecutor(
+                        task.getConfig().getRetryInterval().toMillis(),
+                        TimeUnit.MILLISECONDS,
+                        virtualExecutor
+                )
+        );
+        task.setExecutingFuture(future);
     }
 
     /// 构造任务的 stage chain。

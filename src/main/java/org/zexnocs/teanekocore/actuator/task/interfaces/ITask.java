@@ -6,7 +6,7 @@ import org.zexnocs.teanekocore.actuator.task.state.ITaskState;
 import org.zexnocs.teanekocore.framework.state.IStateMachine;
 
 import java.util.UUID;
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 任务接口，用于定义一个任务的基本行为。
@@ -46,7 +46,7 @@ public interface ITask<T> extends IStateMachine<ITaskState> {
      * 获取其线程执行的 future，用于过期取消
      * @return 任务执行的线程 future
      */
-    ScheduledFuture<?> getExecutingFuture();
+    CompletableFuture<?> getExecutingFuture();
 
     /**
      * 原子性地修改成 Retry 的状态。
@@ -73,5 +73,5 @@ public interface ITask<T> extends IStateMachine<ITaskState> {
      * 设置任务执行的线程 Future，用于观察或者取消任务执行。
      * @param future 任务执行的线程 Future
      */
-    void setExecutingFuture(ScheduledFuture<?> future);
+    void setExecutingFuture(CompletableFuture<?> future);
 }

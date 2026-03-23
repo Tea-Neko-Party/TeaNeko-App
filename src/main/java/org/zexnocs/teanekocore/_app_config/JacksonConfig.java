@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoapp._app_config;
+package org.zexnocs.teanekocore._app_config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
