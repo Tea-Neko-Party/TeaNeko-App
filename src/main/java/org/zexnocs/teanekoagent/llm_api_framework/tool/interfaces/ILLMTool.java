@@ -9,5 +9,26 @@ import org.zexnocs.teanekocore.framework.function.MethodCallable;
  * @date 2026/03/24
  * @since 4.4.0
  */
-public interface ILLMTool extends MethodCallable<Void> {
+public interface ILLMTool extends MethodCallable<String> {
+    /**
+     * tool 的名字。
+     *
+     * @return {@link String }
+     */
+    String getName();
+
+    /**
+     * tool 的描述
+     *
+     * @return {@link String }
+     */
+    String getDescription();
+
+
+    /**
+     * 获取输入参数
+     *
+     * @return {@link ILLMFunctionParameter }
+     */
+    ILLMFunctionParameter getParameters();
 }
