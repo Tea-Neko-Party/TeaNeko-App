@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
-import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
@@ -22,9 +21,6 @@ import java.util.Map;
 @Service
 @RequiredArgsConstructor
 public class GroupActivityQueryService {
-    private final TeaNekoScopeService teaNekoScopeService;
-    private final GroupActivityService groupActivityService;
-
     /**
      * 获取一个低活跃度成员的细节信息。
      *

@@ -2,9 +2,7 @@ package org.zexnocs.teanekoapp;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.zexnocs.teanekoagent.llm_api_framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm_api_framework.message.content.LLMContentListBuilder;
-import tools.jackson.databind.ObjectMapper;
+import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
 /**
  * 常规测试类，用于测试任何想要测试的功能。
@@ -18,14 +16,6 @@ import tools.jackson.databind.ObjectMapper;
 public class NormalTest {
     @Test
     public void run() {
-        var mapper = new ObjectMapper();
-        var messageA = LLMAssistantMessage.builder()
-                .contents(LLMContentListBuilder.builder().addText("hello").build())
-                .build();
-        var messageB = LLMAssistantMessage.builder()
-                .contents(LLMContentListBuilder.builder().addText("hello").addText("world").build())
-                .build();
-        System.out.println(mapper.writeValueAsString(messageA));
-        System.out.println(mapper.writeValueAsString(messageB));
+        IO.println(ChinaDateUtil.Instance.convertToDateTimeString(1771931055 * 1000L));
     }
 }

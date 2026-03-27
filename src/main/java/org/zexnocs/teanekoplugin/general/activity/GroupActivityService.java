@@ -62,7 +62,7 @@ public class GroupActivityService {
     @Nullable
     public TaskFuture<Map<String, Pair<GroupActivityData, GroupActivityRule>>> scanWithFuture(String scopeId) throws ConfigDataNotFoundException {
         long currentTimeMs = System.currentTimeMillis();
-        var activityMap = activityDataMap.computeIfAbsent(scopeId, k -> new ConcurrentHashMap<>());
+        var activityMap = activityDataMap.computeIfAbsent(scopeId, _ -> new ConcurrentHashMap<>());
         synchronized (activityMap) {
             return _scan(scopeId, currentTimeMs, activityMap);
         }
@@ -106,7 +106,7 @@ public class GroupActivityService {
         // 开始扫描
         return tools.getGroupMemberListSender().get(groupId)
                 .thenAccept(list -> processList(list, scopeId, currentTimeMs, rules, map))
-                .thenApply(v -> {
+                .thenApply(_ -> {
                     for(var monitorGroupId : config.getGroups()) {
                         tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
                                 .sendTextMessage("扫描完毕，扫描出 %d 低活跃度成员".formatted(map.size()));

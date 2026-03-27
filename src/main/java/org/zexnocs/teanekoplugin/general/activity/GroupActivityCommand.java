@@ -46,7 +46,7 @@ public class GroupActivityCommand {
     public void allInfo(CommandData<ITeaNekoMessageData> commandData,
                         @DefaultValue("") String groupId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (finalGroupId, targetScopeId, config) -> {
+        withValidGroupContext(data, groupId, (_, targetScopeId, _) -> {
             var map = groupActivityService.getActivityDataMap().get(targetScopeId);
             var allDatils = groupActivityQueryService
                     .getAllDetail(data.getClient(), groupId, map);
@@ -63,7 +63,7 @@ public class GroupActivityCommand {
     @SubCommand(value = {"scan", "扫描"}, permission = CommandPermission.ADMIN)
     public void scan(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String groupId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (finalGroupId, targetScopeId, config) -> {
+        withValidGroupContext(data, groupId, (_, targetScopeId, _) -> {
             try {
                 var future = groupActivityService.scanWithFuture(targetScopeId);
                 if(future != null) {
@@ -101,14 +101,14 @@ public class GroupActivityCommand {
                     Duration.ofDays(90).toMillis()
             );
         }
-        withValidGroupContext(commandData.getRawData(), groupId, (finalGroupId, targetScopeId, config) ->
+        withValidGroupContext(commandData.getRawData(), groupId, (finalGroupId, targetScopeId, _) ->
                 groupActivityExemptionService.addWithFuture(targetScopeId, userId, interval)
                 .thenAccept(ignored -> {
-                    groupActivityService.getActivityDataMap().computeIfPresent(targetScopeId, (k, v) -> {
+                    groupActivityService.getActivityDataMap().computeIfPresent(targetScopeId, (_, v) -> {
                         v.remove(userId);
                         return v;
                     });
-                    groupActivityPunishService.getPunishCache().computeIfPresent(targetScopeId, (k, v) -> {
+                    groupActivityPunishService.getPunishCache().computeIfPresent(targetScopeId, (_, v) -> {
                         v.remove(userId);
                         return v;
                     });
