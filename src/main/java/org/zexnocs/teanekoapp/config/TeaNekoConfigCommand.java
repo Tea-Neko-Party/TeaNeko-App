@@ -119,7 +119,7 @@ public class TeaNekoConfigCommand {
 
     @Description("""
             注册一个配置。
-            规格：/pm reg <配置名称>
+            规格：/cfg reg <配置名称>
             重复注册将重置该配置。""")
     @SubCommand(value = {"reg", "register"})
     public void registerConfig(CommandData<ITeaNekoMessageData> commandData,

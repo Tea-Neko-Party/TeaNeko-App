@@ -30,8 +30,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Description("""
         让机器人给你个人资料卡点赞。
         可以选择手动点赞，也可以选择加入到每天凌晨1点的定时点赞队列中。
-        点赞每天凌晨1点刷新。
-        """)
+        点赞每天凌晨1点刷新。""")
 @Command(value = {"/like", "like"},
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL,
