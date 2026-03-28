@@ -51,7 +51,7 @@ public class MemberExitService {
                 groupMessageSender.getBuilder(AbstractEvent.getTokenForSender(), String.valueOf(data.getGroupId()))
                                 .addImageMessage(AvatarUtils.Instance.getUrl(data.getUserId()))
                                 .addTextMessage(String.format("""
-                                    有%s离开了猫猫茶馆喵！
+                                    有%s离开了群聊喵！
                                     离开的%s是：%s
                                     离开的原因是：%s""",
                                         memberName,
