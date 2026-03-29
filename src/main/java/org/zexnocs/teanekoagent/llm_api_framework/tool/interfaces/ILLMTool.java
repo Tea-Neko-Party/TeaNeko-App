@@ -24,11 +24,24 @@ public interface ILLMTool extends MethodCallable<String> {
      */
     String getDescription();
 
-
     /**
      * 获取输入参数
      *
      * @return {@link ILLMFunctionParameter }
      */
     ILLMFunctionParameter getParameters();
+
+    /**
+     * 如果设置为 true，API 确保输出始终符合函数的 JSON schema 定义
+     *
+     * @return boolean
+     */
+    boolean isStrict();
+
+    /**
+     * 大模型给出的参数值。只在大模型需求时才提供。
+     *
+     * @return {@link String }
+     */
+    String getArguments();
 }
