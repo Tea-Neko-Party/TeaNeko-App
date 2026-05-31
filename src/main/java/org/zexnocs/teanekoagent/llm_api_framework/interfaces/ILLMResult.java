@@ -1,6 +1,9 @@
 package org.zexnocs.teanekoagent.llm_api_framework.interfaces;
 
+import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMAssistantMessage;
+
 import java.util.List;
+import java.util.Optional;
 
 /**
  * LLM 获取的结果接口。
@@ -52,4 +55,26 @@ public interface ILLMResult {
      * @return {@link ILLMUsage }
      */
     ILLMUsage getUsage();
+
+    /**
+     * 获取第一个生成的选项。
+     *
+     * @return {@link Optional }<{@link ILLMChoice }>
+     */
+    default Optional<ILLMChoice> getFirstChoice() {
+        var choices = getChoices();
+        if (choices == null || choices.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(choices.getFirst());
+    }
+
+    /**
+     * 获取第一个生成选项的信息。
+     *
+     * @return {@link Optional }<{@link ILLMAssistantMessage }>
+     */
+    default Optional<ILLMAssistantMessage> getFirstMessage() {
+        return getFirstChoice().map(ILLMChoice::getMessage);
+    }
 }
