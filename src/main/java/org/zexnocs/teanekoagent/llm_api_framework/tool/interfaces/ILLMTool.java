@@ -3,7 +3,8 @@ package org.zexnocs.teanekoagent.llm_api_framework.tool.interfaces;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 /**
- * LLM 工具类接口
+ * 大语言模型 Function Tool 接口。
+ * <br>用于向不同供应商暴露统一的工具定义和执行入口。
  *
  * @author zExNocs
  * @date 2026/03/24
@@ -11,7 +12,16 @@ import org.zexnocs.teanekocore.framework.function.MethodCallable;
  */
 public interface ILLMTool extends MethodCallable<String> {
     /**
-     * tool 的名字。
+     * 类型，一般都为 function
+     *
+     * @return {@link String }
+     */
+    default String getType() {
+        return "function";
+    }
+
+    /**
+     * tool 的名字
      *
      * @return {@link String }
      */
@@ -43,5 +53,18 @@ public interface ILLMTool extends MethodCallable<String> {
      *
      * @return {@link String }
      */
-    String getArguments();
+    default String getArguments() {
+        return null;
+    }
+
+    /**
+     * 调用工具执行逻辑，返回结果。参数为大模型给出的参数值。只在大模型需求时才提供。
+     *
+     * @param arguments 参数
+     * @return {@link String }
+     * @throws Exception 可能的异常
+     */
+    default String call(String arguments) throws Exception {
+        return call();
+    }
 }
