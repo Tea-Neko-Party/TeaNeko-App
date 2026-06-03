@@ -335,7 +335,9 @@ public class SignInService {
                                        int coin,
                                        int continuous,
                                        int totalDays) {
-        var extra = date.getDayOfWeek() == DayOfWeek.THURSDAY
+        // 如果是星期四且不是 六月四日
+        var extra = ((date.getDayOfWeek() == DayOfWeek.THURSDAY)
+                && (date.getMonthValue() != 6 || date.getDayOfMonth() != 4))
                 ? "疯狂星期四v你 50 喵！\n" : "";
         return """
         %s主人签到成功喵！
