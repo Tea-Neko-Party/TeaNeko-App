@@ -49,6 +49,16 @@ public interface ILLMTool extends MethodCallable<String> {
     boolean isStrict();
 
     /**
+     * 获取工具所属包。
+     * <br>该字段用于按包筛选需要暴露给模型的工具，不参与供应商 Function Tool Schema。
+     *
+     * @return 工具所属包
+     */
+    default String getToolPackage() {
+        return "";
+    }
+
+    /**
      * 大模型给出的参数值。只在大模型需求时才提供。
      *
      * @return {@link String }

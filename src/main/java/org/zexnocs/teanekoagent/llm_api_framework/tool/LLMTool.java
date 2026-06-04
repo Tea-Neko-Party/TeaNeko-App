@@ -53,6 +53,14 @@ public class LLMTool implements ILLMTool {
     private boolean strict = false;
 
     /**
+     * 工具所属包。
+     * <br>该字段仅用于按包筛选暴露给模型的工具，序列化工具定义时会忽略。
+     */
+    @JsonIgnore
+    @Builder.Default
+    private String toolPackage = "";
+
+    /**
      * 模型生成的工具调用参数。
      * <br>通常为 JSON 字符串，仅在需要把工具定义和一次具体调用绑定在同一对象中时使用。
      */
@@ -78,10 +86,29 @@ public class LLMTool implements ILLMTool {
                                    String description,
                                    ILLMFunctionParameter parameters,
                                    ILLMToolExecutor executor) {
+        return function(name, description, parameters, "", executor);
+    }
+
+    /**
+     * 创建指定工具包的 Function Tool。
+     *
+     * @param name 工具名称
+     * @param description 工具描述
+     * @param parameters 工具参数定义
+     * @param toolPackage 工具所属包
+     * @param executor 本地工具执行器
+     * @return Function Tool 实例
+     */
+    public static LLMTool function(String name,
+                                   String description,
+                                   ILLMFunctionParameter parameters,
+                                   String toolPackage,
+                                   ILLMToolExecutor executor) {
         return LLMTool.builder()
                 .name(name)
                 .description(description)
                 .parameters(parameters)
+                .toolPackage(toolPackage)
                 .executor(executor)
                 .build();
     }

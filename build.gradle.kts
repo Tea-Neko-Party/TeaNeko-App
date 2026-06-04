@@ -37,6 +37,10 @@ configurations {
     }
 }
 
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.add("-parameters")
+}
+
 // ========= 仓库与依赖 =========
 repositories {
     mavenCentral()

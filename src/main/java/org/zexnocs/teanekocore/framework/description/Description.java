@@ -12,7 +12,7 @@ import java.lang.annotation.Target;
  * @date 2026/02/10
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})
+@Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD, ElementType.PARAMETER})
 public @interface Description {
     /**
      * 描述内容。
