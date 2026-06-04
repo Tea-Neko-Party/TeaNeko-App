@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoagent.llm_api_framework.response;
 
 import lombok.*;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMChoice;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMUsage;
 import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMChoice;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMUsage;
 
 import java.time.Instant;
 import java.util.List;

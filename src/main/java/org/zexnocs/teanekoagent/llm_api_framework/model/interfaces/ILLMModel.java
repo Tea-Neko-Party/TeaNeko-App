@@ -1,11 +1,11 @@
 package org.zexnocs.teanekoagent.llm_api_framework.model.interfaces;
 
-import org.zexnocs.teanekoagent.llm_api_framework.LLMPrompt;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm_api_framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm_api_framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm_api_framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm_api_framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 import java.util.List;

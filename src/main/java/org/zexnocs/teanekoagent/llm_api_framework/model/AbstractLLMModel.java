@@ -1,9 +1,9 @@
 package org.zexnocs.teanekoagent.llm_api_framework.model;
 
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm_api_framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 /**

@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent.llm_api_framework.response;
 
 import lombok.*;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMChoice;
 import org.zexnocs.teanekoagent.llm_api_framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMChoice;
 
 import java.util.Map;
 

@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoagent.llm_api_framework.model;
 
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm_api_framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm_api_framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;

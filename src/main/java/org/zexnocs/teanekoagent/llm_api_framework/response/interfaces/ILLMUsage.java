@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api_framework.interfaces;
+package org.zexnocs.teanekoagent.llm_api_framework.response.interfaces;
 
 /**
  * LLM 请求的用量信息。

@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm_api_framework.interfaces;
+package org.zexnocs.teanekoagent.llm_api_framework.input.interfaces;
 
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;

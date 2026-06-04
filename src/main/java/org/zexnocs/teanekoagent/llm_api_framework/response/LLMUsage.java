@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoagent.llm_api_framework.response;
 
 import lombok.*;
-import org.zexnocs.teanekoagent.llm_api_framework.interfaces.ILLMUsage;
+import org.zexnocs.teanekoagent.llm_api_framework.response.interfaces.ILLMUsage;
 
 /**
  * 大语言模型 token 用量信息。
