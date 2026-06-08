@@ -4,7 +4,7 @@ import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 /**
  * 大语言模型适配器的抽象基类。
@@ -99,10 +99,10 @@ public abstract class AbstractLLMModel implements ILLMModel {
      * <br>该方法会先合并默认选项和提示词选项，再委托给 {@link #doCall(ILLMPrompt, LLMModelOptions)} 完成实际调用。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      */
     @Override
-    public ITaskResult<ILLMResult> call(ILLMPrompt prompt) {
+    public TaskFuture<ILLMResult> call(ILLMPrompt prompt) {
         return doCall(prompt, LLMModelOptions.merge(defaultOptions, prompt.getOptions()));
     }
 
@@ -112,7 +112,7 @@ public abstract class AbstractLLMModel implements ILLMModel {
      *
      * @param prompt 本次调用的提示词与消息
      * @param options 已完成合并的模型调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      */
-    protected abstract ITaskResult<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options);
+    protected abstract TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options);
 }

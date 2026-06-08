@@ -31,10 +31,10 @@ public class DeepSeekChatModel extends AbstractLLMModel {
     }
 
     @Override
-    protected ILLMResult doCall(ILLMPrompt prompt, LLMModelOptions options) {
+    protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options) {
         // 1. 将 prompt.getMessages() 和 options 转成供应商 HTTP request。
         // 2. 调用供应商 API。
-        // 3. 将供应商 response 转成 LLMResult。
+        // 3. 将供应商 response 转成 TaskFuture<ILLMResult>。
         throw new UnsupportedOperationException();
     }
 }
@@ -43,20 +43,24 @@ public class DeepSeekChatModel extends AbstractLLMModel {
 `LLMModelService` 会扫描所有 `ILLMModel` Bean，并使用供应商级 ID 作为唯一 key。默认情况下该 ID 等于 `getProvider()`，例如 `deepseek`：
 
 ```java
-ILLMResult result = llmModelService.call(
+TaskFuture<ILLMResult> resultFuture = llmModelService.call(
         LLMModelId.of("deepseek"),
         prompt
 );
+
+ILLMResult result = resultFuture.finish().join();
 ```
 
 如果只想切换同一供应商下的具体模型名称，不需要注册新的 ID，而是覆盖本次调用的 `model` option：
 
 ```java
-ILLMResult result = llmModelService.call(
+TaskFuture<ILLMResult> resultFuture = llmModelService.call(
         "deepseek",
         "deepseek-v4-flash",
         prompt
 );
+
+ILLMResult result = resultFuture.finish().join();
 ```
 
 # 三. Options
@@ -96,7 +100,9 @@ LLM 默认模型和默认 options 不应写死在代码中。框架会读取 `co
 `LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `default-model-id`：
 
 ```java
-var result = llmModelService.call(new LLMPrompt(messages));
+var result = llmModelService.call(new LLMPrompt(messages))
+        .finish()
+        .join();
 ```
 
 文件配置示例：

@@ -6,7 +6,7 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.util.List;
 import java.util.Map;
@@ -84,28 +84,28 @@ public interface ILLMModelService {
      *
      * @param modelId 模型适配器 ID
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
-    ITaskResult<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt);
+    TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt);
 
     /**
      * 使用默认模型适配器执行一次大语言模型调用。
      * <br>如果 prompt options 中提供 provider，则优先使用 prompt 指定的供应商级 ID；model 只覆盖本次调用的模型名称。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalStateException 当未配置默认模型适配器且 prompt 未提供 provider 时抛出
      */
-    ITaskResult<ILLMResult> call(ILLMPrompt prompt);
+    TaskFuture<ILLMResult> call(ILLMPrompt prompt);
 
     /**
      * 使用默认模型和消息列表执行一次大语言模型调用。
      *
      * @param messages 消息列表
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      */
-    default ITaskResult<ILLMResult> call(List<ILLMMessage> messages) {
+    default TaskFuture<ILLMResult> call(List<ILLMMessage> messages) {
         return call(new LLMPrompt(messages));
     }
 
@@ -114,10 +114,10 @@ public interface ILLMModelService {
      *
      * @param modelId 模型适配器 ID，通常为供应商 ID
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型适配器未注册或调用选项不受支持时抛出
      */
-    default ITaskResult<ILLMResult> call(String modelId, ILLMPrompt prompt) {
+    default TaskFuture<ILLMResult> call(String modelId, ILLMPrompt prompt) {
         return call(LLMModelId.of(modelId), prompt);
     }
 
@@ -128,10 +128,10 @@ public interface ILLMModelService {
      * @param provider 模型供应商 ID
      * @param model 模型名称
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
-    default ITaskResult<ILLMResult> call(String provider, String model, ILLMPrompt prompt) {
+    default TaskFuture<ILLMResult> call(String provider, String model, ILLMPrompt prompt) {
         var options = LLMModelOptions.merge(
                 prompt.getOptions(),
                 LLMModelOptions.builder()

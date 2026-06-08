@@ -7,8 +7,7 @@ import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekocore.actuator.task.TaskResult;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 
 import java.util.Map;
@@ -102,10 +101,10 @@ public class DeepSeekChatModel extends AbstractLLMModel {
      *
      * @param prompt 本次调用的提示词与消息
      * @param options 已完成合并的模型调用选项
-     * @return DeepSeek 响应转换后的统一 LLM 结果
+     * @return DeepSeek 响应转换后的统一 LLM 结果 Future
      */
     @Override
-    protected ITaskResult<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options) {
+    protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options) {
         var metadata = options.getMetadata();
         var apiKey = requireMetadata(metadata, API_KEY_METADATA);
         var baseUrl = requireMetadata(metadata, BASE_URL_METADATA);
@@ -115,21 +114,16 @@ public class DeepSeekChatModel extends AbstractLLMModel {
                 trimTrailingSlash(baseUrl),
                 normalizeApiPath(api),
                 apiKey);
-        DeepSeekChatCompletionResponseData response;
         try {
-            var responseFuture = apiResponseService.addTask(
+            return apiResponseService.addTask(
                     request,
                     DeepSeekChatCompletionResponseData.class,
                     true,
-                    true);
-            response = responseFuture.finish().join();
+                    true)
+                    .thenApply(response -> (ILLMResult) DeepSeekChatCompletionMapper.toResult(response));
         } catch (Exception exception) {
             throw new IllegalStateException("DeepSeek chat completion request failed.", exception);
         }
-        if (response == null) {
-            throw new IllegalStateException("DeepSeek response body is empty.");
-        }
-        return new TaskResult<>(true, DeepSeekChatCompletionMapper.toResult(response));
     }
 
     /**

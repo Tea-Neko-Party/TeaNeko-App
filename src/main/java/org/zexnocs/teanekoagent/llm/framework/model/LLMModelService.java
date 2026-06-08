@@ -8,7 +8,7 @@ import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
@@ -110,11 +110,11 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      *
      * @param modelId 模型适配器 ID
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
     @Override
-    public ITaskResult<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt) {
+    public TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt) {
         var model = getModel(modelId);
         var options = buildEffectiveOptions(modelId, model.getDefaultOptions(), prompt.getOptions());
         if (!model.supports(options)) {
@@ -128,11 +128,11 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * <br>如果 prompt options 中提供 provider，则优先使用 prompt 指定的供应商级 ID；model 只作为本次调用的模型名称覆盖项。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
-     * @return 模型调用结果
+     * @return 模型调用结果 Future
      * @throws IllegalStateException 当未配置默认模型适配器且 prompt 未提供 provider 时抛出
      */
     @Override
-    public ITaskResult<ILLMResult> call(ILLMPrompt prompt) {
+    public TaskFuture<ILLMResult> call(ILLMPrompt prompt) {
         return call(resolveModelId(prompt), prompt);
     }
 

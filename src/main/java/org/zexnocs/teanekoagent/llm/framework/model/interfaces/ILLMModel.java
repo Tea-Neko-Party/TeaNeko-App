@@ -6,7 +6,7 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.util.List;
 
@@ -72,17 +72,17 @@ public interface ILLMModel {
      * 使用一个 prompt 来获取模型结果。
      *
      * @param prompt 提示词
-     * @return {@link ILLMResult }
+     * @return 模型调用结果 Future
      */
-    ITaskResult<ILLMResult> call(ILLMPrompt prompt);
+    TaskFuture<ILLMResult> call(ILLMPrompt prompt);
 
     /**
      * 直接使用 {@link ILLMMessage} list 来获取模型结果，使用默认配置。
      *
      * @param messages messages
-     * @return {@link ILLMResult }
+     * @return 模型调用结果 Future
      */
-    default ITaskResult<ILLMResult> call(List<ILLMMessage> messages) {
+    default TaskFuture<ILLMResult> call(List<ILLMMessage> messages) {
         return call(new LLMPrompt(messages, getDefaultOptions()));
     }
 
@@ -91,9 +91,9 @@ public interface ILLMModel {
      *
      * @param messages messages
      * @param options options
-     * @return {@link ILLMResult }
+     * @return 模型调用结果 Future
      */
-    default ITaskResult<ILLMResult> call(List<ILLMMessage> messages, ILLMModelOptions options) {
+    default TaskFuture<ILLMResult> call(List<ILLMMessage> messages, ILLMModelOptions options) {
         return call(new LLMPrompt(messages, options));
     }
 }
