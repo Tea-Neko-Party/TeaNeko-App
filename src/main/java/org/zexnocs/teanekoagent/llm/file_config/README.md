@@ -19,7 +19,7 @@ default-model-id: "deepseek"
 
 models:
   - id: "deepseek"
-    model: "deepseek-chat"
+    model: "deepseek-v4-flash"
     api: ""
     api-key: ""
     base-url: ""
@@ -35,7 +35,7 @@ models:
 | `models` | 各模型适配器默认 options 列表。 |
 | `models[].id` | 模型适配器注册 ID，必须与模型注册到 `LLMModelService` 的 ID 一致；不再使用 `provider/model` 格式。 |
 | `models[].provider` | `id` 未设置时的兼容回退字段；推荐优先写 `id`。 |
-| `models[].model` | 供应商侧具体模型名称，例如 `deepseek-chat`；用于覆盖模型代码中的默认模型名，不参与路由。 |
+| `models[].model` | 供应商侧具体模型名称，例如 `deepseek-v4-flash`；用于覆盖模型代码中的默认模型名，不参与路由。 |
 | `models[].api` | 通用 API 配置，具体含义由供应商适配器解释。 |
 | `models[].api-key` | API key。 |
 | `models[].base-url` | 供应商 API base URL。 |
@@ -48,13 +48,14 @@ models:
 ```yaml
 models:
   - id: "deepseek"                 # 必须等于模型适配器注册 ID，通常就是 provider。
-    model: "deepseek-chat"         # 供应商侧默认模型名称；未填写时使用模型代码中的默认值。
+    model: "deepseek-v4-flash"     # 供应商侧默认模型名称；未填写时使用模型代码中的默认值。
     api-key: "${DEEPSEEK_API_KEY}" # 访问凭据应来自 file config、环境变量或数据库，不要写死在代码中。
     base-url: "https://api.deepseek.com"
+    api: "/chat/completions"
     temperature: 0.7               # 通用 options 字段；未填写时沿用代码默认值。
     max-tokens: 2048
     metadata:                      # 供应商私有参数，具体 key 由适配器约定。
-      timeout-ms: 30000
+      body.top_logprobs: 5
 ```
 
 `models[].id` 如果暂时没有对应的已注册模型适配器，不会影响启动；只有实际调用该 ID 时，`LLMModelService` 才会要求对应适配器存在。
@@ -83,7 +84,7 @@ LLMModelId.of(provider)
 
 | Provider | 默认 Model | 注册 ID |
 |---|---|---|
-| `deepseek` | `deepseek-chat` | `deepseek` |
+| `deepseek` | `deepseek-v4-flash` | `deepseek` |
 | `openai` | `gpt-4.1` | `openai` |
 
 如果 `models` 中写了尚未注册的 ID，不会影响启动，也不会主动报错；只有实际调用该 ID 时，`LLMModelService` 才会要求对应模型存在。

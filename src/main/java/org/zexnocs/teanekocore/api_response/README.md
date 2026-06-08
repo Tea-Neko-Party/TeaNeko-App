@@ -14,6 +14,7 @@
 | 功能 | 说明 |
 |---|---|
 | 声明式请求 | 在请求类上使用 `@APIRequestData` 声明 baseUrl、path、HTTP method、超时和重试。 |
+| 运行时覆盖 | 请求对象可重写 `getBaseUrlOverride()`、`getPathOverride()`、`getMethodOverride()`，用于从 file config 或数据库读取 API 地址。 |
 | 参数提取 | 从请求对象字段中提取参数，可用 `@APIRequestParam` 指定参数名和默认值。 |
 | GET/POST | GET 使用 query param；POST 支持 JSON body 和 `application/x-www-form-urlencoded`。 |
 | Header 自定义 | 请求对象可重写 `IAPIRequestData.headers()`。 |
@@ -26,6 +27,9 @@
 |---|---|
 | `@APIRequestData(baseUrl, path, method, isJson, timeoutInMillis, retryCount, retryDelayInMillis, cacheDurationInMillis)` | 描述一个请求类。`baseUrl` 必填，`path` 建议以 `/` 开头且不要以 `/` 结尾。 |
 | `@APIRequestParam(value, defaultValue)` | 标注字段对应的请求参数名。未标注时使用小写字段名。 |
+| `IAPIRequestData.getBaseUrlOverride()` | 运行时覆盖 base URL；返回 `null` 时使用注解配置。 |
+| `IAPIRequestData.getPathOverride()` | 运行时覆盖 path；返回 `null` 时使用注解配置。 |
+| `IAPIRequestData.getMethodOverride()` | 运行时覆盖 HTTP method；返回 `null` 时使用注解配置。 |
 | `IAPIRequestData.headers()` | 返回请求头，默认空 Map。 |
 | `IAPIResponseData` | 响应 DTO 标记接口。 |
 | `IAPIResponseService.addTask(requestData, responseType)` | 使用缓存策略发起请求。 |
@@ -55,6 +59,31 @@ public class UserResponse implements IAPIResponseData {
 apiResponseService.addTask(new UserRequest("10001"), UserResponse.class)
         .thenApply(user -> user.name)
         .finish();
+```
+
+运行时覆盖示例：
+
+```java
+@APIRequestData(baseUrl = "", path = "", method = "POST")
+public class RuntimeUrlRequest implements IAPIRequestData {
+    private final String baseUrl;
+    private final String path;
+
+    public RuntimeUrlRequest(String baseUrl, String path) {
+        this.baseUrl = baseUrl;
+        this.path = path;
+    }
+
+    @Override
+    public String getBaseUrlOverride() {
+        return baseUrl;
+    }
+
+    @Override
+    public String getPathOverride() {
+        return path;
+    }
+}
 ```
 
 # 五. 注意事项

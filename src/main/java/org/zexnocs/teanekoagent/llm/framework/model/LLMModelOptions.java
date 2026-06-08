@@ -33,7 +33,7 @@ public class LLMModelOptions implements ILLMModelOptions {
 
     /**
      * 供应商侧具体模型名称。
-     * <br>例如 {@code gpt-4.1}、{@code deepseek-chat}。
+     * <br>例如 {@code gpt-4.1}、{@code deepseek-v4-flash}。
      */
     @Nullable
     private String model;

@@ -23,7 +23,7 @@ public abstract class AbstractLLMModel implements ILLMModel {
 
     /**
      * 当前模型在供应商侧的默认模型名称。
-     * <br>例如 {@code deepseek-chat}；文件配置或本次调用 options 可以覆盖该值。
+     * <br>例如 {@code deepseek-v4-flash}；文件配置或本次调用 options 可以覆盖该值。
      */
     private final String model;
 

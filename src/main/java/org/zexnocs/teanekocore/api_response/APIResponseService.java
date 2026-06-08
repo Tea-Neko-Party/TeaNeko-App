@@ -82,7 +82,15 @@ public class APIResponseService implements IAPIResponseService {
         if (apiRequestAnnotation == null) {
             throw new APIRequestAnnotationNotFoundException("类 " + requestData.getClass().getName() + " 缺少 APIRequestData 注解");
         }
-        var url = apiRequestAnnotation.baseUrl();
+        var url = _firstNotBlank(requestData.getBaseUrlOverride(), apiRequestAnnotation.baseUrl());
+        var path = _firstNotBlank(requestData.getPathOverride(), apiRequestAnnotation.path());
+        var method = _firstNotBlank(requestData.getMethodOverride(), apiRequestAnnotation.method());
+        if (path == null) {
+            path = "";
+        }
+        if (method == null) {
+            method = "GET";
+        }
         // 检测 URL 是否正确
         if (url == null || url.isBlank()) {
             throw new APIURLErrorException("APIRequestData 注解中的 URL 不能为空");
@@ -91,8 +99,8 @@ public class APIResponseService implements IAPIResponseService {
         var future = new TaskFuture<>(logger, "订阅 api", new CompletableFuture<RES>());
         var webClient = _getWebClient(url);
         var params = _extractParams(requestData);
-        boolean isPost = apiRequestAnnotation.method().equalsIgnoreCase("POST");
-        String cacheKey = url + "?" + params.hashCode() + "@" + responseType.getName();
+        boolean isPost = method.equalsIgnoreCase("POST");
+        String cacheKey = url + path + "?" + params.hashCode() + "@" + responseType.getName();
 
         // 如果不跳过缓存，则尝试从缓存中获取响应
         if(!skipCache) {
@@ -106,9 +114,9 @@ public class APIResponseService implements IAPIResponseService {
 
         Mono<RES> mono;
         if(isPost) {
-            mono = _getMonoForPost(webClient, apiRequestAnnotation, requestData, params, responseType);
+            mono = _getMonoForPost(webClient, apiRequestAnnotation, requestData, params, responseType, path);
         } else {
-            mono = _getMonoForGet(webClient, apiRequestAnnotation, requestData, params, responseType);
+            mono = _getMonoForGet(webClient, requestData, params, responseType, path);
         }
         // 订阅 Mono 对象
         mono.timeout(Duration.ofMillis(apiRequestAnnotation.timeoutInMillis()))
@@ -142,11 +150,11 @@ public class APIResponseService implements IAPIResponseService {
      * 获取 Mono 对象用于 GET 请求
      */
     private <RES extends IAPIResponseData> Mono<RES> _getMonoForGet(
-            WebClient webClient, APIRequestData apiRequestAnnotation,
+            WebClient webClient,
             IAPIRequestData requestData, Map<String, Object> params,
-            Class<RES> responseType) {
+            Class<RES> responseType, String path) {
         return webClient.get()
-                .uri(uriBuilder -> _buildUri(uriBuilder, apiRequestAnnotation.path(), params))
+                .uri(uriBuilder -> _buildUri(uriBuilder, path, params))
                 .headers(h -> requestData.headers().forEach(h::add))
                 .retrieve()
                 .bodyToMono(responseType);
@@ -158,11 +166,11 @@ public class APIResponseService implements IAPIResponseService {
     private <RES extends IAPIResponseData> Mono<RES> _getMonoForPost(
             WebClient webClient, APIRequestData apiRequestAnnotation,
             IAPIRequestData requestData, Map<String, Object> params,
-            Class<RES> responseType) {
+            Class<RES> responseType, String path) {
         boolean isJson = apiRequestAnnotation.isJson();
         if(isJson) {
             return webClient.post()
-                    .uri(apiRequestAnnotation.path())
+                    .uri(path)
                     .contentType(MediaType.APPLICATION_JSON)
                     .headers(h -> requestData.headers().forEach(h::add))
                     .bodyValue(requestData)
@@ -170,7 +178,7 @@ public class APIResponseService implements IAPIResponseService {
                     .bodyToMono(responseType);
         }
         return webClient.post()
-                .uri(apiRequestAnnotation.path())
+                .uri(path)
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                 .headers(h -> requestData.headers().forEach(h::add))
                 .body(BodyInserters.fromFormData(_toMultiValueMap(params)))
@@ -239,6 +247,23 @@ public class APIResponseService implements IAPIResponseService {
         MultiValueMap<String, String> m = new LinkedMultiValueMap<>();
         map.forEach((k, v) -> m.add(k, v.toString()));
         return m;
+    }
+
+    /**
+     * 返回第一个非空白字符串。
+     *
+     * @param primary 优先值
+     * @param fallback 回退值
+     * @return 第一个非空白字符串；如果都为空则返回 {@code null}
+     */
+    private static String _firstNotBlank(String primary, String fallback) {
+        if (primary != null && !primary.isBlank()) {
+            return primary;
+        }
+        if (fallback != null && !fallback.isBlank()) {
+            return fallback;
+        }
+        return null;
     }
 
     /**

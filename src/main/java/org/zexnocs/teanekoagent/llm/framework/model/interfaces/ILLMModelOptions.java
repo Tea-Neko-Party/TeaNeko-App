@@ -28,7 +28,7 @@ public interface ILLMModelOptions {
 
     /**
      * 获取供应商侧具体模型名称。
-     * <br>例如 {@code gpt-4.1}、{@code deepseek-chat}。
+     * <br>例如 {@code gpt-4.1}、{@code deepseek-v4-flash}。
      *
      * @return 模型名称
      * @throws UnsupportedOperationException 当前 options 未提供模型名称时抛出

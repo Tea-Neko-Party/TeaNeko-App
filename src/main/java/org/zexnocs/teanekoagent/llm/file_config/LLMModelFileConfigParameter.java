@@ -21,7 +21,7 @@ import java.util.Optional;
  * <pre>{@code
  * models:
  *   - id: "deepseek"
- *     model: "deepseek-chat"
+ *     model: "deepseek-v4-flash"
  *     api-key: "${DEEPSEEK_API_KEY}"
  * }</pre>
  *
@@ -50,7 +50,7 @@ public class LLMModelFileConfigParameter {
 
     /**
      * 默认模型名称。
-     * <br>该字段写入 {@link LLMModelOptions#getModel()}，用于覆盖模型适配器代码中的默认模型名，例如把 {@code deepseek-chat} 改为其他兼容模型。
+     * <br>该字段写入 {@link LLMModelOptions#getModel()}，用于覆盖模型适配器代码中的默认模型名，例如把 {@code deepseek-v4-flash} 改为其他兼容模型。
      * <br>该字段不参与模型适配器路由，路由只由 {@link #id} 决定。
      */
     @Nullable

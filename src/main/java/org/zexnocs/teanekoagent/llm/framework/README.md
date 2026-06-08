@@ -21,10 +21,10 @@
 @Service
 public class DeepSeekChatModel extends AbstractLLMModel {
     public DeepSeekChatModel() {
-        super("deepseek", "deepseek-chat",
+        super("deepseek", "deepseek-v4-flash",
                 LLMModelOptions.builder()
                         .provider("deepseek")
-                        .model("deepseek-chat")
+                        .model("deepseek-v4-flash")
                         .temperature(0.7)
                         .maxTokens(2048)
                         .build());
@@ -54,7 +54,7 @@ ILLMResult result = llmModelService.call(
 ```java
 ILLMResult result = llmModelService.call(
         "deepseek",
-        "deepseek-chat",
+        "deepseek-v4-flash",
         prompt
 );
 ```
@@ -66,7 +66,7 @@ ILLMResult result = llmModelService.call(
 | 字段 | 说明 |
 |---|---|
 | `provider` | 供应商级模型适配器 ID，例如 `openai`、`deepseek`。 |
-| `model` | 供应商侧的具体模型名称，例如 `gpt-4.1`、`deepseek-chat`。 |
+| `model` | 供应商侧的具体模型名称，例如 `gpt-4.1`、`deepseek-v4-flash`。 |
 | `thinking` | 是否启用思考/推理模式。 |
 | `maxTokens` | 最大输出 token。 |
 | `temperature` / `topP` | 采样控制。 |
@@ -106,13 +106,14 @@ default-model-id: "deepseek"
 
 models:
   - id: "deepseek"
-    model: "deepseek-chat"
+    model: "deepseek-v4-flash"
     api-key: "${DEEPSEEK_API_KEY}"
     base-url: "https://api.deepseek.com"
+    api: "/chat/completions"
     temperature: 0.7
     max-tokens: 2048
     metadata:
-      timeout-ms: 30000
+      body.top_logprobs: 5
 
   - id: "openai"
     model: "gpt-4.1"
@@ -124,7 +125,7 @@ models:
 
 `id` 必须与模型适配器注册到 `LLMModelService` 的 ID 一致，通常就是 provider，例如 `deepseek` 或 `openai`。配置中存在未注册的 ID 不会影响启动；只有实际调用该 ID 时才会用到对应配置。
 
-`model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-chat`，也可以在文件配置中把该默认模型名改为其他兼容模型。
+`model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-v4-flash`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
 `api-key`、`base-url`、`api` 和其他供应商私有字段会进入 `LLMModelOptions.metadata`，由具体模型适配器读取。任何 API key、base URL 或供应商访问参数都应来自 file config 或数据库，不应写在模型代码中。
 
@@ -132,7 +133,7 @@ models:
 
 | Provider | 默认 Model | 注册 ID |
 |---|---|---|
-| `deepseek` | `deepseek-chat` | `deepseek` |
+| `deepseek` | `deepseek-v4-flash` | `deepseek` |
 | `openai` | `gpt-4.1` | `openai` |
 
 # 四. Response
@@ -356,5 +357,5 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 
 | Provider | 默认 Model | 注册 ID | 说明 |
 |---|---|---|---|
-| `deepseek` | `deepseek-chat` | `deepseek` | 示例映射；实际以已注册 Bean 为准。 |
+| `deepseek` | `deepseek-v4-flash` | `deepseek` | 示例映射；实际以已注册 Bean 为准。 |
 | `openai` | `gpt-4.1` | `openai` | 示例映射；实际以已注册 Bean 为准。 |
