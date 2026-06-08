@@ -56,25 +56,29 @@ public final class DeepSeekChatCompletionMapper {
                                                               String baseUrl,
                                                               String apiPath,
                                                               String apiKey) {
+        var deepSeekOptions = DeepSeekModelOptions.copyOf(options);
         return DeepSeekChatCompletionRequestData.builder()
                 .baseUrl(baseUrl)
                 .apiPath(apiPath)
                 .apiKey(apiKey)
-                .model(options.findModel().orElse(DeepSeekChatModel.DEFAULT_MODEL))
+                .model(deepSeekOptions.findModel().orElse(DeepSeekChatModel.DEFAULT_MODEL))
                 .messages(toMessages(prompt.getMessages()))
-                .thinking(toThinking(options))
-                .maxTokens(options.findMaxTokens().orElse(null))
-                .frequencyPenalty(options.findFrequencyPenalty().orElse(null))
-                .temperature(options.findTemperature().orElse(null))
-                .topP(options.findTopP().orElse(null))
-                .presencePenalty(options.findPresencePenalty().orElse(null))
-                .stop(options.findStopWords().orElse(null))
-                .stream(options.findStream().orElse(null))
-                .responseFormat(toResponseFormat(options))
-                .tools(options.findTools().map(DeepSeekChatCompletionMapper::toTools).orElse(null))
-                .toolChoice(options.findToolChoice().orElse(null))
-                .logprobs(options.findLogprobs().orElse(null))
-                .extraBody(toExtraBody(options.getMetadata()))
+                .thinking(toThinking(deepSeekOptions))
+                .maxTokens(deepSeekOptions.findMaxTokens().orElse(null))
+                .frequencyPenalty(deepSeekOptions.findFrequencyPenalty().orElse(null))
+                .temperature(deepSeekOptions.findTemperature().orElse(null))
+                .topP(deepSeekOptions.findTopP().orElse(null))
+                .presencePenalty(deepSeekOptions.findPresencePenalty().orElse(null))
+                .stop(deepSeekOptions.findStopWords().orElse(null))
+                .stream(deepSeekOptions.findStream().orElse(null))
+                .responseFormat(toResponseFormat(deepSeekOptions))
+                .tools(deepSeekOptions.findTools().map(DeepSeekChatCompletionMapper::toTools).orElse(null))
+                .toolChoice(deepSeekOptions.findToolChoice().orElse(null))
+                .logprobs(deepSeekOptions.findLogprobs().orElse(null))
+                .topLogprobs(deepSeekOptions.findTopLogprobs().orElse(null))
+                .streamOptions(toStreamOptions(deepSeekOptions))
+                .userId(deepSeekOptions.findUserId().orElse(null))
+                .extraBody(toExtraBody(deepSeekOptions.getMetadata()))
                 .build();
     }
 
@@ -137,8 +141,10 @@ public final class DeepSeekChatCompletionMapper {
         }
         var text = new StringBuilder();
         for (var content : contents) {
-            if (content == null || content.getContentPart() == null) {
+            if (content == null) {
                 continue;
+            } else {
+                content.getContentPart();
             }
             if (content.getContentPart() instanceof TextLLMContentPart textPart) {
                 appendContentText(text, textPart.getText());
@@ -155,9 +161,25 @@ public final class DeepSeekChatCompletionMapper {
      * @param options LLM 调用参数
      * @return DeepSeek thinking 请求对象
      */
-    private static Map<String, Object> toThinking(LLMModelOptions options) {
-        return options.findThinking()
-                .map(thinking -> Map.<String, Object>of("type", thinking ? "enabled" : "disabled"))
+    private static Map<String, Object> toThinking(DeepSeekModelOptions options) {
+        var result = new LinkedHashMap<String, Object>();
+        options.findThinking().ifPresent(thinking -> result.put("type", thinking ? "enabled" : "disabled"));
+        options.findReasoningEffort().ifPresent(reasoningEffort -> result.put("reasoning_effort", reasoningEffort));
+        return result.isEmpty() ? null : Map.copyOf(result);
+    }
+
+    /**
+     * 转换 stream_options 参数。
+     *
+     * @param options DeepSeek 调用参数
+     * @return DeepSeek stream_options 请求对象
+     */
+    private static Map<String, Object> toStreamOptions(DeepSeekModelOptions options) {
+        if (!options.findStream().orElse(false)) {
+            return null;
+        }
+        return options.findStreamIncludeUsage()
+                .map(includeUsage -> Map.<String, Object>of("include_usage", includeUsage))
                 .orElse(null);
     }
 
@@ -170,7 +192,7 @@ public final class DeepSeekChatCompletionMapper {
     private static Map<String, String> toResponseFormat(LLMModelOptions options) {
         return options.findResponseFormat()
                 .filter(format -> format == LLMResponseFormat.JSON)
-                .map(format -> Map.of("type", "json_object"))
+                .map(_ -> Map.of("type", "json_object"))
                 .orElse(null);
     }
 

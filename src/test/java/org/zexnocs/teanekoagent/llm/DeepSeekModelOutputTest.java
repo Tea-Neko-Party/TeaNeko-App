@@ -16,6 +16,7 @@ import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatModel;
+import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekModelOptions;
 import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 
 import java.util.List;
@@ -24,7 +25,7 @@ import java.util.Map;
 /**
  * DeepSeek 模型输出测试。
  * <br>该测试直接使用 file_config 中 {@code deepseek} 的默认 options，并把模型输出打印到控制台。
- * <br>如果未配置 DeepSeek 的 {@code apiKey} 或 {@code baseUrl}，测试会自动跳过，避免无配置环境下误失败。
+ * <br>如果未配置 DeepSeek 的 {@code apiKey}，测试会自动跳过，避免无配置环境下误失败。
  *
  * @author zExNocs
  * @date 2026/06/08
@@ -46,6 +47,8 @@ public class DeepSeekModelOutputTest {
         System.out.println("-------------------------------------");
         var modelId = LLMModelId.of(DeepSeekChatModel.PROVIDER);
         var defaultOptions = llmModelService.getDefaultOptions(modelId);
+        Assertions.assertInstanceOf(DeepSeekModelOptions.class, defaultOptions,
+                "DeepSeek default options should keep DeepSeekModelOptions type.");
         assumeDeepSeekConfigured(defaultOptions.getMetadata());
 
         var messages = List.<ILLMMessage>of(
@@ -56,7 +59,7 @@ public class DeepSeekModelOutputTest {
                         .build(),
                 LLMUserMessage.builder()
                         .contents(LLMContentListBuilder.builder()
-                                .addText("请用一句中文回答：DeepSeek 模型适配器已经成功响应。")
+                                .addText("你好，请做一个简短的自我介绍。")
                                 .build())
                         .build()
         );
@@ -75,11 +78,8 @@ public class DeepSeekModelOutputTest {
      */
     private static void assumeDeepSeekConfigured(Map<String, Object> metadata) {
         var apiKey = metadataValue(metadata, DeepSeekChatModel.API_KEY_METADATA);
-        var baseUrl = metadataValue(metadata, DeepSeekChatModel.BASE_URL_METADATA);
         Assumptions.assumeTrue(isConfigured(apiKey),
                 "Skip DeepSeek live test: config/llm/main-config.yml missing deepseek api-key.");
-        Assumptions.assumeTrue(isConfigured(baseUrl),
-                "Skip DeepSeek live test: config/llm/main-config.yml missing deepseek base-url.");
     }
 
     /**

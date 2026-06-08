@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * DeepSeek 对话补全模型适配器。
  * <br>注册 ID 为 {@code deepseek}，默认模型名称为 {@code deepseek-v4-flash}。
- * <br>API key、base URL 等访问参数应通过 LLM 文件配置或数据库写入 {@link LLMModelOptions#getMetadata()}。
+ * <br>API key 应通过 LLM 文件配置或数据库写入 {@link LLMModelOptions#getMetadata()}，base URL 固定为 DeepSeek 官方地址。
  *
  * @author zExNocs
  * @date 2026/06/08
@@ -32,12 +32,12 @@ public class DeepSeekChatModel extends AbstractLLMModel {
     /**
      * DeepSeek 当前推荐的默认对话模型。
      */
-    public static final String DEFAULT_MODEL = "deepseek-v4-flash";
+    public static final String DEFAULT_MODEL = DeepSeekModelOptions.DEFAULT_MODEL;
 
     /**
      * DeepSeek 对话补全接口路径。
      */
-    public static final String DEFAULT_API = "/chat/completions";
+    public static final String DEFAULT_API = DeepSeekModelOptions.DEFAULT_API_PATH;
 
     /**
      * API key 在 metadata 中的字段名。
@@ -47,12 +47,12 @@ public class DeepSeekChatModel extends AbstractLLMModel {
     /**
      * base URL 在 metadata 中的字段名。
      */
-    public static final String BASE_URL_METADATA = "baseUrl";
+    public static final String BASE_URL_METADATA = DeepSeekModelOptions.BASE_URL_METADATA;
 
     /**
      * API path 在 metadata 中的字段名。
      */
-    public static final String API_METADATA = "api";
+    public static final String API_METADATA = DeepSeekModelOptions.API_PATH_METADATA;
 
     /**
      * API 响应服务。
@@ -66,11 +66,7 @@ public class DeepSeekChatModel extends AbstractLLMModel {
      * @param apiResponseService API 响应服务
      */
     public DeepSeekChatModel(IAPIResponseService apiResponseService) {
-        super(PROVIDER, DEFAULT_MODEL, LLMModelOptions.builder()
-                .provider(PROVIDER)
-                .model(DEFAULT_MODEL)
-                .responseFormat(LLMResponseFormat.TEXT)
-                .build());
+        super(PROVIDER, DEFAULT_MODEL, DeepSeekModelOptions.defaults());
         this.apiResponseService = apiResponseService;
     }
 
@@ -105,13 +101,13 @@ public class DeepSeekChatModel extends AbstractLLMModel {
      */
     @Override
     protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options) {
-        var metadata = options.getMetadata();
+        var deepSeekOptions = DeepSeekModelOptions.copyOf(options);
+        var metadata = deepSeekOptions.getMetadata();
         var apiKey = requireMetadata(metadata, API_KEY_METADATA);
-        var baseUrl = requireMetadata(metadata, BASE_URL_METADATA);
-        var api = metadataString(metadata, API_METADATA).orElse(DEFAULT_API);
+        var api = deepSeekOptions.findApiPath().orElse(DEFAULT_API);
         var request = DeepSeekChatCompletionMapper.toRequest(prompt,
-                options,
-                trimTrailingSlash(baseUrl),
+                deepSeekOptions,
+                trimTrailingSlash(DeepSeekModelOptions.DEFAULT_BASE_URL),
                 normalizeApiPath(api),
                 apiKey);
         try {
@@ -120,7 +116,7 @@ public class DeepSeekChatModel extends AbstractLLMModel {
                     DeepSeekChatCompletionResponseData.class,
                     true,
                     true)
-                    .thenApply(response -> (ILLMResult) DeepSeekChatCompletionMapper.toResult(response));
+                    .thenApply(DeepSeekChatCompletionMapper::toResult);
         } catch (Exception exception) {
             throw new IllegalStateException("DeepSeek chat completion request failed.", exception);
         }

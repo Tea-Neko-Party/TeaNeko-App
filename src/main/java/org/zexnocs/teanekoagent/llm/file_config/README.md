@@ -22,11 +22,10 @@ models:
     model: "deepseek-v4-flash"
     api: ""
     api-key: ""
-    base-url: ""
     temperature: 0.7
     max-tokens: 2048
     metadata:
-      custom-provider-field: ""
+      deepseek.reasoningEffort: ""
 ```
 
 | 字段 | 说明 |
@@ -38,7 +37,7 @@ models:
 | `models[].model` | 供应商侧具体模型名称，例如 `deepseek-v4-flash`；用于覆盖模型代码中的默认模型名，不参与路由。 |
 | `models[].api` | 通用 API 配置，具体含义由供应商适配器解释。 |
 | `models[].api-key` | API key。 |
-| `models[].base-url` | 供应商 API base URL。 |
+| `models[].base-url` | 供应商 API base URL。DeepSeek 适配器已固定为 `https://api.deepseek.com`，通常不需要填写该字段。 |
 | `models[].metadata` | 供应商私有参数，原样进入 `LLMModelOptions.metadata`。 |
 
 # 三. 添加新的模型配置项
@@ -50,12 +49,13 @@ models:
   - id: "deepseek"                 # 必须等于模型适配器注册 ID，通常就是 provider。
     model: "deepseek-v4-flash"     # 供应商侧默认模型名称；未填写时使用模型代码中的默认值。
     api-key: "${DEEPSEEK_API_KEY}" # 访问凭据应来自 file config、环境变量或数据库，不要写死在代码中。
-    base-url: "https://api.deepseek.com"
     api: "/chat/completions"
     temperature: 0.7               # 通用 options 字段；未填写时沿用代码默认值。
     max-tokens: 2048
     metadata:                      # 供应商私有参数，具体 key 由适配器约定。
-      body.top_logprobs: 5
+      deepseek.reasoningEffort: "medium"
+      deepseek.topLogprobs: 5
+      deepseek.streamIncludeUsage: true
 ```
 
 `models[].id` 如果暂时没有对应的已注册模型适配器，不会影响启动；只有实际调用该 ID 时，`LLMModelService` 才会要求对应适配器存在。
@@ -98,5 +98,5 @@ LLMModelId.of(provider)
 | 模型 Bean | 实现 `ILLMModel` 或继承 `AbstractLLMModel`，并声明稳定的 provider 级注册 ID 和默认模型名。 |
 | README ID 映射 | 在 `llm/framework/README.md` 的“模型适配器 ID 映射”中补充 provider、默认 model、注册 ID。 |
 | 文件配置模板 | 在 `config/llm/main-config.yml` 或模板中提供该模型的默认参数示例。 |
-| API 配置 | API key、base URL、endpoint 等必须来自 file config 或数据库，不应写死在代码中。 |
+| API 配置 | API key、endpoint 等必须来自 file config 或数据库，不应写死在代码中；供应商官方固定 base URL 可由适配器作为常量声明。 |
 | 私有参数 | 通用 options 无法覆盖的字段放入 `metadata`，由供应商适配器读取。 |

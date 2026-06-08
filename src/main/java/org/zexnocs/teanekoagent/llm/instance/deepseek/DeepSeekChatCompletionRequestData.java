@@ -28,16 +28,14 @@ import java.util.Map;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 @APIRequestData(
         baseUrl = "",
-        path = "",
         method = "POST",
-        isJson = true,
         timeoutInMillis = 60000L,
         retryCount = 0
 )
 public class DeepSeekChatCompletionRequestData implements IAPIRequestData {
     /**
      * DeepSeek API base URL。
-     * <br>来自 LLM file config 的 metadata {@code baseUrl}。
+     * <br>来自 {@link DeepSeekModelOptions#DEFAULT_BASE_URL}。
      */
     @JsonIgnore
     private String baseUrl;
@@ -132,6 +130,25 @@ public class DeepSeekChatCompletionRequestData implements IAPIRequestData {
      * 是否返回 token 对数概率。
      */
     private Boolean logprobs;
+
+    /**
+     * 返回的候选 token 对数概率数量。
+     */
+    @JsonProperty("top_logprobs")
+    private Integer topLogprobs;
+
+    /**
+     * 流式响应配置。
+     * <br>例如 {@code {"include_usage":true}}。
+     */
+    @JsonProperty("stream_options")
+    private Map<String, Object> streamOptions;
+
+    /**
+     * DeepSeek 请求体中的用户标识。
+     */
+    @JsonProperty("user_id")
+    private String userId;
 
     /**
      * 额外请求体字段。

@@ -114,12 +114,13 @@ models:
   - id: "deepseek"
     model: "deepseek-v4-flash"
     api-key: "${DEEPSEEK_API_KEY}"
-    base-url: "https://api.deepseek.com"
     api: "/chat/completions"
     temperature: 0.7
     max-tokens: 2048
     metadata:
-      body.top_logprobs: 5
+      deepseek.reasoningEffort: "medium"
+      deepseek.topLogprobs: 5
+      deepseek.streamIncludeUsage: true
 
   - id: "openai"
     model: "gpt-4.1"
@@ -133,7 +134,7 @@ models:
 
 `model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-v4-flash`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
-`api-key`、`base-url`、`api` 和其他供应商私有字段会进入 `LLMModelOptions.metadata`，由具体模型适配器读取。任何 API key、base URL 或供应商访问参数都应来自 file config 或数据库，不应写在模型代码中。
+`api-key`、`api` 和其他供应商私有字段会进入 `LLMModelOptions.metadata`，由具体模型适配器读取。DeepSeek 的 base URL 已固定为官方地址；其他供应商的 API key、base URL 或访问参数通常应来自 file config 或数据库，不应写死在模型代码中。
 
 扩展新供应商时，必须在 README 中补充该供应商的模型适配器 ID 映射，例如：
 

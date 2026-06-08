@@ -59,8 +59,8 @@ public abstract class AbstractLLMModel implements ILLMModel {
         this.provider = provider;
         this.model = model;
         this.defaultOptions = LLMModelOptions.merge(
-                LLMModelOptions.builder().provider(provider).model(model).build(),
-                defaultOptions
+                defaultOptions,
+                LLMModelOptions.builder().provider(provider).model(model).build()
         );
     }
 

@@ -17,6 +17,7 @@
 |---|---|
 | 注册 ID | `deepseek` |
 | 默认模型 | `deepseek-v4-flash` |
+| 固定 base URL | `https://api.deepseek.com` |
 | 默认 API path | `/chat/completions` |
 
 访问参数必须来自 file config 或数据库，不能写死在代码中：
@@ -26,15 +27,16 @@ models:
   - id: "deepseek"
     model: "deepseek-v4-flash"
     api-key: "${DEEPSEEK_API_KEY}"
-    base-url: "https://api.deepseek.com"
     api: "/chat/completions"
     temperature: 0.7
     max-tokens: 2048
     metadata:
-      body.top_logprobs: 5
+      deepseek.reasoningEffort: "medium"
+      deepseek.topLogprobs: 5
+      deepseek.streamIncludeUsage: true
 ```
 
-`api-key`、`base-url`、`api` 会进入 `LLMModelOptions.metadata`，由 `DeepSeekChatModel` 读取。`metadata` 中以 `body.` 开头的字段会去掉前缀后写入 DeepSeek 请求体。
+`api-key`、`api` 会进入 `LLMModelOptions.metadata`，由 `DeepSeekChatModel` 和 `DeepSeekModelOptions` 读取。DeepSeek base URL 固定为官方地址，不再要求写入 file config。`metadata` 中以 `body.` 开头的字段会去掉前缀后写入 DeepSeek 请求体。
 
 # 三. 参数映射
 
@@ -42,6 +44,7 @@ models:
 |---|---|
 | `model` | `model` |
 | `thinking` | `thinking.type = enabled/disabled` |
+| `DeepSeekModelOptions.reasoningEffort` | `thinking.reasoning_effort` |
 | `maxTokens` | `max_tokens` |
 | `frequencyPenalty` | `frequency_penalty` |
 | `temperature` | `temperature` |
@@ -53,6 +56,9 @@ models:
 | `tools` | `tools[].function` |
 | `toolChoice` | `tool_choice` |
 | `logprobs` | `logprobs` |
+| `DeepSeekModelOptions.topLogprobs` | `top_logprobs` |
+| `DeepSeekModelOptions.streamIncludeUsage` | `stream_options.include_usage` |
+| `DeepSeekModelOptions.userId` | `user_id` |
 
 # 四. 响应映射
 

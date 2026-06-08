@@ -9,7 +9,7 @@ default-model-id: ""
 # 1. id 必须等于模型适配器注册 ID，通常就是 provider，例如 deepseek。
 # 2. model 是该供应商默认调用的模型名称，例如 deepseek-v4-flash；不参与路由。
 # 3. 未填写的通用参数会继续使用模型代码中的默认 options。
-# 4. api-key、base-url、api 以及供应商私有参数应来自 file config 或数据库，不要写死在代码中。
+# 4. api-key、api 以及供应商私有参数应来自 file config 或数据库；DeepSeek 的 base URL 由适配器固定为官方地址。
 models: []
 
 # 示例：
@@ -17,12 +17,13 @@ models: []
 #   - id: "deepseek"
 #     model: "deepseek-v4-flash"
 #     api-key: "${DEEPSEEK_API_KEY}"
-#     base-url: "https://api.deepseek.com"
 #     api: "/chat/completions"
 #     temperature: 0.7
 #     max-tokens: 2048
 #     metadata:
-#       body.top_logprobs: 5
+#       deepseek.reasoningEffort: "medium"
+#       deepseek.topLogprobs: 5
+#       deepseek.streamIncludeUsage: true
 #
 #   - id: "openai"
 #     model: "gpt-4.1"

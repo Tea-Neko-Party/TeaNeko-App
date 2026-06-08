@@ -173,11 +173,10 @@ public class LLMModelFileConfigParameter {
      * @return 合并后的模型调用参数
      */
     public LLMModelOptions toOptions(ILLMModelOptions codeDefaults) {
-        var base = LLMModelOptions.copyOf(codeDefaults);
         var modelId = findModelId();
         var mergedMetadata = new LinkedHashMap<String, Object>();
-        if (base.getMetadata() != null) {
-            mergedMetadata.putAll(base.getMetadata());
+        if (codeDefaults != null) {
+            codeDefaults.findMetadata().ifPresent(mergedMetadata::putAll);
         }
         if (metadata != null) {
             mergedMetadata.putAll(metadata);
@@ -186,8 +185,8 @@ public class LLMModelFileConfigParameter {
         putIfNotBlank(mergedMetadata, "apiKey", apiKey);
         putIfNotBlank(mergedMetadata, "baseUrl", baseUrl);
         var overrides = LLMModelOptions.builder()
-                .provider(modelId.map(LLMModelId::id).orElse(provider))
-                .model(model)
+                .provider(modelId.map(LLMModelId::id).orElse(blankToNull(provider)))
+                .model(blankToNull(model))
                 .thinking(thinking)
                 .maxTokens(maxTokens)
                 .frequencyPenalty(frequencyPenalty)
@@ -197,11 +196,11 @@ public class LLMModelFileConfigParameter {
                 .responseFormat(responseFormat)
                 .stopWords(stopWords)
                 .stream(stream)
-                .toolChoice(toolChoice)
+                .toolChoice(blankToNull(toolChoice))
                 .logprobs(logprobs)
                 .metadata(new LinkedHashMap<>(mergedMetadata))
                 .build();
-        return LLMModelOptions.merge(base, overrides);
+        return LLMModelOptions.merge(codeDefaults, overrides);
     }
 
     /**
@@ -215,5 +214,16 @@ public class LLMModelFileConfigParameter {
         if (value != null && !value.isBlank()) {
             metadata.put(key, value);
         }
+    }
+
+    /**
+     * 将空白字符串视为未配置。
+     *
+     * @param value 配置值
+     * @return 非空白字符串；空白时返回 {@code null}
+     */
+    @Nullable
+    private static String blankToNull(@Nullable String value) {
+        return value == null || value.isBlank() ? null : value;
     }
 }

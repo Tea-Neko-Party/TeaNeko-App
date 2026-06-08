@@ -181,7 +181,22 @@ public class LLMModelOptions implements ILLMModelOptions {
      */
     public static LLMModelOptions merge(@Nullable ILLMModelOptions defaults,
                                         @Nullable ILLMModelOptions overrides) {
+        if (defaults instanceof LLMModelOptions modelOptions) {
+            return modelOptions.mergeWith(overrides);
+        }
         var base = copyOf(defaults);
+        return base.mergeWith(overrides);
+    }
+
+    /**
+     * 将当前 options 与覆盖 options 合并。
+     * <br>子类可以重写该方法，以在合并文件配置或 prompt options 时保留供应商专用 options 类型。
+     *
+     * @param overrides 覆盖 options；为 {@code null} 时直接返回当前 options 的副本
+     * @return 合并后的 options
+     */
+    public LLMModelOptions mergeWith(@Nullable ILLMModelOptions overrides) {
+        var base = this.toBuilder().build();
         if (overrides == null) {
             return base;
         }
