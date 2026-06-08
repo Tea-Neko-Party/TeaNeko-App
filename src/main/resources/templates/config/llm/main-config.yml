@@ -1,14 +1,30 @@
-# 默认模型 ID，格式必须与模型注册 ID 一致：provider/model。
-# 为空时，调用方必须显式指定模型 ID 或在 prompt options 中提供 provider/model。
+# 默认模型适配器 ID，必须与 LLMModelService 中注册的 ID 一致。
+# 该 ID 一般与 provider 相同，例如 openai、deepseek；不再使用 provider/model 格式。
+# 为空时，调用方必须显式指定模型适配器 ID，或在 prompt options 中提供 provider。
 default-model-id: ""
 
-# 各模型的默认 options。这里的 id 不存在于 LLMModelService 时不会影响启动；
-# 只有实际调用该模型时才会读取对应配置。
+# 各模型适配器的默认 options。这里的 id 不存在于 LLMModelService 时不会影响启动；
+# 只有实际调用该模型适配器时才会读取对应配置。
+# 添加一个新的 model 配置项时：
+# 1. id 必须等于模型适配器注册 ID，通常就是 provider，例如 deepseek。
+# 2. model 是该供应商默认调用的模型名称，例如 deepseek-chat；不参与路由。
+# 3. 未填写的通用参数会继续使用模型代码中的默认 options。
+# 4. api-key、base-url、api 以及供应商私有参数应来自 file config 或数据库，不要写死在代码中。
 models: []
 
 # 示例：
 # models:
-#   - id: "openai/gpt-4.1"
+#   - id: "deepseek"
+#     model: "deepseek-chat"
+#     api-key: "${DEEPSEEK_API_KEY}"
+#     base-url: "https://api.deepseek.com"
+#     temperature: 0.7
+#     max-tokens: 2048
+#     metadata:
+#       organization: ""
+#
+#   - id: "openai"
+#     model: "gpt-4.1"
 #     api-key: "${OPENAI_API_KEY}"
 #     base-url: "https://api.openai.com/v1"
 #     temperature: 0.7

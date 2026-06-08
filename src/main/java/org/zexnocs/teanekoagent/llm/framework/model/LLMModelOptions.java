@@ -25,14 +25,14 @@ import java.util.Optional;
 @AllArgsConstructor
 public class LLMModelOptions implements ILLMModelOptions {
     /**
-     * 模型供应商标识。
+     * 供应商级模型适配器 ID。
      * <br>例如 {@code openai}、{@code deepseek}。
      */
     @Nullable
     private String provider;
 
     /**
-     * 模型名称。
+     * 供应商侧具体模型名称。
      * <br>例如 {@code gpt-4.1}、{@code deepseek-chat}。
      */
     @Nullable
@@ -210,9 +210,9 @@ public class LLMModelOptions implements ILLMModelOptions {
     }
 
     /**
-     * 获取模型供应商标识。
+     * 获取供应商级模型适配器 ID。
      *
-     * @return 模型供应商标识
+     * @return 供应商级模型适配器 ID
      * @throws UnsupportedOperationException 当前对象未设置 {@link #provider} 时抛出
      */
     @Override
@@ -363,7 +363,7 @@ public class LLMModelOptions implements ILLMModelOptions {
     }
 
     /**
-     * 查找模型供应商标识。
+     * 查找供应商级模型适配器 ID。
      *
      * @return {@link #provider} 的 Optional 包装
      */

@@ -15,8 +15,15 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * 单个大语言模型的文件配置项。
+ * 单个大语言模型适配器的文件配置项。
  * <br>用于把 YAML 中的默认调用参数转换为统一的 {@link LLMModelOptions}。
+ * <br>新增一个供应商适配器时，通常只需要在 {@code models} 列表中添加一项：
+ * <pre>{@code
+ * models:
+ *   - id: "deepseek"
+ *     model: "deepseek-chat"
+ *     api-key: "${DEEPSEEK_API_KEY}"
+ * }</pre>
  *
  * @author zExNocs
  * @date 2026/06/08
@@ -27,22 +34,24 @@ import java.util.Optional;
 @NoArgsConstructor
 public class LLMModelFileConfigParameter {
     /**
-     * 模型 ID。
-     * <br>推荐格式为 {@code provider/model}，需要与模型注册到 {@code LLMModelService} 中的 ID 一致。
+     * 模型适配器注册 ID。
+     * <br>一般与供应商 ID 相同，例如 {@code openai}、{@code deepseek}。
+     * <br>该值必须与模型适配器注册到 {@code LLMModelService} 中的 ID 一致，不再使用 {@code provider/model} 格式。
      */
     @Nullable
     private String id;
 
     /**
      * 模型供应商标识。
-     * <br>当 {@link #id} 未设置时，可与 {@link #model} 组合为模型 ID。
+     * <br>该字段仅作为 {@link #id} 未设置时的兼容写法；推荐直接使用 {@link #id}。
      */
     @Nullable
     private String provider;
 
     /**
-     * 模型名称。
-     * <br>当 {@link #id} 未设置时，可与 {@link #provider} 组合为模型 ID。
+     * 默认模型名称。
+     * <br>该字段写入 {@link LLMModelOptions#getModel()}，用于覆盖模型适配器代码中的默认模型名，例如把 {@code deepseek-chat} 改为其他兼容模型。
+     * <br>该字段不参与模型适配器路由，路由只由 {@link #id} 决定。
      */
     @Nullable
     private String model;
@@ -140,19 +149,20 @@ public class LLMModelFileConfigParameter {
     private Map<String, Object> metadata = new LinkedHashMap<>();
 
     /**
-     * 查找该配置项对应的模型 ID。
+     * 查找该配置项对应的模型适配器 ID。
+     * <br>优先使用 {@link #id}；当 {@link #id} 未设置时，使用 {@link #provider} 作为兼容回退。
      *
-     * @return 模型 ID
+     * @return 模型适配器 ID
      */
     public Optional<LLMModelId> findModelId() {
         var parsedId = LLMMainFileConfig.parseModelId(id);
         if (parsedId.isPresent()) {
             return parsedId;
         }
-        if (provider == null || provider.isBlank() || model == null || model.isBlank()) {
+        if (provider == null || provider.isBlank()) {
             return Optional.empty();
         }
-        return Optional.of(LLMModelId.of(provider, model));
+        return Optional.of(LLMModelId.of(provider));
     }
 
     /**
@@ -176,8 +186,8 @@ public class LLMModelFileConfigParameter {
         putIfNotBlank(mergedMetadata, "apiKey", apiKey);
         putIfNotBlank(mergedMetadata, "baseUrl", baseUrl);
         var overrides = LLMModelOptions.builder()
-                .provider(modelId.map(LLMModelId::provider).orElse(provider))
-                .model(modelId.map(LLMModelId::model).orElse(model))
+                .provider(modelId.map(LLMModelId::id).orElse(provider))
+                .model(model)
                 .thinking(thinking)
                 .maxTokens(maxTokens)
                 .frequencyPenalty(frequencyPenalty)

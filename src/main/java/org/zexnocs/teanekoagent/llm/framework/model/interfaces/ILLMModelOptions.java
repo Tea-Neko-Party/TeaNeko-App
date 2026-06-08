@@ -16,10 +16,10 @@ import java.util.Optional;
  */
 public interface ILLMModelOptions {
     /**
-     * 获取模型所属的供应商标识。
+     * 获取模型所属的供应商级适配器 ID。
      * <br>例如 {@code openai}、{@code deepseek}。
      *
-     * @return 供应商标识
+     * @return 供应商级适配器 ID
      * @throws UnsupportedOperationException 当前 options 未提供供应商标识时抛出
      */
     default String getProvider() throws UnsupportedOperationException {
@@ -27,7 +27,7 @@ public interface ILLMModelOptions {
     }
 
     /**
-     * 获取模型名称。
+     * 获取供应商侧具体模型名称。
      * <br>例如 {@code gpt-4.1}、{@code deepseek-chat}。
      *
      * @return 模型名称
@@ -173,10 +173,10 @@ public interface ILLMModelOptions {
     }
 
     /**
-     * 尝试获取供应商标识。
+     * 尝试获取供应商级适配器 ID。
      * <br>如果当前 options 未提供该参数，则返回空 Optional。
      *
-     * @return 供应商标识 Optional
+     * @return 供应商级适配器 ID Optional
      */
     default Optional<String> findProvider() {
         try {

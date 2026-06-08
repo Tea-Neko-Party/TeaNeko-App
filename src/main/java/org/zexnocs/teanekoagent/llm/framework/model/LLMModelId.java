@@ -3,60 +3,77 @@ package org.zexnocs.teanekoagent.llm.framework.model;
 import org.jspecify.annotations.NonNull;
 
 /**
- * 大语言模型的唯一标识。
- * <br>由 provider 和 model 两部分组成，用于在框架中定位具体模型实现。
+ * 大语言模型适配器的注册 ID。
+ * <br>该 ID 用于在框架中定位具体供应商适配器，通常与供应商 ID 相同，例如 {@code openai}、{@code deepseek}。
+ * <br>具体调用的模型名称不再属于 ID，而是由 {@link LLMModelOptions#getModel()} 提供默认值或调用时覆盖。
  *
  * @author zExNocs
  * @date 2026/05/15
  * @since 4.4.0
  */
-public record LLMModelId(String provider, String model) {
+public record LLMModelId(String id) {
     /**
-     * 构造器
+     * 创建模型适配器注册 ID。
      *
-     * @param provider 模型供应商
-     * @param model 模型
+     * @param id 模型适配器注册 ID
      */
     public LLMModelId {
-        if (provider == null || provider.isBlank()) {
-            throw new IllegalArgumentException("provider must not be blank");
-        }
-        if (model == null || model.isBlank()) {
-            throw new IllegalArgumentException("model must not be blank");
-        }
-    }
-
-    /**
-     * 快速构造
-     *
-     * @param provider 模型供应商
-     * @param model 模型
-     * @return {@link LLMModelId }
-     */
-    public static LLMModelId of(String provider, String model) {
-        return new LLMModelId(provider, model);
-    }
-
-    /**
-     * 解析 "provider/model" 格式的字符串
-     *
-     * @param value "provider/model" 格式的字符串
-     * @return {@link LLMModelId }
-     */
-    public static LLMModelId parse(String value) {
-        if (value == null || value.isBlank()) {
+        if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("model id must not be blank");
         }
-        int splitIndex = value.indexOf('/');
-        if (splitIndex < 1 || splitIndex == value.length() - 1) {
-            throw new IllegalArgumentException("model id must use provider/model format: " + value);
+        id = id.trim();
+        if (id.contains("/")) {
+            throw new IllegalArgumentException("model id must be provider-level id, not provider/model: " + id);
         }
-        return of(value.substring(0, splitIndex), value.substring(splitIndex + 1));
+    }
+
+    /**
+     * 使用供应商级 ID 快速构造模型适配器注册 ID。
+     *
+     * @param id 模型适配器注册 ID
+     * @return 模型适配器注册 ID
+     */
+    public static LLMModelId of(String id) {
+        return new LLMModelId(id);
+    }
+
+    /**
+     * 使用供应商 ID 快速构造模型适配器注册 ID。
+     * <br>该重载保留给旧调用代码迁移使用；{@code model} 不再参与路由，应写入 {@link LLMModelOptions}。
+     *
+     * @param provider 模型供应商 ID
+     * @param model 模型名称
+     * @return 模型适配器注册 ID
+     * @deprecated 模型名称不再属于 {@link LLMModelId}，请使用 {@link #of(String)}。
+     */
+    @Deprecated
+    public static LLMModelId of(String provider, String model) {
+        return of(provider);
+    }
+
+    /**
+     * 解析供应商级 ID 字符串。
+     *
+     * @param value 供应商级 ID 字符串，例如 {@code openai}、{@code deepseek}
+     * @return 模型适配器注册 ID
+     */
+    public static LLMModelId parse(String value) {
+        return of(value);
+    }
+
+    /**
+     * 获取供应商级 ID。
+     * <br>该方法用于兼容早期以 {@code provider} 命名的调用点。
+     *
+     * @return 供应商级 ID
+     */
+    public String provider() {
+        return id;
     }
 
     @Override
     @NonNull
     public String toString() {
-        return provider + "/" + model;
+        return id;
     }
 }

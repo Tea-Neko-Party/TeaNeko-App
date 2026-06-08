@@ -43,9 +43,9 @@ public class LLMFileConfigService implements ILLMFileConfigService {
     }
 
     /**
-     * 查找默认模型 ID。
+     * 查找默认模型适配器 ID。
      *
-     * @return 默认模型 ID
+     * @return 默认模型适配器 ID
      */
     @Override
     public Optional<LLMModelId> findDefaultModelId() {
@@ -53,20 +53,20 @@ public class LLMFileConfigService implements ILLMFileConfigService {
     }
 
     /**
-     * 根据模型 ID 和代码默认 options 构造实际默认 options。
+     * 根据模型适配器 ID 和代码默认 options 构造实际默认 options。
+     * <br>模型适配器 ID 通常等于供应商 ID，具体模型名称优先来自代码默认 options，其次可由文件配置中的 {@code model} 覆盖。
      *
-     * @param modelId 模型 ID
+     * @param modelId 模型适配器 ID
      * @param codeDefaults 代码默认 options
      * @return 合并后的默认 options
      */
     @Override
     public LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions codeDefaults) {
         var base = LLMModelOptions.merge(
+                codeDefaults,
                 LLMModelOptions.builder()
-                        .provider(modelId.provider())
-                        .model(modelId.model())
-                        .build(),
-                codeDefaults
+                        .provider(modelId.id())
+                        .build()
         );
         return getConfig()
                 .findModelConfig(modelId)

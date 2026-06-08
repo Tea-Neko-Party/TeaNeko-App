@@ -7,10 +7,10 @@
 | 模块 | 作用 |
 |:---:|---|
 | `message` | 定义 system/user/assistant/tool 消息和内容片段。 |
-| `model` | 定义模型 ID、模型 options、模型服务和模型适配器基类。 |
+| `model` | 定义供应商级模型适配器 ID、模型 options、模型服务和模型适配器基类。 |
 | `response` | 定义统一响应结果、choice 和 usage。 |
 | `tool` | 定义 Function Tool、参数 schema、tool call 和工具注册服务。 |
-| `../file_config` | 定义 LLM 文件配置，用于保存默认模型和各模型默认 options。 |
+| `../file_config` | 定义 LLM 文件配置，用于保存默认模型适配器和各供应商默认 options。 |
 | `interfaces` | Prompt、Result、Choice、Usage 等公共接口。 |
 
 # 二. 模型接入
@@ -40,11 +40,21 @@ public class DeepSeekChatModel extends AbstractLLMModel {
 }
 ```
 
-`LLMModelService` 会扫描所有 `ILLMModel` Bean，并使用 `provider/model` 作为唯一 key：
+`LLMModelService` 会扫描所有 `ILLMModel` Bean，并使用供应商级 ID 作为唯一 key。默认情况下该 ID 等于 `getProvider()`，例如 `deepseek`：
 
 ```java
 ILLMResult result = llmModelService.call(
-        LLMModelId.of("deepseek", "deepseek-chat"),
+        LLMModelId.of("deepseek"),
+        prompt
+);
+```
+
+如果只想切换同一供应商下的具体模型名称，不需要注册新的 ID，而是覆盖本次调用的 `model` option：
+
+```java
+ILLMResult result = llmModelService.call(
+        "deepseek",
+        "deepseek-chat",
         prompt
 );
 ```
@@ -55,8 +65,8 @@ ILLMResult result = llmModelService.call(
 
 | 字段 | 说明 |
 |---|---|
-| `provider` | 供应商 ID，例如 `openai`、`deepseek`。 |
-| `model` | 模型 ID。 |
+| `provider` | 供应商级模型适配器 ID，例如 `openai`、`deepseek`。 |
+| `model` | 供应商侧的具体模型名称，例如 `gpt-4.1`、`deepseek-chat`。 |
 | `thinking` | 是否启用思考/推理模式。 |
 | `maxTokens` | 最大输出 token。 |
 | `temperature` / `topP` | 采样控制。 |
@@ -77,13 +87,13 @@ LLM 默认模型和默认 options 不应写死在代码中。框架会读取 `co
 
 ```text
 模型代码默认 options
-    -> config/llm/main-config.yml 中对应 model id 的默认 options
+    -> config/llm/main-config.yml 中对应模型适配器 ID 的默认 options
     -> 本次 prompt.getOptions()
 ```
 
 调用方没有指定 options 时，会使用文件配置中的默认 options；调用方只指定部分 options 时，未指定字段继续沿用文件配置或代码默认值。
 
-`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider/model`。如果 prompt 未指定完整模型 ID，则使用 `default-model-id`：
+`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `default-model-id`：
 
 ```java
 var result = llmModelService.call(new LLMPrompt(messages));
@@ -92,10 +102,11 @@ var result = llmModelService.call(new LLMPrompt(messages));
 文件配置示例：
 
 ```yaml
-default-model-id: "deepseek/deepseek-chat"
+default-model-id: "deepseek"
 
 models:
-  - id: "deepseek/deepseek-chat"
+  - id: "deepseek"
+    model: "deepseek-chat"
     api-key: "${DEEPSEEK_API_KEY}"
     base-url: "https://api.deepseek.com"
     temperature: 0.7
@@ -103,23 +114,26 @@ models:
     metadata:
       timeout-ms: 30000
 
-  - id: "openai/gpt-4.1"
+  - id: "openai"
+    model: "gpt-4.1"
     api-key: "${OPENAI_API_KEY}"
     base-url: "https://api.openai.com/v1"
     metadata:
       organization: ""
 ```
 
-`id` 必须与模型注册到 `LLMModelService` 的 ID 一致，即 `provider/model`。配置中存在未注册的模型 ID 不会影响启动；只有实际调用该模型时才会用到对应配置。
+`id` 必须与模型适配器注册到 `LLMModelService` 的 ID 一致，通常就是 provider，例如 `deepseek` 或 `openai`。配置中存在未注册的 ID 不会影响启动；只有实际调用该 ID 时才会用到对应配置。
+
+`model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-chat`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
 `api-key`、`base-url`、`api` 和其他供应商私有字段会进入 `LLMModelOptions.metadata`，由具体模型适配器读取。任何 API key、base URL 或供应商访问参数都应来自 file config 或数据库，不应写在模型代码中。
 
-扩展新供应商时，必须在 README 中补充该供应商的模型 ID 映射，例如：
+扩展新供应商时，必须在 README 中补充该供应商的模型适配器 ID 映射，例如：
 
-| Provider | Model | 注册 ID |
+| Provider | 默认 Model | 注册 ID |
 |---|---|---|
-| `deepseek` | `deepseek-chat` | `deepseek/deepseek-chat` |
-| `openai` | `gpt-4.1` | `openai/gpt-4.1` |
+| `deepseek` | `deepseek-chat` | `deepseek` |
+| `openai` | `gpt-4.1` | `openai` |
 
 # 四. Response
 
@@ -334,11 +348,13 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 | 响应转换 | 把供应商返回值转成 `LLMResult`、`LLMChoice`、`LLMUsage` 和 `LLMToolCall`。 |
 | 错误处理 | 将供应商错误转成清晰的异常，交由上层任务或日志系统处理。 |
 
-# 七. 模型 ID 映射
+# 七. 模型适配器 ID 映射
 
-每个模型 Bean 注册到 `LLMModelService` 时，ID 都由 `provider/model` 组成。新增供应商或新增模型时，需要在这里维护映射，方便 `config/llm/main-config.yml` 正确引用。
+每个模型 Bean 注册到 `LLMModelService` 时，ID 都是供应商级 ID，通常与 provider 相同。具体模型名称由模型实现中的默认 `model`、`config/llm/main-config.yml` 的 `models[].model` 或本次 prompt options 覆盖。
 
-| Provider | Model | 注册 ID | 说明 |
+新增供应商或新增模型适配器时，需要在这里维护映射，方便 `config/llm/main-config.yml` 正确引用。
+
+| Provider | 默认 Model | 注册 ID | 说明 |
 |---|---|---|---|
-| `deepseek` | `deepseek-chat` | `deepseek/deepseek-chat` | 示例映射；实际以已注册 Bean 为准。 |
-| `openai` | `gpt-4.1` | `openai/gpt-4.1` | 示例映射；实际以已注册 Bean 为准。 |
+| `deepseek` | `deepseek-chat` | `deepseek` | 示例映射；实际以已注册 Bean 为准。 |
+| `openai` | `gpt-4.1` | `openai` | 示例映射；实际以已注册 Bean 为准。 |

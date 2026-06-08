@@ -8,7 +8,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 
 /**
  * 大语言模型适配器的抽象基类。
- * <br>封装 provider、model 和默认 options 的合并逻辑，具体供应商只需要实现实际调用方法。
+ * <br>封装供应商级 ID、默认模型名称和默认 options 的合并逻辑，具体供应商只需要实现实际调用方法。
  *
  * @author zExNocs
  * @date 2026/05/15
@@ -16,12 +16,14 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
-     * 当前模型所属的大语言模型供应商标识。
+     * 当前模型所属的大语言模型供应商级 ID。
+     * <br>该值默认作为模型适配器注册 ID。
      */
     private final String provider;
 
     /**
-     * 当前模型在供应商侧的模型名称。
+     * 当前模型在供应商侧的默认模型名称。
+     * <br>例如 {@code deepseek-chat}；文件配置或本次调用 options 可以覆盖该值。
      */
     private final String model;
 
@@ -32,11 +34,11 @@ public abstract class AbstractLLMModel implements ILLMModel {
     private final ILLMModelOptions defaultOptions;
 
     /**
-     * 使用供应商和模型名称创建模型适配器。
+     * 使用供应商级 ID 和默认模型名称创建模型适配器。
      * <br>默认调用选项会自动填充 {@code provider} 和 {@code model}。
      *
-     * @param provider 模型供应商名称
-     * @param model 模型名称
+     * @param provider 模型供应商级 ID
+     * @param model 默认模型名称
      */
     protected AbstractLLMModel(String provider, String model) {
         this(provider, model, LLMModelOptions.builder()
@@ -46,11 +48,11 @@ public abstract class AbstractLLMModel implements ILLMModel {
     }
 
     /**
-     * 使用供应商、模型名称和默认调用选项创建模型适配器。
+     * 使用供应商级 ID、默认模型名称和默认调用选项创建模型适配器。
      * <br>传入的默认选项会与供应商和模型名称合并，确保模型身份始终与适配器一致。
      *
-     * @param provider 模型供应商名称
-     * @param model 模型名称
+     * @param provider 模型供应商级 ID
+     * @param model 默认模型名称
      * @param defaultOptions 默认调用选项
      */
     protected AbstractLLMModel(String provider, String model, ILLMModelOptions defaultOptions) {
@@ -63,9 +65,9 @@ public abstract class AbstractLLMModel implements ILLMModel {
     }
 
     /**
-     * 获取模型供应商名称。
+     * 获取模型供应商级 ID。
      *
-     * @return 模型供应商名称
+     * @return 模型供应商级 ID
      */
     @Override
     public String getProvider() {
@@ -73,9 +75,9 @@ public abstract class AbstractLLMModel implements ILLMModel {
     }
 
     /**
-     * 获取模型名称。
+     * 获取默认模型名称。
      *
-     * @return 模型名称
+     * @return 默认模型名称
      */
     @Override
     public String getModel() {

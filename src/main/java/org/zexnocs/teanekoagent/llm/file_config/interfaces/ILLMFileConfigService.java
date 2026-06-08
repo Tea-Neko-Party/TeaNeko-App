@@ -9,7 +9,7 @@ import java.util.Optional;
 
 /**
  * 大语言模型文件配置服务接口。
- * <br>用于读取 LLM 文件配置，并按模型 ID 构造默认调用参数。
+ * <br>用于读取 LLM 文件配置，并按模型适配器 ID 构造默认调用参数。
  *
  * @author zExNocs
  * @date 2026/06/08
@@ -24,16 +24,16 @@ public interface ILLMFileConfigService {
     LLMMainFileConfig getConfig();
 
     /**
-     * 查找默认模型 ID。
+     * 查找默认模型适配器 ID。
      *
-     * @return 默认模型 ID
+     * @return 默认模型适配器 ID
      */
     Optional<LLMModelId> findDefaultModelId();
 
     /**
-     * 根据模型 ID 和代码默认 options 构造实际默认 options。
+     * 根据模型适配器 ID 和代码默认 options 构造实际默认 options。
      *
-     * @param modelId 模型 ID
+     * @param modelId 模型适配器 ID
      * @param codeDefaults 代码默认 options
      * @return 合并后的默认 options
      */

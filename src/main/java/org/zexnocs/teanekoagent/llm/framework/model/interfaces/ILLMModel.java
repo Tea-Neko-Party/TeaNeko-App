@@ -20,32 +20,36 @@ import java.util.List;
  */
 public interface ILLMModel {
     /**
-     * 获取模型供应商
+     * 获取模型供应商 ID。
+     * <br>该值默认也是模型适配器注册到 {@code LLMModelService} 的 ID，例如 {@code openai}、{@code deepseek}。
      *
-     * @return {@link String }
+     * @return 模型供应商 ID
      */
     String getProvider();
 
     /**
-     * 获取模型名
+     * 获取默认模型名称。
+     * <br>该值不是模型注册 ID 的一部分，仅作为未显式传入 {@link ILLMModelOptions#getModel()} 时的默认模型名。
      *
-     * @return {@link String }
+     * @return 默认模型名称
      */
     String getModel();
 
     /**
-     * 获取模型的唯一标识符
+     * 获取模型适配器注册 ID。
+     * <br>默认使用 {@link #getProvider()} 作为注册 ID；当一个供应商适配器支持多个模型名称时，仍然只注册一个供应商级 ID。
      *
-     * @return {@link LLMModelId }
+     * @return 模型适配器注册 ID
      */
     default LLMModelId getModelId() {
-        return LLMModelId.of(getProvider(), getModel());
+        return LLMModelId.of(getProvider());
     }
 
     /**
-     * 获取模型的默认配置
+     * 获取模型的默认配置。
+     * <br>默认配置会写入供应商 ID 和默认模型名称，文件配置和本次调用 options 可以继续覆盖未固定的调用参数。
      *
-     * @return {@link ILLMModelOptions }
+     * @return 模型默认配置
      */
     default ILLMModelOptions getDefaultOptions() {
         return LLMModelOptions.builder()
