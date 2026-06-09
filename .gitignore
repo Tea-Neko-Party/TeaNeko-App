@@ -43,3 +43,6 @@ gradle.properties
 
 ### file config ###
 /config/
+
+### temp file ###
+temp/
