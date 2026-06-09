@@ -280,15 +280,15 @@ public class DeepSeekModelOptions extends LLMModelOptions {
                 ? Map.<String, Object>of()
                 : source.findMetadata().orElse(Map.of());
         if (source instanceof DeepSeekModelOptions deepSeekOptions) {
-            target.setApiPath(firstPresentText(deepSeekOptions.getApiPath(), metadataString(metadata, API_PATH_METADATA), DEFAULT_API_PATH));
-            target.setReasoningEffort(firstPresentText(deepSeekOptions.getReasoningEffort(), metadataString(metadata, REASONING_EFFORT_METADATA), null));
+            target.setApiPath(firstPresentText(deepSeekOptions.getApiPath(), metadataText(metadata, API_PATH_METADATA), DEFAULT_API_PATH));
+            target.setReasoningEffort(firstPresentText(deepSeekOptions.getReasoningEffort(), metadataText(metadata, REASONING_EFFORT_METADATA), null));
             target.setStreamIncludeUsage(deepSeekOptions.getStreamIncludeUsage() == null
                     ? metadataBoolean(metadata, STREAM_INCLUDE_USAGE_METADATA).orElse(null)
                     : deepSeekOptions.getStreamIncludeUsage());
             target.setTopLogprobs(deepSeekOptions.getTopLogprobs() == null
                     ? metadataInteger(metadata, TOP_LOGPROBS_METADATA).orElse(null)
                     : deepSeekOptions.getTopLogprobs());
-            target.setUserId(firstPresentText(deepSeekOptions.getUserId(), metadataString(metadata, USER_ID_METADATA), null));
+            target.setUserId(firstPresentText(deepSeekOptions.getUserId(), metadataText(metadata, USER_ID_METADATA), null));
             return;
         }
         target.setApiPath(metadataString(metadata, API_PATH_METADATA)
@@ -316,6 +316,18 @@ public class DeepSeekModelOptions extends LLMModelOptions {
             return Optional.empty();
         }
         return Optional.ofNullable(normalizeBlank(value.toString()));
+    }
+
+    /**
+     * 读取 metadata 中的字符串值。
+     *
+     * @param metadata metadata
+     * @param key 字段名
+     * @return 字符串值；没有值或为空白时返回 {@code null}
+     */
+    @Nullable
+    private static String metadataText(Map<String, Object> metadata, String key) {
+        return metadataString(metadata, key).orElse(null);
     }
 
     /**
@@ -370,13 +382,14 @@ public class DeepSeekModelOptions extends LLMModelOptions {
      */
     @Nullable
     private static String firstPresentText(@Nullable String primary,
-                                           Optional<String> fallback,
+                                           @Nullable String fallback,
                                            @Nullable String defaultValue) {
         var primaryText = normalizeBlank(primary);
         if (primaryText != null) {
             return primaryText;
         }
-        return fallback.orElse(defaultValue);
+        var fallbackText = normalizeBlank(fallback);
+        return fallbackText == null ? defaultValue : fallbackText;
     }
 
     /**
