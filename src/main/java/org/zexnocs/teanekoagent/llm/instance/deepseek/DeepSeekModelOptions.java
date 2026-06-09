@@ -152,6 +152,17 @@ public class DeepSeekModelOptions extends LLMModelOptions {
             return result;
         }
 
+        _findSomething(overrides, result);
+
+        var metadata = new LinkedHashMap<String, Object>();
+        result.findMetadata().ifPresent(metadata::putAll);
+        overrides.findMetadata().ifPresent(metadata::putAll);
+        result.setMetadata(metadata);
+        copyDeepSeekOptions(result, overrides);
+        return result;
+    }
+
+    private static void _findSomething(ILLMModelOptions overrides, DeepSeekModelOptions result) {
         overrides.findProvider().ifPresent(result::setProvider);
         overrides.findModel().ifPresent(result::setModel);
         overrides.findThinking().ifPresent(result::setThinking);
@@ -166,13 +177,6 @@ public class DeepSeekModelOptions extends LLMModelOptions {
         overrides.findTools().ifPresent(result::setTools);
         overrides.findToolChoice().ifPresent(result::setToolChoice);
         overrides.findLogprobs().ifPresent(result::setLogprobs);
-
-        var metadata = new LinkedHashMap<String, Object>();
-        result.findMetadata().ifPresent(metadata::putAll);
-        overrides.findMetadata().ifPresent(metadata::putAll);
-        result.setMetadata(metadata);
-        copyDeepSeekOptions(result, overrides);
-        return result;
     }
 
     /**
@@ -261,20 +265,7 @@ public class DeepSeekModelOptions extends LLMModelOptions {
         if (source == null) {
             return;
         }
-        source.findProvider().ifPresent(target::setProvider);
-        source.findModel().ifPresent(target::setModel);
-        source.findThinking().ifPresent(target::setThinking);
-        source.findMaxTokens().ifPresent(target::setMaxTokens);
-        source.findFrequencyPenalty().ifPresent(target::setFrequencyPenalty);
-        source.findTemperature().ifPresent(target::setTemperature);
-        source.findTopP().ifPresent(target::setTopP);
-        source.findPresencePenalty().ifPresent(target::setPresencePenalty);
-        source.findResponseFormat().ifPresent(target::setResponseFormat);
-        source.findStopWords().ifPresent(target::setStopWords);
-        source.findStream().ifPresent(target::setStream);
-        source.findTools().ifPresent(target::setTools);
-        source.findToolChoice().ifPresent(target::setToolChoice);
-        source.findLogprobs().ifPresent(target::setLogprobs);
+        _findSomething(source, target);
         source.findMetadata().ifPresent(metadata -> target.setMetadata(new LinkedHashMap<>(metadata)));
     }
 

@@ -26,8 +26,4 @@ public class LLMToolMessage extends AbstractLLMMessage implements ILLMToolMessag
     @JsonProperty("tool_call_id")
     private String toolCallId;
 
-    /**
-     * tool 名称
-     */
-    private String name;
 }

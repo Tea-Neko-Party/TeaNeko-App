@@ -101,6 +101,11 @@ public class DeepSeekChatCompletionResponseData implements IAPIResponseData {
         private String role;
 
         /**
+         * 消息参与者名称。
+         */
+        private String name = "";
+
+        /**
          * 文本内容。
          */
         private String content;

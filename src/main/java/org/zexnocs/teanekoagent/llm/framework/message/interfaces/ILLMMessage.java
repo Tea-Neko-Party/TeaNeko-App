@@ -21,6 +21,15 @@ public interface ILLMMessage {
     LLMMessageRole getRole();
 
     /**
+     * 获取 message 参与者名称
+     *
+     * @return {@link String }
+     */
+    default String getName() {
+        return "";
+    }
+
+    /**
      * 获取 content 列表
      *
      * @return {@link List }<{@link ILLMContent }>

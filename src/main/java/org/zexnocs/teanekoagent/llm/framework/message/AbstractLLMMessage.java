@@ -1,11 +1,9 @@
 package org.zexnocs.teanekoagent.llm.framework.message;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 import lombok.experimental.SuperBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
@@ -30,8 +28,16 @@ import java.util.List;
 @SuperBuilder
 @NoArgsConstructor
 @AllArgsConstructor
-@JsonPropertyOrder({"role", "content"})
+@JsonPropertyOrder({"role", "name", "content"})
 public abstract class AbstractLLMMessage implements ILLMMessage {
+    /**
+     * message 参与者名称
+     */
+    @Builder.Default
+    @JsonInclude(JsonInclude.Include.NON_EMPTY)
+    @JsonProperty("name")
+    private String name = "";
+
     /**
      * content 列表
      *

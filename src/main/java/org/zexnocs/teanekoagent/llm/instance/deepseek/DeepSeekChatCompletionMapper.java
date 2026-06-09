@@ -22,10 +22,7 @@ import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * DeepSeek 对话补全 API 与 LLM framework 之间的转换器。
@@ -69,7 +66,7 @@ public final class DeepSeekChatCompletionMapper {
                 .temperature(deepSeekOptions.findTemperature().orElse(null))
                 .topP(deepSeekOptions.findTopP().orElse(null))
                 .presencePenalty(deepSeekOptions.findPresencePenalty().orElse(null))
-                .stop(deepSeekOptions.findStopWords().orElse(null))
+                .stop(nonEmptyList(deepSeekOptions.findStopWords().orElse(null)))
                 .stream(deepSeekOptions.findStream().orElse(null))
                 .responseFormat(toResponseFormat(deepSeekOptions))
                 .tools(deepSeekOptions.findTools().map(DeepSeekChatCompletionMapper::toTools).orElse(null))
@@ -113,6 +110,7 @@ public final class DeepSeekChatCompletionMapper {
         for (var message : messages) {
             var item = new LinkedHashMap<String, Object>();
             item.put("role", message.getRole().getValue());
+            putIfNotBlank(item, "name", message.getName());
             item.put("content", toContent(message.getContents()));
             if (message instanceof ILLMAssistantMessage assistantMessage) {
                 var toolCalls = assistantMessage.getToolCalls();
@@ -122,7 +120,6 @@ public final class DeepSeekChatCompletionMapper {
             }
             if (message instanceof ILLMToolMessage toolMessage) {
                 putIfNotBlank(item, "tool_call_id", toolMessage.getToolCallId());
-                putIfNotBlank(item, "name", toolMessage.getName());
             }
             result.add(item);
         }
@@ -268,7 +265,7 @@ public final class DeepSeekChatCompletionMapper {
         }
         var result = new LinkedHashMap<String, Object>();
         metadata.forEach((key, value) -> {
-            if (key != null && key.startsWith(EXTRA_BODY_PREFIX) && value != null) {
+            if (key != null && key.startsWith(EXTRA_BODY_PREFIX) && shouldWriteOptionalValue(value)) {
                 result.put(key.substring(EXTRA_BODY_PREFIX.length()), value);
             }
         });
@@ -311,6 +308,7 @@ public final class DeepSeekChatCompletionMapper {
                     .build();
         }
         return LLMAssistantMessage.builder()
+                .name(firstNotBlank(message.getName(), ""))
                 .contents(LLMContentListBuilder.builder()
                         .addText(firstNotBlank(message.getContent(), message.getReasoningContent()))
                         .build())
@@ -394,6 +392,33 @@ public final class DeepSeekChatCompletionMapper {
         if (value != null && !value.isBlank()) {
             target.put(key, value);
         }
+    }
+
+    /**
+     * 返回非空列表；空列表作为未设置处理。
+     *
+     * @param list 待检查列表
+     * @return 非空列表，或 {@code null}
+     * @param <T> 列表元素类型
+     */
+    private static <T> List<T> nonEmptyList(List<T> list) {
+        return list == null || list.isEmpty() ? null : list;
+    }
+
+    /**
+     * 判断可选请求字段是否需要写入。
+     *
+     * @param value 字段值
+     * @return 需要写入时返回 {@code true}
+     */
+    private static boolean shouldWriteOptionalValue(Object value) {
+        return switch (value) {
+            case null -> false;
+            case String text -> !text.isBlank();
+            case Collection<?> collection -> !collection.isEmpty();
+            case Map<?, ?> map -> !map.isEmpty();
+            default -> true;
+        };
     }
 
     /**

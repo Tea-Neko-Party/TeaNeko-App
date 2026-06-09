@@ -28,6 +28,6 @@ public interface ILLMToolMessage extends ILLMMessage {
      * @return {@link String }
      */
     default String getName() {
-        return null;
+        return "";
     }
 }

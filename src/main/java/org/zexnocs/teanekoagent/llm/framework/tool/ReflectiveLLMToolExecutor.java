@@ -93,9 +93,8 @@ public class ReflectiveLLMToolExecutor implements ILLMToolExecutor {
      *
      * @param arguments 模型生成的 JSON 参数对象
      * @return 方法实参数组
-     * @throws Exception 当参数解析失败时抛出
      */
-    private Object[] buildArguments(String arguments) throws Exception {
+    private Object[] buildArguments(String arguments) {
         var parameters = method.getParameters();
         if (parameters.length == 0) {
             return new Object[0];
@@ -119,9 +118,8 @@ public class ReflectiveLLMToolExecutor implements ILLMToolExecutor {
      *
      * @param arguments JSON 参数对象
      * @return 参数名称到参数值的映射
-     * @throws Exception 当 JSON 解析失败时抛出
      */
-    private Map<String, Object> parseArgumentMap(String arguments) throws Exception {
+    private Map<String, Object> parseArgumentMap(String arguments) {
         if (arguments == null || arguments.isBlank()) {
             return Map.of();
         }
@@ -135,9 +133,8 @@ public class ReflectiveLLMToolExecutor implements ILLMToolExecutor {
      * @param value JSON 字段值
      * @param parameter 方法参数
      * @return 转换后的参数值
-     * @throws Exception 当转换失败时抛出
      */
-    private Object convertValue(Object value, Parameter parameter) throws Exception {
+    private Object convertValue(Object value, Parameter parameter) {
         if (parameter.getType() == String.class && value instanceof String stringValue) {
             return stringValue;
         }
