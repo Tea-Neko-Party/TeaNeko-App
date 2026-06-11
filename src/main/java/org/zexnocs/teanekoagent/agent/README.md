@@ -7,6 +7,7 @@
 | `AgentRuntimeService` | 处理一次 `AgentInboundMessage`，执行模型调用和 tool call loop，返回 `AgentOutboundMessage`。 |
 | `AgentContextService` | 创建上下文、追加消息、解析人格、构建 Prompt、压缩历史和写入暂存记忆。 |
 | `AgentConversationContext` | 保存 conversationId、scopeId、agentId、userId、LLM 消息历史、已解析人格和暂存记忆。 |
+| `AgentConversationMessage` | 保存消息顺序、消息发生时间和写入上下文时间，不改变供应商 Message JSON。 |
 | `TeaNekoAgent` | 单个会话的轻量门面，便于上层按对象方式追加消息、压缩、构建 Prompt 和写入记忆。 |
 | `IAgentContextCompressionStrategy` | 上下文压缩策略接口。 |
 | `TailKeepingAgentContextCompressionStrategy` | 默认压缩策略，保留首个 system message 和最近消息窗口。 |
@@ -25,7 +26,7 @@
 3. AgentTurnEvent 未取消时，默认调用 AgentRuntimeService.__handleForEvent(...)。
 4. 当前人格未解析时，调用 AgentContextService.resolvePersonality(...)。
 5. 如果当前配置未启用 Agent，直接结束事件默认流程。
-6. 将用户文本通过 LLMMessageListBuilder 写入 user message。
+6. 将用户文本及平台 receivedAt 写入消息时间轴。
 7. 使用上下文压缩策略控制消息窗口长度。
 8. AgentContextService.buildPrompt(...) 构造 LLMPrompt。
 9. AgentRuntimeService 为 Prompt 注入当前可见 ILLMTool 列表。
@@ -51,6 +52,7 @@
 | `AgentContextService.buildPrompt(...)` | 根据上下文、人格和额外组件构建 `LLMPrompt`。 |
 | `AgentContextService.recordStagedMemories(...)` | 将上下文暂存记忆写入长期记忆服务。 |
 | `AgentConversationContext.snapshotMessages()` | 返回当前 LLM 消息历史快照。 |
+| `AgentConversationContext.snapshotMessageTimeline()` | 返回消息发生时间与记录时间的时间轴快照。 |
 | `TeaNekoAgent.buildPrompt(String)` | 通过会话门面构建 Prompt。 |
 
 # 四. Tool Call Loop
@@ -62,6 +64,7 @@
 | 执行工具 | `AgentToolCallEvent` 默认调用 `AgentToolRegistryService.call(ILLMToolCall)`。 |
 | 结果回填 | 运行时使用 `LLMMessageListBuilder.addTool(toolCallId, result)` 写入 tool message。 |
 | 继续推理 | 下一轮重新构建 Prompt，让模型读取 tool result 后生成回复或继续调用工具。 |
+| 时间检索 | Agent 根据 `temporal-context` 自主换算相对时间，并调用 `query_memory_by_time`。 |
 
 # 五. 事件扩展点
 
@@ -105,3 +108,19 @@
 | 事件取消 | 取消 `AgentTurnEvent` 会跳过默认运行流程；取消 `AgentModelCallEvent` 或 `AgentToolCallEvent` 时应在 data 中写入替代结果。 |
 | 上下文压缩 | 默认策略只保留首个 system 和最近消息，未来可替换为摘要压缩策略。 |
 | 平台发送 | Runtime 只生成 `AgentOutboundMessage`，实际发送由宿主 adapter 负责。 |
+| 时间含义 | 消息 `occurredAt`、记忆 `eventTime` 和记录 `createdAt/updatedAt` 分别表示发生时间与记录生命周期。 |
+| 相对时间 | Agent 自主解析“昨天、一周前左右”等表达；代码只接受 ISO-8601 时间点或范围，不提供自然语言时间解析器。 |
+
+# 九. 受控思考与结构化输出
+
+每次模型调用前，`AgentRuntimeService` 都会通过 `AgentContextService.buildPrompt(...)` 重新注入保留的历史消息、时间上下文、当前人格和已解析记忆。新会话在创建上下文时会先解析人格，并按重要度和相关度加载长期记忆。
+
+|阶段|行为|
+|---|---|
+|上下文装配|注入历史消息、人格、重要记忆、时间和当前请求信息。|
+|结构化分析|模型只返回有限长度的 `thoughtSummary`、候选 `answer` 和 `confidence`。|
+|工具行动|存在 `tool_calls` 时执行工具，将结果作为 tool message 注入下一步。|
+|预算收束|达到 `max-thinking-steps` 前的最后一步时关闭工具，要求直接形成答案。|
+|最终输出|生成 `AgentOutput`，平台只发送 `answer`，思考摘要与 metadata 供事件监听器和调试器读取。|
+
+具体输出类型和配置见 [thinking/README.md](thinking/README.md)。供应商返回的原始 `reasoning_content` 不属于 Agent 思考流程，不会写入会话或发送给用户。

@@ -9,7 +9,7 @@
 | `file_config` | Agent 主配置和 token 监控器配置读取入口。 |
 | `agent.prompt` | 将运行硬规则、基础人格、学习修正、长期记忆和额外组件按优先级拼装成 LLM Prompt。 |
 | `agent.token` | token 使用量日志、上下文快照、清理策略和 token 告警事件。 |
-| `memory` | 长期记忆 DTO、人格学习修正记录、记忆查询写入服务和显式记忆工具。 |
+| `memory` | 带事件时间和重要度的长期记忆 DTO、人格学习修正、时间范围查询和显式记忆工具。 |
 | `personality` | 根据 scope、agentId、userId 解析当前 active personality、边界策略、记忆和模型 options。 |
 | `personality.config` | Agent 运行配置 DTO、字段校验和配置读取 port。 |
 | `personality.file_config` | 文件基础人格配置模型和读取服务。 |
@@ -95,4 +95,15 @@ flowchart TB
 | 事件驱动边界 | 可扩展节点使用 `teanekocore.event`，监听器可修改事件 data 或取消默认动作。 |
 | tool call loop | 工具调用必须有最大轮数，工具异常要作为 tool message 回填给模型。 |
 | token 监控 | 模型调用后记录 `ILLMUsage`，上下文快照写入 `CleanableEasyData`，单轮结束后按阈值推送 `AgentTokenWarningEvent` 并写入 warn。 |
+| 时间维度 | 会话保存消息发生时间和记录时间；记忆区分事件时间与记录生命周期，并支持 Agent 通过 Tool 按时间点或范围检索。 |
 | 应用隔离 | Agent Core 不直接处理平台事件或发送器，宿主应用通过 adapter 转换 DTO。 |
+
+# 六. 受控思考输出
+
+`agent.thinking` 在每次模型调用前复用当前历史消息、人格、重要记忆和时间上下文，并通过有限步骤完成分析、工具观察和最终校验。最终返回的 `AgentOutput` 将思考摘要、用户答案和 metadata 分离，宿主 adapter 仍只发送最终答案。
+
+|顺序|导航|说明|
+|---|---|---|
+|$1$|[agent/README.md](agent/README.md)|了解完整对话、上下文、工具和输出流程。|
+|$2$|[agent/thinking/README.md](agent/thinking/README.md)|了解思考步骤预算、结构化 JSON、输出字段和供应商推理隔离。|
+|$3$|[file_config/README.md](file_config/README.md)|了解思考模式和摘要长度配置。|

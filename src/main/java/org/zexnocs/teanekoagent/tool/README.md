@@ -49,6 +49,7 @@
 | `ILLMToolService` | 提供框架扫描到的工具和基础查询能力。 |
 | `@LLMToolProvider` | 继续用于注解式工具注册。 |
 | `@LLMToolMapping` | 继续用于方法级工具 schema 生成。 |
+| 时间检索工具 | `query_memory_by_time` 接受 Agent 已换算的 ISO-8601 时间点或范围，并返回相交记忆。 |
 
 # 六. 注意事项
 

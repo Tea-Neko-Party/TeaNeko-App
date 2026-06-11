@@ -17,6 +17,8 @@
 | `config/agent/token-monitor.yml` | token 使用量记录、上下文快照、清理策略和告警上报配置。 |
 | `config/agent/model.yml` | 每个模型适配器 ID 下的默认 options，由 LLM 配置服务读取。 |
 
+`main-config.yml` 同时包含 Agent 思考流程配置：`thinking-enabled`、`max-thinking-steps`、`max-thought-summary-length` 和 `include-thoughts-in-output`。默认最多执行 3 个模型步骤，其中最后一步用于关闭工具并收束最终答案。
+
 # 三. Token 监控器
 
 `AgentTokenMonitorFileConfig` 控制以下行为：

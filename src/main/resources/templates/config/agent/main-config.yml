@@ -5,3 +5,19 @@
 # 该 ID 用于 Agent 在本次 Prompt 没有指定 provider 时选择模型适配器
 # 为空字符串表示不设置默认模型，调用方必须在 Prompt options 或作用域配置中指定模型适配器
 default-model-id: ""
+
+# 是否启用 Agent 自主的受控思考流程
+# 启用后每次模型调用会返回简短思考摘要、最终答案和置信度，不使用供应商原始 reasoning_content
+thinking-enabled: true
+
+# 单轮回答最多允许的模型思考步骤数，包含最后生成答案的步骤
+# 建议使用 2 到 4；数值越大越可能执行更多工具调用，同时会增加 token 消耗
+max-thinking-steps: 3
+
+# 每个可公开思考摘要允许的最大字符数
+# 运行时会将该值限制在 32 到 1000 之间，较小的值有助于控制 completion token
+max-thought-summary-length: 240
+
+# 是否在 AgentOutput 中保留可公开的思考摘要
+# 关闭后 Agent 仍会执行思考流程，但输出只保留最终答案和 metadata
+include-thoughts-in-output: true
