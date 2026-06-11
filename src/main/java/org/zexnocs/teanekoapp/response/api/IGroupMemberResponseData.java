@@ -2,6 +2,8 @@ package org.zexnocs.teanekoapp.response.api;
 
 import org.jspecify.annotations.Nullable;
 
+import java.time.Instant;
+
 /**
  * 群成员信息响应子数据接口。
  *
@@ -35,20 +37,44 @@ public interface IGroupMemberResponseData {
     String getCard();
 
     /**
-     * 加入时间 (单位毫秒)
+     * 加入时间点
      *
-     * @return {@link Long }
+     * @return 加入时间点
      */
     @Nullable
-    Long getJoinTimeMs();
+    Instant getJoinInstant();
 
     /**
-     * 上次发言时间 (单位秒)
+     * 上次发言时间点
      *
-     * @return {@link Long }
+     * @return 上次发言时间点
      */
     @Nullable
-    Long getLastSentTimeMs();
+    Instant getLastSentInstant();
+
+    /**
+     * 获取加入时间的 Unix 毫秒时间戳。
+     *
+     * @return 毫秒时间戳
+     * @deprecated 业务代码应直接使用 {@link #getJoinInstant()}
+    */
+    @Deprecated
+    default @Nullable Long getJoinTimeMs() {
+        var instant = getJoinInstant();
+        return instant == null ? null : instant.toEpochMilli();
+    }
+
+    /**
+     * 获取最后发言时间的 Unix 毫秒时间戳。
+     *
+     * @return 毫秒时间戳
+     * @deprecated 业务代码应直接使用 {@link #getLastSentInstant()}
+    */
+    @Deprecated
+    default @Nullable Long getLastSentTimeMs() {
+        var instant = getLastSentInstant();
+        return instant == null ? null : instant.toEpochMilli();
+    }
 
     /**
      * 群等级

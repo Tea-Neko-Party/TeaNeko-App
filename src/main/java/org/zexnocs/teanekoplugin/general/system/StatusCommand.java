@@ -19,6 +19,7 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * 状态命令，提供系统状态信息查询功能，包括 CPU 使用率、内存使用情况和磁盘使用情况。
@@ -42,7 +43,7 @@ public class StatusCommand {
     private final OperatingSystemMXBean osBean;
 
     /// 记录开启时间
-    private final long startTime;
+    private final Instant startTime;
 
     /// 应用名称
     private final String applicationName;
@@ -56,7 +57,7 @@ public class StatusCommand {
                          ILogger logger,
                          @Value("${spring.application.name}") String applicationName, VersionUtil versionUtil) {
         this.osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
-        this.startTime = System.currentTimeMillis();
+        this.startTime = Instant.now();
         this.iTimerService = iTimerService;
         this.logger = logger;
         this.applicationName = applicationName;
@@ -101,7 +102,7 @@ public class StatusCommand {
 
         // 获取 CPU 核心数
         int cpuCount = Runtime.getRuntime().availableProcessors();
-        long currentTime = System.currentTimeMillis();
+        var runningTime = Duration.between(startTime, Instant.now());
 
         // 获取系统的 CPU 使用率
         double systemCpuLoad = osBean.getCpuLoad() * 100.0;
@@ -130,7 +131,7 @@ public class StatusCommand {
         double memoryUsagePercentage = totalMemory == 0 ? 0 : 100.0 * usedMemory / totalMemory;
 
         // 构造运行时间
-        long runningTimeInSeconds = (int) ((currentTime - startTime) / 1000);
+        long runningTimeInSeconds = runningTime.toSeconds();
         int runningDays = (int) (runningTimeInSeconds / (24 * 3600));
         int runningHours = (int) ((runningTimeInSeconds % (24 * 3600)) / 3600);
         int runningMinutes = (int) ((runningTimeInSeconds % 3600) / 60);

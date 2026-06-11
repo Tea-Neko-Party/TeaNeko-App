@@ -6,6 +6,8 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekoplugin.general.dice.event.DiceAfterEvent;
 import org.zexnocs.teanekoplugin.general.dice.event.DiceSetEvent;
 
+import java.time.Instant;
+
 /**
  * 真心话大冒险注册服务，监听骰子事件，注册参与者，并禁止在游戏期间使用骰子设置。
  *
@@ -46,7 +48,7 @@ public class TruthRegisterService {
         // 注册数据
         truthService.join(attempt.getMessageData(),
                 data.getDiceResultList().getFirst(),
-                System.currentTimeMillis());
+                Instant.now());
     }
 
     /**

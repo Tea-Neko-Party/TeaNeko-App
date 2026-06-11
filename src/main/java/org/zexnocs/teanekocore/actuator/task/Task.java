@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.actuator.task.state.TaskCreatedState;
 import org.zexnocs.teanekocore.actuator.task.state.TaskExecutedState;
 import org.zexnocs.teanekocore.framework.state.LockStateMachine;
 
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -38,7 +39,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
 
     /// 上次重试的时间，用于判断任务是否过期
     @Getter(AccessLevel.PROTECTED)
-    private volatile long lastRetryTime;
+    private volatile Instant lastRetryTime;
 
     /// 重新尝试次数
     private final AtomicInteger retryCount = new AtomicInteger(0);
@@ -71,7 +72,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
         this.resultType = resultType;
         this.key = key;
         // 第一次尝试时间应该等于 当前时间 + 执行时间
-        this.lastRetryTime = System.currentTimeMillis() + config.getDelayDuration().toMillis();
+        this.lastRetryTime = Instant.now().plus(config.getDelayDuration());
 
         // config 创建 task 增加其创建计数器
         this.config.addCounter();
@@ -100,18 +101,18 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
         }
 
         // 更新上次重试的时间
-        lastRetryTime = System.currentTimeMillis() + config.getRetryInterval().toMillis();
+        lastRetryTime = Instant.now().plus(config.getRetryInterval());
         return true;
     }
 
     /**
      * 判断是否过期。过期的定义是：当前时间 - 上次重试时间 > 过期时间。
-     * @param currentTimeInMillis 当前时间，单位毫秒
+     * @param currentTime 当前时间
      * @return 是否过期
      */
     @Override
-    public boolean isExpired(long currentTimeInMillis) {
-        return currentTimeInMillis - lastRetryTime > config.getExpirationDuration().toMillis();
+    public boolean isExpired(Instant currentTime) {
+        return currentTime.isAfter(lastRetryTime.plus(config.getExpirationDuration()));
     }
 
     /**

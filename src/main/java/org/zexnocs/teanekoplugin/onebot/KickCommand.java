@@ -41,7 +41,7 @@ public class KickCommand {
                        ICacheService iCacheService) {
         this.groupKickSender = groupKickSender;
         this.groupMemberInfoSender = groupMemberInfoSender;
-        this.kickDataMap = ConcurrentMapCacheContainer.of(iCacheService, Duration.ofMinutes(5).toMillis());
+        this.kickDataMap = ConcurrentMapCacheContainer.of(iCacheService, Duration.ofMinutes(5));
     }
 
     @Description("""

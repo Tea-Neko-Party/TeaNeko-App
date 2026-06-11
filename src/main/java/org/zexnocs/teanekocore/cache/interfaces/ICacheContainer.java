@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.cache.interfaces;
 
+import java.time.Instant;
+
 /**
  * 缓存类接口：如果长时间没有被访问，则会被自动清理
  *
@@ -15,7 +17,7 @@ public interface ICacheContainer {
     /**
      * 自动清理缓存
      *
-     * @param currentTimeMs 当前时间，单位毫秒
+     * @param currentTime 当前时间点
      */
-    void autoClean(long currentTimeMs);
+    void autoClean(Instant currentTime);
 }

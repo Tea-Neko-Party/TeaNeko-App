@@ -7,7 +7,9 @@ import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicLong;
+import java.time.Instant;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 固定 delay 的定时器。
@@ -22,9 +24,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * @date 2026/02/14
  */
 public class FixedDelayTimer<T> implements ITimer<T> {
-    /// 任务正在执行的标志，表示 lastExecutionTime 的值无效。
-    private static final long EXECUTING = -1L;
-
     /// 任务配置
     private final ITimerTaskConfig<T> timerTaskConfig;
 
@@ -32,7 +31,10 @@ public class FixedDelayTimer<T> implements ITimer<T> {
     private final Duration delay;
 
     /// 上次执行时间
-    private final AtomicLong lastExecutionTime;
+    private final AtomicReference<Instant> lastExecutionTime;
+
+    /// 任务是否正在执行。
+    private final AtomicBoolean executing = new AtomicBoolean(false);
 
     /// result type
     @Getter
@@ -49,7 +51,7 @@ public class FixedDelayTimer<T> implements ITimer<T> {
                            @NonNull Class<T> resultType) {
         this.delay = delay;
         this.timerTaskConfig = config;
-        this.lastExecutionTime = new AtomicLong(System.currentTimeMillis());
+        this.lastExecutionTime = new AtomicReference<>(Instant.now());
         this.resultType = resultType;
     }
 
@@ -66,28 +68,27 @@ public class FixedDelayTimer<T> implements ITimer<T> {
     /**
      * 判断是否到了执行时间。
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      * @return 是否到了执行时间。
      */
     @Override
-    public boolean isTime(long currentTime) {
-        long lastTime = lastExecutionTime.get();
+    public boolean isTime(Instant currentTime) {
+        var lastTime = lastExecutionTime.get();
         // 如果正在执行，则不触发。
-        if(lastTime == EXECUTING) {
+        if(executing.get()) {
             return false;
         }
-        return currentTime - lastTime >= delay.toMillis();
+        return !currentTime.isBefore(lastTime.plus(delay));
     }
 
     /**
      * 每次执行成功时更新定时器的状态
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      */
     @Override
-    public void update(long currentTime) {
-        // 临时将 lastExecutionTime 设置为无穷大，防止在任务执行过程中定时器被重复触发。
-        lastExecutionTime.set(EXECUTING);
+    public void update(Instant currentTime) {
+        executing.set(true);
     }
 
     /**
@@ -100,7 +101,10 @@ public class FixedDelayTimer<T> implements ITimer<T> {
     public void execute(ITaskService iTaskService) {
         // 让任务更新定时器状态。
         var future = iTaskService.subscribeWithFuture(timerTaskConfig.getTaskConfig(), resultType)
-                .whenComplete((v, t) -> lastExecutionTime.set(System.currentTimeMillis()));
+                .whenComplete((v, t) -> {
+                    lastExecutionTime.set(Instant.now());
+                    executing.set(false);
+                });
         // 配置任务的 future 链。
         var chain = timerTaskConfig.getTaskFutureChain();
         if(chain != null) {

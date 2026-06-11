@@ -7,6 +7,7 @@ import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 
 import java.time.Duration;
+import java.time.Instant;
 
 /**
  * 每经过一个 rate 都会生成一个新的 task 来执行，无论上一个 task 是否完成。
@@ -24,7 +25,7 @@ public class FixedRateTimer<T> implements ITimer<T> {
     private final Duration rate;
 
     /// 上次执行的时间
-    private long lastExecutionTime;
+    private Instant lastExecutionTime;
 
     /// result type
     @Getter
@@ -38,7 +39,7 @@ public class FixedRateTimer<T> implements ITimer<T> {
     public FixedRateTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig, @NonNull Duration rate, @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;
         this.rate = rate;
-        this.lastExecutionTime = System.currentTimeMillis();
+        this.lastExecutionTime = Instant.now();
         this.resultType = resultType;
     }
 
@@ -55,21 +56,21 @@ public class FixedRateTimer<T> implements ITimer<T> {
     /**
      * 判断是否到了执行时间。
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      * @return 是否到了执行时间。
      */
     @Override
-    public boolean isTime(long currentTime) {
-        return currentTime - lastExecutionTime >= rate.toMillis();
+    public boolean isTime(Instant currentTime) {
+        return !currentTime.isBefore(lastExecutionTime.plus(rate));
     }
 
     /**
      * 每次执行成功时更新定时器的状态
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      */
     @Override
-    public void update(long currentTime) {
+    public void update(Instant currentTime) {
         this.lastExecutionTime = currentTime;
     }
 

@@ -102,7 +102,7 @@ public class GroupActivityCommand {
             );
         }
         withValidGroupContext(commandData.getRawData(), groupId, (finalGroupId, targetScopeId, _) ->
-                groupActivityExemptionService.addWithFuture(targetScopeId, userId, interval)
+                groupActivityExemptionService.addWithFuture(targetScopeId, userId, Duration.ofMillis(interval))
                 .thenAccept(ignored -> {
                     groupActivityService.getActivityDataMap().computeIfPresent(targetScopeId, (_, v) -> {
                         v.remove(userId);

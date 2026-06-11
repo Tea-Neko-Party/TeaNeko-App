@@ -7,6 +7,7 @@ import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -27,7 +28,7 @@ public class SmartRateTimer<T> implements ITimer<T> {
     private final Duration delay;
 
     /// 上次执行时间
-    private long lastExecutionTime;
+    private volatile Instant lastExecutionTime;
 
     /// 上次执行任务是否已经完成。true 表示上次执行的任务已经完成，false 表示上次执行的任务还在执行中。
     private final AtomicBoolean lastTaskCompleted;
@@ -47,7 +48,7 @@ public class SmartRateTimer<T> implements ITimer<T> {
                           @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;
         this.delay = delay;
-        this.lastExecutionTime = System.currentTimeMillis();
+        this.lastExecutionTime = Instant.now();
         this.lastTaskCompleted = new AtomicBoolean(true);
         this.resultType = resultType;
     }
@@ -66,22 +67,22 @@ public class SmartRateTimer<T> implements ITimer<T> {
     /**
      * 判断是否到了执行时间。
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      * @return 是否到了执行时间。
      */
     @Override
-    public boolean isTime(long currentTime) {
+    public boolean isTime(Instant currentTime) {
         // 已经完成了并且当前时间已经超过了上次执行时间 + delay
-        return lastTaskCompleted.get() && currentTime - lastExecutionTime >= delay.toMillis();
+        return lastTaskCompleted.get() && !currentTime.isBefore(lastExecutionTime.plus(delay));
     }
 
     /**
      * 每次执行成功时更新定时器的状态
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      */
     @Override
-    public void update(long currentTime) {
+    public void update(Instant currentTime) {
         // 更新上次执行时间为当前时间
         lastExecutionTime = currentTime;
 

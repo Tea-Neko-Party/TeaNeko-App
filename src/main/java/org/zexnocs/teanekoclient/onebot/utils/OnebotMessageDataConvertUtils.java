@@ -10,8 +10,8 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.framework.pair.Pair;
-import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -43,7 +43,7 @@ public enum OnebotMessageDataConvertUtils {
         var messageType = getTeaNekoMessageType(onebotData);
         var client = eventShareComponent.onebotTeaNekoClient;
         return OnebotMessageData.builder()
-                .time(ChinaDateUtil.Instance.convertToChinaZonedDateTime(onebotData.getTime() * 1000L))
+                .time(Instant.ofEpochSecond(onebotData.getTime()))
                 .messageId(String.valueOf(onebotData.getMessageId()))
                 .messages(onebotData.getMessage())
                 .messageType(messageType)

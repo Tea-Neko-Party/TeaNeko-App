@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -24,6 +25,18 @@ public class MessageBoardInfoData {
     @JsonProperty("sender_id")
     private UUID senderId;
 
+    @JsonProperty("created_at")
+    private Instant createdAt;
+
+    /**
+     * 兼容旧版本以毫秒时间戳保存的留言时间。
+     *
+     * @param time Unix 毫秒时间戳
+     */
     @JsonProperty("time")
-    private long time;
+    private void setLegacyTime(long time) {
+        if (createdAt == null) {
+            createdAt = Instant.ofEpochMilli(time);
+        }
+    }
 }

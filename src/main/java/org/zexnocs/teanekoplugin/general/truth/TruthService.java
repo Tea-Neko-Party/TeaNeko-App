@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekoplugin.general.dice.DiceService;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -98,7 +99,7 @@ public class TruthService {
      * @param value 投掷的值
      * @param time 投掷的时间
      */
-    public void join(ITeaNekoMessageData data, int value, long time) {
+    public void join(ITeaNekoMessageData data, int value, Instant time) {
         var scopeId = data.getScopeId();
         var groupData = truthGroupDataMap.get(scopeId);
         // 判断真心话是否正在运行
@@ -179,14 +180,14 @@ public class TruthService {
         private final int value;
 
         /// 时间
-        private final long time;
+        private final Instant time;
 
         @Override
         public int compareTo(TruthUserData o) {
             if (value == o.value) {
-                return Long.compare(o.time, time);
+                return o.time.compareTo(time);
             }
-            return Long.compare(value, o.value);
+            return Integer.compare(value, o.value);
         }
     }
 

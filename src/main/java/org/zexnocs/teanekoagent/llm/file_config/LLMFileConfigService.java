@@ -9,11 +9,9 @@ import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundException;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 
-import java.util.Optional;
-
 /**
  * 大语言模型文件配置服务。
- * <br>负责把 {@link LLMMainFileConfig} 中的配置项合并为框架统一的 {@link LLMModelOptions}。
+ * <br>负责把 {@link LLMModelFileConfig} 中的配置项合并为框架统一的 {@link LLMModelOptions}。
  *
  * @author zExNocs
  * @date 2026/06/08
@@ -28,28 +26,19 @@ public class LLMFileConfigService implements ILLMFileConfigService {
     private final IFileConfigService fileConfigService;
 
     /**
-     * 获取 LLM 主文件配置。
-     * <br>当文件配置尚未加载时返回默认配置对象，避免配置项缺失影响模型注册流程。
+     * 获取 LLM 模型文件配置。
+     * <br>优先读取 {@code config/agent/model.yml}；当配置尚未加载时返回默认配置对象，
+     * 避免配置项缺失影响模型注册流程。
      *
-     * @return LLM 主文件配置
+     * @return LLM 模型文件配置
      */
     @Override
-    public LLMMainFileConfig getConfig() {
+    public LLMModelFileConfig getConfig() {
         try {
-            return fileConfigService.get(LLMMainFileConfig.class);
+            return fileConfigService.get(LLMModelFileConfig.class);
         } catch (FileConfigDataNotFoundException ignored) {
-            return new LLMMainFileConfig();
+            return new LLMModelFileConfig();
         }
-    }
-
-    /**
-     * 查找默认模型适配器 ID。
-     *
-     * @return 默认模型适配器 ID
-     */
-    @Override
-    public Optional<LLMModelId> findDefaultModelId() {
-        return getConfig().findDefaultModelId();
     }
 
     /**

@@ -8,6 +8,8 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekoplugin.general.affection.interfaces.IAffectionService;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,12 +28,12 @@ import java.util.concurrent.ConcurrentHashMap;
 @EventListener
 public class PokeAffectionTrigger {
     /// 冷却时间
-    private static final int POKE_COOLDOWN_MILLIS = 60 * 60 * 1000;
+    private static final Duration POKE_COOLDOWN = Duration.ofHours(1);
 
     private final IAffectionService iAffectionService;
 
     /// senderId, targetId -> lastPokeTimestamp
-    private final Map<HashPair<UUID, UUID>, Long> lastPokeTimestamps = new ConcurrentHashMap<>();
+    private final Map<HashPair<UUID, UUID>, Instant> lastPokeTimestamps = new ConcurrentHashMap<>();
     private final ITeaUserService iTeaUserService;
     private final OnebotTeaNekoClient onebotTeaNekoClient;
 
@@ -45,7 +47,7 @@ public class PokeAffectionTrigger {
 
     @EventHandler
     public void handle(NotifyNoticeReceiveEvent event) {
-        long time = System.currentTimeMillis();
+        var time = Instant.now();
         var data = event.getData();
         long groupId = data.getGroupID();
         long senderId = data.getUserID();
@@ -58,9 +60,9 @@ public class PokeAffectionTrigger {
         if(groupId != 0) {
             // 判断是否在冷却时间内
             var key = HashPair.of(senderUUID, targetUUID);
-            Long lastPokeTime = lastPokeTimestamps.get(key);
+            var lastPokeTime = lastPokeTimestamps.get(key);
             // 如果没有记录过 或者 已经过了冷却时间 则增加好感度
-            if(lastPokeTime == null || time - lastPokeTime >= POKE_COOLDOWN_MILLIS) {
+            if(lastPokeTime == null || !time.isBefore(lastPokeTime.plus(POKE_COOLDOWN))) {
                 // 记录新的戳一戳时间
                 lastPokeTimestamps.put(key, time);
                 // 增加好感度

@@ -5,7 +5,7 @@ import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -23,7 +23,7 @@ public interface ITeaNekoMessageData {
      * @return 消息的发送时间戳
      */
     @NonNull
-    ZonedDateTime getTime();
+    Instant getTime();
 
     /**
      * 获取消息的 scope ID

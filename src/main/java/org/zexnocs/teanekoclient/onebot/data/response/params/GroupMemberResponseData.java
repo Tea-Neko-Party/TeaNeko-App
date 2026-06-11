@@ -7,6 +7,8 @@ import lombok.NoArgsConstructor;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.response.api.IGroupMemberResponseData;
 
+import java.time.Instant;
+
 /**
  * 群成员信息响应子数据
  *
@@ -87,22 +89,22 @@ public class GroupMemberResponseData implements IGroupMemberResponseData {
     }
 
     /**
-     * 加入时间 (单位毫秒)
+     * 加入时间点
      *
-     * @return {@link Long }
+     * @return 加入时间点
      */
     @Override
-    public Long getJoinTimeMs() {
-        return joinTime * 1000L;
+    public @Nullable Instant getJoinInstant() {
+        return joinTime == null ? null : Instant.ofEpochSecond(joinTime);
     }
 
     /**
-     * 上次发言时间 (单位秒)
+     * 上次发言时间点
      *
-     * @return {@link Long }
+     * @return 上次发言时间点
      */
     @Override
-    public @Nullable Long getLastSentTimeMs() {
-        return lastSentTime * 1000L;
+    public @Nullable Instant getLastSentInstant() {
+        return lastSentTime == null ? null : Instant.ofEpochSecond(lastSentTime);
     }
 }

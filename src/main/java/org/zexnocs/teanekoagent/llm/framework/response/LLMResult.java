@@ -44,11 +44,10 @@ public class LLMResult implements ILLMResult {
     private String object = "chat.completion";
 
     /**
-     * 响应创建时间戳。
-     * <br>单位为秒，默认使用当前时间。
+     * 响应创建时间点，默认使用当前时间。
      */
     @Builder.Default
-    private long created = Instant.now().getEpochSecond();
+    private Instant created = Instant.now();
 
     /**
      * 生成本次响应所使用的模型名称。

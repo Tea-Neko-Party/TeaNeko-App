@@ -15,6 +15,7 @@ import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import org.zexnocs.teanekoplugin.general.signin.data.SignInChunkData;
 import org.zexnocs.teanekoplugin.general.signin.data.SignInData;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
@@ -46,13 +47,13 @@ public class RepairSignInService {
      */
     public void repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
                              UUID userId,
-                             long nowMs,
+                             Instant now,
                              int k,
                              @Nullable IItemDataDTO<?> card) {
         var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
         lock.lock();
         try {
-            __repairSignIn(sender, userId, nowMs, k, card);
+            __repairSignIn(sender, userId, now, k, card);
         } finally {
             lock.unlock();
         }
@@ -63,21 +64,21 @@ public class RepairSignInService {
      *
      * @param sender 发送器，用于发送信息
      * @param userId uuid
-     * @param nowMs  当前时间 ms
+     * @param now    当前时间点
      * @param k      修补的最大个数
      * @param card   用于扣除补签卡，如果为 null 则不扣除
      */
     public void __repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
                              UUID userId,
-                             long nowMs,
+                             Instant now,
                              int k,
                              @Nullable IItemDataDTO<?> card) {
-        var currentDate = ChinaDateUtil.Instance.convertToChinaDate(nowMs);
+        var currentDate = ChinaDateUtil.Instance.convertToChinaDate(now);
 
         var target = GeneralEasyData.of(SignInService.NAMESPACE).get(userId.toString());
         var data = signInService.getSignInData(target);
 
-        var lastDate = ChinaDateUtil.Instance.convertToChinaDate(data.getLastTimeMs());
+        var lastDate = ChinaDateUtil.Instance.convertToChinaDate(data.getLastTime());
 
         // 1. 今天没签到
         if (!currentDate.isEqual(lastDate)) {
@@ -106,8 +107,8 @@ public class RepairSignInService {
             var prev = chunks.get(i - 1);
             // 从当前区块的第一个时间开始到上一个区块的最后一个时间
             // 两个时间的 gap days 就是这两个区块区间需要补签的时间
-            var prevLast = ChinaDateUtil.Instance.convertToChinaDate(prev.getLastTimeMs());
-            var currLast = ChinaDateUtil.Instance.convertToChinaDate(curr.getLastTimeMs());
+            var prevLast = ChinaDateUtil.Instance.convertToChinaDate(prev.getLastTime());
+            var currLast = ChinaDateUtil.Instance.convertToChinaDate(curr.getLastTime());
             var currFirst = currLast.minusDays(curr.getContinuous() - 1);
             int gapDays = Math.toIntExact(ChronoUnit.DAYS.between(prevLast, currFirst) - 1);
             // 从后往前取该区间的日期，要么全部取完，要么取到最大值
@@ -118,7 +119,7 @@ public class RepairSignInService {
             if(remain >= gapDays) {
                 // 说明需要补完整个 gap
                 prev.setContinuous(prev.getContinuous() + gapDays + curr.getContinuous());
-                prev.setLastTimeMs(curr.getLastTimeMs());
+                prev.setLastTime(curr.getLastTime());
                 // 因为是从后往前的遍历，所以删除 i 是合理的。
                 chunks.remove(i);
                 // 记录本次补签的区间
@@ -160,10 +161,10 @@ public class RepairSignInService {
         RepairRecordData recordData = RepairRecordData.builder()
                 .repairCount(repairCount)
                 .repairRanges(repairedRanges)
-                .timestamp(nowMs)
+                .timestamp(now)
                 .build();
 
-        recordTask.set("repair-" + ChinaDateUtil.Instance.convertToDateTimeString(nowMs), recordData);
+        recordTask.set("repair-" + ChinaDateUtil.Instance.convertToDateTimeString(now), recordData);
         // ---- 6. 更新 SignInData + chunks + 补签卡 ----
         var dataTask = target.getTaskConfig("补签数据更新")
                 .set(SignInData.KEY, newData)
@@ -221,6 +222,6 @@ public class RepairSignInService {
     public static class RepairRecordData {
         private int repairCount;                 // 本次补签数量
         private LinkedList<String> repairRanges; // 补签的区间描述
-        private long timestamp;                  // 补签操作时间 ms
+        private Instant timestamp;               // 补签操作时间
     }
 }

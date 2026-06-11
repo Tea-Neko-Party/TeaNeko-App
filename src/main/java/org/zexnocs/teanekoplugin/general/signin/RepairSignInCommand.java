@@ -12,6 +12,7 @@ import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataService;
 import org.zexnocs.teanekocore.framework.description.Description;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -67,7 +68,7 @@ public class RepairSignInCommand {
         // 根据补签卡数量确定实际数量
         var count = Math.min(card.getCount(), k);
         repairSignInService.repairSignIn(data.getMessageSender(),
-                user, System.currentTimeMillis(), count, card);
+                user, Instant.now(), count, card);
     }
 
     @SubCommand(value = {"give"}, permission = CommandPermission.DEBUG)

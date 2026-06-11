@@ -47,8 +47,8 @@ public class GroupActivityQueryService {
         var rule =  pair.second();
         // 使用中国式的时间格式设置上次发言时间和入群时间
         var util = ChinaDateUtil.Instance;
-        var lastSpeakTime = util.convertToDateTimeString(activityData.getLastSpeakTimeMs());
-        var joinTime = util.convertToDateTimeString(activityData.getJoinTimeMs());
+        var lastSpeakTime = util.convertToDateTimeString(activityData.getLastSpeakTime());
+        var joinTime = util.convertToDateTimeString(activityData.getJoinTime());
         // 计算距离上次发言的时间
         var lastSpeakDelta = activityData.getSpeak();
         msgListBuilder.addText(String.format("""

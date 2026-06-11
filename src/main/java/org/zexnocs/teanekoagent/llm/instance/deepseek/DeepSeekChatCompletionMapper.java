@@ -89,7 +89,7 @@ public final class DeepSeekChatCompletionMapper {
         return LLMResult.builder()
                 .id(response.getId())
                 .object(response.getObject())
-                .created(response.getCreated() > 0 ? response.getCreated() : Instant.now().getEpochSecond())
+                .created(response.getCreated() > 0 ? Instant.ofEpochSecond(response.getCreated()) : Instant.now())
                 .model(response.getModel())
                 .choices(toChoices(response.getChoices()))
                 .usage(toUsage(response.getUsage()))
@@ -310,7 +310,7 @@ public final class DeepSeekChatCompletionMapper {
         return LLMAssistantMessage.builder()
                 .name(firstNotBlank(message.getName(), ""))
                 .contents(LLMContentListBuilder.builder()
-                        .addText(firstNotBlank(message.getContent(), message.getReasoningContent()))
+                        .addText(firstNotBlank(message.getContent(), ""))
                         .build())
                 .toolCalls(toFrameworkToolCalls(message.getToolCalls()))
                 .build();

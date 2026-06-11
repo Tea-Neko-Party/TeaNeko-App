@@ -11,7 +11,7 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 
-import java.time.ZonedDateTime;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -28,7 +28,7 @@ import java.util.List;
 @AllArgsConstructor
 public class TeaNekoMessageData implements ITeaNekoMessageData {
     /// 消息的发送时间戳
-    protected ZonedDateTime time;
+    protected Instant time;
 
     /// 消息的唯一 ID
     protected String messageId;

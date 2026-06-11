@@ -7,6 +7,9 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 
+import java.time.Duration;
+import java.time.Instant;
+
 /**
  * 群活跃度豁免服务。
  * <br>用于记录豁免成员，以及自动删除过期的豁免成员。
@@ -30,14 +33,14 @@ public class GroupActivityExemptionService {
      * @see TaskFuture
      * @param scopeId      群组的区域 ID
      * @param userId       用户在平台中的 ID
-     * @param durationInMs 豁免的持续时间。毫秒。
+     * @param duration     豁免持续时长
      * @return {@link TaskFuture }<{@link ITaskResult }<{@link Void }>> 数据库完成 future，请自行 finish()
      */
-    public TaskFuture<ITaskResult<Void>> addWithFuture(String scopeId, String userId, long durationInMs) {
-        long exemptionTime = System.currentTimeMillis() + durationInMs;
+    public TaskFuture<ITaskResult<Void>> addWithFuture(String scopeId, String userId, Duration duration) {
+        var exemptionTime = Instant.now().plus(duration);
         // 添加到数据库中
         return getDto().getTaskConfig("添加豁免成员")
-                .set(getKey(scopeId, userId), exemptionTime)
+                .set(getKey(scopeId, userId), exemptionTime.toString())
                 .pushWithFuture();
     }
 
@@ -46,10 +49,10 @@ public class GroupActivityExemptionService {
      *
      * @param scopeId      群组的区域 ID
      * @param userId       用户在平台中的 ID
-     * @param durationInMs 豁免的持续时间。毫秒。
+     * @param duration     豁免持续时长
      */
-    public void add(String scopeId, String userId, long durationInMs) {
-        addWithFuture(scopeId, userId, durationInMs).finish();
+    public void add(String scopeId, String userId, Duration duration) {
+        addWithFuture(scopeId, userId, duration).finish();
     }
 
     /**
@@ -70,14 +73,21 @@ public class GroupActivityExemptionService {
      *
      * @return 是否在豁免名单中
      */
-    public boolean isExempted(String scopeId, String userId, long currentTimeInMs) {
+    public boolean isExempted(String scopeId, String userId, Instant currentTime) {
         // 尝试查找，如果没找到则返回 false
-        Long exemptionTime = getDto().get(getKey(scopeId, userId), Long.class);
-        if (exemptionTime == null) {
+        var storedValue = getDto().get(getKey(scopeId, userId));
+        if (storedValue == null) {
             return false;
         }
+        Instant exemptionTime;
+        try {
+            exemptionTime = Instant.parse(storedValue);
+        } catch (RuntimeException ignored) {
+            // 兼容旧版本写入的毫秒时间戳。
+            exemptionTime = Instant.ofEpochMilli(Long.parseLong(storedValue));
+        }
         // 判断是否已经过期
-        if (exemptionTime < currentTimeInMs) {
+        if (exemptionTime.isBefore(currentTime)) {
             // 已过期，删除该豁免名单
             remove(scopeId, userId);
             return false;

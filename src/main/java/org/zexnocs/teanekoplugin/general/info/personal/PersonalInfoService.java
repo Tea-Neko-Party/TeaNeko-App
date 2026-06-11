@@ -6,6 +6,7 @@ import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import org.zexnocs.teanekoplugin.general.info.InfoService;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -47,7 +48,7 @@ public class PersonalInfoService {
         }
         var util = ChinaDateUtil.Instance;
         var dto = GeneralEasyData.of(InfoService.INFO_NAMESPACE).get(teaUser.toString());
-        var currentTime = System.currentTimeMillis();
+        var currentTime = Instant.now();
         var currentDate = util.convertToChinaDateTime(currentTime);
         // debug记录
         var debugData = DebugEasyData.of(DEBUG_NAMESPACE).get(teaUser.toString());

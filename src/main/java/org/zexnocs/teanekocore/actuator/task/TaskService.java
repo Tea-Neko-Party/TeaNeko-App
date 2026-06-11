@@ -17,6 +17,8 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheDataFactory;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -41,7 +43,7 @@ public class TaskService implements ITaskService {
                        ITaskExecuteService iTaskExecuteService,
                        ITaskRetryService iTaskRetryService) {
         this.taskMap = ConcurrentMapCacheContainer.of(iCacheService,
-                1000L,             // 清理间隔，1s
+                Duration.ofSeconds(1),             // 清理间隔，1s
                 new TaskCacheFactory(),         // CacheData 工厂
                 false);                         // 不参与自动清理
         this.logger = logger;
@@ -191,31 +193,31 @@ public class TaskService implements ITaskService {
 
         /**
          * 更新缓存的访问时间
-         * @param currentTimeMs 当前时间，单位毫秒
+         * @param currentTime 当前时间点
          */
         @Override
-        public void updateAccessTime(long currentTimeMs) {
+        public void updateAccessTime(Instant currentTime) {
             // 什么也不做，因为访问不会改变过期时间。
         }
 
         /**
          * 是否过期
-         * @param currentTimeMs 当前时间，单位毫秒
+         * @param currentTime 当前时间点
          * @return 是否过期
          */
         @Override
-        public boolean isExpired(long currentTimeMs) {
-            return task.isExpired(currentTimeMs);
+        public boolean isExpired(Instant currentTime) {
+            return task.isExpired(currentTime);
         }
 
         /**
          * 过期后任务将会以异常形式完成。
-         * @param currentTimeMs 用于传递当前的时间，单位毫秒
+         * @param currentTime 当前时间点
          * @param value         当前缓存的值，过期后可能需要进行一些清理或其他操作
          * @return 是否需要删除该缓存。返回 true 则会删除，返回 false 则不会删除。
          */
         @Override
-        public boolean onExpire(long currentTimeMs, ITask<?> value) {
+        public boolean onExpire(Instant currentTime, ITask<?> value) {
             // 以异常的形式完成任务
             try {
                 var e = new TaskExpirationException("任务过期：" + task.getConfig().getName());

@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.llm.framework.response.interfaces;
 
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 
@@ -36,11 +37,11 @@ public interface ILLMResult {
     String getObject();
 
     /**
-     * 时间戳，单位为秒
+     * 响应创建时间点
      *
-     * @return long
+     * @return 响应创建时间点
      */
-    long getCreated();
+    Instant getCreated();
 
     /**
      * 生成该 completion 所使用的模型

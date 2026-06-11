@@ -14,6 +14,7 @@ import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -54,7 +55,7 @@ public class TimerService implements ITimerService {
     @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}")
     public void timerLoop() {
         // 获得当前的时间戳。
-        long now = System.currentTimeMillis();
+        var now = Instant.now();
 
         // 遍历所有定时器，更新它们的状态。
         List<ITimer<?>> copy = new ArrayList<>(timers);

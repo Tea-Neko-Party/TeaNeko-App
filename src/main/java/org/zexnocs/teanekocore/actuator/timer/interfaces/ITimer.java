@@ -3,6 +3,8 @@ package org.zexnocs.teanekocore.actuator.timer.interfaces;
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 
+import java.time.Instant;
+
 /**
  * Timer 任务的配置接口，用于周期性地根据 taskConfig 来生成 task。
  * 执行顺序是 isTime → update → execute。
@@ -22,16 +24,16 @@ public interface ITimer<T> {
     /**
      * 判断是否到了执行时间。
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      * @return 是否到了执行时间。
      */
-    boolean isTime(long currentTime);
+    boolean isTime(Instant currentTime);
 
     /**
      * 每次执行成功时更新定时器的状态
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      */
-    void update(long currentTime);
+    void update(Instant currentTime);
 
     /**
      * 使用 iTaskService 来执行任务。

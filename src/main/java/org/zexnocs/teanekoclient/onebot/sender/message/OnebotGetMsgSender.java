@@ -21,10 +21,10 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -95,7 +95,7 @@ public class OnebotGetMsgSender extends AbstractOnebotSender<GetMessageSendParam
                     };
                     return new TaskResult<>(true,
                             TeaNekoMessageData.builder()
-                                    .time(ChinaDateUtil.Instance.convertToChinaZonedDateTime(data.getTime() * 1000L))
+                                    .time(Instant.ofEpochSecond(data.getTime()))
                                     .messageId(messageId)
                                     .messages(data.getMessage())
                                     .messageType(messageType)

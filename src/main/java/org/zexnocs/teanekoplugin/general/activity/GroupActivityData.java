@@ -3,6 +3,8 @@ package org.zexnocs.teanekoplugin.general.activity;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.time.Instant;
+
 /**
  * 支持解析成表达式的活跃度数据
  *
@@ -35,10 +37,10 @@ public class GroupActivityData {
     private final String title;
 
     /// 实际加入时间的时间戳 (ms)
-    private final long joinTimeMs;
+    private final Instant joinTime;
 
     /// 实际上次说话的时间戳 (ms)
-    private final long lastSpeakTimeMs;
+    private final Instant lastSpeakTime;
 
     /**
      * 获取一个 fake data
@@ -46,7 +48,7 @@ public class GroupActivityData {
      * @return fake data
      */
     public static GroupActivityData getFakeData() {
-        var currentTime = System.currentTimeMillis();
+        var currentTime = Instant.now();
         return builder()
                 .nickname("user")
                 .card("group_member")
@@ -54,8 +56,8 @@ public class GroupActivityData {
                 .speak(10)
                 .level(20)
                 .hasTitle(true)
-                .joinTimeMs(currentTime)
-                .lastSpeakTimeMs(currentTime)
+                .joinTime(currentTime)
+                .lastSpeakTime(currentTime)
                 .title("title")
                 .build();
     }

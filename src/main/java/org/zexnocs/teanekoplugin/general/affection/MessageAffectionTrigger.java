@@ -13,6 +13,7 @@ import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.utils.RandomUtil;
 import org.zexnocs.teanekoplugin.general.affection.interfaces.IAffectionService;
 
+import java.time.Duration;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.Map;
@@ -58,11 +59,11 @@ public class MessageAffectionTrigger {
                                    IAffectionService iAffectionService, ITeaUserService iTeaUserService) {
         // 10 分钟过期，不参与手动清理
         this.messageCache = ConcurrentMapCacheContainer.of(iCacheService,
-                10 * 60_000L,
+                Duration.ofMinutes(10),
                 false);
         // 2 小时过期，不参与手动清理
         this.energyCache = ConcurrentMapCacheContainer.of(iCacheService,
-                2 * 60 * 60_000L,
+                Duration.ofHours(2),
                 false);
 
         this.randomUtil = randomUtil;
@@ -201,7 +202,7 @@ public class MessageAffectionTrigger {
     /// 根据位置和势能计算成功概率
     private double _calculateProbability(int position, double energy) {
         // 基础成功概率: P_base = 1 / E[X]
-        double P_base = Math.min(0.999999, Math.max(1e-6, 1.0 / _expectedTimes(position)));
+        double P_base = Math.clamp(1.0 / _expectedTimes(position), 1e-6, 0.999999);
         // 使用有界增长方法计算实际成功概率
         double offset = Math.log(P_base / (1.0 - P_base));
         double growth = _shiftedSigmoid(PROBABILITY_GROWTH_SENSITIVITY * energy, offset);

@@ -8,7 +8,7 @@ import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
-import java.time.LocalDateTime;
+import java.time.Instant;
 
 /**
  * 固定时间点计时器。
@@ -46,8 +46,8 @@ public class CronTimer<T> implements ITimer<T>  {
     /// Cron 表达式。
     private final CronExpression cron;
 
-    /// 下次触发时间戳（毫秒）。
-    private long nextTriggerTime;
+    /// 下次触发时间点。
+    private Instant nextTriggerTime;
 
     /// result type
     @Getter
@@ -64,7 +64,7 @@ public class CronTimer<T> implements ITimer<T>  {
                      @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;
         this.cron = CronExpression.parse(cronExpression);
-        this.nextTriggerTime = ChinaDateUtil.Instance.getNextTriggerTime(cron, LocalDateTime.now());
+        this.nextTriggerTime = ChinaDateUtil.Instance.getNextTriggerTime(cron, Instant.now());
         this.resultType = resultType;
     }
 
@@ -81,21 +81,21 @@ public class CronTimer<T> implements ITimer<T>  {
     /**
      * 判断是否到了执行时间。
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      * @return 是否到了执行时间。
      */
     @Override
-    public boolean isTime(long currentTime) {
-        return currentTime >= nextTriggerTime;
+    public boolean isTime(Instant currentTime) {
+        return !currentTime.isBefore(nextTriggerTime);
     }
 
     /**
      * 每次执行成功时更新定时器的状态
      *
-     * @param currentTime 当前时间戳（毫秒）。
+     * @param currentTime 当前时间点。
      */
     @Override
-    public void update(long currentTime) {
+    public void update(Instant currentTime) {
         this.nextTriggerTime = ChinaDateUtil.Instance.getNextTriggerTime(cron, currentTime);
     }
 

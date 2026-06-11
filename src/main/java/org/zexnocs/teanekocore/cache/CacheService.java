@@ -10,6 +10,7 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,8 +29,8 @@ public class CacheService implements ICacheService {
     /// 定时器服务
     private final ITimerService iTimerService;
 
-    /// 清理缓存的时间间隔（毫秒）
-    private final long cleanCacheIntervalMs;
+    /// 清理缓存的时间间隔
+    private final Duration cleanCacheInterval;
 
     /// 缓存列表
     private final Set<ICacheContainer> cacheMap = ConcurrentHashMap.newKeySet();
@@ -37,7 +38,7 @@ public class CacheService implements ICacheService {
     @Autowired
     public CacheService(ITimerService iTimerService,
                         @Value("${tea-neko.cache.general-clean-rate-ms:1000}") long cleanCacheIntervalMs) {
-        this.cleanCacheIntervalMs = cleanCacheIntervalMs;
+        this.cleanCacheInterval = Duration.ofMillis(cleanCacheIntervalMs);
         this.iTimerService = iTimerService;
     }
 
@@ -47,7 +48,7 @@ public class CacheService implements ICacheService {
                 "CacheService-清理缓存任务",
                 CLEAN_CACHE_TASK_NAMESPACE,
                 this::cleanCacheTask,
-                Duration.ofMillis(cleanCacheIntervalMs),
+                cleanCacheInterval,
                 EmptyTaskResult.getResultType());
     }
 
@@ -57,9 +58,9 @@ public class CacheService implements ICacheService {
      * @return emptyTaskResult
      */
     public EmptyTaskResult cleanCacheTask() {
-        long currentTimeMs = System.currentTimeMillis();
+        var currentTime = Instant.now();
         for (ICacheContainer cache : cacheMap) {
-            cache.autoClean(currentTimeMs);
+            cache.autoClean(currentTime);
         }
         return EmptyTaskResult.INSTANCE;
     }

@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequiredArgsConstructor
 public class GroupActivityPunishService {
     /// 惩罚的豁免时间。
-    private final static long EXEMPTION_TIME = Duration.ofDays(7).toMillis();
+    private final static Duration EXEMPTION_TIME = Duration.ofDays(7);
 
     /// 惩罚的 cache，scopeID → (userID → punish value)
     @Getter

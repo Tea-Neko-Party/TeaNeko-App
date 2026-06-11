@@ -17,11 +17,12 @@ import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
+import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 import org.zexnocs.teanekoplugin.general.servant.GroupSeniorServantRule;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -133,10 +134,8 @@ public class GroupRequestReviewService {
                 """, userId, invitorId == 0 ? "无" : invitorId));
         var info = value.strangerInfo;
         if(info != null) {
-            var date = new Date(info.getRegTime() * 1000);
-            var sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            sdf.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
-            String regTimeStr = sdf.format(date);
+            var regTimeStr = ChinaDateUtil.Instance.convertToDateTimeString(
+                    Instant.ofEpochSecond(info.getRegTime()));
             builder.addImage(AvatarUtils.Instance.getUrl(userId))
                     .addText(String.format("""
                             昵称: %s
@@ -267,7 +266,7 @@ public class GroupRequestReviewService {
         private final int requestRejectNum;
 
         /// 创建时间
-        private final long createTime = System.currentTimeMillis();
+        private final Instant createTime = Instant.now();
 
         /// 请求数据
         private final GroupRequestData requestData;
@@ -300,7 +299,7 @@ public class GroupRequestReviewService {
          * @return 是否过期
          */
         public boolean isExpired() {
-            return System.currentTimeMillis() - createTime > 48 * 60 * 60 * 1000;
+            return Instant.now().isAfter(createTime.plus(Duration.ofHours(48)));
         }
 
         /**

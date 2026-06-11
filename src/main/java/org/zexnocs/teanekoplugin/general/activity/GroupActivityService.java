@@ -17,6 +17,7 @@ import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -61,10 +62,10 @@ public class GroupActivityService {
      */
     @Nullable
     public TaskFuture<Map<String, Pair<GroupActivityData, GroupActivityRule>>> scanWithFuture(String scopeId) throws ConfigDataNotFoundException {
-        long currentTimeMs = System.currentTimeMillis();
+        var currentTime = Instant.now();
         var activityMap = activityDataMap.computeIfAbsent(scopeId, _ -> new ConcurrentHashMap<>());
         synchronized (activityMap) {
-            return _scan(scopeId, currentTimeMs, activityMap);
+            return _scan(scopeId, currentTime, activityMap);
         }
     }
 
@@ -77,7 +78,7 @@ public class GroupActivityService {
      */
     @Nullable
     public TaskFuture<Map<String, Pair<GroupActivityData, GroupActivityRule>>> _scan(String scopeId,
-                      long currentTimeMs,
+                      Instant currentTime,
                       Map<String, Pair<GroupActivityData, GroupActivityRule>> map)
             throws ConfigDataNotFoundException {
         map.clear();
@@ -105,7 +106,7 @@ public class GroupActivityService {
 
         // 开始扫描
         return tools.getGroupMemberListSender().get(groupId)
-                .thenAccept(list -> processList(list, scopeId, currentTimeMs, rules, map))
+                .thenAccept(list -> processList(list, scopeId, currentTime, rules, map))
                 .thenApply(_ -> {
                     for(var monitorGroupId : config.getGroups()) {
                         tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
@@ -120,21 +121,22 @@ public class GroupActivityService {
      */
     private void processList(List<? extends IGroupMemberResponseData> list,
                              String scopeId,
-                             long currentTimeMs,
+                             Instant currentTime,
                              List<GroupActivityRule> rules,
                              Map<String, Pair<GroupActivityData, GroupActivityRule>> map) {
         for (var member : list) {
             // 如果 member 在豁免名单中，则跳过
-            if (groupActivityExemptionService.isExempted(scopeId, member.getUserId(), currentTimeMs)) {
+            if (groupActivityExemptionService.isExempted(scopeId, member.getUserId(), currentTime)) {
                 continue;
             }
             // 构造信息
-            long joinTimeMs = member.getJoinTimeMs() == null ? 0 : member.getJoinTimeMs();
-            long lastSpeakTimeMs = member.getLastSentTimeMs() == null ? 0 : member.getLastSentTimeMs();
-            int joinTime = member.getJoinTimeMs() == null ? 0 :
-                    Math.toIntExact(Duration.ofMillis(currentTimeMs - member.getJoinTimeMs()).toDays());
-            int speak = member.getLastSentTimeMs() == null ? 0 :
-                    Math.toIntExact(Duration.ofMillis(currentTimeMs - member.getLastSentTimeMs()).toDays());
+            var joinInstant = member.getJoinInstant() == null ? Instant.EPOCH : member.getJoinInstant();
+            var lastSpeakInstant = member.getLastSentInstant() == null
+                    ? Instant.EPOCH : member.getLastSentInstant();
+            int joinTime = member.getJoinInstant() == null ? 0 :
+                    Math.toIntExact(Duration.between(joinInstant, currentTime).toDays());
+            int speak = member.getLastSentInstant() == null ? 0 :
+                    Math.toIntExact(Duration.between(lastSpeakInstant, currentTime).toDays());
             var data = GroupActivityData.builder()
                     .nickname(member.getNickname())
                     .card(member.getCard())
@@ -142,8 +144,8 @@ public class GroupActivityService {
                     .speak(speak)
                     .level(member.getLevel() == null ? 0 : member.getLevel())
                     .hasTitle(member.getTitle() != null)
-                    .joinTimeMs(joinTimeMs)
-                    .lastSpeakTimeMs(lastSpeakTimeMs)
+                    .joinTime(joinInstant)
+                    .lastSpeakTime(lastSpeakInstant)
                     .title(member.getTitle())
                     .build();
             // 开始检测

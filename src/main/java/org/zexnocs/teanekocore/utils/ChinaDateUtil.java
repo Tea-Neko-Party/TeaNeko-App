@@ -38,6 +38,16 @@ public enum ChinaDateUtil {
     }
 
     /**
+     * 将时间点转换为中国时区的日期。
+     *
+     * @param instant 时间点
+     * @return 中国时区日期
+     */
+    public LocalDate convertToChinaDate(Instant instant) {
+        return instant.atZone(zoneId).toLocalDate();
+    }
+
+    /**
      * 根将毫秒时间转换为带有时分秒的中国日期。
      *
      * @param millis 毫秒时间
@@ -45,6 +55,16 @@ public enum ChinaDateUtil {
      */
     public LocalDateTime convertToChinaDateTime(long millis) {
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(millis), zoneId);
+    }
+
+    /**
+     * 将时间点转换为中国时区的本地日期时间，仅用于展示和日历计算。
+     *
+     * @param instant 时间点
+     * @return 中国时区本地日期时间
+     */
+    public LocalDateTime convertToChinaDateTime(Instant instant) {
+        return LocalDateTime.ofInstant(instant, zoneId);
     }
 
 
@@ -99,6 +119,16 @@ public enum ChinaDateUtil {
      */
     public String convertToDateTimeString(long millis) {
         return convertToString(convertToChinaDateTime(millis));
+    }
+
+    /**
+     * 将时间点格式化为中国时区的人类可读日期时间。
+     *
+     * @param instant 时间点
+     * @return {@code yyyy-MM-dd HH:mm:ss} 格式字符串
+     */
+    public String convertToDateTimeString(Instant instant) {
+        return convertToString(convertToChinaDateTime(instant));
     }
 
     /**
@@ -157,6 +187,18 @@ public enum ChinaDateUtil {
      */
     public long getNextTriggerTime(CronExpression cron, long millis) {
         return getNextTriggerTime(cron, convertToChinaZonedDateTime(millis));
+    }
+
+    /**
+     * 计算指定时间点之后的下一次 Cron 触发时间。
+     *
+     * @param cron Cron 表达式
+     * @param instant 起始时间点
+     * @return 下一次触发时间；不存在后续触发时间时返回 {@link Instant#MAX}
+     */
+    public Instant getNextTriggerTime(CronExpression cron, Instant instant) {
+        var next = cron.next(instant.atZone(zoneId));
+        return next == null ? Instant.MAX : next.toInstant();
     }
 
     /**

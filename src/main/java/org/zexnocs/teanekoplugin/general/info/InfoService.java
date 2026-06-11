@@ -72,10 +72,10 @@ public class InfoService {
                                     .send();
                             return;
                         }
-                        var joinTime = r.getJoinTimeMs() == null ?
-                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getJoinTimeMs());
-                        var lastSpeakTime = r.getLastSentTimeMs() == null ?
-                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getLastSentTimeMs());
+                        var joinTime = r.getJoinInstant() == null ?
+                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getJoinInstant());
+                        var lastSpeakTime = r.getLastSentInstant() == null ?
+                                "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getLastSentInstant());
                         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
                                 .addReply(data.getMessageId())
                                 .addText(String.format("""

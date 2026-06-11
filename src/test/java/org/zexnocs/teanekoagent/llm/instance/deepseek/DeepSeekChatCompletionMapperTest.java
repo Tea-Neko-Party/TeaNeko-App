@@ -7,6 +7,7 @@ import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
@@ -141,6 +142,29 @@ class DeepSeekChatCompletionMapperTest {
 
         var mappedMessage = result.getFirstMessage().orElseThrow();
         Assertions.assertEquals("", mappedMessage.getName());
+    }
+
+    @Test
+    void toResultDoesNotExposeProviderReasoningAsAssistantContent() {
+        var response = new DeepSeekChatCompletionResponseData();
+        var choice = new DeepSeekChatCompletionResponseData.Choice();
+        var message = new DeepSeekChatCompletionResponseData.Message();
+        message.setRole("assistant");
+        message.setReasoningContent("private provider reasoning");
+        choice.setMessage(message);
+        response.setChoices(List.of(choice));
+
+        var result = DeepSeekChatCompletionMapper.toResult(response);
+        var mappedMessage = result.getFirstMessage().orElseThrow();
+        var mappedText = mappedMessage.getContents().stream()
+                .map(ILLMContent::getContentPart)
+                .filter(TextLLMContentPart.class::isInstance)
+                .map(TextLLMContentPart.class::cast)
+                .map(TextLLMContentPart::getText)
+                .findFirst()
+                .orElse("");
+
+        Assertions.assertEquals("", mappedText);
     }
 
     private static List<ILLMContent> text(String text) {

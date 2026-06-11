@@ -40,6 +40,9 @@
 | `StringUtils.Instance.isValidUrl(url)` | 判断 URL 是否匹配项目内的基础 URL 正则。 |
 | `ChinaDateUtil.Instance.convertToDateString(millis)` | 毫秒时间戳转 `yyyy-MM-dd`。 |
 | `ChinaDateUtil.Instance.convertToDateTimeString(millis)` | 毫秒时间戳转 `yyyy-MM-dd HH:mm:ss`。 |
+| `ChinaDateUtil.Instance.convertToChinaDate(instant)` | 将 `Instant` 转为中国时区的日历日期。 |
+| `ChinaDateUtil.Instance.convertToDateTimeString(instant)` | 将 `Instant` 格式化为中国时区的人类可读时间。 |
+| `ChinaDateUtil.Instance.getNextTriggerTime(cron, instant)` | 返回下一次 Cron 触发的 `Instant`。 |
 | `ChinaDateUtil.Instance.getNextTriggerTime(cron, millis)` | 获取 Cron 表达式在指定时间后的下一次触发时间。 |
 | `ExceptionUtils.instance.buildExceptionMessage(throwable)` | 构造完整异常文本。 |
 | `ObjectFieldUtil.instance.setFieldValue(objectMapper, obj, field, value)` | 将字符串解析为字段类型并写入对象。 |

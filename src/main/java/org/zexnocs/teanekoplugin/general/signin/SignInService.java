@@ -20,6 +20,7 @@ import org.zexnocs.teanekoplugin.general.signin.data.SignInData;
 import org.zexnocs.teanekoplugin.general.signin.data.SignInRecordData;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.LinkedList;
 import java.util.List;
@@ -87,14 +88,14 @@ public class SignInService {
      * 线性安全的签到
      *
      * @param userId 用户 ID
-     * @param nowMs  当前时间戳（毫秒）
+     * @param now    当前时间点
      * @param sender 消息发送器
      */
-    public void signIn(UUID userId, long nowMs, @Nullable IEasyMessageSenderBuilder sender) {
+    public void signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
         var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
         lock.lock();
         try {
-            __signIn(userId, nowMs, sender);
+            __signIn(userId, now, sender);
         } finally {
             lock.unlock();
         }
@@ -104,12 +105,12 @@ public class SignInService {
      * 签到
      *
      * @param userId 用户 ID
-     * @param nowMs  当前时间戳（毫秒）
+     * @param now    当前时间点
      * @param sender 消息发送器
      */
-    public void __signIn(UUID userId, long nowMs, @Nullable IEasyMessageSenderBuilder sender) {
+    public void __signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
         // 获取当前时间和日期
-        var currentDate = ChinaDateUtil.Instance.convertToChinaDate(nowMs);
+        var currentDate = ChinaDateUtil.Instance.convertToChinaDate(now);
 
         // 获取用户的签到数据
         var target = GeneralEasyData.of(NAMESPACE).get(userId.toString());
@@ -128,17 +129,17 @@ public class SignInService {
         int coin = calculateCoin(currentDate, luckyNumber);
         // 获取当前连续签到天数
         var chunks = new LinkedList<>(target.getList(SignInChunkData.KEY, SignInChunkData.class));
-        int continuous = updateChunks(chunks, currentDate, nowMs);
+        int continuous = updateChunks(chunks, currentDate, now);
         // 构建新的签到数据和签到记录
-        var newData = buildNewSignInData(data, nowMs, luckyNumber, continuous);
-        var record = buildRecord(nowMs, luckyNumber, coin);
+        var newData = buildNewSignInData(data, now, luckyNumber, continuous);
+        var record = buildRecord(now, luckyNumber, coin);
         // 更新数据库
         pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate)
                 .pushWithFuture()
                 .thenAccept(r -> {
                     if(sender != null) {
                         sender.sendAtReplyMessage(
-                                buildSuccessMessage(currentDate, nowMs, luckyNumber,
+                                buildSuccessMessage(currentDate, now, luckyNumber,
                                         coin, continuous, newData.getTotalDays())
                         );
                     }
@@ -155,7 +156,7 @@ public class SignInService {
         return target.get(SignInData.KEY,
                 SignInData.builder()
                         .totalDays(0)
-                        .lastTimeMs(0)
+                        .lastTime(Instant.EPOCH)
                         .lastNumber(0)
                         .continuousDays(0)
                         .build());
@@ -172,7 +173,7 @@ public class SignInService {
     private String checkRepeatSignIn(UUID userId,
                                      LocalDate currentDate,
                                      SignInData data) {
-        var lastDate = ChinaDateUtil.Instance.convertToChinaDate(data.getLastTimeMs());
+        var lastDate = ChinaDateUtil.Instance.convertToChinaDate(data.getLastTime());
         // 使用缓存来判断用户是否已经签到过了，如果 put 返回的不是 null，说明用户之前已经签到过了。
         if (todaySignInSet.put(userId, true) != null) {
             // 如果用户上次签到的日期不是今天，说明数据库还没更新，用户签到过快。
@@ -239,18 +240,18 @@ public class SignInService {
      */
     private int updateChunks(List<SignInChunkData> chunks,
                              LocalDate currentDate,
-                             long now) {
+                             Instant now) {
         int continuous = 1;
         if (!chunks.isEmpty()) {
             var last = chunks.getLast();
             if (currentDate.minusDays(1)
-                    .isEqual(ChinaDateUtil.Instance.convertToChinaDate(last.getLastTimeMs()))) {
+                    .isEqual(ChinaDateUtil.Instance.convertToChinaDate(last.getLastTime()))) {
                 continuous = last.getContinuous() + 1;
                 chunks.removeLast();
             }
         }
         chunks.addLast(SignInChunkData.builder()
-                .lastTimeMs(now)
+                .lastTime(now)
                 .continuous(continuous)
                 .build());
         return continuous;
@@ -266,13 +267,13 @@ public class SignInService {
      * @return {@link SignInData } 签到数据
      */
     private SignInData buildNewSignInData(SignInData data,
-                                          long now,
+                                          Instant now,
                                           int luckyNumber,
                                           int continuous) {
 
         return data.toBuilder()
                 .totalDays(data.getTotalDays() + 1)
-                .lastTimeMs(now)
+                .lastTime(now)
                 .lastNumber(luckyNumber)
                 .continuousDays(continuous)
                 .build();
@@ -286,7 +287,7 @@ public class SignInService {
      * @param coin 获得的猫猫币数量
      * @return {@link SignInRecordData }
      */
-    private SignInRecordData buildRecord(long now,
+    private SignInRecordData buildRecord(Instant now,
                                          int luckyNumber,
                                          int coin) {
 
@@ -330,7 +331,7 @@ public class SignInService {
      *
      */
     private String buildSuccessMessage(LocalDate date,
-                                       long now,
+                                       Instant now,
                                        int luckyNumber,
                                        int coin,
                                        int continuous,

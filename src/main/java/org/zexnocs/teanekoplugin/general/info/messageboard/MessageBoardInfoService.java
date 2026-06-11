@@ -5,6 +5,7 @@ import org.zexnocs.teanekocore.database.easydata.debug.DebugEasyData;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -55,8 +56,8 @@ public class MessageBoardInfoService {
             return "留言信息过长，最大长度为" + MAXIMUM_LENGTH + "个字符";
         }
         var util = ChinaDateUtil.Instance;
-        var currentTime = System.currentTimeMillis();
-        var timeInfo = util.convertToString(util.convertToChinaDateTime(currentTime));
+        var currentTime = Instant.now();
+        var timeInfo = util.convertToDateTimeString(currentTime);
         var dto = GeneralEasyData.of(DATABASE_NAMESPACE).get(target.toString());
         var debugDto = DebugEasyData.of(DEBUG_NAMESPACE).get(target.toString());
         // 设置留言信息

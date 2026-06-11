@@ -5,6 +5,7 @@ import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException
 import org.zexnocs.teanekocore.actuator.task.state.ITaskState;
 import org.zexnocs.teanekocore.framework.state.IStateMachine;
 
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -64,10 +65,11 @@ public interface ITask<T> extends IStateMachine<ITaskState> {
 
     /**
      * 判断是否过期，过期任务将会以异常的形式完成。
-     * @param currentTimeInMillis 当前时间的毫秒数
+     *
+     * @param currentTime 当前时间戳
      * @return true 表示过期；false 表示未过期
      */
-    boolean isExpired(long currentTimeInMillis);
+    boolean isExpired(Instant currentTime);
 
     /**
      * 设置任务执行的线程 Future，用于观察或者取消任务执行。

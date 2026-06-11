@@ -8,6 +8,8 @@ import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.framework.description.Description;
 
+import java.time.Instant;
+
 /**
  * 签到指令。
  *
@@ -27,6 +29,6 @@ public class SignInCommand {
     public void signIn(CommandData<ITeaNekoMessageData> data) {
         var messageData = data.getRawData();
         signInService.signIn(messageData.getUserData().getUuid(),
-                System.currentTimeMillis(), messageData.getMessageSender());
+                Instant.now(), messageData.getMessageSender());
     }
 }
