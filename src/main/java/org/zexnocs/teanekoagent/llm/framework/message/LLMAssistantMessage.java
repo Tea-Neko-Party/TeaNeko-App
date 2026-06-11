@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoagent.llm.framework.message;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -24,6 +25,7 @@ import java.util.List;
 @NoArgsConstructor
 public class LLMAssistantMessage extends AbstractLLMMessage implements ILLMAssistantMessage {
     /// tool call list
+    @Builder.Default
     @JsonProperty("tool_calls")
     private List<ILLMToolCall> toolCalls = List.of();
 }

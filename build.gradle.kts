@@ -8,9 +8,9 @@ import java.time.LocalDate
 // ========= 插件 =========
 plugins {
     java                                                    // 基础插件
-    id("org.springframework.boot") version "4.0.3"          // spring boot 插件
+    id("org.springframework.boot") version "4.1.0"          // spring boot 插件
     id("io.spring.dependency-management") version "1.1.7"   // spring 依赖管理插件
-    id("com.github.ben-manes.versions") version "0.53.0"    // gradle version 插件
+    id("com.github.ben-manes.versions") version "0.54.0"    // gradle version 插件
     id("se.bjurr.gitchangelog.git-changelog-gradle-plugin") version "3.1.2" // 根据 git 自动写入 changelog
 }
 val springAiVersion by extra("2.0.0-M3")
@@ -72,8 +72,6 @@ dependencies {
     // testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    testCompileOnly("org.projectlombok:lombok")
-    testAnnotationProcessor("org.projectlombok:lombok")
 }
 
 // ========= 主类配置 =========

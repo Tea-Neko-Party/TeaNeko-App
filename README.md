@@ -9,8 +9,8 @@
 
 <!-- 技术栈 -->
 <img src="https://img.shields.io/badge/Java-25-orange" alt="Java 25">
-<img src="https://img.shields.io/badge/Spring_Boot-4.0.3-brightgreen" alt="Spring Boot 4.0.3">
-<img src="https://img.shields.io/badge/Gradle-9.3.0-02303A" alt="Gradle 9.3.0">
+<img src="https://img.shields.io/badge/Spring_Boot-4.0.3-brightgreen" alt="Spring Boot 4.1.0">
+<img src="https://img.shields.io/badge/Gradle-9.3.0-02303A" alt="Gradle 9.5.0">
 
 </p>
 
