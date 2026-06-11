@@ -87,17 +87,17 @@ ILLMResult result = resultFuture.finish().join();
 
 ## 3.1 文件配置默认 Options
 
-LLM 默认模型和默认 options 不应写死在代码中。框架会读取 `config/llm/main-config.yml`，并按下面顺序合并 options：
+LLM 默认 options 不应写死在代码中。框架会优先读取 `config/agent/model.yml`，并按下面顺序合并 options：
 
 ```text
 模型代码默认 options
-    -> config/llm/main-config.yml 中对应模型适配器 ID 的默认 options
+    -> config/agent/model.yml 中对应模型适配器 ID 的默认 options
     -> 本次 prompt.getOptions()
 ```
 
 调用方没有指定 options 时，会使用文件配置中的默认 options；调用方只指定部分 options 时，未指定字段继续沿用文件配置或代码默认值。
 
-`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `default-model-id`：
+`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `config/agent/main-config.yml` 中的 `default-model-id`：
 
 ```java
 var result = llmModelService.call(new LLMPrompt(messages))
@@ -105,10 +105,15 @@ var result = llmModelService.call(new LLMPrompt(messages))
         .join();
 ```
 
-文件配置示例：
+Agent 主配置示例：
 
 ```yaml
 default-model-id: "deepseek"
+```
+
+模型默认参数配置示例：
+
+```yaml
 
 models:
   - id: "deepseek"
@@ -358,9 +363,9 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 
 # 七. 模型适配器 ID 映射
 
-每个模型 Bean 注册到 `LLMModelService` 时，ID 都是供应商级 ID，通常与 provider 相同。具体模型名称由模型实现中的默认 `model`、`config/llm/main-config.yml` 的 `models[].model` 或本次 prompt options 覆盖。
+每个模型 Bean 注册到 `LLMModelService` 时，ID 都是供应商级 ID，通常与 provider 相同。具体模型名称由模型实现中的默认 `model`、`config/agent/model.yml` 的 `models[].model` 或本次 prompt options 覆盖。
 
-新增供应商或新增模型适配器时，需要在这里维护映射，方便 `config/llm/main-config.yml` 正确引用。
+新增供应商或新增模型适配器时，需要在这里维护映射，方便 `config/agent/model.yml` 正确引用。
 
 | Provider | 默认 Model | 注册 ID | 说明 |
 |---|---|---|---|

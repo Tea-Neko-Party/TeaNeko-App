@@ -8,6 +8,7 @@
 | `AgentModelCallEvent` / `AgentModelCallData` | 单次模型调用事件，默认执行 `LLMModelService.call(prompt)`。 |
 | `AgentToolCallEvent` / `AgentToolCallData` | 单次工具调用事件，默认执行 `AgentToolRegistryService.call(toolCall)`。 |
 | `AgentOutboundMessageEvent` / `AgentOutboundMessageData` | 出站消息生成事件，默认不执行额外动作。 |
+| `AgentTokenWarningEvent` / `AgentTokenWarningData` | token 告警事件，在 token 监控器写 warn 日志前推送。 |
 
 # 二. 事件处理流程
 
@@ -19,7 +20,8 @@
 5. 默认运行时逻辑在每轮模型调用前推送 AgentModelCallEvent。
 6. 模型返回 tool_calls 时，逐个推送 AgentToolCallEvent。
 7. 生成可见回复后，推送 AgentOutboundMessageEvent。
-8. Runtime 从 AgentTurnData 中读取最终出站消息并返回。
+8. 单轮对话完成后，token 监控器在达到阈值时推送 AgentTokenWarningEvent。
+9. Runtime 从 AgentTurnData 中读取最终出站消息并返回。
 ```
 
 # 三. 事件 Key
@@ -30,6 +32,7 @@
 | `AgentModelCallEvent` | `teaneko-agent-model-call` | `teaneko-agent-runtime` |
 | `AgentToolCallEvent` | `teaneko-agent-tool-call` | `teaneko-agent-runtime` |
 | `AgentOutboundMessageEvent` | `teaneko-agent-outbound-message` | `teaneko-agent-runtime` |
+| `AgentTokenWarningEvent` | `teaneko-agent-token-warning` | `teaneko-agent-runtime` |
 
 # 四. 监听示例
 
@@ -52,6 +55,7 @@ public class AgentAuditListener {
 | `AgentModelCallEvent` | 跳过默认模型调用；如果 data 中没有 result，本轮运行会停止。 |
 | `AgentToolCallEvent` | 跳过默认工具调用；如果 data 中没有 result，会写入 `Tool execution cancelled.`。 |
 | `AgentOutboundMessageEvent` | Runtime 会读取 data 中的 outboundMessage；监听器可设为 `null` 来取消回复。 |
+| `AgentTokenWarningEvent` | 不影响本轮返回；事件处理完成后 token 监控器仍会写入 warn 日志。 |
 
 # 六. 注意事项
 

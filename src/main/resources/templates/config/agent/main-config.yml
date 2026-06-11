@@ -1,0 +1,7 @@
+---
+# --- Agent 主配置 ---
+
+# 默认模型适配器 ID
+# 该 ID 用于 Agent 在本次 Prompt 没有指定 provider 时选择模型适配器
+# 为空字符串表示不设置默认模型，调用方必须在 Prompt options 或作用域配置中指定模型适配器
+default-model-id: ""

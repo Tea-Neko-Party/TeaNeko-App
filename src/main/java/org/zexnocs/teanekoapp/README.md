@@ -26,27 +26,46 @@
 # 三. 主流程
 
 ```mermaid
-flowchart LR
-    A["外部平台消息"] --> B["client: IClient.handle"]
-    B --> C["message: TeaNekoMessageReceiveEvent"]
-    C --> D["command: TeaNekoCommandReceiver"]
-    D --> E["teanekocore command dispatcher"]
-    E --> F["sender: IEasyMessageSenderBuilder"]
-    F --> G["sender: SenderService"]
-    G --> H["event: SentEvent"]
-    H --> I["client: IClient.send"]
-    I --> J["外部平台响应"]
-    J --> K["response: ResponseEvent"]
-    K --> L["response: ResponseService"]
-    L --> M["actuator: TaskFuture"]
+flowchart TB
+    subgraph RECEIVE["接收与分发"]
+        direction LR
+        A["外部平台消息"] --> B["client: IClient.handle"]
+        B --> C["message: TeaNekoMessageReceiveEvent"]
+        C --> D["command: TeaNekoCommandReceiver"]
+        D --> E["teanekocore command dispatcher"]
+    end
+
+    subgraph SEND["发送链路"]
+        direction LR
+        F["sender: IEasyMessageSenderBuilder"] --> G["sender: SenderService"]
+        G --> H["event: SentEvent"]
+        H --> I["client: IClient.send"]
+    end
+
+    subgraph RESPONSE["响应回填"]
+        direction LR
+        J["外部平台响应"] --> K["response: ResponseEvent"]
+        K --> L["response: ResponseService"]
+        L --> M["actuator: TaskFuture"]
+    end
+
+    E --> F
+    I --> J
 ```
 
 # 四. 阅读顺序
 
-1. 先读 [client/README.md](client/README.md)，了解平台适配器如何接入。
-2. 再读 [message/README.md](message/README.md)，了解消息数据在应用层的统一结构。
-3. 然后读 [sender/README.md](sender/README.md) 和 [response/README.md](response/README.md)，理解发送请求与异步响应如何通过 `echo` 和 `TaskFuture` 对接。
-4. 最后读 [command/README.md](command/README.md)、[config/README.md](config/README.md) 和 [teauser/README.md](teauser/README.md)，了解上层业务能力。
+| 顺序 | 导航 | 说明 |
+|---|---|---|
+| $1$ | [client/README.md](client/README.md) | 平台适配器如何接入、客户端如何注册和暴露工具箱能力。 |
+| $2$ | [message/README.md](message/README.md) | 消息数据、内容片段、接收事件和消息扫描机制。 |
+| $3$ | [sender/README.md](sender/README.md) | 发送数据模型、发送器注册、发送事件和 easy sender builder。 |
+| $4$ | [response/README.md](response/README.md) | 发送请求与异步响应如何通过 `echo` 和 `TaskFuture` 对接。 |
+| $5$ | [command/README.md](command/README.md) | 应用层如何把消息转换为 core 命令并提供内置命令。 |
+| $6$ | [config/README.md](config/README.md) | 聊天作用域配置命令、配置 namespace 和配置 key 约定。 |
+| $7$ | [teauser/README.md](teauser/README.md) | TeaNeko 用户 UUID、平台用户 ID 映射和用户数据入口。 |
+| $8$ | [utils/README.md](utils/README.md) | 作用域 ID 序列化/反序列化和版本号读取工具。 |
+| $9$ | [test/README.md](test/README.md) | 调试命令样例和测试入口的用途。 |
 
 # 五. 关键约定
 

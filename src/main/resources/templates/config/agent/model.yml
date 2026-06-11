@@ -1,10 +1,8 @@
-# 默认模型适配器 ID，必须与 LLMModelService 中注册的 ID 一致。
-# 该 ID 一般与 provider 相同，例如 openai、deepseek；不再使用 provider/model 格式。
-# 为空时，调用方必须显式指定模型适配器 ID，或在 prompt options 中提供 provider。
-default-model-id: ""
-
-# 各模型适配器的默认 options。这里的 id 不存在于 LLMModelService 时不会影响启动；
-# 只有实际调用该模型适配器时才会读取对应配置。
+---
+# --- Agent model 配置 ---
+# 模型适配器默认参数列表
+# 该文件只记录每个模型适配器 ID 下的默认调用参数，不记录默认模型适配器 ID
+# Agent 默认模型适配器 ID 请在 config/agent/main-config.yml 的 default-model-id 中配置
 # 添加一个新的 model 配置项时：
 # 1. id 必须等于模型适配器注册 ID，通常就是 provider，例如 deepseek。
 # 2. model 是该供应商默认调用的模型名称，例如 deepseek-v4-flash；不参与路由。
@@ -33,3 +31,4 @@ models: []
 #     max-tokens: 2048
 #     metadata:
 #       organization: ""
+

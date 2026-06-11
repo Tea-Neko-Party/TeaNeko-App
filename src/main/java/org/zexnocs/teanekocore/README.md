@@ -25,27 +25,40 @@
 
 ```mermaid
 flowchart TD
-    framework["framework 基础抽象"]
-    logger["logger 日志"]
-    utils["utils 工具与扫描"]
-    reload["reload 热重载"]
-    cache["cache 缓存"]
-    actuator["actuator 任务/定时器"]
-    event["event 事件"]
-    command["command 命令"]
-    database["database 数据库辅助"]
-    file_config["file_config 文件配置"]
-    api_response["api_response API 请求"]
+    subgraph BASE["基础层"]
+        direction LR
+        framework["framework 基础抽象"]
+        logger["logger 日志"]
+        utils["utils 工具与扫描"]
+    end
+
+    subgraph RUNTIME["运行层"]
+        direction LR
+        reload["reload 热重载"]
+        cache["cache 缓存"]
+        actuator["actuator 任务/定时器"]
+        event["event 事件"]
+    end
+
+    subgraph DATA["数据与配置"]
+        direction LR
+        database["database 数据库辅助"]
+        file_config["file_config 文件配置"]
+    end
+
+    subgraph ENTRY["接入能力"]
+        direction LR
+        command["command 命令"]
+        api_response["api_response API 请求"]
+    end
 
     framework --> utils
     logger --> utils
     utils --> reload
-    reload --> command
     reload --> event
     reload --> database
     reload --> file_config
-    cache --> actuator
-    actuator --> cache
+    cache <--> actuator
     actuator --> event
     actuator --> database
     actuator --> api_response
@@ -58,13 +71,20 @@ flowchart TD
 
 # 三. 推荐阅读顺序
 
-| 目标 | 建议阅读 |
-|---|---|
-| 理解核心执行模型 | `framework` -> `logger` -> `cache` -> `actuator` |
-| 理解扫描和热加载 | `utils` -> `reload` -> 对应业务模块 README |
-| 接入命令系统 | `event` -> `command` -> `database/easydata` |
-| 接入持久化配置 | `database` -> `file_config` |
-| 发起外部 API 请求 | `cache` -> `actuator` -> `api_response` |
+| 顺序 | 导航 | 说明 |
+|---|---|---|
+| $1$ | [framework/README.md](framework/README.md) | 基础数据结构、状态机、生命周期和函数式接口。 |
+| $2$ | [logger/README.md](logger/README.md) | 统一日志接口、默认日志实现和错误报告入口。 |
+| $3$ | [utils/README.md](utils/README.md) | 日期、异常、反射字段、JSON 描述和 Bean/Class 扫描工具。 |
+| $4$ | [cache/README.md](cache/README.md) | 通用缓存容器、TTL、自动清理和手动清理。 |
+| $5$ | [actuator/README.md](actuator/README.md) | 异步任务、任务阶段链、重试策略和定时器。 |
+| $6$ | [event/README.md](event/README.md) | 事件模型、监听器扫描、同步/异步监听器和事件链。 |
+| $7$ | [reload/README.md](reload/README.md) | 热重载接口、扫描器抽象类和统一重载流程。 |
+| $8$ | [database/README.md](database/README.md) | 数据库事务任务、EasyData、ConfigData 和 ItemData。 |
+| $9$ | [file_config/README.md](file_config/README.md) | 本地 JSON/YAML 配置加载、模板复制、写回和热重载。 |
+| $10$ | [command/README.md](command/README.md) | 命令注解扫描、参数解析、权限/作用域校验和命令事件。 |
+| $11$ | [api_response/README.md](api_response/README.md) | 声明式 HTTP API 请求、WebClient 异步响应和响应缓存。 |
+| $12$ | [plugin/README.md](plugin/README.md) | 预留插件目录的当前边界和后续扩展位置。 |
 
 # 四. 关键约定
 

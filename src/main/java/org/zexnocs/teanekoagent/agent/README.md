@@ -14,6 +14,8 @@
 | `AgentOutboundMessage` | 平台无关的出站消息 DTO。 |
 | `IAgentHostPort` | 宿主应用能力 port，定义 scope 解析、发送和用户资料读取。 |
 | `agent.event` | 运行时事件包，提供整轮对话、模型调用、工具调用和出站消息的事件数据与事件类。 |
+| `file_config` | Agent 主配置与 token 监控器配置。 |
+| `agent.token` | token 使用量日志、上下文快照、清理任务和告警事件。 |
 
 # 二. 对话处理流程
 
@@ -32,7 +34,8 @@
 12. 如果 assistant 带有 tool_calls，逐个推送 AgentToolCallEvent。
 13. AgentToolCallEvent 默认执行工具并写入 tool message 后继续下一轮。
 14. 如果没有 tool_calls，构造 AgentOutboundMessageData 并推送 AgentOutboundMessageEvent。
-15. 事件未取消时，handle(...) 返回最终 AgentOutboundMessage。
+15. token 监控器聚合本轮模型调用记录，必要时推送 AgentTokenWarningEvent，并在事件结束后写 warn。
+16. 事件未取消时，handle(...) 返回最终 AgentOutboundMessage。
 ```
 
 # 三. 核心 API
@@ -68,6 +71,7 @@
 | `AgentModelCallEvent` | 调用 `LLMModelService.call(prompt)`。 | 修改 Prompt、替换模型结果、取消模型调用。 |
 | `AgentToolCallEvent` | 执行 `AgentToolRegistryService.call(toolCall)`。 | 改写工具调用、替换工具结果、记录工具审计。 |
 | `AgentOutboundMessageEvent` | 无额外默认动作。 | 修改出站文本、取消本次回复、附加发送前审计。 |
+| `AgentTokenWarningEvent` | 事件完成后由 token 监控器写入 warn，并可按配置报告 debugger。 | 监听 token 异常、上下文接近耗尽或模型异常。 |
 
 # 六. LLM 复用点
 
@@ -80,7 +84,18 @@
 | `LLMModelOptions` | 承载模型参数和工具列表。 |
 | `ILLMToolCall` | 表示模型返回的工具调用请求。 |
 
-# 七. 注意事项
+# 七. Token 监控器
+
+| 项 | 说明 |
+|---|---|
+| 使用量来源 | 直接读取 `ILLMResult.getUsage()`，不重复实现模型 usage 解析。 |
+| 日志摘要 | 写入 `DebugEasyData` 的 `agent-token-usage` namespace，包含 api、模型、token 明细和上下文长度。 |
+| 上下文快照 | 写入 `CleanableEasyData` 的 `agent-token-context` namespace，按配置保留 7 天、30 天、异常不保存或不自动清理。 |
+| 清理任务 | `ApplicationReadyEvent` 后按 `agent/token-monitor.yml` 中的 cron 注册定时清理任务。 |
+| 告警事件 | 单轮对话完成后，如果达到 warning/abnormal 阈值，会先推送 `AgentTokenWarningEvent`，再写 warn。 |
+| debugger 报告 | `report-warning-to-debugger` 和 `report-abnormal-to-debugger` 控制是否调用 `ILogger#errorWithReport`。 |
+
+# 八. 注意事项
 
 | 项 | 说明 |
 |---|---|

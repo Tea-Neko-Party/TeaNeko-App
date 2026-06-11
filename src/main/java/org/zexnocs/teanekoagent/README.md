@@ -6,7 +6,9 @@
 |:---:|---|
 | `agent` | 对话上下文、Prompt 构建入口、上下文压缩、Agent 运行时和平台无关入站/出站 DTO。 |
 | `agent.event` | Agent 运行时事件，提供整轮对话、模型调用、工具调用和出站消息的拦截点。 |
+| `file_config` | Agent 主配置和 token 监控器配置读取入口。 |
 | `agent.prompt` | 将运行硬规则、基础人格、学习修正、长期记忆和额外组件按优先级拼装成 LLM Prompt。 |
+| `agent.token` | token 使用量日志、上下文快照、清理策略和 token 告警事件。 |
 | `memory` | 长期记忆 DTO、人格学习修正记录、记忆查询写入服务和显式记忆工具。 |
 | `personality` | 根据 scope、agentId、userId 解析当前 active personality、边界策略、记忆和模型 options。 |
 | `personality.config` | Agent 运行配置 DTO、字段校验和配置读取 port。 |
@@ -30,33 +32,56 @@
 # 三. 主流程
 
 ```mermaid
-flowchart LR
-    A["宿主应用消息"] --> B["AgentInboundMessage"]
-    B --> C["AgentRuntimeService"]
-    C --> D["EventService.push: AgentTurnEvent"]
-    D --> E["AgentContextService.appendUser"]
-    E --> F["AgentPromptBuilder"]
-    F --> G["EventService.push: AgentModelCallEvent"]
-    G --> H["LLMModelService.call"]
-    H --> I["ILLMAssistantMessage"]
-    I --> J{"是否有 tool_calls"}
-    J -- 是 --> K["EventService.push: AgentToolCallEvent"]
-    K --> L["AgentToolRegistryService.call"]
-    L --> M["LLMToolMessage"]
+flowchart TB
+    subgraph INPUT["入口"]
+        direction LR
+        A["宿主应用消息"] --> B["AgentInboundMessage"]
+        B --> C["AgentRuntimeService"]
+        C --> D["EventService.push: AgentTurnEvent"]
+    end
+
+    subgraph PROMPT["Prompt 与模型"]
+        direction LR
+        E["AgentContextService.appendUser"] --> F["AgentPromptBuilder"]
+        F --> G["EventService.push: AgentModelCallEvent"]
+        G --> H["LLMModelService.call"]
+        H --> I["ILLMAssistantMessage"]
+        I --> J{"是否有 tool_calls"}
+    end
+
+    subgraph TOOL["工具循环"]
+        direction LR
+        K["EventService.push: AgentToolCallEvent"] --> L["AgentToolRegistryService.call"]
+        L --> M["LLMToolMessage"]
+    end
+
+    subgraph OUTPUT["出站"]
+        direction LR
+        N["EventService.push: AgentOutboundMessageEvent"] --> O["AgentOutboundMessage"]
+        O --> P["宿主应用发送"]
+    end
+
+    D --> E
+    J -- 是 --> K
     M --> F
-    J -- 否 --> N["EventService.push: AgentOutboundMessageEvent"]
-    N --> O["AgentOutboundMessage"]
-    O --> P["宿主应用发送"]
+    J -- 否 --> N
 ```
 
 # 四. 阅读顺序
 
-1. 先读 [agent/README.md](agent/README.md)，了解一次对话如何进入 Agent Runtime。
-2. 再读 [agent/event/README.md](agent/event/README.md)，了解运行时事件和监听器扩展点。
-3. 然后读 [personality/README.md](personality/README.md)，了解 active personality、边界和模型参数如何解析。
-4. 接着读 [memory/README.md](memory/README.md)，了解长期记忆和人格学习修正的存储方式。
-5. 再读 [tool/README.md](tool/README.md)，了解 Agent 如何复用 LLM framework 的 Function Tool。
-6. 最后读 [database/README.md](database/README.md)，了解 LLM/Agent 相关 EasyData 的存储约定。
+| 顺序 | 导航 | 说明 |
+|---|---|---|
+| $1$ | [agent/README.md](agent/README.md) | 对话如何进入 Agent Runtime、上下文如何维护、tool call loop 如何结束。 |
+| $2$ | [agent/event/README.md](agent/event/README.md) | 运行时事件、监听器扩展点、取消事件后的默认行为。 |
+| $3$ | [file_config/README.md](file_config/README.md) | Agent 主配置、模型配置迁移路径、token 监控器配置结构。 |
+| $4$ | [agent/token/README.md](agent/token/README.md) | token 使用摘要、上下文快照、清理策略和 warning 事件顺序。 |
+| $5$ | [personality/README.md](personality/README.md) | active personality、边界策略、学习修正和模型参数解析。 |
+| $6$ | [memory/README.md](memory/README.md) | 长期记忆、关系记忆、人格修正记录和存储方式。 |
+| $7$ | [tool/README.md](tool/README.md) | Agent 工具如何复用 LLM framework 的 Function Tool。 |
+| $8$ | [database/README.md](database/README.md) | LLM/Agent 相关 EasyData namespace 和存储约定。 |
+| $9$ | [llm/framework/README.md](llm/framework/README.md) | LLM message、prompt、model、tool 和 usage 抽象。 |
+| $10$ | [llm/file_config/README.md](llm/file_config/README.md) | `config/agent/model.yml` 的读取顺序和模型 options 合并规则。 |
+| $11$ | [llm/instance/deepseek/README.md](llm/instance/deepseek/README.md) | DeepSeek 适配器的请求映射、可选字段忽略和 usage 解析。 |
 
 # 五. 关键约定
 
@@ -69,4 +94,5 @@ flowchart LR
 | LLM 复用边界 | Agent 层使用 `ILLMMessage`、`LLMPrompt`、`LLMModelOptions`、`ILLMTool` 和 `ILLMToolCall`，不新增平行抽象。 |
 | 事件驱动边界 | 可扩展节点使用 `teanekocore.event`，监听器可修改事件 data 或取消默认动作。 |
 | tool call loop | 工具调用必须有最大轮数，工具异常要作为 tool message 回填给模型。 |
+| token 监控 | 模型调用后记录 `ILLMUsage`，上下文快照写入 `CleanableEasyData`，单轮结束后按阈值推送 `AgentTokenWarningEvent` 并写入 warn。 |
 | 应用隔离 | Agent Core 不直接处理平台事件或发送器，宿主应用通过 adapter 转换 DTO。 |

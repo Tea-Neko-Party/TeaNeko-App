@@ -1,0 +1,67 @@
+---
+# --- Agent token 监控器配置 ---
+
+# 是否启用 token 监控器
+# 关闭后不会记录 token 使用量、保存上下文快照或推送 token 告警事件
+enabled: true
+
+# 是否记录模型调用时的上下文快照
+# 上下文内容较长，只会写入 CleanableEasyData，并由清理任务按保留策略处理
+record-context: true
+
+# 单条上下文快照最多保存的字符数
+# 超过该长度的上下文会被截断，避免调试数据过大
+max-context-snapshot-characters: 200000
+
+# 短 token 使用量阈值
+# total tokens 小于该值时，上下文快照使用 short-context-retention-days
+short-usage-token-threshold: 1024
+
+# 异常 token 使用量阈值
+# total tokens 大于或等于该值时，本次调用会被标记为 abnormal
+abnormal-usage-token-threshold: 16384
+
+# 短 token 使用量对应的上下文快照保留天数
+short-context-retention-days: 7
+
+# 普通或较长 token 使用量对应的上下文快照保留天数
+long-context-retention-days: 30
+
+# 异常 token 使用量对应的上下文快照保留天数
+# 0 表示不保存异常上下文快照；负数表示保存但不自动清理；正数表示保存指定天数
+abnormal-context-retention-days: 0
+
+# 模型上下文窗口 token 上限
+# 大于 0 时用于估算上下文剩余 token；为 0 时不进行上下文窗口剩余量判断
+context-window-tokens: 0
+
+# 低剩余 token 告警阈值
+# 上下文或 completion 估算剩余 token 小于等于该值时触发 warning
+low-remaining-token-threshold: 512
+
+# token 使用比例告警阈值
+# 上下文窗口或 completion 上限使用比例大于等于该值时触发 warning
+warning-usage-ratio: 0.85
+
+# token 使用比例异常阈值
+# 上下文窗口或 completion 上限使用比例大于等于该值时触发 abnormal
+abnormal-usage-ratio: 0.95
+
+# warning 级别 token 告警是否报告给 debugger
+# 开启后会在推送 AgentTokenWarningEvent 后调用 ILogger#errorWithReport
+report-warning-to-debugger: true
+
+# abnormal 级别 token 告警或模型调用异常是否报告给 debugger
+# 开启后会在推送 AgentTokenWarningEvent 后调用 ILogger#errorWithReport
+report-abnormal-to-debugger: true
+
+# 指定报告接收者
+# 默认为空，表示使用 logger 的默认 debugger 或监护人配置
+report-recipients: ""
+
+# 是否启用上下文快照清理任务
+cleanup-enabled: true
+
+# 上下文快照清理任务 cron 表达式
+# 默认每天 04:00 执行一次清理
+cleanup-cron: "0 0 4 * * *"
