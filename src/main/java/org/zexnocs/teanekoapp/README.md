@@ -12,7 +12,6 @@
 | `config` | 面向聊天作用域的配置命令、配置命名空间和配置 key。 |
 | `teauser` | TeaNeko 用户 UUID 与平台用户 ID 的映射，以及用户金币数据入口。 |
 | `utils` | 作用域 ID 序列化/反序列化和版本号读取工具。 |
-| `test` | 调试用命令样例。 |
 | `_app_config` | Spring/JPA/WebSocket 等应用配置类，属于启动装配层，本文档未展开。 |
 
 # 二. 运行入口
@@ -65,7 +64,6 @@ flowchart TB
 | $6$ | [config/README.md](config/README.md) | 聊天作用域配置命令、配置 namespace 和配置 key 约定。 |
 | $7$ | [teauser/README.md](teauser/README.md) | TeaNeko 用户 UUID、平台用户 ID 映射和用户数据入口。 |
 | $8$ | [utils/README.md](utils/README.md) | 作用域 ID 序列化/反序列化和版本号读取工具。 |
-| $9$ | [test/README.md](test/README.md) | 调试命令样例和测试入口的用途。 |
 
 # 五. 关键约定
 
