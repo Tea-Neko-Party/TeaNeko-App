@@ -56,7 +56,7 @@ public interface ILLMModelService {
     /**
      * 根据模型适配器 ID 获取已注册的大语言模型实例。
      *
-     * @param modelId 模型适配器 ID，通常为供应商 ID
+     * @param modelId 模型类 {@link LLMModel#id()} 声明的注册 ID
      * @return 对应的大语言模型实例
      * @throws IllegalArgumentException 当模型未注册时抛出
      */
@@ -65,18 +65,18 @@ public interface ILLMModelService {
     }
 
     /**
-     * 根据供应商 ID 获取已注册的大语言模型适配器实例。
+     * 根据注册 ID 和模型名称获取已注册的大语言模型适配器实例。
      * <br>该重载保留给旧调用代码迁移使用；{@code model} 不参与适配器路由。
      *
-     * @param provider 模型供应商 ID
+     * @param modelId 模型适配器注册 ID
      * @param model 模型名称
      * @return 对应的大语言模型适配器实例
      * @throws IllegalArgumentException 当模型适配器未注册时抛出
      * @deprecated 模型名称不再属于 {@link LLMModelId}，请使用 {@link #getModel(String)}。
      */
     @Deprecated
-    default ILLMModel getModel(String provider, String model) {
-        return getModel(provider);
+    default ILLMModel getModel(String modelId, String model) {
+        return getModel(modelId);
     }
 
     /**
@@ -91,7 +91,7 @@ public interface ILLMModelService {
 
     /**
      * 使用默认模型适配器执行一次大语言模型调用。
-     * <br>如果 prompt options 中提供 provider，则优先使用 prompt 指定的供应商级 ID；model 只覆盖本次调用的模型名称。
+     * <br>如果 prompt options 中提供 provider，则将其作为模型注册 ID；model 只覆盖本次调用的模型名称。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
      * @return 模型调用结果 Future
@@ -112,7 +112,7 @@ public interface ILLMModelService {
     /**
      * 使用指定模型适配器 ID 执行一次大语言模型调用。
      *
-     * @param modelId 模型适配器 ID，通常为供应商 ID
+     * @param modelId 模型类 {@link LLMModel#id()} 声明的注册 ID
      * @param prompt 本次调用的提示词、消息与调用选项
      * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型适配器未注册或调用选项不受支持时抛出
@@ -122,23 +122,23 @@ public interface ILLMModelService {
     }
 
     /**
-     * 使用指定供应商和模型名称执行一次大语言模型调用。
-     * <br>{@code provider} 用于选择适配器，{@code model} 写入本次调用 options，不参与适配器注册 ID。
+     * 使用指定模型适配器 ID 和模型名称执行一次大语言模型调用。
+     * <br>{@code modelId} 用于选择适配器并写入本次调用的 provider option，{@code model} 只覆盖模型名称。
      *
-     * @param provider 模型供应商 ID
+     * @param modelId 模型适配器注册 ID
      * @param model 模型名称
      * @param prompt 本次调用的提示词、消息与调用选项
      * @return 模型调用结果 Future
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
-    default TaskFuture<ILLMResult> call(String provider, String model, ILLMPrompt prompt) {
+    default TaskFuture<ILLMResult> call(String modelId, String model, ILLMPrompt prompt) {
         var options = LLMModelOptions.merge(
                 prompt.getOptions(),
                 LLMModelOptions.builder()
-                        .provider(provider)
+                        .provider(modelId)
                         .model(model)
                         .build()
         );
-        return call(LLMModelId.of(provider), new LLMPrompt(prompt.getMessages(), options));
+        return call(LLMModelId.of(modelId), new LLMPrompt(prompt.getMessages(), options));
     }
 }

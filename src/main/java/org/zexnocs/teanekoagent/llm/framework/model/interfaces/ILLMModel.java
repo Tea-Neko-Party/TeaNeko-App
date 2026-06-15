@@ -3,7 +3,6 @@ package org.zexnocs.teanekoagent.llm.framework.model.interfaces;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -12,7 +11,7 @@ import java.util.List;
 
 /**
  * 大语言模型的客户端接口。
- * <br>新的模型供应商只需要实现该接口并注册为 Spring Bean，即可接入 TeaNeko Agent。
+ * <br>新的模型供应商需要实现该接口并使用 {@link LLMModel} 标注，才能注册到 TeaNeko Agent。
  *
  * @author zExNocs
  * @date 2026/03/23
@@ -20,8 +19,8 @@ import java.util.List;
  */
 public interface ILLMModel {
     /**
-     * 获取模型供应商 ID。
-     * <br>该值默认也是模型适配器注册到 {@code LLMModelService} 的 ID，例如 {@code openai}、{@code deepseek}。
+     * 获取模型调用使用的供应商 ID。
+     * <br>该值用于 base options、能力校验和供应商日志，不参与模型注册；注册 ID 由 {@link LLMModel#id()} 提供。
      *
      * @return 模型供应商 ID
      */
@@ -34,16 +33,6 @@ public interface ILLMModel {
      * @return 默认模型名称
      */
     String getModel();
-
-    /**
-     * 获取模型适配器注册 ID。
-     * <br>默认使用 {@link #getProvider()} 作为注册 ID；当一个供应商适配器支持多个模型名称时，仍然只注册一个供应商级 ID。
-     *
-     * @return 模型适配器注册 ID
-     */
-    default LLMModelId getModelId() {
-        return LLMModelId.of(getProvider());
-    }
 
     /**
      * 获取模型代码自带的基础配置。

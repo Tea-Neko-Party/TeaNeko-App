@@ -2,7 +2,7 @@
 
 `llm/framework` 是 TeaNeko Agent 的大语言模型 API 中间层。它不绑定 OpenAI、DeepSeek 或其他供应商协议，而是提供统一的 Prompt、Options、Response、Model Registry 和 Function Tool 抽象。
 
-新增供应商时，通常只需要实现一个或多个 `ILLMModel` Spring Bean；如果需要复用工具调用，再实现或注册 `ILLMTool` Bean。
+新增供应商时，需要实现 `ILLMModel` 并在模型类上添加 `@LLMModel(id = "...")`。只有同时满足注解和接口约束的 Bean 才会注册；如果需要复用工具调用，再实现或注册 `ILLMTool` Bean。
 
 | 模块 | 作用 |
 |:---:|---|
@@ -15,10 +15,10 @@
 
 # 二. 模型接入
 
-推荐继承 `AbstractLLMModel`，只实现 `doCall(...)`：
+推荐继承 `AbstractLLMModel`，使用 `@LLMModel` 声明注册 ID，并实现 `doCall(...)`：
 
 ```java
-@Service
+@LLMModel(id = "deepseek")
 public class DeepSeekChatModel extends AbstractLLMModel {
     public DeepSeekChatModel() {
         super("deepseek", "deepseek-v4-flash",
@@ -40,7 +40,7 @@ public class DeepSeekChatModel extends AbstractLLMModel {
 }
 ```
 
-`LLMModelService` 会扫描所有 `ILLMModel` Bean，并使用供应商级 ID 作为唯一 key。默认情况下该 ID 等于 `getProvider()`，例如 `deepseek`：
+`LLMModelService` 只扫描带有 `@LLMModel` 且实现 `ILLMModel` 的 Bean，并仅使用注解的 `id` 作为注册 key。`getProvider()` 仍用于调用参数和供应商日志，不参与注册：
 
 ```java
 TaskFuture<ILLMResult> resultFuture = llmModelService.call(
@@ -144,16 +144,9 @@ models:
       openai.reasoningSummary: "auto"
       openai.store: false
 
-  - id: "openai-completions"
-    model: "gpt-5.5"
-    api-key: "${OPENAI_API_KEY}"
-    base-url: "https://api.openai.com/v1"
-    api: "/chat/completions"
-    metadata:
-      openaiChat.parallelToolCalls: true
 ```
 
-`id` 必须与模型适配器注册到 `LLMModelService` 的 ID 一致，通常就是 provider，例如 `deepseek` 或 `openai`。配置中存在未注册的 ID 不会影响启动；只有实际调用该 ID 时才会用到对应配置。
+`id` 必须与模型类 `@LLMModel(id = "...")` 声明的注册 ID 一致。配置中存在未注册的 ID 不会影响启动；只有实际调用该 ID 时才会用到对应配置。
 
 `model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-v4-flash`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
@@ -165,7 +158,6 @@ models:
 |---|---|---|
 | `deepseek` | `deepseek-v4-flash` | `deepseek` |
 | `openai` | `gpt-5.5` | `openai` |
-| `openai-completions` | `gpt-5.5` | `openai-completions` |
 | `kimi` | `kimi-k2.6` | `kimi` |
 
 # 四. Response
@@ -383,7 +375,7 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 
 # 七. 模型适配器 ID 映射
 
-每个模型 Bean 注册到 `LLMModelService` 时，ID 都是供应商级 ID，通常与 provider 相同。具体模型名称由模型实现中的默认 `model`、`config/agent/model.yml` 的 `models[].model` 或本次 prompt options 覆盖。
+每个模型 Bean 注册到 `LLMModelService` 时，ID 仅来自 `@LLMModel.id`。具体模型名称由模型实现中的基础 `model`、`config/agent/model.yml` 的 `models[].model` 或本次 prompt options 覆盖。
 
 新增供应商或新增模型适配器时，需要在这里维护映射，方便 `config/agent/model.yml` 正确引用。
 
@@ -391,5 +383,6 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 |---|---|---|---|
 | `deepseek` | `deepseek-v4-flash` | `deepseek` | 示例映射；实际以已注册 Bean 为准。 |
 | `openai` | `gpt-5.5` | `openai` | 使用 Responses API 的已注册适配器。 |
-| `openai-completions` | `gpt-5.5` | `openai-completions` | 使用 Chat Completions API，并提供兼容供应商扩展基类。 |
 | `kimi` | `kimi-k2.6` | `kimi` | 继承 Chat Completions 通用层，只实现 Kimi 差异。 |
+
+OpenAI Chat Completions 通用类没有 `@LLMModel`，不会注册。需要接入兼容供应商时，应继承其抽象模型，并在供应商实现类上声明独立的 `@LLMModel(id = "...")`。

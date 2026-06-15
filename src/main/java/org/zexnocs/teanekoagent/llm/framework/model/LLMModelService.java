@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
@@ -18,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 大语言模型注册与调用服务。
- * <br>扫描所有 {@link ILLMModel} Bean，并通过供应商级 {@link LLMModelId} 路由到对应模型适配器。
+ * <br>只扫描带有 {@link LLMModel} 注解且实现 {@link ILLMModel} 的 Bean，并通过注解声明的 {@link LLMModelId} 路由。
  *
  * @author zExNocs
  * @date 2026/05/15
@@ -27,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
     /**
-     * Spring Bean 扫描器，用于发现容器中注册的 {@link ILLMModel} 实例。
+     * Spring Bean 扫描器，用于发现带有 {@link LLMModel} 注解的 {@link ILLMModel} 实例。
      */
     private final IBeanScanner beanScanner;
 
@@ -83,7 +84,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     public LLMModelId getDefaultModelId() {
         return agentFileConfigService.findDefaultModelId()
                 .orElseThrow(() -> new IllegalStateException(
-                        "Default Agent model id is not configured. Set agent/main-config.yml default-model-id to a provider-level id such as deepseek."));
+                        "Default Agent model id is not configured. Set agent/main-config.yml default-model-id to an @LLMModel id such as deepseek."));
     }
 
     /**
@@ -134,7 +135,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
 
     /**
      * 使用默认模型适配器执行一次大语言模型调用。
-     * <br>如果 prompt options 中提供 provider，则优先使用 prompt 指定的供应商级 ID；model 只作为本次调用的模型名称覆盖项。
+     * <br>如果 prompt options 中提供 provider，则将其作为模型注册 ID；model 只作为本次调用的模型名称覆盖项。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
      * @return 模型调用结果 Future
@@ -146,20 +147,39 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     }
 
     /**
-     * 扫描并注册 Spring 容器中的所有大语言模型适配器。
-     * <br>当存在重复的供应商级 {@link LLMModelId} 时会立即抛出异常，避免调用时路由到不确定的模型实例。
+     * 扫描并注册 Spring 容器中带有 {@link LLMModel} 注解的大语言模型适配器。
+     * <br>注册 ID 仅使用注解中的 {@link LLMModel#id()}；未标注的 {@link ILLMModel} Bean 不会注册。
+     * <br>当存在重复 {@link LLMModelId} 时会立即抛出异常，避免调用时路由到不确定的模型实例。
      *
      * @throws IllegalStateException 当发现重复模型 ID 时抛出
      */
     @Override
     protected void _scan() {
-        for (var model : beanScanner.getBeansOfType(ILLMModel.class).values()) {
-            var modelId = model.getModelId();
+        var modelPairs = beanScanner.getBeansWithAnnotationAndInterface(LLMModel.class, ILLMModel.class);
+        for (var pair : modelPairs.values()) {
+            var annotation = pair.first();
+            var model = pair.second();
+            var modelId = parseModelId(annotation);
             var existing = modelMap.putIfAbsent(modelId, model);
             if (existing != null) {
                 throw new IllegalStateException("Duplicate LLM model id: " + modelId);
             }
         }
+    }
+
+    /**
+     * 将模型注解中的 ID 转换为模型注册 ID。
+     *
+     * @param annotation 模型注册注解
+     * @return 模型注册 ID
+     * @throws IllegalStateException 当注解 ID 为空时抛出
+     */
+    private static LLMModelId parseModelId(LLMModel annotation) {
+        var id = annotation.id();
+        if (id == null || id.isBlank()) {
+            throw new IllegalStateException("LLM model annotation id must not be blank.");
+        }
+        return LLMModelId.of(id);
     }
 
     /**
@@ -174,7 +194,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     /**
      * 构造实际调用时使用的 options。
      * <br>合并顺序为：模型 base options、文件配置 default options、本次 prompt options。
-     * <br>最终会强制写回当前路由使用的供应商级 ID，避免 prompt options 中的 provider 与路由 ID 不一致。
+     * <br>最终会强制把当前注解注册 ID 写回 provider option，避免 prompt options 与实际路由 ID 不一致。
      *
      * @param modelId 模型适配器 ID
      * @param baseOptions 模型代码自带的 base options

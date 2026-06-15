@@ -1,10 +1,10 @@
 package org.zexnocs.teanekoagent.llm.instance.deepseek;
 
-import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.AbstractLLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -22,7 +22,7 @@ import java.util.Optional;
  * @date 2026/06/08
  * @since 4.4.0
  */
-@Service
+@LLMModel(id = DeepSeekChatModel.PROVIDER)
 public class DeepSeekChatModel extends AbstractLLMModel {
     /**
      * DeepSeek 模型适配器注册 ID。

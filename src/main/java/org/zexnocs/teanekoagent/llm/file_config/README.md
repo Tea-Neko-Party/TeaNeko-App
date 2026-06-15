@@ -24,7 +24,7 @@ models:
 | 字段 | 说明 |
 |---|---|
 | `models` | 各模型适配器默认 options 列表。 |
-| `models[].id` | 模型适配器注册 ID，必须与 `LLMModelService` 中注册的 ID 一致。 |
+| `models[].id` | 模型适配器注册 ID，必须与模型类 `@LLMModel.id` 一致。 |
 | `models[].provider` | `id` 未设置时的兼容字段，推荐优先写 `id`。 |
 | `models[].model` | 供应商侧具体模型名称，只覆盖调用参数，不参与路由。 |
 | `models[].api` | 通用 API 配置，具体含义由供应商适配器解释。 |
@@ -71,24 +71,7 @@ models:
       openai.parallelToolCalls: true
 ```
 
-OpenAI Chat Completions 配置示例：
-
-```yaml
-models:
-  - id: "openai-completions"
-    model: "gpt-5.5"
-    api-key: "${OPENAI_API_KEY}"
-    base-url: "https://api.openai.com/v1"
-    api: "/chat/completions"
-    max-tokens: 2048
-    metadata:
-      openaiChat.organization: ""
-      openaiChat.project: ""
-      openaiChat.parallelToolCalls: true
-      openaiChat.topLogprobs: 3
-```
-
-`openai` 使用 Responses API，`openai-completions` 使用 Chat Completions API。第三方兼容服务应优先继承 Chat Completions 通用层，并使用独立的注册 ID，避免与 OpenAI 原生适配器混淆。
+`openai` 使用 Responses API。OpenAI Chat Completions 通用实现未使用 `@LLMModel`，因此不能在 `model.yml` 中作为独立 ID 配置；第三方兼容服务应继承 Chat Completions 通用层，并在具体供应商类上声明独立的 `@LLMModel(id = "...")`。
 
 Kimi OpenAI 兼容 Chat Completions 配置示例：
 
@@ -114,8 +97,8 @@ Kimi base URL 固定为官方地址 `https://api.moonshot.cn/v1`。`kimi-k2.7-co
 
 | 项目 | 要求 |
 |---|---|
-| 模型 Bean | 原生协议实现 `ILLMModel` 或继承 `AbstractLLMModel`；OpenAI Chat Completions 兼容服务优先继承 `AbstractOpenAIChatCompletionModel`。 |
-| 配置 ID | `models[].id` 必须与模型 Bean 注册 ID 一致。 |
+| 模型 Bean | 实现 `ILLMModel` 或继承模型基类，并使用 `@LLMModel` 标注；未标注实现不会注册。 |
+| 配置 ID | `models[].id` 必须与模型 Bean 的 `@LLMModel.id` 一致。 |
 | API 配置 | API key、endpoint 等必须来自 file config 或数据库，不应写死在代码中。 |
 | 私有参数 | 通用 options 无法覆盖的字段放入 `metadata`，由供应商适配器读取。 |
 | 快速透传 | Chat Completions 兼容服务可使用 `body.*` 添加请求字段，使用 `header.*` 添加请求头。 |

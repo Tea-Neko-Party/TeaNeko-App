@@ -16,8 +16,8 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
-     * 当前模型所属的大语言模型供应商级 ID。
-     * <br>该值默认作为模型适配器注册 ID。
+     * 当前模型调用使用的大语言模型供应商 ID。
+     * <br>该值不参与模型注册，注册 ID 由模型类上的 {@code LLMModel} 注解提供。
      */
     private final String provider;
 
