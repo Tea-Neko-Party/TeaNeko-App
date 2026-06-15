@@ -6,6 +6,9 @@
 # 为空字符串表示不设置默认模型，调用方必须在 Prompt options 或作用域配置中指定模型适配器
 default-model-id: ""
 
+
+# --- Thinking 相关配置 ---
+
 # 是否启用 Agent 自主的受控思考流程
 # 启用后每次模型调用会返回简短思考摘要、最终答案和置信度，不使用供应商原始 reasoning_content
 thinking-enabled: true
@@ -15,7 +18,7 @@ thinking-enabled: true
 max-thinking-steps: 3
 
 # 每个可公开思考摘要允许的最大字符数
-# 运行时会将该值限制在 32 到 1000 之间，较小的值有助于控制 completion token
+# 建议限制在 32 到 1024 之间，较小的值有助于控制 completion token
 max-thought-summary-length: 240
 
 # 是否在 AgentOutput 中保留可公开的思考摘要

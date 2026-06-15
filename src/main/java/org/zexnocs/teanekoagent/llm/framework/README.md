@@ -6,7 +6,7 @@
 
 | 模块 | 作用 |
 |:---:|---|
-| `message` | 定义 system/user/assistant/tool 消息和内容片段。 |
+| [`message`](message/README.md) | 定义 system/user/assistant/tool 消息、内容片段、组成关系和 JSON 序列化规则。 |
 | `model` | 定义供应商级模型适配器 ID、模型 options、模型服务和模型适配器基类。 |
 | `response` | 定义统一响应结果、choice 和 usage。 |
 | `tool` | 定义 Function Tool、参数 schema、tool call 和工具注册服务。 |
