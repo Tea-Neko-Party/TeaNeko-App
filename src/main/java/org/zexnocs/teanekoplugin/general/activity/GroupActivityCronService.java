@@ -8,9 +8,11 @@ import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
+import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 
 import java.util.Map;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -72,6 +74,18 @@ public class GroupActivityCronService {
                                             .addBotAllList(messageLists)
                                             .sendByPart(8);
                                 }
+                            }).exceptionally(t -> {
+                                // 循环获取异常根源
+                                Throwable cause = t;
+                                while(cause instanceof CompletionException && cause.getCause() != null) {
+                                    cause = cause.getCause();
+                                }
+                                // 如果是 ConfigDataNotFoundException，说明群在注册 cron 又取消了，则跳过
+                                if(cause instanceof ConfigDataNotFoundException) {
+                                    return null;
+                                }
+                                // 否则重新抛出异常
+                                throw new CompletionException(cause);
                             }).finish();
                         }
                         return EmptyTaskResult.INSTANCE;
