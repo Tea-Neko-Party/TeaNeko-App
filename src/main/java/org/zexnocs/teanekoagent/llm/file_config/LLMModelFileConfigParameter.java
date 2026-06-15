@@ -155,7 +155,7 @@ public class LLMModelFileConfigParameter {
      * @return 模型适配器 ID
      */
     public Optional<LLMModelId> findModelId() {
-        var parsedId = LLMMainFileConfig.parseModelId(id);
+        var parsedId = LLMModelFileConfig.parseModelId(id);
         if (parsedId.isPresent()) {
             return parsedId;
         }
