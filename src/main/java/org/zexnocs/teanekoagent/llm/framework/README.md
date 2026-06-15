@@ -209,8 +209,8 @@ assistant 消息支持 `tool_calls`，tool 响应用 `LLMToolMessage` 携带 `to
 ```java
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMObjectFunctionParameter;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMStringFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.LLMObjectFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.LLMStringFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 

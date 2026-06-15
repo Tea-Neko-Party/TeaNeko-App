@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm.framework.tool;
+package org.zexnocs.teanekoagent.llm.framework.tool.parameter;
 
 import java.util.List;
 import java.util.Map;

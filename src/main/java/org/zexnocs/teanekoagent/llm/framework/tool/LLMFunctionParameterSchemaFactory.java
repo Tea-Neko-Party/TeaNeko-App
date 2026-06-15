@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoagent.llm.framework.tool;
 
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.*;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.description.Ignore;
 

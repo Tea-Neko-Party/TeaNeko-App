@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm.framework.tool;
+package org.zexnocs.teanekoagent.llm.framework.tool.parameter;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
