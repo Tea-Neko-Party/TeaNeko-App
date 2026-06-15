@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoagent.llm.framework.model;
 
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.file_config.interfaces.IAgentFileConfigService;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
@@ -31,9 +32,14 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     private final IBeanScanner beanScanner;
 
     /**
-     * LLM 文件配置服务，用于解析默认模型和默认 options。
+     * LLM 文件配置服务，用于解析模型适配器默认 options。
      */
     private final ILLMFileConfigService llmFileConfigService;
+
+    /**
+     * Agent 文件配置服务，用于读取 Agent 默认模型适配器 ID。
+     */
+    private final IAgentFileConfigService agentFileConfigService;
 
     /**
      * 模型注册表。
@@ -46,11 +52,14 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      *
      * @param beanScanner Spring Bean 扫描器
      * @param llmFileConfigService LLM 文件配置服务
+     * @param agentFileConfigService Agent 文件配置服务
      */
     public LLMModelService(IBeanScanner beanScanner,
-                           ILLMFileConfigService llmFileConfigService) {
+                           ILLMFileConfigService llmFileConfigService,
+                           IAgentFileConfigService agentFileConfigService) {
         this.beanScanner = beanScanner;
         this.llmFileConfigService = llmFileConfigService;
+        this.agentFileConfigService = agentFileConfigService;
     }
 
     /**
@@ -72,9 +81,9 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public LLMModelId getDefaultModelId() {
-        return llmFileConfigService.findDefaultModelId()
+        return agentFileConfigService.findDefaultModelId()
                 .orElseThrow(() -> new IllegalStateException(
-                        "Default LLM model id is not configured. Set llm/main-config.yml default-model-id to a provider-level id such as deepseek."));
+                        "Default Agent model id is not configured. Set agent/main-config.yml default-model-id to a provider-level id such as deepseek."));
     }
 
     /**

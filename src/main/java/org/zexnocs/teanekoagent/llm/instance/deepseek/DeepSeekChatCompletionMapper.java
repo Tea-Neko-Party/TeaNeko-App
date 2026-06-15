@@ -16,8 +16,8 @@ import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterJsonMapper;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 
@@ -208,7 +208,7 @@ public final class DeepSeekChatCompletionMapper {
             var function = new LinkedHashMap<String, Object>();
             putIfNotBlank(function, "name", tool.getName());
             putIfNotBlank(function, "description", tool.getDescription());
-            function.put("parameters", toParameterSchema(tool.getParameters()));
+            function.put("parameters", LLMFunctionParameterJsonMapper.toJsonSchema(tool.getParameters()));
             if (tool.isStrict()) {
                 function.put("strict", true);
             }
@@ -218,39 +218,6 @@ public final class DeepSeekChatCompletionMapper {
             result.add(item);
         }
         return List.copyOf(result);
-    }
-
-    /**
-     * 转换工具参数 schema。
-     *
-     * @param parameter LLM 工具参数
-     * @return JSON Schema 风格参数对象
-     */
-    private static Map<String, Object> toParameterSchema(ILLMFunctionParameter parameter) {
-        var schema = new LinkedHashMap<String, Object>();
-        if (parameter == null) {
-            schema.put("type", "object");
-            schema.put("properties", Map.of());
-            return schema;
-        }
-        putIfNotBlank(schema, "type", parameter.getType());
-        putIfNotBlank(schema, "description", parameter.getDescription());
-        if (parameter.getProperties() != null && !parameter.getProperties().isEmpty()) {
-            var properties = new LinkedHashMap<String, Object>();
-            parameter.getProperties().forEach((name, property) -> properties.put(name, toParameterSchema(property)));
-            schema.put("properties", properties);
-        }
-        if (parameter.getRequired() != null && !parameter.getRequired().isEmpty()) {
-            schema.put("required", parameter.getRequired());
-        }
-        if (parameter.getItems() != null) {
-            schema.put("items", toParameterSchema(parameter.getItems()));
-        }
-        if (parameter.getEnumValues() != null && !parameter.getEnumValues().isEmpty()) {
-            schema.put("enum", parameter.getEnumValues());
-        }
-        schema.put("additionalProperties", parameter.isAdditionalProperties());
-        return schema;
     }
 
     /**

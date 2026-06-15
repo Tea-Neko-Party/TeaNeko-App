@@ -16,7 +16,18 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * DeepSeek Chat Completion 请求与响应映射测试。
+ * <br>验证参与者名称、可选请求字段和供应商推理内容的映射边界。
+ *
+ * @author zExNocs
+ * @date 2026/06/10
+ * @since 4.4.1
+ */
 class DeepSeekChatCompletionMapperTest {
+    /**
+     * 验证非空参与者名称会写入 system、user 和 assistant 请求消息。
+     */
     @Test
     void toRequestIncludesParticipantNames() {
         var messages = List.<ILLMMessage>of(
@@ -47,6 +58,9 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertEquals("assistant-a", request.getMessages().get(2).get("name"));
     }
 
+    /**
+     * 验证空值、空字符串和纯空白参与者名称不会写入请求消息。
+     */
     @Test
     void toRequestOmitsBlankParticipantNames() {
         var messages = List.<ILLMMessage>of(
@@ -76,6 +90,9 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertFalse(request.getMessages().get(2).containsKey("name"));
     }
 
+    /**
+     * 验证请求 JSON 会忽略无效的空可选字段，同时保留有效 metadata 字段。
+     */
     @Test
     void toRequestJsonOmitsEmptyOptionalFields() {
         var messages = List.<ILLMMessage>of(
@@ -111,6 +128,9 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertTrue(json.contains("\"keep\""));
     }
 
+    /**
+     * 验证 DeepSeek 响应中的 assistant 参与者名称能够映射到统一消息对象。
+     */
     @Test
     void toResultParsesAssistantMessageName() {
         var response = new DeepSeekChatCompletionResponseData();
@@ -128,6 +148,9 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertEquals("assistant-a", mappedMessage.getName());
     }
 
+    /**
+     * 验证响应未提供 assistant 参与者名称时，统一消息使用空字符串默认值。
+     */
     @Test
     void toResultDefaultsMissingAssistantMessageNameToEmpty() {
         var response = new DeepSeekChatCompletionResponseData();
@@ -144,6 +167,9 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertEquals("", mappedMessage.getName());
     }
 
+    /**
+     * 验证供应商内部推理内容不会作为普通 assistant 正文暴露给上层 Agent。
+     */
     @Test
     void toResultDoesNotExposeProviderReasoningAsAssistantContent() {
         var response = new DeepSeekChatCompletionResponseData();
@@ -167,6 +193,12 @@ class DeepSeekChatCompletionMapperTest {
         Assertions.assertEquals("", mappedText);
     }
 
+    /**
+     * 构造只包含一个文本片段的 LLM Content 列表。
+     *
+     * @param text 文本内容
+     * @return 不可变的 LLM Content 列表
+     */
     private static List<ILLMContent> text(String text) {
         return LLMContentListBuilder.builder()
                 .addText(text)

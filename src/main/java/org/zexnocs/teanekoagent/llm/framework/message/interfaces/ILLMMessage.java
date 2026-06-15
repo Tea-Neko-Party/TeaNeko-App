@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoagent.llm.framework.message.interfaces;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 从 LLM 接收或者发送给 LLM 作为上下文的消息。
@@ -35,4 +36,15 @@ public interface ILLMMessage {
      * @return {@link List }<{@link ILLMContent }>
      */
     List<ILLMContent> getContents();
+
+    /**
+     * 获取供应商适配器需要在多轮调用中保留的透明 metadata。
+     * <br>该数据不属于用户可见消息正文，也不应直接序列化到通用消息 JSON。
+     *
+     * @return 供应商 metadata
+     * @since 4.4.1
+     */
+    default Map<String, Object> getProviderMetadata() {
+        return Map.of();
+    }
 }

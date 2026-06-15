@@ -28,8 +28,8 @@ import java.util.Map;
  * <br>如果未配置 DeepSeek 的 {@code apiKey}，测试会自动跳过，避免无配置环境下误失败。
  *
  * @author zExNocs
- * @date 2026/06/08
- * @since 4.4.0
+ * @date 2026/06/10
+ * @since 4.4.1
  */
 @SpringBootTest(classes = TeaNekoAppApplication.class)
 public class DeepSeekModelOutputTest {

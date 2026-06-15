@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.framework.message;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
@@ -15,6 +16,7 @@ import tools.jackson.databind.ValueSerializer;
 import tools.jackson.databind.annotation.JsonSerialize;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * LLM Message 的抽象类
@@ -45,6 +47,14 @@ public abstract class AbstractLLMMessage implements ILLMMessage {
     @JsonProperty("content")
     @JsonSerialize(using = LLMContentSerializer.class)
     private List<ILLMContent> contents;
+
+    /**
+     * 供应商适配器需要跨模型调用保留的透明 metadata。
+     * <br>例如 OpenAI reasoning item；该字段不进入通用 Message JSON。
+     */
+    @JsonIgnore
+    @Builder.Default
+    private Map<String, Object> providerMetadata = Map.of();
 
     /**
      * 提供一个默认的 Deserializer。
