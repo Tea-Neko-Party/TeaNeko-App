@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent.llm;
+package org.zexnocs.teanekoagent.llm.instance.deepseek;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
@@ -15,8 +15,6 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatModel;
-import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekModelOptions;
 import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 
 import java.util.List;
