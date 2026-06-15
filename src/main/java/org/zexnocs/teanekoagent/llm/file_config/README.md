@@ -51,13 +51,69 @@ config/agent/model.yml
 
 文件配置只覆盖显式声明的字段。未声明字段继续使用代码默认值；不属于通用 `LLMModelOptions` 的供应商私有字段应放入 `metadata`。
 
+OpenAI Responses API 配置示例：
+
+```yaml
+models:
+  - id: "openai"
+    model: "gpt-5.5"
+    api-key: "${OPENAI_API_KEY}"
+    base-url: "https://api.openai.com/v1"
+    api: "/responses"
+    max-tokens: 2048
+    metadata:
+      openai.reasoningEffort: "medium"
+      openai.reasoningSummary: "auto"
+      openai.verbosity: "medium"
+      openai.store: false
+      openai.parallelToolCalls: true
+```
+
+OpenAI Chat Completions 配置示例：
+
+```yaml
+models:
+  - id: "openai-completions"
+    model: "gpt-5.5"
+    api-key: "${OPENAI_API_KEY}"
+    base-url: "https://api.openai.com/v1"
+    api: "/chat/completions"
+    max-tokens: 2048
+    metadata:
+      openaiChat.organization: ""
+      openaiChat.project: ""
+      openaiChat.parallelToolCalls: true
+      openaiChat.topLogprobs: 3
+```
+
+`openai` 使用 Responses API，`openai-completions` 使用 Chat Completions API。第三方兼容服务应优先继承 Chat Completions 通用层，并使用独立的注册 ID，避免与 OpenAI 原生适配器混淆。
+
+Kimi OpenAI 兼容 Chat Completions 配置示例：
+
+```yaml
+models:
+  - id: "kimi"
+    model: "kimi-k2.6"
+    api-key: "${KIMI_API_KEY}"
+    api: "/chat/completions"
+    max-tokens: 4096
+    thinking: true
+    metadata:
+      kimi.thinkingKeep: true
+      kimi.promptCacheKey: ""
+      kimi.safetyIdentifier: ""
+```
+
+Kimi base URL 固定为官方地址 `https://api.moonshot.cn/v1`。`kimi-k2.7-code` 可以通过 `model` 字段选择，但该模型固定开启 thinking，不应配置 `thinking: false`。
+
 默认模型适配器 ID 属于 Agent 主配置，存放在 `config/agent/main-config.yml` 的 `default-model-id` 字段中。
 
 # 四. 扩展供应商约定
 
 | 项目 | 要求 |
 |---|---|
-| 模型 Bean | 实现 `ILLMModel` 或继承 `AbstractLLMModel`，并声明稳定的 provider 级注册 ID 和默认模型名。 |
+| 模型 Bean | 原生协议实现 `ILLMModel` 或继承 `AbstractLLMModel`；OpenAI Chat Completions 兼容服务优先继承 `AbstractOpenAIChatCompletionModel`。 |
 | 配置 ID | `models[].id` 必须与模型 Bean 注册 ID 一致。 |
 | API 配置 | API key、endpoint 等必须来自 file config 或数据库，不应写死在代码中。 |
 | 私有参数 | 通用 options 无法覆盖的字段放入 `metadata`，由供应商适配器读取。 |
+| 快速透传 | Chat Completions 兼容服务可使用 `body.*` 添加请求字段，使用 `header.*` 添加请求头。 |

@@ -9,6 +9,7 @@
 |角色|`LLMMessageRole`|标识消息来自 system、user、assistant 或 tool。|
 |参与者名称|`String name`|用于区分相同角色的不同参与者；默认为空字符串。|
 |正文|`List<ILLMContent> contents`|消息内容列表，每项由内容类型和具体 content part 组成。|
+|供应商 metadata|`Map<String, Object> providerMetadata`|保存多轮调用必须回传但不应展示或进入通用 JSON 的透明供应商状态。|
 |工具调用|`List<ILLMToolCall> toolCalls`|仅 assistant 消息使用，表示模型希望执行的工具。|
 |工具调用 ID|`String toolCallId`|仅 tool 消息使用，用于关联 assistant 发起的工具调用。|
 
@@ -23,11 +24,13 @@ classDiagram
         +getRole() LLMMessageRole
         +getName() String
         +getContents() List~ILLMContent~
+        +getProviderMetadata() Map~String,Object~
     }
 
     class AbstractLLMMessage {
         -name String
         -contents List~ILLMContent~
+        -providerMetadata Map~String,Object~
     }
 
     class ILLMSystemMessage {
@@ -209,6 +212,7 @@ ILLMToolMessage toolMessage = LLMToolMessage.builder()
 |场景|JSON 行为|
 |---|---|
 |`name == null` 或 `name.isEmpty()`|忽略 `name` 字段，不写入请求 JSON。|
+|`providerMetadata`|始终忽略，不写入通用 Message JSON；由供应商 mapper 显式读取。|
 |`contents == null`|输出 `"content": null`。|
 |`contents` 为空列表|输出 `"content": ""`。|
 |所有 content 都是 `TextLLMContentPart`|按顺序使用空格合并，输出单个字符串。|
@@ -285,4 +289,3 @@ flowchart TB
 |$3$|[AbstractLLMMessage.java](AbstractLLMMessage.java)|了解公共字段和 content JSON 序列化规则。|
 |$4$|[LLMMessageListBuilder.java](LLMMessageListBuilder.java)|了解常规消息列表的构造入口。|
 |$5$|[content/LLMContentListBuilder.java](content/LLMContentListBuilder.java)|了解文本 content 的构造方式。|
-

@@ -70,7 +70,7 @@ ILLMResult result = resultFuture.finish().join();
 | 字段 | 说明 |
 |---|---|
 | `provider` | 供应商级模型适配器 ID，例如 `openai`、`deepseek`。 |
-| `model` | 供应商侧的具体模型名称，例如 `gpt-4.1`、`deepseek-v4-flash`。 |
+| `model` | 供应商侧的具体模型名称，例如 `gpt-5.5`、`deepseek-v4-flash`。 |
 | `thinking` | 是否启用思考/推理模式。 |
 | `maxTokens` | 最大输出 token。 |
 | `temperature` / `topP` | 采样控制。 |
@@ -128,11 +128,22 @@ models:
       deepseek.streamIncludeUsage: true
 
   - id: "openai"
-    model: "gpt-4.1"
+    model: "gpt-5.5"
     api-key: "${OPENAI_API_KEY}"
     base-url: "https://api.openai.com/v1"
+    api: "/responses"
     metadata:
-      organization: ""
+      openai.reasoningEffort: "medium"
+      openai.reasoningSummary: "auto"
+      openai.store: false
+
+  - id: "openai-completions"
+    model: "gpt-5.5"
+    api-key: "${OPENAI_API_KEY}"
+    base-url: "https://api.openai.com/v1"
+    api: "/chat/completions"
+    metadata:
+      openaiChat.parallelToolCalls: true
 ```
 
 `id` 必须与模型适配器注册到 `LLMModelService` 的 ID 一致，通常就是 provider，例如 `deepseek` 或 `openai`。配置中存在未注册的 ID 不会影响启动；只有实际调用该 ID 时才会用到对应配置。
@@ -146,7 +157,9 @@ models:
 | Provider | 默认 Model | 注册 ID |
 |---|---|---|
 | `deepseek` | `deepseek-v4-flash` | `deepseek` |
-| `openai` | `gpt-4.1` | `openai` |
+| `openai` | `gpt-5.5` | `openai` |
+| `openai-completions` | `gpt-5.5` | `openai-completions` |
+| `kimi` | `kimi-k2.6` | `kimi` |
 
 # 四. Response
 
@@ -370,4 +383,6 @@ for (var toolCall : assistantMessage.getToolCalls()) {
 | Provider | 默认 Model | 注册 ID | 说明 |
 |---|---|---|---|
 | `deepseek` | `deepseek-v4-flash` | `deepseek` | 示例映射；实际以已注册 Bean 为准。 |
-| `openai` | `gpt-4.1` | `openai` | 示例映射；实际以已注册 Bean 为准。 |
+| `openai` | `gpt-5.5` | `openai` | 使用 Responses API 的已注册适配器。 |
+| `openai-completions` | `gpt-5.5` | `openai-completions` | 使用 Chat Completions API，并提供兼容供应商扩展基类。 |
+| `kimi` | `kimi-k2.6` | `kimi` | 继承 Chat Completions 通用层，只实现 Kimi 差异。 |

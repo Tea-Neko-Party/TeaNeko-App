@@ -24,11 +24,44 @@ models: []
 #       deepseek.streamIncludeUsage: true
 #
 #   - id: "openai"
-#     model: "gpt-4.1"
+#     model: "gpt-5.5"
 #     api-key: "${OPENAI_API_KEY}"
 #     base-url: "https://api.openai.com/v1"
-#     temperature: 0.7
+#     api: "/responses"
 #     max-tokens: 2048
 #     metadata:
-#       organization: ""
-
+#       openai.organization: ""
+#       openai.project: ""
+#       openai.reasoningEffort: "medium"
+#       openai.reasoningSummary: "auto"
+#       openai.verbosity: "medium"
+#       openai.store: false
+#       openai.parallelToolCalls: true
+#       openai.topLogprobs: 3
+#
+#   - id: "openai-completions"
+#     model: "gpt-5.5"
+#     api-key: "${OPENAI_API_KEY}"
+#     base-url: "https://api.openai.com/v1"
+#     api: "/chat/completions"
+#     max-tokens: 2048
+#     metadata:
+#       openaiChat.organization: ""
+#       openaiChat.project: ""
+#       openaiChat.parallelToolCalls: true
+#       openaiChat.topLogprobs: 3
+#       # body.<字段名> 会作为兼容接口的额外 JSON 字段发送，空值不会发送
+#       body.service_tier: ""
+#       # header.<请求头名> 会作为兼容接口的额外 HTTP 请求头发送
+#       header.X-Vendor-Option: ""
+#
+#   - id: "kimi"
+#     model: "kimi-k2.6"
+#     api-key: "${KIMI_API_KEY}"
+#     api: "/chat/completions"
+#     max-tokens: 4096
+#     thinking: true
+#     metadata:
+#       kimi.thinkingKeep: true
+#       kimi.promptCacheKey: ""
+#       kimi.safetyIdentifier: ""

@@ -215,6 +215,9 @@ flowchart TB
 |$13$|[llm/framework/README.md](llm/framework/README.md)|了解 LLM message、Prompt、model、response、tool 和 usage 抽象。|
 |$14$|[llm/file_config/README.md](llm/file_config/README.md)|了解 `model.yml` 的读取顺序和模型 options 合并规则。|
 |$15$|[llm/instance/deepseek/README.md](llm/instance/deepseek/README.md)|了解 DeepSeek 请求映射、可选字段忽略和 usage 解析。|
+|$16$|[llm/instance/openai/README.md](llm/instance/openai/README.md)|了解 OpenAI Responses API 的消息、工具、reasoning 和 usage 映射。|
+|$17$|[llm/instance/openai/completions/README.md](llm/instance/openai/completions/README.md)|了解 OpenAI Chat Completions、兼容供应商抽象模型和快速扩展方式。|
+|$18$|[llm/instance/kimi/README.md](llm/instance/kimi/README.md)|了解 Kimi 如何复用 Chat Completions 通用层以及 thinking 参数限制。|
 
 # 十二. 关键约定
 
