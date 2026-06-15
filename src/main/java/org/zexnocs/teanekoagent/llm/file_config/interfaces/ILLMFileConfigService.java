@@ -22,11 +22,11 @@ public interface ILLMFileConfigService {
     LLMModelFileConfig getConfig();
 
     /**
-     * 根据模型适配器 ID 和代码默认 options 构造实际默认 options。
+     * 根据模型适配器 ID 和模型 base options 构造文件默认 options。
      *
      * @param modelId 模型适配器 ID
-     * @param codeDefaults 代码默认 options
-     * @return 合并后的默认 options
+     * @param baseOptions 模型代码自带的 base options
+     * @return 合并后的文件默认 options
      */
-    LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions codeDefaults);
+    LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions baseOptions);
 }

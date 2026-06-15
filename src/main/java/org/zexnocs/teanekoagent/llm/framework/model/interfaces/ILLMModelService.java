@@ -37,7 +37,7 @@ public interface ILLMModelService {
 
     /**
      * 获取指定模型适配器的默认 options。
-     * <br>返回值由代码默认 options 与文件配置 options 合并得到。
+     * <br>返回值由模型 base options 与文件配置 default options 合并得到。
      *
      * @param modelId 模型适配器 ID
      * @return 合并后的默认 options

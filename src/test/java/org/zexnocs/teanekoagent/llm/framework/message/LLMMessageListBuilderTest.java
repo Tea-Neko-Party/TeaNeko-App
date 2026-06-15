@@ -8,7 +8,18 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.*;
 
 import java.util.List;
 
+/**
+ * LLM Message 列表构造器测试。
+ * <br>验证不同正文来源、参与者名称、现有消息和工具结果的构造行为。
+ *
+ * @author zExNocs
+ * @date 2026/06/10
+ * @since 4.4.1
+ */
 class LLMMessageListBuilderTest {
+    /**
+     * 验证构造器能够使用文本和 Content 列表创建不同角色的消息。
+     */
     @Test
     void buildsMessagesFromTextAndContentList() {
         var assistantContents = LLMContentListBuilder.builder()
@@ -28,6 +39,9 @@ class LLMMessageListBuilderTest {
         Assertions.assertInstanceOf(ILLMAssistantMessage.class, messages.get(2));
     }
 
+    /**
+     * 验证构造器保留直接加入的消息实例，并正确创建带调用 ID 的工具结果消息。
+     */
     @Test
     void addsExistingMessageAndToolResult() {
         var existing = LLMUserMessage.builder()
@@ -49,6 +63,9 @@ class LLMMessageListBuilderTest {
         Assertions.assertEquals("call-1", toolMessage.getToolCallId());
     }
 
+    /**
+     * 验证未设置或传入空值的参与者名称会统一规范化为空字符串。
+     */
     @Test
     void defaultsNameToEmpty() {
         var messages = LLMMessageListBuilder.builder()
@@ -64,12 +81,26 @@ class LLMMessageListBuilderTest {
         Assertions.assertEquals("", messages.get(3).getName());
     }
 
+    /**
+     * 断言消息的角色、参与者名称和首个文本内容符合预期。
+     *
+     * @param message 待检查消息
+     * @param role 预期角色
+     * @param name 预期参与者名称
+     * @param text 预期文本内容
+     */
     private static void assertMessage(ILLMMessage message, LLMMessageRole role, String name, String text) {
         Assertions.assertEquals(role, message.getRole());
         Assertions.assertEquals(name, message.getName());
         Assertions.assertEquals(text, text(message.getContents()));
     }
 
+    /**
+     * 提取 Content 列表首项中的文本，无法提取时返回空字符串。
+     *
+     * @param contents Content 列表
+     * @return 首个文本内容或空字符串
+     */
     private static String text(List<ILLMContent> contents) {
         if (contents == null || contents.isEmpty()) {
             return "";

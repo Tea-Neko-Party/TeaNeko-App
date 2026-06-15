@@ -42,17 +42,17 @@ public class LLMFileConfigService implements ILLMFileConfigService {
     }
 
     /**
-     * 根据模型适配器 ID 和代码默认 options 构造实际默认 options。
-     * <br>模型适配器 ID 通常等于供应商 ID，具体模型名称优先来自代码默认 options，其次可由文件配置中的 {@code model} 覆盖。
+     * 根据模型适配器 ID 和模型 base options 构造文件默认 options。
+     * <br>模型适配器 ID 通常等于供应商 ID，具体模型名称优先来自 base options，其次可由文件配置中的 {@code model} 覆盖。
      *
      * @param modelId 模型适配器 ID
-     * @param codeDefaults 代码默认 options
-     * @return 合并后的默认 options
+     * @param baseOptions 模型代码自带的 base options
+     * @return 合并后的文件默认 options
      */
     @Override
-    public LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions codeDefaults) {
+    public LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions baseOptions) {
         var base = LLMModelOptions.merge(
-                codeDefaults,
+                baseOptions,
                 LLMModelOptions.builder()
                         .provider(modelId.id())
                         .build()

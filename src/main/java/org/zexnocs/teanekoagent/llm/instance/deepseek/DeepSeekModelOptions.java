@@ -112,11 +112,11 @@ public class DeepSeekModelOptions extends LLMModelOptions {
     private String userId;
 
     /**
-     * 创建 DeepSeek 模型的代码默认 options。
+     * 创建 DeepSeek 模型代码自带的 base options。
      *
-     * @return DeepSeek 默认 options
+     * @return DeepSeek base options
      */
-    public static DeepSeekModelOptions defaults() {
+    public static DeepSeekModelOptions baseOptions() {
         var options = new DeepSeekModelOptions();
         options.setProvider(DeepSeekChatModel.PROVIDER);
         options.setModel(DEFAULT_MODEL);

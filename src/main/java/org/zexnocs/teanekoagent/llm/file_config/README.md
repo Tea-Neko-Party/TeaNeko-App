@@ -34,6 +34,8 @@ models:
 
 # 三. 读取顺序
 
+`base options` 专指模型代码自带参数，`default options` 专指文件配置覆盖 base options 后的默认参数。文件配置服务的方法名保持为 `getDefaultOptions(...)`，其第二个参数统一命名为 `baseOptions`。
+
 `LLMFileConfigService` 的读取顺序：
 
 ```text
@@ -44,12 +46,12 @@ config/agent/model.yml
 实际调用模型时，options 合并顺序为：
 
 ```text
-模型代码默认 options
-    -> config/agent/model.yml 中对应模型适配器 ID 的默认 options
+模型代码 base options
+    -> config/agent/model.yml 中对应模型适配器 ID 的 default options
     -> 本次 prompt.getOptions()
 ```
 
-文件配置只覆盖显式声明的字段。未声明字段继续使用代码默认值；不属于通用 `LLMModelOptions` 的供应商私有字段应放入 `metadata`。
+文件配置只覆盖显式声明的字段。未声明字段继续使用模型 base options；不属于通用 `LLMModelOptions` 的供应商私有字段应放入 `metadata`。
 
 OpenAI Responses API 配置示例：
 

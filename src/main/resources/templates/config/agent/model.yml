@@ -6,7 +6,7 @@
 # 添加一个新的 model 配置项时：
 # 1. id 必须等于模型适配器注册 ID，通常就是 provider，例如 deepseek。
 # 2. model 是该供应商默认调用的模型名称，例如 deepseek-v4-flash；不参与路由。
-# 3. 未填写的通用参数会继续使用模型代码中的默认 options。
+# 3. 未填写的通用参数会继续使用模型代码中的 base options。
 # 4. api-key、api 以及供应商私有参数应来自 file config 或数据库；DeepSeek 的 base URL 由适配器固定为官方地址。
 models: []
 

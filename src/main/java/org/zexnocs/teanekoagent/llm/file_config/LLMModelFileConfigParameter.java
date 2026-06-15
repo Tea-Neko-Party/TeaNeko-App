@@ -167,16 +167,16 @@ public class LLMModelFileConfigParameter {
 
     /**
      * 将该配置项转换为统一模型调用参数。
-     * <br>转换时会先保留代码默认 options，再用文件配置覆盖已声明字段。
+     * <br>转换时会先保留模型 base options，再用文件 default options 覆盖已声明字段。
      *
-     * @param codeDefaults 代码中声明的模型默认 options
+     * @param baseOptions 模型代码中声明的 base options
      * @return 合并后的模型调用参数
      */
-    public LLMModelOptions toOptions(ILLMModelOptions codeDefaults) {
+    public LLMModelOptions toOptions(ILLMModelOptions baseOptions) {
         var modelId = findModelId();
         var mergedMetadata = new LinkedHashMap<String, Object>();
-        if (codeDefaults != null) {
-            codeDefaults.findMetadata().ifPresent(mergedMetadata::putAll);
+        if (baseOptions != null) {
+            baseOptions.findMetadata().ifPresent(mergedMetadata::putAll);
         }
         if (metadata != null) {
             mergedMetadata.putAll(metadata);
@@ -200,7 +200,7 @@ public class LLMModelFileConfigParameter {
                 .logprobs(logprobs)
                 .metadata(new LinkedHashMap<>(mergedMetadata))
                 .build();
-        return LLMModelOptions.merge(codeDefaults, overrides);
+        return LLMModelOptions.merge(baseOptions, overrides);
     }
 
     /**

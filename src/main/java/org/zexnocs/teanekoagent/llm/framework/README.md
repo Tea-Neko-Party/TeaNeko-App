@@ -67,6 +67,13 @@ ILLMResult result = resultFuture.finish().join();
 
 `LLMModelOptions` 是统一配置 DTO，字段包括：
 
+|术语|来源|API|说明|
+|---|---|---|---|
+|base options|模型代码|`ILLMModel.getBaseOptions()`、供应商 `baseOptions()`|保证模型适配器可以运行的代码内建基础值。|
+|default options|`config/agent/model.yml`|`ILLMModelService.getDefaultOptions(...)`|文件配置覆盖 base options 后得到的部署默认值。|
+|prompt options|单次 `ILLMPrompt`|`ILLMPrompt.getOptions()`|仅覆盖本次模型调用。|
+|effective options|模型调用阶段|内部合并结果|按 base、default、prompt 的顺序合并，并强制写回路由 provider。|
+
 | 字段 | 说明 |
 |---|---|
 | `provider` | 供应商级模型适配器 ID，例如 `openai`、`deepseek`。 |
@@ -87,15 +94,15 @@ ILLMResult result = resultFuture.finish().join();
 
 ## 3.1 文件配置默认 Options
 
-LLM 默认 options 不应写死在代码中。框架会优先读取 `config/agent/model.yml`，并按下面顺序合并 options：
+模型代码只声明可运行的 base options；可部署环境的 default options 由 `config/agent/model.yml` 提供。框架按下面顺序合并 options：
 
 ```text
-模型代码默认 options
-    -> config/agent/model.yml 中对应模型适配器 ID 的默认 options
+模型代码 base options
+    -> config/agent/model.yml 中对应模型适配器 ID 的 default options
     -> 本次 prompt.getOptions()
 ```
 
-调用方没有指定 options 时，会使用文件配置中的默认 options；调用方只指定部分 options 时，未指定字段继续沿用文件配置或代码默认值。
+调用方没有指定 options 时，会使用文件配置中的 default options；调用方只指定部分 options 时，未指定字段继续沿用文件 default options 或模型 base options。
 
 `LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `config/agent/main-config.yml` 中的 `default-model-id`：
 

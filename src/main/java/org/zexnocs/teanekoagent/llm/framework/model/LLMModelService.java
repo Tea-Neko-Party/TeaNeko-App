@@ -94,7 +94,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public LLMModelOptions getDefaultOptions(LLMModelId modelId) {
-        return llmFileConfigService.getDefaultOptions(modelId, getModel(modelId).getDefaultOptions());
+        return llmFileConfigService.getDefaultOptions(modelId, getModel(modelId).getBaseOptions());
     }
 
     /**
@@ -125,7 +125,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     @Override
     public TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt) {
         var model = getModel(modelId);
-        var options = buildEffectiveOptions(modelId, model.getDefaultOptions(), prompt.getOptions());
+        var options = buildEffectiveOptions(modelId, model.getBaseOptions(), prompt.getOptions());
         if (!model.supports(options)) {
             throw new IllegalArgumentException("LLM model does not support the prompt options: " + modelId);
         }
@@ -173,19 +173,19 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
 
     /**
      * 构造实际调用时使用的 options。
-     * <br>合并顺序为：代码默认 options、文件配置默认 options、本次 prompt options。
+     * <br>合并顺序为：模型 base options、文件配置 default options、本次 prompt options。
      * <br>最终会强制写回当前路由使用的供应商级 ID，避免 prompt options 中的 provider 与路由 ID 不一致。
      *
      * @param modelId 模型适配器 ID
-     * @param codeDefaults 代码默认 options
+     * @param baseOptions 模型代码自带的 base options
      * @param promptOptions 本次 prompt options
      * @return 实际调用 options
      */
     private LLMModelOptions buildEffectiveOptions(LLMModelId modelId,
-                                                  ILLMModelOptions codeDefaults,
+                                                  ILLMModelOptions baseOptions,
                                                   ILLMModelOptions promptOptions) {
-        var configuredDefaults = llmFileConfigService.getDefaultOptions(modelId, codeDefaults);
-        var merged = LLMModelOptions.merge(configuredDefaults, promptOptions);
+        var defaultOptions = llmFileConfigService.getDefaultOptions(modelId, baseOptions);
+        var merged = LLMModelOptions.merge(defaultOptions, promptOptions);
         return LLMModelOptions.merge(merged, LLMModelOptions.builder()
                 .provider(modelId.id())
                 .build());

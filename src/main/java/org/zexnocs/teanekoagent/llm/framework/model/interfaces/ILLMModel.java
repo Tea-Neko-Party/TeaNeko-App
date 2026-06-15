@@ -46,12 +46,12 @@ public interface ILLMModel {
     }
 
     /**
-     * 获取模型的默认配置。
-     * <br>默认配置会写入供应商 ID 和默认模型名称，文件配置和本次调用 options 可以继续覆盖未固定的调用参数。
+     * 获取模型代码自带的基础配置。
+     * <br>基础配置会写入供应商 ID 和基础模型名称，文件默认 options 和本次调用 options 可以继续覆盖未固定的调用参数。
      *
-     * @return 模型默认配置
+     * @return 模型基础配置
      */
-    default ILLMModelOptions getDefaultOptions() {
+    default ILLMModelOptions getBaseOptions() {
         return LLMModelOptions.builder()
                 .provider(getProvider())
                 .model(getModel())
@@ -77,13 +77,13 @@ public interface ILLMModel {
     TaskFuture<ILLMResult> call(ILLMPrompt prompt);
 
     /**
-     * 直接使用 {@link ILLMMessage} list 来获取模型结果，使用默认配置。
+     * 直接使用 {@link ILLMMessage} list 来获取模型结果，使用模型基础配置。
      *
      * @param messages messages
      * @return 模型调用结果 Future
      */
     default TaskFuture<ILLMResult> call(List<ILLMMessage> messages) {
-        return call(new LLMPrompt(messages, getDefaultOptions()));
+        return call(new LLMPrompt(messages, getBaseOptions()));
     }
 
     /**

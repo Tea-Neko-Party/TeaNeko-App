@@ -172,27 +172,27 @@ public class LLMModelOptions implements ILLMModelOptions {
     }
 
     /**
-     * 合并默认 options 和覆盖 options。
-     * <br>当 {@code overrides} 提供某字段时使用覆盖值，否则保留 {@code defaults} 中的值。
+     * 合并 base options 和覆盖 options。
+     * <br>当 {@code overrides} 提供某字段时使用覆盖值，否则保留 {@code baseOptions} 中的值。
      *
-     * @param defaults 默认 options；为 {@code null} 时视为空 options
-     * @param overrides 覆盖 options；为 {@code null} 时直接返回默认 options 的副本
+     * @param baseOptions 基础 options；为 {@code null} 时视为空 options
+     * @param overrides 覆盖 options；为 {@code null} 时直接返回 base options 的副本
      * @return 合并后的标准 options
      */
-    public static LLMModelOptions merge(@Nullable ILLMModelOptions defaults,
+    public static LLMModelOptions merge(@Nullable ILLMModelOptions baseOptions,
                                         @Nullable ILLMModelOptions overrides) {
-        if (defaults instanceof LLMModelOptions modelOptions) {
+        if (baseOptions instanceof LLMModelOptions modelOptions) {
             return modelOptions.mergeWith(overrides);
         }
-        var base = copyOf(defaults);
+        var base = copyOf(baseOptions);
         return base.mergeWith(overrides);
     }
 
     /**
-     * 将当前 options 与覆盖 options 合并。
+     * 将当前 base options 与覆盖 options 合并。
      * <br>子类可以重写该方法，以在合并文件配置或 prompt options 时保留供应商专用 options 类型。
      *
-     * @param overrides 覆盖 options；为 {@code null} 时直接返回当前 options 的副本
+     * @param overrides 覆盖 options；为 {@code null} 时直接返回当前 base options 的副本
      * @return 合并后的 options
      */
     public LLMModelOptions mergeWith(@Nullable ILLMModelOptions overrides) {

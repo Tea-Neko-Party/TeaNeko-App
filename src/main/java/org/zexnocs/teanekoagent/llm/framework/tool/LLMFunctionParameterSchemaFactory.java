@@ -265,7 +265,9 @@ public final class LLMFunctionParameterSchemaFactory {
      * @return 如果参数必填则返回 {@code true}
      */
     private static boolean isRequired(Parameter parameter) {
-        return !isOptionalType(parameter.getParameterizedType()) && !hasNullableAnnotation(parameter.getAnnotations());
+        return !isOptionalType(parameter.getParameterizedType())
+                && !hasNullableAnnotation(parameter.getAnnotations())
+                && !hasNullableAnnotation(parameter.getAnnotatedType().getAnnotations());
     }
 
     /**
@@ -275,7 +277,9 @@ public final class LLMFunctionParameterSchemaFactory {
      * @return 如果字段必填则返回 {@code true}
      */
     private static boolean isRequired(Field field) {
-        return !isOptionalType(field.getGenericType()) && !hasNullableAnnotation(field.getAnnotations());
+        return !isOptionalType(field.getGenericType())
+                && !hasNullableAnnotation(field.getAnnotations())
+                && !hasNullableAnnotation(field.getAnnotatedType().getAnnotations());
     }
 
     /**

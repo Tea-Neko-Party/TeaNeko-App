@@ -66,7 +66,7 @@ public class DeepSeekChatModel extends AbstractLLMModel {
      * @param apiResponseService API 响应服务
      */
     public DeepSeekChatModel(IAPIResponseService apiResponseService) {
-        super(PROVIDER, DEFAULT_MODEL, DeepSeekModelOptions.defaults());
+        super(PROVIDER, DEFAULT_MODEL, DeepSeekModelOptions.baseOptions());
         this.apiResponseService = apiResponseService;
     }
 
