@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.exception.CommandDataTypeMismatchException;
@@ -19,7 +20,7 @@ import java.lang.reflect.Method;
  * 1. 传入数据为 A，参数数据为 B，那么回抛出 CommandDataTypeMismatchException 异常，因为参数数据的类型不匹配。
  * 2. 传入数据为 B，参数数据为 A，那么应该正常解析参数数据，并返回正确的参数列表。
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class CommandInheritanceTest {
     @Autowired
     private ICommandArgumentProcessor iCommandArgumentProcessor;

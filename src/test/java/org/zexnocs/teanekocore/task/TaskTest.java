@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.task;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
@@ -17,7 +18,7 @@ import java.time.Duration;
  * @author zExNocs
  * @date 2026/02/13
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class TaskTest {
     @Autowired
     private ITaskService iTaskService;

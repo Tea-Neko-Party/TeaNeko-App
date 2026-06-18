@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 
 import java.io.IOException;
@@ -17,7 +18,7 @@ import java.io.IOException;
  * @date 2026/03/13
  * @since 4.2.0
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class TestFileTest {
     @Autowired
     private IFileConfigService iFileConfigService;

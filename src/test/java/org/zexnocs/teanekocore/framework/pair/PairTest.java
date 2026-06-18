@@ -1,7 +1,6 @@
 package org.zexnocs.teanekocore.framework.pair;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -12,7 +11,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
  * @author zExNocs
  * @date 2026/02/16
  */
-@SpringBootTest
 public class PairTest {
 
     /**

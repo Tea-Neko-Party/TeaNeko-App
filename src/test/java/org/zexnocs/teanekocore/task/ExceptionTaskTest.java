@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.task;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
@@ -17,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
  * @author zExNocs
  * @date 2026/02/15
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class ExceptionTaskTest {
     @Autowired
     private ITaskService iTaskService;

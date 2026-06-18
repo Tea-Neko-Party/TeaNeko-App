@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.itemdata.exception.InsufficientItemCountException;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataService;
@@ -22,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author zExNocs
  * @date 2026/02/16
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class ItemDataTest {
     private final static UUID owner = UUID.fromString("09417781-8ebe-4eb8-9e5e-46bfbdc73e23");
 

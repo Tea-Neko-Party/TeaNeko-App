@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.event.object.AEvent;
 import org.zexnocs.teanekocore.event.object.BEvent;
@@ -17,7 +18,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author zExNocs
  * @date 2026/02/17
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class EventTest {
     @Autowired
     private IEventService iEventService;

@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
@@ -19,7 +20,7 @@ import java.util.List;
  * @author zExNocs
  * @date 2026/02/19
  */
-@SpringBootTest
+@SpringBootTest(classes = TeaNekoAppApplication.class)
 public class CommandArgumentProcessorTest {
 
     @Autowired

@@ -2,12 +2,10 @@ package org.zexnocs.teanekocore.framework.callable;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
-@SpringBootTest
 public class MethodCallableTest {
     /**
      * 测试是否可以从 MethodCallable 中提取到正确的 Method 注解。
