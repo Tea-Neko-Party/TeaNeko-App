@@ -57,4 +57,4 @@
 |$1$|[../README.md](../README.md)|了解 Agent 模块边界、运行主流程和各配置模块之间的关系。|
 |$2$|[../personality/README.md](../personality/README.md)|了解文件基础人格如何与运行配置、学习修正和长期记忆合并。|
 |$3$|[../agent/token/README.md](../agent/token/README.md)|了解 token 监控配置如何控制记录、清理、告警和 debugger 报告。|
-|$4$|[../llm/file_config/README.md](../llm/file_config/README.md)|了解模型配置为何由 LLM 配置服务独立读取。|
+|$4$|[../llm/file_config/README.md](../../teanekoagent/llm/file_config/README.md)|了解模型配置为何由 LLM 配置服务独立读取。|

@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent_old.agent;
 
 import lombok.Getter;
-import org.zexnocs.teanekoagent_old.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryRecord;
 import org.zexnocs.teanekoagent_old.memory.PersonalityDeltaRecord;
 import org.zexnocs.teanekoagent_old.personality.ResolvedAgentPersonality;

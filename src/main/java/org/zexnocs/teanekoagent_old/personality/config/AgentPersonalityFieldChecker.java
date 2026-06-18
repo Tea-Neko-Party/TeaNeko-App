@@ -2,8 +2,8 @@ package org.zexnocs.teanekoagent_old.personality.config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent_old.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigFieldChecker;
 
 import java.net.URI;

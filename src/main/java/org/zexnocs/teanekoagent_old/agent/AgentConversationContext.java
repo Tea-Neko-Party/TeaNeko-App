@@ -2,9 +2,9 @@ package org.zexnocs.teanekoagent_old.agent;
 
 import lombok.Getter;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentRequestContext;
-import org.zexnocs.teanekoagent_old.llm.framework.message.LLMMessageListBuilder;
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryRecord;
 import org.zexnocs.teanekoagent_old.personality.ResolvedAgentPersonality;
 

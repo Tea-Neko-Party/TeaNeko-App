@@ -3,9 +3,9 @@ package org.zexnocs.teanekoagent_old.memory;
 import org.jspecify.annotations.NonNull;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterSchemaFactory;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.LLMObjectFunctionParameter;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentRequestContext;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.LLMFunctionParameterSchemaFactory;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.parameter.LLMObjectFunctionParameter;
 
 import java.time.Instant;
 import java.util.List;

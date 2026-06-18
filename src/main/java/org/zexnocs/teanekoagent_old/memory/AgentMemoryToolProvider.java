@@ -2,9 +2,9 @@ package org.zexnocs.teanekoagent_old.memory;
 
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.tool.api.LLMToolMapping;
+import org.zexnocs.teanekoagent.llm.framework.tool.api.LLMToolProvider;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentRequestContext;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.api.LLMToolMapping;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.api.LLMToolProvider;
 import org.zexnocs.teanekocore.framework.description.Description;
 
 import java.time.Instant;

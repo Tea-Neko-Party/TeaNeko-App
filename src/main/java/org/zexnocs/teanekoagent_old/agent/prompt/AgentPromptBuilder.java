@@ -1,9 +1,9 @@
 package org.zexnocs.teanekoagent_old.agent.prompt;
 
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageListBuilder;
 import org.zexnocs.teanekoagent_old.file_config.personality.AgentPersonalityDefinition;
-import org.zexnocs.teanekoagent_old.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent_old.llm.framework.message.LLMMessageListBuilder;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryRecord;
 import org.zexnocs.teanekoagent_old.memory.MemoryTimeRange;
 import org.zexnocs.teanekoagent_old.memory.PersonalityDeltaRecord;

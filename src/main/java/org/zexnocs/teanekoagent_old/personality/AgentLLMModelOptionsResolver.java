@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent_old.personality;
 
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent_old.file_config.personality.AgentPersonalityRuntimeConfig;
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelOptions;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

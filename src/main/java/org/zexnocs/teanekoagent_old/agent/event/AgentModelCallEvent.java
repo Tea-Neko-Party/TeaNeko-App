@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoagent_old.agent.event;
 
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelService;
 import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.event.core.Event;
 

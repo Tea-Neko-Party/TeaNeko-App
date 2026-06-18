@@ -69,4 +69,4 @@ flowchart TB
 |---|---|---|
 |$1$|[Agent Runtime](../README.md)|了解思考流程如何嵌入对话、工具和事件链路。|
 |$2$|[人格模块](../../personality/README.md)|了解新会话注入的人格、边界和长期记忆来源。|
-|$3$|[LLM Framework](../../llm/framework/README.md)|了解结构化输出使用的 Prompt、模型参数和 Tool 抽象。|
+|$3$|[LLM Framework](../../../teanekoagent/llm/framework/README.md)|了解结构化输出使用的 Prompt、模型参数和 Tool 抽象。|

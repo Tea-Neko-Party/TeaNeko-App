@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoagent_old.tool;
 
-import org.zexnocs.teanekoagent_old.llm.framework.tool.interfaces.ILLMTool;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.interfaces.ILLMToolService;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolService;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

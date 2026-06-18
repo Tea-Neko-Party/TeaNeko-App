@@ -212,12 +212,12 @@ flowchart TB
 |$10$|[memory/README.md](memory/README.md)|了解长期记忆、关系记忆、事件时间、时间范围查询和存储方式。|
 |$11$|[tool/README.md](tool/README.md)|了解 Agent 工具如何复用 LLM framework 的 Function Tool。|
 |$12$|[database/README.md](database/README.md)|了解 LLM/Agent 相关 EasyData namespace 和存储约定。|
-|$13$|[llm/framework/README.md](llm/framework/README.md)|了解 LLM message、Prompt、model、response、tool 和 usage 抽象。|
-|$14$|[llm/file_config/README.md](llm/file_config/README.md)|了解 `model.yml` 的读取顺序和模型 options 合并规则。|
-|$15$|[llm/instance/deepseek/README.md](llm/instance/deepseek/README.md)|了解 DeepSeek 请求映射、可选字段忽略和 usage 解析。|
-|$16$|[llm/instance/openai/README.md](llm/instance/openai/responses/README.md)|了解 OpenAI Responses API 的消息、工具、reasoning 和 usage 映射。|
-|$17$|[llm/instance/openai/completions/README.md](llm/instance/openai/completions/README.md)|了解 OpenAI Chat Completions、兼容供应商抽象模型和快速扩展方式。|
-|$18$|[llm/instance/kimi/README.md](llm/instance/kimi/README.md)|了解 Kimi 如何复用 Chat Completions 通用层以及 thinking 参数限制。|
+|$13$|[llm/framework/README.md](../teanekoagent/llm/framework/README.md)|了解 LLM message、Prompt、model、response、tool 和 usage 抽象。|
+|$14$|[llm/file_config/README.md](../teanekoagent/llm/file_config/README.md)|了解 `model.yml` 的读取顺序和模型 options 合并规则。|
+|$15$|[llm/instance/deepseek/README.md](../teanekoagent/llm/instance/deepseek/README.md)|了解 DeepSeek 请求映射、可选字段忽略和 usage 解析。|
+|$16$|[llm/instance/openai/README.md](../teanekoagent/llm/instance/openai/responses/README.md)|了解 OpenAI Responses API 的消息、工具、reasoning 和 usage 映射。|
+|$17$|[llm/instance/openai/completions/README.md](../teanekoagent/llm/instance/openai/completions/README.md)|了解 OpenAI Chat Completions、兼容供应商抽象模型和快速扩展方式。|
+|$18$|[llm/instance/kimi/README.md](../teanekoagent/llm/instance/kimi/README.md)|了解 Kimi 如何复用 Chat Completions 通用层以及 thinking 参数限制。|
 
 # 十二. 关键约定
 

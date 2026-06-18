@@ -1,6 +1,6 @@
 package org.zexnocs.teanekoagent_old.agent;
 
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 
 import java.time.Instant;
 

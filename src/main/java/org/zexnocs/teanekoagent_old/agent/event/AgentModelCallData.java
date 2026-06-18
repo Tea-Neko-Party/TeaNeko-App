@@ -3,9 +3,9 @@ package org.zexnocs.teanekoagent_old.agent.event;
 import lombok.Getter;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent_old.agent.AgentConversationContext;
-import org.zexnocs.teanekoagent_old.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent_old.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 
 import java.util.Optional;

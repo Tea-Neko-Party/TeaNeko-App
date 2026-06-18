@@ -2,8 +2,8 @@ package org.zexnocs.teanekoagent_old.file_config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService;
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundException;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 

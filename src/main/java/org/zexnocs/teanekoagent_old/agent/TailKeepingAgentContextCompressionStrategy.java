@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent_old.agent;
 
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.LLMMessageRole;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
 
 import java.util.ArrayList;
 import java.util.List;

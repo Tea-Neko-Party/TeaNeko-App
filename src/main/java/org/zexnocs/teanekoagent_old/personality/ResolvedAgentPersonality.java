@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent_old.personality;
 
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent_old.file_config.personality.AgentPersonalityDefinition;
 import org.zexnocs.teanekoagent_old.file_config.personality.AgentPersonalityRuntimeConfig;
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryRecord;
 import org.zexnocs.teanekoagent_old.memory.PersonalityDeltaRecord;
 

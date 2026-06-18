@@ -2,11 +2,11 @@ package org.zexnocs.teanekoagent_old.agent;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentPromptBuildRequest;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentPromptBuilder;
 import org.zexnocs.teanekoagent_old.agent.prompt.AgentPromptComponent;
-import org.zexnocs.teanekoagent_old.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent_old.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryQueryService;
 import org.zexnocs.teanekoagent_old.memory.AgentMemoryRecord;
 import org.zexnocs.teanekoagent_old.memory.PersonalityDeltaRecord;

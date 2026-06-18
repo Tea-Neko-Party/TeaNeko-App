@@ -3,8 +3,8 @@ package org.zexnocs.teanekoagent_old.agent.event;
 import lombok.Getter;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent_old.agent.AgentConversationContext;
-import org.zexnocs.teanekoagent_old.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 
 import java.util.Optional;

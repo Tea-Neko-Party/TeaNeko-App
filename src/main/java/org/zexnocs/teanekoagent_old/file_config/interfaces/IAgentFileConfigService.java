@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent_old.file_config.interfaces;
 
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent_old.file_config.AgentMainFileConfig;
 import org.zexnocs.teanekoagent_old.file_config.AgentTokenMonitorFileConfig;
-import org.zexnocs.teanekoagent_old.llm.framework.model.LLMModelId;
 
 import java.util.Optional;
 
