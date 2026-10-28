@@ -150,13 +150,14 @@ public final class OpenAIResponsesMapper {
         var result = new ArrayList<Map<String, Object>>();
         for (var item : items) {
             if (!(item instanceof Map<?, ?> map) || !"reasoning".equals(map.get("type"))
-                    || !Set.of("type", "id", "summary", "encrypted_content", "status").containsAll(map.keySet())) {
-                throw new IllegalArgumentException("Unsupported opaque Responses state; use explicit messages and tool calls.");
+                    || !map.keySet().stream().allMatch(key -> key instanceof String name
+                    && Set.of("type", "id", "summary", "encrypted_content", "status").contains(name))) {
+                throw new IllegalArgumentException("Responses 透明状态字段不受支持，请使用显式消息和工具调用。");
             }
             var copy = new LinkedHashMap<String, Object>();
             map.forEach((key, value) -> {
-                if (key != null && value != null) {
-                    copy.put(key.toString(), value);
+                if (key instanceof String name && value != null) {
+                    copy.put(name, value);
                 }
             });
             if (!copy.isEmpty()) {

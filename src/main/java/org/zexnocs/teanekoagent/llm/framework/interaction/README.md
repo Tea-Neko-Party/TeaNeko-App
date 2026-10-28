@@ -64,6 +64,10 @@ tea-neko:
 
 模型阶段结束且开放了工具后，`executeTools(calls)` 接受至多一个批次。先校验整批格式、ID 去重和已知额度，再按原顺序逐个执行、等待真实业务阶段。显然超过额度或含重复 ID 的批次不会先执行前几项副作用。其他交互并发消耗父额度时，仍可能在本批中途额度不足，此时异常结束并保留真实已执行动作，不能声称回滚。
 
+需要逐次业务准入的宿主可使用五参数 `interact(prompt, tools, context, settings, guard)`。`ILLMInteractionGuard` 在每次模型的参数准备后、资源预留和实际调用前检查，位于阶段时限内及生命周期锁外，不进入 Prompt metadata。旧四参数入口保持无额外宿主策略；自定义交互服务若未实现新重载必须明确拒绝，不能静默忽略传入守卫。
+
+工具绑定可用 `LLMToolBinding.guarded` 在实际执行器之前附加检查，继续保留同一不可变定义和执行目标。宿主拒绝以 `LLMOperationRejectedException` 传播，停止剩余工具和模型，交互返回 CANCELLED 并保留此前观察记录；具体业务拒绝原因由宿主结果承担。该异常不会包装成成功工具输出，普通工具故障仍按原可恢复状态回填。绑定与模型守卫必须保留原业务权限检查，不能从模型参数取得身份或权限。
+
 工具仍经过真实 `LLMToolSet`：未选工具不执行，参数按固定 schema 检查，可信绑定不从模型参数取得。单个工具阶段超时可回填固定 `TIMED_OUT` 错误后继续下一项；整轮取消、关闭、到期或共享预算耗尽立即停止余项。结果保留调用 ID 与截断标志，列表不可变。
 
 执行器验证工具批次及调用时序，自动服务进一步验证本次模型响应、历史回填的 ID/名称/顺序和全链重复 ID。当前只接受一个 index=0 候选，避免从多个候选隐式选择一条产生副作用；无候选是空输出，缺失消息或非法结束原因是非法响应。截断、拒绝或失败响应携带的工具不会执行。末次仍请求工具时不增加模型尝试，不执行额外工具。
@@ -90,6 +94,8 @@ tea-neko:
 
 配置、工具定义和执行器引用在交互内固定。消息、文本、工具调用、选项 metadata、供应商状态、logprobs 与返回内容均作必要深层快照；已不可变的图像可复用。嵌套状态只接受最多 64 层的 JSON 值，保留 null 和列表顺序，数组转不可变列表，拒绝循环、非有限数及任意运行对象。调用方须避免复制期间并发修改原数据，复制完成后修改原 DTO 不影响本轮。
 
+宿主若需要固定本轮完整模型配置，应先解析并冻结有效参数，再构造 `new LLMPrompt(messages, options, LLMOptionsPolicy.RESOLVED)`。服务固定并传递此策略，工具回填后的下一次请求和 token 预检均不重新合并文件或适配器基础值。普通 `MERGE_DEFAULTS` 输入继续在每个模型阶段解析当时默认值；仅复制覆盖项不能保证未提供的参数不受热更新影响。策略不放入供应商 metadata，也不代替 scope、权限或凭据检查。
+
 自动服务返回前关闭本轮拥有的阶段和整轮控制，取消由传入宿主控制传播；不关闭父控制或借用线程池。显式阶段 API 的使用方仍须自行关闭 `LLMInteractionExecution`。
 
-离线测试包括 `LLMInteractionExecutionTest`、`LLMInteractionServiceTest`、`LLMInteractionDefaultsTest`、`LLMInteractionMapperTest`、`LLMTokenBudgetTest` 和 `LLMTokenEstimatorTest`，使用真实 Core 子控制、真实工具绑定、手动时钟与受控模型，覆盖循环、次数/token 准入、结算、透明状态回放、快照、终止及资源归属；没有真实模型、平台或应用启动依赖。
+离线测试包括 `LLMInteractionExecutionTest`、`LLMInteractionServiceTest`、`LLMInteractionDefaultsTest`、`LLMInteractionMapperTest`、`LLMTokenBudgetTest`、`LLMTokenEstimatorTest` 和 `LLMResolvedOptionsTest`，使用真实 Core 子控制、真实工具绑定、手动时钟与受控模型，覆盖循环、次数/token 准入、结算、透明状态回放、参数热更新隔离、快照、终止及资源归属；没有真实模型、平台或应用启动依赖。

@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.framework.tool;
 
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
@@ -109,6 +110,8 @@ public final class LLMToolSet {
             var stage = Objects.requireNonNull(binding.executor().call(call, context), "Tool returned a null Stage.");
             return context.control().guard(stage).handle((output, failure) -> {
                 if (failure != null) {
+                    var cause = unwrap(failure);
+                    if (cause instanceof LLMOperationRejectedException rejected) { throw new CompletionException(rejected); }
                     return error(call, status(failure));
                 }
                 if (output == null) {
@@ -122,6 +125,8 @@ public final class LLMToolSet {
                 return new ToolInvocationResult(call, Status.SUCCESS, output.substring(0, end), end < output.length());
             });
         } catch (Exception failure) {
+            var cause = unwrap(failure);
+            if (cause instanceof LLMOperationRejectedException) { return CompletableFuture.failedStage(cause); }
             try {
                 context.control().checkActive();
             } catch (ExecutionStoppedException stopped) {
@@ -165,19 +170,22 @@ public final class LLMToolSet {
         }
         return switch (schema.getType()) {
             case "object" -> {
-                if (!(value instanceof Map<?, ?> map) || !map.keySet().containsAll(schema.getRequired())) {
+                if (!(value instanceof Map<?, ?> map)) {
                     yield false;
                 }
+                var missing = new HashSet<>(schema.getRequired());
                 boolean valid = true;
                 for (var entry : map.entrySet()) {
-                    var property = schema.getProperties().get(entry.getKey());
+                    if (!(entry.getKey() instanceof String name)) { yield false; }
+                    missing.remove(name);
+                    var property = schema.getProperties().get(name);
                     if (property == null ? !schema.isAdditionalProperties()
                             : !validValue(entry.getValue(), property, depth + 1)) {
                         valid = false;
                         break;
                     }
                 }
-                yield valid;
+                yield valid && missing.isEmpty();
             }
             case "array" -> value instanceof List<?> list && (schema.getItems() == null
                     || list.stream().allMatch(item -> validValue(item, schema.getItems(), depth + 1)));
@@ -198,10 +206,7 @@ public final class LLMToolSet {
      * @return 不携带原始异常内容的结构化终止状态
      */
     private static Status status(Throwable failure) {
-        while ((failure instanceof CompletionException || failure instanceof ExecutionException)
-                && failure.getCause() != null) {
-            failure = failure.getCause();
-        }
+        failure = unwrap(failure);
         if (failure instanceof ExecutionStoppedException stopped) {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED
                     ? Status.TIMED_OUT : Status.CANCELLED;
@@ -210,6 +215,19 @@ public final class LLMToolSet {
             return Status.CANCELLED;
         }
         return failure instanceof TimeoutException ? Status.TIMED_OUT : Status.FAILED;
+    }
+
+    /**
+     * 解开完成阶段包装，以便保留宿主拒绝与普通工具故障的不同语义。
+     * @param failure 观察到的异常
+     * @return 不含完成包装的原始异常
+     */
+    private static Throwable unwrap(Throwable failure) {
+        while ((failure instanceof CompletionException || failure instanceof ExecutionException)
+                && failure.getCause() != null) {
+            failure = failure.getCause();
+        }
+        return failure;
     }
 
     /**

@@ -19,6 +19,15 @@ import static org.junit.jupiter.api.Assertions.*;
  * @version 4.5.0-l
  */
 class ExecutionControlTest {
+    /** 验证多级显式执行链与共享预算分别表达，兄弟控制不被误判为祖先。 */
+    @Test void explicitAncestryRemainsIndependentOfSharedBudgetIdentity() {
+        try (var root = ExecutionControl.create(); var first = root.child(); var second = root.child(); var leaf = first.child()) {
+            assertTrue(leaf.isWithin(root.id())); assertTrue(leaf.isWithin(first.id())); assertTrue(leaf.isWithin(leaf.id()));
+            assertFalse(leaf.isWithin(second.id())); assertFalse(first.isWithin(leaf.id()));
+            assertSame(first.budget(), second.budget());
+            root.cancel(); assertTrue(leaf.isWithin(root.id()));
+        }
+    }
     /**
      * 验证终止监听可解除且至多通知一次。
      */

@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.llm.framework.interaction;
 
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
@@ -44,6 +46,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
     private final ResourceBudget localBudget;
     private final ExecutionControl control;
     private final ILLMTokenEstimator tokenEstimator;
+    private final ILLMInteractionGuard guard;
     private final LLMTokenBudget tokenBudget;
     private final Map<Integer, LLMInteractionResult.ModelAttempt> modelAttempts = new ConcurrentHashMap<>();
     private final AtomicBoolean busy = new AtomicBoolean();
@@ -88,12 +91,34 @@ public final class LLMInteractionExecution implements AutoCloseable {
     public LLMInteractionExecution(ILLMModelService models, LLMToolSet tools, ToolInvocationContext context,
                                    LLMInteractionSettings settings, Executor executor,
                                    ScheduledExecutorService scheduler, ILLMTokenEstimator tokenEstimator) {
+        this(models, tools, context, settings, executor, scheduler, tokenEstimator, ignored -> {});
+    }
+
+    /**
+     * 固定显式模型准入守卫，仍借用父控制及执行资源，不将策略存入协议数据。
+     * @param models 单次模型端口
+     * @param tools 本轮可信工具集
+     * @param context 宿主身份与父控制
+     * @param settings 固定交互设置
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param tokenEstimator 本地 token 估算器
+     * @param guard 每次模型请求前的动态检查
+     * @throws IllegalArgumentException 当父预算缺少必需维度时
+     * @throws NullPointerException 当必需依赖为空时
+     * @throws ExecutionStoppedException 当父控制已经停止时
+     * @throws RuntimeException 当计时器无法登记整轮时限时
+     */
+    public LLMInteractionExecution(ILLMModelService models, LLMToolSet tools, ToolInvocationContext context,
+            LLMInteractionSettings settings, Executor executor, ScheduledExecutorService scheduler,
+            ILLMTokenEstimator tokenEstimator, ILLMInteractionGuard guard) {
         this.models = Objects.requireNonNull(models, "模型端口不能为空。");
         this.tools = Objects.requireNonNull(tools, "工具集合不能为空。");
         this.settings = Objects.requireNonNull(settings, "交互配置不能为空。");
         this.executor = Objects.requireNonNull(executor, "业务执行器不能为空。");
         this.scheduler = Objects.requireNonNull(scheduler, "计时调度器不能为空。");
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "token 估算器不能为空。");
+        this.guard = Objects.requireNonNull(guard, "模型准入守卫不能为空。");
         Objects.requireNonNull(context, "宿主上下文不能为空。");
         for (var key : List.of(MODEL_REQUESTS, TOOL_ROUNDS, TOOL_EXECUTIONS)) {
             context.control().budget().remaining(key);
@@ -124,6 +149,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
             Objects.requireNonNull(prompt, "模型输入不能为空。");
             var messages = LLMProtocolSnapshots.messages(prompt.getMessages());
             var options = LLMProtocolSnapshots.options(prompt.getOptions());
+            var optionsPolicy = Objects.requireNonNull(prompt.getOptionsPolicy(), "模型参数解析策略不能为空。");
             var held = new AtomicReference<LLMTokenBudget.Held>();
             var attempt = new AtomicInteger();
             toolRoundAvailable = false;
@@ -136,7 +162,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
                             && remaining(TOOL_EXECUTIONS) > 0 && !tools.definitions().isEmpty();
                     options.setTools(preview ? tools.definitions() : List.of());
                     options.setToolChoice(preview ? options.findToolChoice().orElse("auto") : "none");
-                    var resolved = Objects.requireNonNull(models.resolveOptions(new LLMPrompt(messages, options)), "有效模型参数不能为空。");
+                    var resolved = Objects.requireNonNull(models.resolveOptions(new LLMPrompt(messages, options, optionsPolicy)), "有效模型参数不能为空。");
                     prepared = LLMProtocolSnapshots.options(resolved);
                     prepared.setTools(options.getTools());
                     prepared.setToolChoice(options.getToolChoice());
@@ -144,6 +170,8 @@ public final class LLMInteractionExecution implements AutoCloseable {
                 }
                 var effective = prepared;
                 var inputEstimate = estimate;
+                guard.check(context.withControl(stage));
+                stage.checkActive();
                 var allowed = stage.whileActive(() -> {
                     requireCapacity(MODEL_REQUESTS, 1);
                     var reserved = tokenBudget.enabled() ? tokenBudget.reserve(inputEstimate, effective) : null;
@@ -159,7 +187,8 @@ public final class LLMInteractionExecution implements AutoCloseable {
                 });
                 effective.setTools(allowed ? tools.definitions() : List.of());
                 effective.setToolChoice(allowed ? effective.findToolChoice().orElse("auto") : "none");
-                var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective),
+                var callPolicy = tokenBudget.enabled() ? LLMOptionsPolicy.RESOLVED : optionsPolicy;
+                var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective, callPolicy),
                         ExecutionPolicy.controlled(settings.modelTimeout(), stage)), "模型端口返回的任务不能为空。");
                 return pending.asStage().thenApply(result -> stage.whileActive(() -> {
                     if (result == null) { throw new InvalidModelResponseException(); }
@@ -252,7 +281,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
                     control.checkActive();
                     if (failure != null) {
                         var cause = unwrap(failure);
-                        if (cause instanceof BudgetExceededException) {
+                        if (cause instanceof BudgetExceededException || cause instanceof LLMOperationRejectedException) {
                             throw new CompletionException(cause);
                         }
                         var status = cause instanceof ExecutionStoppedException stopped

@@ -16,6 +16,7 @@ import org.zexnocs.teanekocore.utils.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -213,7 +214,8 @@ public class SauceNAOCommand {
                     return data.getMessageSender().sendReplyMessageAsync(summary)
                             .thenCompose(ignored -> forward ? builder.sendByPartAsync(8) : CompletableFuture.completedStage(null));
                 }).asStage().exceptionallyCompose(error -> {
-                    Throwable source = error;
+                    var failure = Objects.requireNonNull(error, "查询失败时异常不能为空。");
+                    Throwable source = failure;
                     while (source != null && !(source instanceof WebClientResponseException)) source = source.getCause();
                     CompletionStage<Void> feedback;
                     if (source == null) {
@@ -225,8 +227,8 @@ public class SauceNAOCommand {
                                 .thenCompose(ignored -> builder.sendByPartAsync(8));
                     }
                     return feedback.handle((ignored, feedbackError) -> {
-                        if (feedbackError != null && feedbackError != error) error.addSuppressed(feedbackError);
-                        throw new java.util.concurrent.CompletionException(error);
+                        if (feedbackError != null && feedbackError != failure) failure.addSuppressed(feedbackError);
+                        throw new java.util.concurrent.CompletionException(failure);
                     });
                 });
     }

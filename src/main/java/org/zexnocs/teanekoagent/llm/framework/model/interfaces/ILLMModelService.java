@@ -49,9 +49,10 @@ public interface ILLMModelService {
     /**
      * 解析并校验本次有效模型参数，不发起模型请求、不消耗调用次数。
      * token 预算通过此入口取得真实本地输出上限，不能猜测模型默认值。
+     * 已解析策略只校验并复制，不重新读取文件默认值。
      *
      * @param prompt 本次固定消息及参数覆盖
-     * @return 路由、模型和文件默认值合并后的参数副本
+     * @return 按输入解析策略得到的有效参数副本
      * @throws UnsupportedOperationException 当实现尚未提供预算预检能力时
      */
     default LLMModelOptions resolveOptions(ILLMPrompt prompt) {
@@ -178,6 +179,6 @@ public interface ILLMModelService {
                         .model(model)
                         .build()
         );
-        return call(LLMModelId.of(modelId), new LLMPrompt(prompt.getMessages(), options));
+        return call(LLMModelId.of(modelId), new LLMPrompt(prompt.getMessages(), options, prompt.getOptionsPolicy()));
     }
 }

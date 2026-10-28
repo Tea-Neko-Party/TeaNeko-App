@@ -30,6 +30,31 @@ public final class LLMOptionBoundary {
     }
 
     /**
+     * 验证已解析选项包含明确路由及模型，保留未设置字段，禁止回退默认值。
+     * @param options 宿主已解析的模型选项
+     * @return 不补入默认值的标准选项副本
+     * @throws IllegalArgumentException 当路由或模型缺失、空白或含首尾空格时
+     * @throws LLMConfigurationException 当普通选项包含认证信息时
+     */
+    public static LLMModelOptions requireResolved(ILLMModelOptions options) {
+        validate(options);
+        if (options == null || options.findProvider().filter(LLMOptionBoundary::validIdentity).isEmpty()
+                || options.findModel().filter(LLMOptionBoundary::validIdentity).isEmpty()) {
+            throw new IllegalArgumentException("已解析模型参数必须包含明确的 provider 和 model。");
+        }
+        return LLMModelOptions.copyOf(options);
+    }
+
+    /**
+     * 检查路由和模型的明确取值，不静默裁剪或回退。
+     * @param value 选项中的标识
+     * @return 标识是否非空白且无首尾空格
+     */
+    private static boolean validIdentity(String value) {
+        return !value.isBlank() && value.equals(value.strip());
+    }
+
+    /**
      * 递归检查扩展元数据的认证字段，循环引用通过对象身份集合去重。
      *
      * @param metadata 不允许包含认证信息的扩展元数据

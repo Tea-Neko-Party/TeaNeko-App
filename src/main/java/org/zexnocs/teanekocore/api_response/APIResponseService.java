@@ -181,7 +181,8 @@ public class APIResponseService implements IAPIResponseService {
             completion.completeExceptionally(stopped);
             return future;
         }
-        var execution = new APIRequestExecution<>(policy, timeout, timerScheduler, completion, managedTimeout);
+        var execution = new APIRequestExecution<>(policy, timeout, timerScheduler, completion, managedTimeout,
+                failure -> logger.error(APIRequestExecution.class.getName(), "请求被外部结束后释放资源失败。", failure));
         if (execution.isDone()) {
             return future;
         }

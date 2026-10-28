@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.framework.model;
 
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
@@ -98,7 +99,7 @@ public abstract class AbstractLLMModel implements ILLMModel {
 
     /**
      * 执行一次模型调用。
-     * <br>该方法会先合并 base options 和提示词选项，再委托给 {@link #doCall(ILLMPrompt, LLMModelOptions)} 完成实际调用。
+     * 普通输入合并基础值，已解析输入保留缺失值，再委托给供应商调用。
      *
      * @param prompt 本次调用的提示词、消息与调用选项
      * @return 模型调用结果 Future
@@ -132,10 +133,12 @@ public abstract class AbstractLLMModel implements ILLMModel {
      */
     private TaskFuture<ILLMResult> callInternal(ILLMPrompt prompt, ExecutionPolicy execution) {
         LLMOptionBoundary.validate(prompt.getOptions());
-        var options = LLMModelOptions.merge(baseOptions, prompt.getOptions());
+        var options = prompt.getOptionsPolicy() == LLMOptionsPolicy.RESOLVED
+                ? LLMOptionBoundary.requireResolved(prompt.getOptions())
+                : LLMModelOptions.merge(baseOptions, prompt.getOptions());
         LLMOptionBoundary.validate(options);
         if (!supports(options)) {
-            throw new IllegalArgumentException("LLM model does not support the prompt options: " + provider);
+            throw new IllegalArgumentException("模型不支持当前输入参数：" + provider);
         }
         LLMInputValidator.validate(prompt.getMessages(), getCapabilities(options.getModel()));
         return execution == null ? doCall(prompt, options) : doCall(prompt, options, execution);

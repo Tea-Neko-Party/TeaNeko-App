@@ -8,12 +8,13 @@ import java.time.LocalDate
 // ========= 插件 =========
 plugins {
     java                                                    // 基础插件
-    id("org.springframework.boot") version "4.1.0"          // spring boot 插件
+    id("org.springframework.boot") version "4.1.2"          // spring boot 插件
     id("io.spring.dependency-management") version "1.1.7"   // spring 依赖管理插件
     id("com.github.ben-manes.versions") version "0.54.0"    // gradle version 插件
     id("se.bjurr.gitchangelog.git-changelog-gradle-plugin") version "3.1.2" // 根据 git 自动写入 changelog
 }
-val springAiVersion by extra("2.0.0-M3")
+extra.set("springAiVersion", "2.0.0-M3")
+val springAiVersion = extra["springAiVersion"] as String
 
 // ========= 版本信息 =========
 val vm = VersionManager(project)
@@ -202,9 +203,13 @@ tasks.register<GitChangelogTask>("generateGitChangelog") {
 }
 
 // --------- file config 模板任务 ---------
-tasks.register<CopyConfigToTemplates>("copyConfigToTemplates")
+tasks.register<CopyConfigToTemplates>("copyConfigToTemplates") {
+    description = "复制 config 文件夹下的配置文件到 templates/config 目录下"
+}
 
-tasks.register<CopyTemplatesToConfig>("copyTemplatesToConfig")
+tasks.register<CopyTemplatesToConfig>("copyTemplatesToConfig") {
+    description = "复制 templates/config 目录下的配置文件到 config 文件夹下"
+}
 dependencyManagement {
     imports {
         mavenBom("org.springframework.ai:spring-ai-bom:$springAiVersion")

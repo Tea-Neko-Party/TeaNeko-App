@@ -5,8 +5,10 @@ import lombok.Getter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 
 import java.util.*;
+import java.util.function.BiConsumer;
 
 /**
  * 固定一次交互的 schema 与执行目标；模型可见定义不携带执行器。
@@ -64,6 +66,32 @@ public final class LLMToolBinding {
      */
     IContextualToolExecutor executor() {
         return executor;
+    }
+
+    /**
+     * 复用已冻结定义，在实际执行器前追加宿主检查，不公开原执行器。
+     * @param guard 生命周期锁外执行的准入检查，不得阻塞等待同一交互
+     * @return 定义不变、执行前重新检查的独立绑定
+     * @throws NullPointerException 当守卫为空时
+     */
+    public LLMToolBinding guarded(BiConsumer<ILLMToolCall, ToolInvocationContext> guard) {
+        Objects.requireNonNull(guard, "工具准入守卫不能为空。");
+        return new LLMToolBinding(this, (call, context) -> {
+            context.control().checkActive();
+            guard.accept(call, context);
+            context.control().checkActive();
+            return executor.call(call, context);
+        });
+    }
+
+    /**
+     * 复用已有绑定的不可变定义，仅替换受控执行链，不重复解析 schema。
+     * @param source 定义已经冻结的绑定
+     * @param executor 带宿主守卫的执行链
+     */
+    private LLMToolBinding(LLMToolBinding source, IContextualToolExecutor executor) {
+        this.definition = source.definition;
+        this.executor = executor;
     }
 
     /**

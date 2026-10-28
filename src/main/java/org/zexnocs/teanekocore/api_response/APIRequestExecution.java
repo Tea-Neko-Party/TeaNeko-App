@@ -41,9 +41,10 @@ final class APIRequestExecution<T> {
      * @param timer 阶段计时使用的借用调度器
      * @param future 承载最终结果的根任务
      * @param managedTimeout 是否将排队及重试等待纳入同一阶段时限
+     * @param lateCleanupFailure 请求已被外部结束后接收清理异常的诊断端口，不改写已交付结果
      */
     APIRequestExecution(ExecutionPolicy policy, Duration timeout, Scheduler timer,
-                        CompletableFuture<T> future, boolean managedTimeout) {
+                        CompletableFuture<T> future, boolean managedTimeout, Consumer<RuntimeException> lateCleanupFailure) {
         this.policy = policy;
         this.timer = timer;
         this.future = future;
@@ -51,7 +52,11 @@ final class APIRequestExecution<T> {
         this.timeoutNanos = managedTimeout ? nanos(timeout) : -1;
         future.whenComplete((_, _) -> {
             if (completed.compareAndSet(false, true)) {
-                disposeResources(); // finish().cancel(...) 或手动完成也释放订阅。
+                var cleanupFailure = disposeResources();
+                if (cleanupFailure != null) {
+                    // 根任务已由调用者结束，清理异常交给诊断端口，不能重新仲裁成功或取消。
+                    lateCleanupFailure.accept(cleanupFailure);
+                }
             }
         });
         if (policy.control() != null) {

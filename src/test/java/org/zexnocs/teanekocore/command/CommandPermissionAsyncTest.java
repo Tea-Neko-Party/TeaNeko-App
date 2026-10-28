@@ -305,8 +305,8 @@ class CommandPermissionAsyncTest {
             return dtos.computeIfAbsent(new Address(namespace, target), ignored -> {
                 var dto = mock(IEasyDataDto.class);
                 var values = values(namespace, target);
-                when(dto.has(anyString())).thenAnswer(invocation -> values.containsKey(invocation.getArgument(0)));
-                when(dto.getBoolean(anyString())).thenAnswer(invocation -> values.getOrDefault(invocation.getArgument(0), false));
+                when(dto.has(anyString())).thenAnswer(invocation -> values.containsKey(invocation.getArgument(0, String.class)));
+                when(dto.getBoolean(anyString())).thenAnswer(invocation -> values.getOrDefault(invocation.getArgument(0, String.class), false));
                 when(dto.getTaskConfig(anyString())).thenAnswer(invocation -> newTask(values));
                 return dto;
             });

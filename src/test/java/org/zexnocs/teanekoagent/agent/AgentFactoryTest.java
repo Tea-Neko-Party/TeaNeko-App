@@ -50,8 +50,16 @@ class AgentFactoryTest {
             assertFalse(second.isClosed());
             assertEquals(0, second.snapshot().revision());
             assertEquals(1, firstClosed.get()); assertEquals(0, secondClosed.get());
-            assertThrows(UnsupportedOperationException.class, () -> registry.snapshots().clear());
+            assertReadOnly(registry.snapshots());
         }
+    }
+
+    /**
+     * 以通用集合引用验证公开快照拒绝修改，保留有意的异常契约测试。
+     * @param values 待验证的快照列表
+     */
+    private static void assertReadOnly(List<?> values) {
+        assertThrows(UnsupportedOperationException.class, values::clear);
     }
 
     /** 验证原始参数、嵌套集合及后续参数副本的修改不会改变定义组件。 */

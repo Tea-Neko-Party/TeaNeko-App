@@ -1,5 +1,8 @@
 package org.zexnocs.teanekoagent.llm.framework.interaction;
 
+import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
@@ -85,6 +88,21 @@ public final class LLMInteractionService implements ILLMInteractionService {
     @Override
     public CompletionStage<LLMInteractionResult> interact(ILLMPrompt prompt, LLMToolSet tools,
                                                          ToolInvocationContext context, LLMInteractionSettings settings) {
+        return interact(prompt, tools, context, settings, ignored -> {});
+    }
+
+    /**
+     * 固定宿主守卫并复用有限交互循环，守卫不进入消息、选项或返回快照。
+     * @param prompt 初始消息和参数策略
+     * @param tools 本轮可信工具集
+     * @param context 宿主绑定及父控制
+     * @param settings 本轮交互设置
+     * @param guard 模型阶段动态准入检查
+     * @return 所有已知终止路径均以明确结果完成的阶段
+     */
+    @Override
+    public CompletionStage<LLMInteractionResult> interact(ILLMPrompt prompt, LLMToolSet tools,
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
         final LLMInteractionSettings selected;
         try {
             selected = Objects.requireNonNull(settings == null ? defaults.resolve() : settings, "交互配置不能为空。");
@@ -93,13 +111,16 @@ public final class LLMInteractionService implements ILLMInteractionService {
         }
         final List<ILLMMessage> messages;
         final LLMModelOptions options;
+        final LLMOptionsPolicy optionsPolicy;
         final Set<String> ids;
         try {
             Objects.requireNonNull(prompt, "模型输入不能为空。");
             Objects.requireNonNull(tools, "工具集合不能为空。");
             Objects.requireNonNull(context, "宿主上下文不能为空。");
+            Objects.requireNonNull(guard, "模型准入守卫不能为空。");
             messages = LLMProtocolSnapshots.messages(prompt.getMessages());
             options = LLMProtocolSnapshots.options(prompt.getOptions());
+            optionsPolicy = Objects.requireNonNull(prompt.getOptionsPolicy(), "模型参数解析策略不能为空。");
             ids = validateHistory(messages);
             for (var key : List.of(LLMCallLimits.MODEL_REQUESTS, LLMCallLimits.TOOL_ROUNDS, LLMCallLimits.TOOL_EXECUTIONS)) {
                 context.control().budget().remaining(key);
@@ -112,8 +133,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
         }
         final Run run;
         try {
-            run = new Run(new LLMInteractionExecution(models, tools, context, selected, executor, scheduler, tokenEstimator),
-                    messages, options, ids);
+            run = new Run(new LLMInteractionExecution(models, tools, context, selected, executor, scheduler, tokenEstimator, guard),
+                    messages, options, optionsPolicy, ids);
         } catch (RuntimeException failure) {
             return CompletableFuture.completedStage(empty(classify(failure)));
         }
@@ -133,7 +154,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * @return 未消耗模型额度的不可变结果
      */
     private static LLMInteractionResult empty(LLMInteractionResult.Status status) {
-        return new LLMInteractionResult(status, List.of(), Optional.empty(), List.of(), List.of(), Map.of());
+        return new LLMInteractionResult(status, List.of(), null, List.of(), List.of(), Map.of());
     }
 
     /**
@@ -195,6 +216,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * @return 交互终止原因
      */
     private static LLMInteractionResult.Status classify(Throwable failure) {
+        if (failure instanceof LLMOperationRejectedException) { return CANCELLED; }
         failure = unwrap(failure);
         if (failure instanceof ExecutionStoppedException stopped) {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED ? TIMED_OUT : CANCELLED;
@@ -233,24 +255,27 @@ public final class LLMInteractionService implements ILLMInteractionService {
         private final LLMInteractionExecution execution;
         private final List<ILLMMessage> transcript;
         private final LLMModelOptions options;
+        private final LLMOptionsPolicy optionsPolicy;
         private final Set<String> ids;
         private final List<LLMInteractionResult.ModelAttempt> attempts = new ArrayList<>();
         private ILLMAssistantMessage candidate;
         private int appendedTools;
-        private Optional<BudgetKey> rejectedBudget = Optional.empty();
+        private @Nullable BudgetKey rejectedBudget;
 
         /**
          * 接管已固定的本轮数据，消息列表转为本轮私有追加容器。
          * @param execution 本轮拥有的阶段执行器
          * @param messages 冻结的初始消息
          * @param options 本轮私有模型选项
+         * @param optionsPolicy 本轮固定的默认值解析规则
          * @param ids 初始历史已用的调用 ID
          */
         private Run(LLMInteractionExecution execution, List<ILLMMessage> messages,
-                    LLMModelOptions options, Set<String> ids) {
+                    LLMModelOptions options, LLMOptionsPolicy optionsPolicy, Set<String> ids) {
             this.execution = execution;
             this.transcript = new ArrayList<>(messages);
             this.options = options;
+            this.optionsPolicy = optionsPolicy;
             this.ids = ids;
         }
 
@@ -260,7 +285,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
          */
         private CompletionStage<LLMInteractionResult.Status> next() {
             long before = execution.usage().get(LLMCallLimits.MODEL_REQUESTS).used();
-            return execution.callModel(new LLMPrompt(transcript, options)).handle((raw, failure) -> {
+            return execution.callModel(new LLMPrompt(transcript, options, optionsPolicy)).handle((raw, failure) -> {
                 int after = Math.toIntExact(execution.usage().get(LLMCallLimits.MODEL_REQUESTS).used());
                 if (failure != null) {
                     if (after > before) {
@@ -345,7 +370,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
          */
         private LLMInteractionResult.Status stopped(Throwable failure) {
             var cause = unwrap(failure);
-            if (cause instanceof BudgetExceededException exceeded) { rejectedBudget = Optional.of(exceeded.key()); }
+            if (cause instanceof BudgetExceededException exceeded) { rejectedBudget = exceeded.key(); }
             return classify(cause);
         }
 
@@ -357,7 +382,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
         private LLMInteractionResult finish(LLMInteractionResult.Status status) {
             appendTools();
             return new LLMInteractionResult(status, transcript, Optional.ofNullable(candidate), attempts,
-                    execution.toolResults(), execution.usage(), rejectedBudget);
+                    execution.toolResults(), execution.usage(), Optional.ofNullable(rejectedBudget));
         }
     }
 }

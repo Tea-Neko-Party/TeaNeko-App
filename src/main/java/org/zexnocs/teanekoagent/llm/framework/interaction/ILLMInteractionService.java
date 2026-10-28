@@ -29,6 +29,21 @@ public interface ILLMInteractionService {
                                                   ToolInvocationContext context, LLMInteractionSettings settings);
 
     /**
+     * 使用显式宿主守卫执行交互；未适配的实现必须拒绝，不能静默忽略动态准入。
+     * @param prompt 固定输入及参数策略
+     * @param tools 固定的可信工具集
+     * @param context 宿主身份及共享执行控制
+     * @param settings 本轮交互设置
+     * @param guard 每个模型阶段实际准入前执行的守卫
+     * @return 完整交互结果，拒绝不会继续后续动作
+     * @throws UnsupportedOperationException 当实现尚不支持显式守卫时
+     */
+    default CompletionStage<LLMInteractionResult> interact(ILLMPrompt prompt, LLMToolSet tools,
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+        throw new UnsupportedOperationException("交互端口尚不支持宿主动态准入守卫。");
+    }
+
+    /**
      * 使用本地默认设置开始交互，不创建新的父总预算。
      *
      * @param prompt 初始消息及模型选项

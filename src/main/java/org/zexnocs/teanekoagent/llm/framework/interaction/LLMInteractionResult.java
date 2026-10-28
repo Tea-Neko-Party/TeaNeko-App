@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.framework.interaction;
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
@@ -62,15 +63,15 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
      * 保留未提供具体预算终止维度的构造入口。
      * @param status 终止状态
      * @param transcript 诊断链
-     * @param finalCandidate 可选候选
+     * @param finalCandidate 终止候选，null 表示缺失
      * @param attempts 模型尝试
      * @param tools 已观察工具结果
      * @param budgetUsage 局部预算快照
      */
-    public LLMInteractionResult(Status status, List<ILLMMessage> transcript, Optional<ILLMAssistantMessage> finalCandidate,
+    public LLMInteractionResult(Status status, List<ILLMMessage> transcript, @Nullable ILLMAssistantMessage finalCandidate,
                                 List<ModelAttempt> attempts, List<ToolInvocationResult> tools,
                                 Map<BudgetKey, ResourceBudget.Usage> budgetUsage) {
-        this(status, transcript, finalCandidate, attempts, tools, budgetUsage, Optional.empty());
+        this(status, transcript, Optional.ofNullable(finalCandidate), attempts, tools, budgetUsage, Optional.empty());
     }
 
     /**
@@ -134,9 +135,9 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
         /**
          * 保留不提供预算记账的响应构造方式，缺失记账不等于已知零用量。
          * @param number 实际尝试序号
-         * @param response 可选响应
+         * @param response 原始响应，null 表示缺失
          */
-        public ModelAttempt(int number, Optional<ILLMResult> response) { this(number, response, Optional.empty()); }
+        public ModelAttempt(int number, @Nullable ILLMResult response) { this(number, Optional.ofNullable(response), Optional.empty()); }
 
         /**
          * 逐次暴露供应商报告的 usage，不用实际请求次数推导 token 或费用。

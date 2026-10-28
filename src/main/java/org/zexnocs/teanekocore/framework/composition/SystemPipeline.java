@@ -33,6 +33,7 @@ public final class SystemPipeline {
      * @param systems 需要装配的 System 集合
      * @return 已验证依赖并固定执行顺序的管线
      * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
+     * @throws IllegalStateException 当内部依赖图缺少入度记录时
      * @throws NullPointerException 当必需的输入或依赖为空时
      */
     public static SystemPipeline compile(Collection<? extends IEntitySystem> systems) {
@@ -73,7 +74,11 @@ public final class SystemPipeline {
             var id = ready.remove();
             ordered.add(nodes.get(id));
             for (var next : successors.getOrDefault(id, List.of())) {
-                if (indegree.compute(next, (ignored, count) -> count - 1) == 0) {
+                var count = indegree.get(next);
+                if (count == null) { throw new IllegalStateException("系统依赖缺少入度记录。"); }
+                int remaining = count - 1;
+                indegree.put(next, remaining);
+                if (remaining == 0) {
                     ready.add(next);
                 }
             }

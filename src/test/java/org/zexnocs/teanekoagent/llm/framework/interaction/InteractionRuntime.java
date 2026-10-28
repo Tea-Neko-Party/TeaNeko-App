@@ -13,19 +13,19 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.mockito.Mockito.*;
 
 /**
- * 手动推进业务队列、时钟及截止时间回调的离线夹具，不创建真实线程池。
+ * 手动推进业务队列、时钟及截止时间回调的离线夹具，供 LLM 和上层服务复用，不创建真实线程池。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
  * @version 4.5.0-l
  */
-final class InteractionRuntime implements Executor {
-    final ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+public final class InteractionRuntime implements Executor {
+    public final ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
     final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-28T00:00:00Z"));
     private final Queue<Runnable> work = new ArrayDeque<>();
     private final List<Entry> timers = new ArrayList<>();
-    final Clock clock = new Clock() {
+    public final Clock clock = new Clock() {
         /**
          * 固定测试时钟的时区，避免依赖机器默认设置。
          *
@@ -52,7 +52,7 @@ final class InteractionRuntime implements Executor {
     /**
      * 捕获实际 Core 使用的 Callable 计时重载，每个取消句柄独立可观察。
      */
-    InteractionRuntime() {
+    public InteractionRuntime() {
         doAnswer(invocation -> {
             Callable<?> callback = invocation.getArgument(0);
             long delay = invocation.getArgument(1);
@@ -76,7 +76,7 @@ final class InteractionRuntime implements Executor {
     /**
      * 按排队顺序执行所有当前可运行工作，期间产生的新工作也继续推进。
      */
-    void runAll() {
+    public void runAll() {
         while (!work.isEmpty()) {
             work.remove().run();
         }
@@ -87,7 +87,7 @@ final class InteractionRuntime implements Executor {
      *
      * @param amount 本次需要推进的时长
      */
-    void advance(Duration amount) {
+    public void advance(Duration amount) {
         now.updateAndGet(value -> value.plus(amount));
         for (;;) {
             var due = timers.stream().filter(entry -> !entry.done().get() && !entry.due().isAfter(now.get()))
@@ -110,7 +110,7 @@ final class InteractionRuntime implements Executor {
      *
      * @return 尚未取消或执行的计时任务数
      */
-    long pendingTimers() { return timers.stream().filter(entry -> !entry.done().get()).count(); }
+    public long pendingTimers() { return timers.stream().filter(entry -> !entry.done().get()).count(); }
 
     /**
      * 为独立请求创建使用手动时钟的宿主控制，默认一天上限不会干扰交互自己的时限。
@@ -118,7 +118,7 @@ final class InteractionRuntime implements Executor {
      * @param limits 宿主总限额，与子交互局部设置分别验证
      * @return 由用例负责关闭的父控制
      */
-    ExecutionControl parent(LLMCallLimits limits) {
+    public ExecutionControl parent(LLMCallLimits limits) {
         ResourceBudget budget = limits.newBudget();
         return ExecutionControl.withDeadline(budget, now.get().plus(Duration.ofDays(1)), clock, scheduler);
     }

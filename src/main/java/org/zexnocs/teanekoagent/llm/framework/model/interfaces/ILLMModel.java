@@ -71,7 +71,8 @@ public interface ILLMModel {
     }
 
     /**
-     * 使用一个 prompt 来获取模型结果。
+     * 使用统一输入获取单次模型结果，须遵守输入的参数解析策略。
+     * RESOLVED 参数不得再补入基础值或文件默认值，仍须检查输入、能力与认证边界。
      *
      * @param prompt 提示词
      * @return 模型调用结果 Future

@@ -33,6 +33,7 @@ public final class ExecutionControl implements AutoCloseable {
 
     private final UUID id = UUID.randomUUID();
     private final UUID parentId;
+    private final List<UUID> ancestors;
     private final ResourceBudget budget;
     private final Clock clock;
     private final Instant deadline;
@@ -104,9 +105,23 @@ public final class ExecutionControl implements AutoCloseable {
      * @throws NullPointerException 当必需的输入或依赖为空时
      */
     private ExecutionControl(UUID parentId, ResourceBudget budget, Clock clock, Instant deadline) {
+        this(parentId, budget, clock, deadline, List.of());
+    }
+
+    /**
+     * 保存不可变祖先标识，不保留父控制对象或通过预算对象猜测调用关系。
+     * @param parentId 直接父执行标识，根执行为空
+     * @param budget 共享预算
+     * @param clock 截止时间来源
+     * @param deadline 可选截止时间
+     * @param ancestors 从直接父执行向根排列的标识
+     * @throws NullPointerException 当预算、时钟或祖先列表为空时
+     */
+    private ExecutionControl(UUID parentId, ResourceBudget budget, Clock clock, Instant deadline, List<UUID> ancestors) {
         this.parentId = parentId;
-        this.budget = Objects.requireNonNull(budget, "budget");
-        this.clock = Objects.requireNonNull(clock, "clock");
+        this.ancestors = List.copyOf(ancestors);
+        this.budget = Objects.requireNonNull(budget, "共享预算不能为空。");
+        this.clock = Objects.requireNonNull(clock, "执行时钟不能为空。");
         this.deadline = deadline;
     }
 
@@ -198,6 +213,17 @@ public final class ExecutionControl implements AutoCloseable {
      */
     public Optional<UUID> parentId() {
         return Optional.ofNullable(parentId);
+    }
+
+    /**
+     * 判断当前控制是否属于指定执行或其后代；只检查显式链路，不授予业务权限。
+     * @param ancestor 包含自身在内的执行标识
+     * @return 标识为自身或任一祖先时为 true
+     * @throws NullPointerException 当执行标识为空时
+     */
+    public boolean isWithin(UUID ancestor) {
+        Objects.requireNonNull(ancestor, "祖先执行标识不能为空。");
+        return id.equals(ancestor) || ancestors.contains(ancestor);
     }
 
     /**
@@ -308,7 +334,9 @@ public final class ExecutionControl implements AutoCloseable {
      * @return 与父执行共享预算的子控制
      */
     private ExecutionControl attachChild(Instant childDeadline) {
-        var child = new ExecutionControl(id, budget, clock, childDeadline);
+        var lineage = new ArrayList<UUID>(ancestors.size() + 1);
+        lineage.add(id); lineage.addAll(ancestors);
+        var child = new ExecutionControl(id, budget, clock, childDeadline, lineage);
         var subscription = onTermination(child::stop);
         child.onTermination(ignored -> subscription.close());
         return child;

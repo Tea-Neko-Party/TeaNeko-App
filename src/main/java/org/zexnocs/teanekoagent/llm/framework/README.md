@@ -75,6 +75,18 @@ ILLMResult result = resultFuture.finish().join();
 |prompt options|单次 `ILLMPrompt`|`ILLMPrompt.getOptions()`|仅覆盖本次模型调用。|
 |effective options|模型调用阶段|内部合并结果|按 base、default、prompt 的顺序合并，并强制写回路由 provider。|
 
+`ILLMPrompt.getOptionsPolicy()` 明确区分默认值合并与已解析参数，旧构造方式默认使用 `MERGE_DEFAULTS`。
+需要在整轮工具往返中固定模型的宿主，可先调用 `resolveOptions`，用 `LLMModelOptionsSnapshot` 冻结结果，再传入 `RESOLVED`：
+
+```java
+var snapshot = new LLMModelOptionsSnapshot(llmModelService.resolveOptions(originalPrompt));
+var prompt = new LLMPrompt(originalPrompt.getMessages(), snapshot.toOptions(), LLMOptionsPolicy.RESOLVED);
+```
+
+`RESOLVED` 要求明确的 provider/model，禁止缺失时回退。模型服务与 `AbstractLLMModel` 都跳过文件和基础值合并，缺失的采样字段和 metadata 键保持缺失；输入、能力和认证边界仍会校验。显式传入的注册 ID 必须与已解析 provider 相同。自定义适配器也须遵守此策略，不能再合并部署默认值。策略只用于本地准备，不写入 metadata，JSON 序列化忽略该属性。
+
+Prompt 本身保留既有容器语义；参数解析策略不等于数据冻结。交互服务在接收时冻结消息和选项，并保留本轮策略。token 预检完成后，收紧的参数同样以已解析策略交付单次调用，避免预留与实际调用之间再次合并默认值。工具定义仍来自可信工具集，末次调用无工具和预算收紧规则继续执行。
+
 | 字段 | 说明 |
 |---|---|
 | `provider` | 供应商级模型适配器 ID，例如 `openai`、`deepseek`。 |

@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.llm.framework.model;
 
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.*;
@@ -168,7 +169,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     }
 
     /**
-     * 合并配置并校验能力，使预检和实际调用保持同一套模型输入边界。
+     * 按显式策略准备参数并校验能力；已解析输入不再读取文件或适配器默认值。
      * @param modelId 可信路由
      * @param model 已注册模型适配器
      * @param prompt 本次输入
@@ -177,7 +178,12 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     private LLMModelOptions validateOptions(LLMModelId modelId, ILLMModel model, ILLMPrompt prompt) {
         LLMOptionBoundary.validate(prompt.getOptions());
-        var options = buildEffectiveOptions(modelId, model.getBaseOptions(), prompt.getOptions());
+        var options = prompt.getOptionsPolicy() == LLMOptionsPolicy.RESOLVED
+                ? LLMOptionBoundary.requireResolved(prompt.getOptions())
+                : buildEffectiveOptions(modelId, model.getBaseOptions(), prompt.getOptions());
+        if (!modelId.id().equals(options.getProvider())) {
+            throw new IllegalArgumentException("已解析参数的 provider 与调用路由不一致。");
+        }
         LLMOptionBoundary.validate(options);
         if (!model.supports(options)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + modelId);
@@ -198,7 +204,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     private TaskFuture<ILLMResult> callInternal(LLMModelId modelId, ILLMPrompt prompt, ExecutionPolicy execution) {
         var model = getModel(modelId);
         var options = validateOptions(modelId, model, prompt);
-        var effective = new LLMPrompt(prompt.getMessages(), options);
+        var effective = new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED);
         return execution == null ? model.call(effective) : model.call(effective, execution);
     }
 
@@ -288,6 +294,9 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * @return 目标模型适配器 ID
      */
     private LLMModelId resolveModelId(ILLMPrompt prompt) {
+        if (prompt.getOptionsPolicy() == LLMOptionsPolicy.RESOLVED) {
+            return LLMModelId.of(LLMOptionBoundary.requireResolved(prompt.getOptions()).getProvider());
+        }
         var options = prompt.getOptions();
         if (options != null) {
             var provider = options.findProvider();
