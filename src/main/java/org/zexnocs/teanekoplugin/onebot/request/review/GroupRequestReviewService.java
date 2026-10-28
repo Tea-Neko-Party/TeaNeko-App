@@ -25,6 +25,8 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -32,8 +34,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 用于管理、缓存群聊入群请求审核服务。
  *
  * @author zExNocs
- * @date 2026/03/10
+ * @date 2026/10/28
  * @since 4.1.3
+ * @version 4.5.0-l
  */
 @Service("GroupRequestService")
 @RequiredArgsConstructor
@@ -69,6 +72,8 @@ public class GroupRequestReviewService {
 
     /**
      * 清理过期的入群请求。
+     *
+     * @return 满足本方法约束的 {@code EmptyTaskResult} 结果
      */
     public EmptyTaskResult __clean() {
         requestMap.entrySet().removeIf(entry -> entry.getValue().isExpired());
@@ -78,6 +83,7 @@ public class GroupRequestReviewService {
     /**
      * 获取上次的请求ID。
      *
+     * @param group 是否选择群聊发送实现
      * @return 上次的请求ID
      */
     public long getLastRequestId(long group) {
@@ -89,6 +95,8 @@ public class GroupRequestReviewService {
      *
      * @param requestData 入群请求数据
      * @param strangerInfo 请求者的资料
+     * @param requestAcceptNum 用于本次处理的 {@code requestAcceptNum} 数据
+     * @param requestRejectNum 用于本次处理的 {@code requestRejectNum} 数据
      */
     public void addRequest(GroupRequestData requestData,
                            @Nullable StrangerInfoGetResponseData strangerInfo,
@@ -101,6 +109,7 @@ public class GroupRequestReviewService {
 
     /**
      * 删除入群请求。
+     *
      * @param groupId 群聊ID
      * @param userId 请求者ID
      * @return 是否成功删除请求
@@ -153,11 +162,11 @@ public class GroupRequestReviewService {
                     请求者的资料获取失败了喵。""");
         }
         builder.addText(String.format("""
-                
-                
+
+
                 请求者申请信息喵：
                 %s
-                
+
                 需 %s 猫同意：/gr 接受 %s
                 需 %s 猫拒绝：/gr 拒绝 %s""",
                 value.requestData.getComment(),
@@ -168,6 +177,7 @@ public class GroupRequestReviewService {
 
     /**
      * 展示一个详细的所有入群请求。
+     *
      * @param groupId 群聊ID
      * @return 返回发送的消息列表，用于 {@link INodeTeaNekoContentPart} 中的 content。
      */
@@ -191,34 +201,34 @@ public class GroupRequestReviewService {
      * @param groupId 群聊ID
      * @param userId  请求者ID
      * @param opId    操作者ID
+     * @param opGroupId 用于本次处理的 {@code opGroupId} 数据
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
     @Nullable
-    public List<ITeaNekoContent> reject(long groupId, long userId, long opGroupId, long opId) {
+    public CompletionStage<List<ITeaNekoContent>> reject(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
         if (value == null) {
-            return OnebotContentListBuilder.builder().addText("该请求不存在喵").build();
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText("该请求不存在喵").build());
         }
         // 如果已经处理过该请求
         if (value.isHandled(opId)) {
-            return OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build();
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build());
         }
         int rejectNum = value.reject(opGroupId, opId);
 
         if (rejectNum >= value.requestRejectNum) {
-            groupAddRequestSender.reject(
-                    value.getRequestData().getFlag(),
-                    "群成员投票拒绝了您的入群请求。"
-            );
-            requestMap.remove(key);
-            return OnebotContentListBuilder.builder().addText(String.format("""
+            return groupAddRequestSender.rejectAsync(value.getRequestData().getFlag(), "群成员投票拒绝了您的入群请求。").thenApply(ignored -> {
+                requestMap.remove(key, value);
+                return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     已经达到拒绝猫数上限喵，请求已被拒绝。""", userId)).build();
+            });
         } else {
-            return OnebotContentListBuilder.builder().addText(String.format("""
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
-                    拒绝成功喵，目前还需要 %d 猫拒绝喵。""", userId, value.requestRejectNum - rejectNum)).build();
+                    拒绝成功喵，目前还需要 %d 猫拒绝喵。""", userId, value.requestRejectNum - rejectNum)).build());
         }
     }
 
@@ -228,35 +238,46 @@ public class GroupRequestReviewService {
      * @param groupId 群聊ID
      * @param userId  请求者ID
      * @param opId    操作者ID
+     * @param opGroupId 用于本次处理的 {@code opGroupId} 数据
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
     @Nullable
-    public List<ITeaNekoContent> accept(long groupId, long userId, long opGroupId, long opId) {
+    public CompletionStage<List<ITeaNekoContent>> accept(long groupId, long userId, long opGroupId, long opId) {
         var key = HashPair.of(groupId, userId);
         var value = requestMap.get(key);
         // 如果不存在请求数据
         if (value == null) {
-            return OnebotContentListBuilder.builder().addText("该请求不存在喵").build();
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText("该请求不存在喵").build());
         }
         // 如果已经处理过该请求
         if (value.isHandled(opId)) {
-            return OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build();
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText("你已经处理过该请求了喵").build());
         }
         int acceptNum = value.accept(opGroupId, opId);
 
         if (acceptNum >= value.requestAcceptNum) {
-            groupAddRequestSender.approve(value.getRequestData().getFlag());
-            requestMap.remove(key);
-            return OnebotContentListBuilder.builder().addText(String.format("""
+            return groupAddRequestSender.approveAsync(value.getRequestData().getFlag()).thenApply(ignored -> {
+                requestMap.remove(key, value);
+                return OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
                     已经达到接受猫数上限喵，请求已被接受。""", userId)).build();
+            });
         } else {
-            return OnebotContentListBuilder.builder().addText(String.format("""
+            return CompletableFuture.completedStage(OnebotContentListBuilder.builder().addText(String.format("""
                     入群请求ID：%d
-                    接受成功喵，目前还需要 %d 猫接受喵。""", userId, value.requestAcceptNum - acceptNum)).build();
+                    接受成功喵，目前还需要 %d 猫接受喵。""", userId, value.requestAcceptNum - acceptNum)).build());
         }
     }
 
 
+    /**
+     * 保存入群申请及审核计数，平台接受或拒绝完成后再处理后续状态。
+     *
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
     @Getter
     public class GroupRequestValue {
         /// 最少需要多少猫同意入群请求
@@ -283,6 +304,14 @@ public class GroupRequestReviewService {
         /// 拒绝入群数量
         private final AtomicInteger rejectNum = new AtomicInteger(0);
 
+        /**
+         * 保存原申请、申请者资料及审核计数，供当前入群审核流程使用。
+         *
+         * @param requestData 请求参数及可信连接覆盖信息
+         * @param strangerInfo 用于本次处理的 {@code strangerInfo} 数据
+         * @param requestAcceptNum 用于本次处理的 {@code requestAcceptNum} 数据
+         * @param requestRejectNum 用于本次处理的 {@code requestRejectNum} 数据
+         */
         public GroupRequestValue(GroupRequestData requestData,
                                  StrangerInfoGetResponseData strangerInfo,
                                  int requestAcceptNum,
@@ -296,6 +325,7 @@ public class GroupRequestReviewService {
         /**
          * 判断该请求是否过期。
          * 超过 48 小时未处理的请求会被视为过期。
+         *
          * @return 是否过期
          */
         public boolean isExpired() {
@@ -306,6 +336,7 @@ public class GroupRequestReviewService {
          * 接受入群请求，并返回接受数量。
          *
          * @param opID 操作者ID
+         * @param opGroupId 用于本次处理的 {@code opGroupId} 数据
          * @return 接受数量
          */
         public int accept(long opGroupId, long opID) {
@@ -325,6 +356,8 @@ public class GroupRequestReviewService {
         /**
          * 拒绝入群请求，并返回拒绝数量。
          *
+         * @param opGroupId 用于本次处理的 {@code opGroupId} 数据
+         * @param opID 用于本次处理的 {@code opID} 数据
          * @return 拒绝数量
          */
         public int reject(long opGroupId, long opID) {
@@ -343,7 +376,9 @@ public class GroupRequestReviewService {
 
         /**
          * 判断该操作者是否已经处理过该请求。
+         *
          * @param opID 操作者ID
+         * @return 当前校验或原子操作是否满足本方法约定的条件
          */
         public boolean isHandled(long opID) {
             return handledMap.containsKey(opID);

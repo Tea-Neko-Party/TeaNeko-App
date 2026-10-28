@@ -27,7 +27,17 @@
 | `DatabaseTaskConfig.merge(IDatabaseTaskConfig)` | 合并两个尚未提交的数据库任务；被合并任务会被标记为已提交。 |
 | `DatabaseTaskConfig.push()` | 提交任务并自动 `finish()`。 |
 | `DatabaseTaskConfig.pushWithFuture()` | 提交任务并返回 `TaskFuture<ITaskResult<Void>>`。 |
+| `IDatabaseTaskConfig.pushAsync()` | 提交一次任务，返回等待事务和缓存处理结束的 `CompletionStage<Void>`；最终失败状态和原异常均向调用方传播。 |
 | `DatabaseRetryHandlingTaskStage` | 处理数据库并发和完整性异常，将可重试异常包装为 `TaskRetryRuntimeException`。 |
+
+需要在落库后发送确认消息时，返回真正的完成链：
+
+```java
+return writeTask.pushAsync()
+        .thenCompose(ignored -> replyBuilder.sendReplyMessageAsync("已保存"));
+```
+
+`pushAsync()` 复用 `pushWithFuture()` 的单次提交和提交后禁止修改规则，重复提交仍同步抛出异常。它不自动记录终端日志；调用方应将失败传播给上层业务入口并在那里统一处理。
 
 默认任务阶段 namespace 是：
 
@@ -97,6 +107,19 @@ dto.getTaskConfig("update config")
 | `clearRuleConfigListFiled(...)` | 清空配置 List 字段。 |
 | `IConfigDataQueryService` | 查询 manager 详情、对象配置详情和 namespace 下的规则详情。 |
 | `ConfigManagerScanner` | 扫描启用的 `@ConfigManager`，建立 name 和 namespace 索引。 |
+
+需要等待写入完成时，使用 `IConfigDataService` 继承的异步写入接口：
+
+| API | 完成含义 |
+| --- | --- |
+| `registerConfigAsync(...)` | 默认配置已提交；配置声明或构造器无效会在提交前同步抛错。 |
+| `unregisterConfigAsync(...)` | 已存在并完成删除时返回 true，不存在时返回 false；删除失败以异常结束。 |
+| `setRuleConfigFieldAsync(...)` | 字段通过校验且写入任务及缓存处理已结束。 |
+| `addToRuleConfigListFiledAsync(...)` / `removeFromRuleConfigListFiledAsync(...)` / `clearRuleConfigListFiledAsync(...)` | 对应列表变更的提交完成。方法名称沿用现有 Filed 拼写。 |
+
+这些接口同时支持 String 与 `IConfigKey`，通过 `pushAsync()` 传播实际任务结果。配置不存在、字段类型错误、字段校验拒绝等准备阶段错误仍同步抛出；数据库阶段的失败由返回的 Stage 传播，调用方负责链尾异常处理。字段检查器加载异常会阻止写入，不能降级为跳过校验。
+
+原有便捷写入接口与异步接口复用变更构建逻辑；便捷接口继续通过 `push()` 处理终端日志。旧 `unregisterConfig()` 的 boolean 只说明找到并提交删除，不表示提交已完成。上述接口不新增并发合并、revision 或跨任务事务；并发修改同一整份配置仍需业务层另行协调。
 
 内置默认配置类型：
 

@@ -11,6 +11,8 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.content.NodeTeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.content.TextTeaNekoContentPart;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
+import org.zexnocs.teanekoapp.sender.MessageSendFailedException;
+import org.zexnocs.teanekoapp.sender.MessageSendStages;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IForwardMessageSenderBuilder;
 import org.zexnocs.teanekoapp.sender.interfaces.ISenderService;
 import org.zexnocs.teanekoclient.onebot.core.OnebotClient;
@@ -22,18 +24,21 @@ import org.zexnocs.teanekoclient.onebot.event.sent.OnebotMessageSentEvent;
 import org.zexnocs.teanekoclient.onebot.sender.AbstractOnebotSender;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotMessageFailSendHandler;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 私聊转发消息发送器
  *
  * @author zExNocs
- * @date 2026/03/05
+ * @date 2026/10/28
  * @since 4.0.12
+ * @version 4.5.0-l
  */
 @Service("Onebot-PrivateForwardMessageSender")
 public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateForwardMessageSendParamsData, OnebotMessageSendResponseData> {
@@ -52,6 +57,9 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * @param senderService 发送服务实例，用于将发送数据推送给客户端，并处理响应数据
      * @param client        要推送数据的客户端
      * @param mapper        mapper，建议使用 {@code @Qualifier("onebotObjectMapper") } 的 mapper
+     * @param botName 发送显示名称
+     * @param onebotMessageFailSendHandler 由装配方提供的 {@code OnebotMessageFailSendHandler} 协作依赖
+     * @param onebotIdService 由装配方提供的 {@code OnebotIdService} 协作依赖
      */
     public PrivateForwardMessageSender(ISenderService senderService,
                                        OnebotClient client,
@@ -70,7 +78,8 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * 不应该在多线程中使用同一个实例。
      *
      * @param data 要回复的消息数据
-     * @return {@link PrivateForwardMessageBuilder }
+     * @param token 原发送链路使用的状态令牌
+     * @return 保持当前目标和原消息来源的发送构建器
      */
     public PrivateForwardMessageBuilder getBuilder(String token, ITeaNekoMessageData data) {
         return new PrivateForwardMessageBuilder(token, data);
@@ -81,7 +90,8 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * 不应该在多线程中使用同一个实例。
      *
      * @param userId 用户 ID，表示要发送消息的目标用户
-     * @return {@link PrivateForwardMessageBuilder }
+     * @param token 原发送链路使用的状态令牌
+     * @return 保持当前目标和原消息来源的发送构建器
      */
     public PrivateForwardMessageBuilder getBuilder(String token, long userId) {
         return new PrivateForwardMessageBuilder(token, userId);
@@ -92,8 +102,9 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
      * 不应该在多线程中使用同一个实例。
      *
      * @author zExNocs
-     * @date 2026/03/05
+     * @date 2026/10/28
      * @since 4.0.12
+     * @version 4.5.0-l
      */
     @Accessors(chain = true)
     public class PrivateForwardMessageBuilder implements IForwardMessageSenderBuilder {
@@ -137,12 +148,24 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
         @Setter
         private boolean recordFailed = true;
 
+        /**
+         * 固定私聊转发的目标与发送令牌；从原消息创建时继续保留其来源信息。
+         *
+         * @param token 原发送链路使用的状态令牌
+         * @param userId 原业务边界中的目标用户标识
+         */
         public PrivateForwardMessageBuilder(String token, long userId) {
             this.userId = userId;
             this.token = token;
             this.messageData = null;
         }
 
+        /**
+         * 固定私聊转发的目标与发送令牌；从原消息创建时继续保留其来源信息。
+         *
+         * @param token 原发送链路使用的状态令牌
+         * @param messageData 用于本次处理的 {@code messageData} 数据
+         */
         public PrivateForwardMessageBuilder(String token, @NonNull ITeaNekoMessageData messageData) {
             this.userId = Long.parseLong(messageData.getUserData().getUserIdInPlatform());
             this.token = token;
@@ -152,7 +175,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
         /**
          * 获取 bot name
          *
-         * @return bot name
+         * @return 当前发送器提供的机器人显示名称
          */
         @Override
         public String getBotName() {
@@ -162,7 +185,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
         /**
          * 获取 bot ID
          *
-         * @return bot ID
+         * @return 当前发送器提供的机器人平台标识
          */
         @Override
         public String getBotId() {
@@ -176,54 +199,100 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
          */
         @Override
         public TaskFuture<IMessageSendResponseData> sendWithFuture() {
+            return sendPart(List.copyOf(messageList), sendOptions());
+        }
+
+        /**
+         * 单次调用的配置快照；异步分段不再读取构造器的可变字段。
+         *
+         * @param prompt 经过宿主装配的消息与本次模型选项
+         * @param source 待处理的来源数据
+         * @param summary 转发消息摘要
+         * @param delay 提交任务前的延迟
+         * @param retryCount 允许的重试次数
+         * @param retryInterval 两次重试之间的等待时长
+         * @param recordFailed 是否记录任务失败
+         * @author zExNocs
+         * @date 2026/10/28
+         * @since 4.0.0
+         * @version 4.5.0-l
+         */
+        private record SendOptions(String prompt, String source, String summary,
+                                   Duration delay, int retryCount, Duration retryInterval,
+                                   boolean recordFailed) {}
+
+        /**
+         * 复制本次分段发送使用的任务参数，后续构建器修改不会改变已启动链路。
+         *
+         * @return 满足本方法约束的 {@code SendOptions} 结果
+         */
+        private SendOptions sendOptions() {
+            return new SendOptions(prompt, source, summary, delay, retryCount, retryInterval, recordFailed);
+        }
+
+        /**
+         * 用固定内容与配置发送一个分段，校验真实回执后才允许继续下一段。
+         *
+         * @param messages 保持原始顺序的统一消息列表
+         * @param options 本次有效模型选项
+         * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+         */
+        private TaskFuture<IMessageSendResponseData> sendPart(List<OnebotContent> messages, SendOptions options) {
             var data = PrivateForwardMessageSendParamsData.builder()
                     .userId(userId)
-                    .messages(messageList)
-                    .prompt(prompt)
-                    .source(source)
-                    .summary(summary)
+                    .messages(messages)
+                    .prompt(options.prompt())
+                    .source(options.source())
+                    .summary(options.summary())
                     .build();
             var sendData = PrivateForwardMessageSender.this.buildSendData(data);
             var future = PrivateForwardMessageSender.this.sendWithFuture(
                     new OnebotMessageSentEvent<>(token, sendData, messageData),
-                    delay, retryCount, retryInterval);
-            if(recordFailed) {
+                    options.delay(), options.retryCount(), options.retryInterval());
+            if (options.recordFailed()) {
                 future = onebotMessageFailSendHandler.recordFailed(PrivateForwardMessageSender.class.getSimpleName(),
-                        messageList,
-                        future);
+                        messages, future);
             }
-            return future.thenApply(r -> {
-                if(r.isSuccess()) {
-                    return r.getResult().getFirst();
-                } else {
-                    return null;
+            return future.thenApply(result -> {
+                var responses = TaskStages.requireSuccess(result, "Private forward message");
+                if (responses == null || responses.isEmpty() || responses.getFirst() == null) {
+                    throw new MessageSendFailedException();
                 }
+                return responses.getFirst();
             });
         }
 
         /**
-         * 以分段的方式发送消息。
-         * @param partSize 每段的大小
+         * 兼容原有不等待分段的调用；每段沿用 TaskFuture 的终端错误日志。
+         *
+         * @param partSize 每个分段包含的最大条目数
+         * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
          */
+        @Override
         public void sendByPart(int partSize) {
-            int totalSize = messageList.size();
-            int totalSegments = (totalSize + partSize - 1) / partSize; // 向上取整
-            for (int i = 0; i < totalSegments; i++) {
-                int start = i * partSize;
-                int end = Math.min(start + partSize, totalSize);
-                var segment = messageList.subList(start, end);
-                var data = PrivateForwardMessageSendParamsData.builder()
-                        .userId(userId)
-                        .messages(segment)
-                        .prompt(prompt)
-                        .source(source)
-                        .summary(summary)
-                        .build();
-                var sendData = PrivateForwardMessageSender.this.buildSendData(data);
-                PrivateForwardMessageSender.this.send(
-                        new OnebotMessageSentEvent<>(token, sendData, messageData),
-                        delay, retryCount, retryInterval);
+            if (partSize <= 0) {
+                throw new IllegalArgumentException("partSize must be greater than 0");
             }
+            var snapshot = List.copyOf(messageList);
+            var options = sendOptions();
+            for (int start = 0; start < snapshot.size();) {
+                int end = start + Math.min(partSize, snapshot.size() - start);
+                sendPart(List.copyOf(snapshot.subList(start, end)), options).finish();
+                start = end;
+            }
+        }
+
+        /**
+         * 冻结待发内容后串行发送分段，等待最后一段完成；失败立即停止剩余发送。
+         *
+         * @param partSize 每个分段包含的最大条目数
+         * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+         */
+        @Override
+        public CompletionStage<Void> sendByPartAsync(int partSize) {
+            var options = sendOptions();
+            return MessageSendStages.sendByPart(messageList, partSize,
+                    part -> MessageSendStages.awaitResponse(sendPart(part, options)));
         }
 
         /**
@@ -232,7 +301,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
          * @param userId   用户 ID
          * @param nickname 用户昵称
          * @param message  消息内容
-         * @return {@link IForwardMessageSenderBuilder }
+         * @return 当前构建器，供调用方继续组合后提交
          */
         @Override
         public IForwardMessageSenderBuilder addText(String userId, String nickname, String message) {
@@ -267,7 +336,7 @@ public class PrivateForwardMessageSender extends AbstractOnebotSender<PrivateFor
                     .contentPart(NodeTeaNekoContentPart.builder()
                             .userId(userId)
                             .nickname(nickname)
-                            .contents(messageList)
+                            .contents(List.copyOf(messageList))
                             .build())
                     .build());
             return this;

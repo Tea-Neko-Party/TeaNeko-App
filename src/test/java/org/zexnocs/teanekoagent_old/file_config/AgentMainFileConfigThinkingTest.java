@@ -2,14 +2,16 @@ package org.zexnocs.teanekoagent_old.file_config;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+import org.zexnocs.teanekoagent.file_config.AgentMainFileConfig;
 
 /**
  * Agent 主配置思考参数测试。
  * <br>验证默认思考预算和异常配置值的规范化边界。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class AgentMainFileConfigThinkingTest {
     /**

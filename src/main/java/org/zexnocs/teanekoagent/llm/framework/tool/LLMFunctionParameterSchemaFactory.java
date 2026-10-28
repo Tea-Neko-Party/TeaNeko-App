@@ -21,8 +21,9 @@ import java.util.*;
  * {@link ILLMFunctionParameter} 结构。
  *
  * @author zExNocs
- * @date 2026/06/05
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 public final class LLMFunctionParameterSchemaFactory {
     /**
@@ -41,6 +42,9 @@ public final class LLMFunctionParameterSchemaFactory {
         var properties = new LinkedHashMap<String, ILLMFunctionParameter>();
         var required = new java.util.ArrayList<String>();
         for (var parameter : method.getParameters()) {
+            if (parameter.getType() == ToolInvocationContext.class) {
+                continue; // 仅由宿主注入；模型不能产生此参数。
+            }
             var parameterName = parameter.getName();
             properties.put(parameterName, fromParameter(parameter));
             if (isRequired(parameter)) {
@@ -126,7 +130,7 @@ public final class LLMFunctionParameterSchemaFactory {
     /**
      * 根据普通 Class 生成参数 Schema。
      *
-     * @param clazz Java Class
+     * @param clazz 用于本次处理的 {@code clazz} 数据
      * @param description 参数描述
      * @param visiting 当前递归链路中正在处理的类
      * @return 参数 Schema

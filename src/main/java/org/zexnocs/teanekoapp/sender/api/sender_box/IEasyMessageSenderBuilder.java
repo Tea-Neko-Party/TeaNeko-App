@@ -7,10 +7,12 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
+import org.zexnocs.teanekoapp.sender.MessageSendStages;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 是一个一次性构造消息发送器的构建器接口，提供了构建消息发送器所需的方法。
@@ -24,8 +26,9 @@ import java.util.List;
  * 是 combination 依赖关系
  *
  * @author zExNocs
- * @date 2026/03/04
- *
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 public interface IEasyMessageSenderBuilder {
 
@@ -50,8 +53,8 @@ public interface IEasyMessageSenderBuilder {
      * 一般 future 是新创一个 future 来接收到 {@link org.zexnocs.teanekoapp.sender.interfaces.ISenderService} 的结果后使用
      * {@code .whenComplete()} 来完成这个 future。
      *
-     * @see TaskFuture
      * @return 发送消息的 future，可以通过该 future 来获取发送结果或者进行后续操作
+     * @see TaskFuture
      */
     TaskFuture<? extends IMessageSendResponseData> sendWithFuture();
 
@@ -63,10 +66,20 @@ public interface IEasyMessageSenderBuilder {
     }
 
     /**
+     * 等待发送回执，发送异常或空回执都会使 Stage 失败。
+     *
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    default CompletionStage<Void> sendAsync() {
+        return MessageSendStages.awaitResponse(sendWithFuture());
+    }
+
+    /**
      * 配置发送延迟。
      * 默认没有延迟，即立即发送。
      *
      * @param delay 发送延迟
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IEasyMessageSenderBuilder setDelay(Duration delay);
 
@@ -75,6 +88,7 @@ public interface IEasyMessageSenderBuilder {
      * 默认 8 次。
      *
      * @param count retry 次数
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IEasyMessageSenderBuilder setRetryCount(int count);
 
@@ -83,6 +97,7 @@ public interface IEasyMessageSenderBuilder {
      * 默认 200ms
      *
      * @param interval retry 间隔
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IEasyMessageSenderBuilder setRetryInterval(Duration interval);
 
@@ -91,6 +106,7 @@ public interface IEasyMessageSenderBuilder {
      * 默认开启
      *
      * @param recordFailed 是否记录发送失败的消息到数据库中，默认为 true
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IEasyMessageSenderBuilder setRecordFailed(boolean recordFailed);
 
@@ -242,5 +258,35 @@ public interface IEasyMessageSenderBuilder {
      */
     default void sendTextMessage(String text) {
         addTextMessage(text).send();
+    }
+
+    /**
+     * 构造引用原消息的文本反馈，并等待真实发送完成后结束阶段。
+     *
+     * @param text 待处理的业务文本
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    default CompletionStage<Void> sendReplyMessageAsync(String text) {
+        return addReplyTextMessage(text).sendAsync();
+    }
+
+    /**
+     * 构造带发起者提醒的引用反馈，等待底层发送完成信号。
+     *
+     * @param text 待处理的业务文本
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    default CompletionStage<Void> sendAtReplyMessageAsync(String text) {
+        return addAtReplyTextMessage(text).sendAsync();
+    }
+
+    /**
+     * 构造普通文本发送，使用同一发送器配置并等待真实回执。
+     *
+     * @param text 待处理的业务文本
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    default CompletionStage<Void> sendTextMessageAsync(String text) {
+        return addTextMessage(text).sendAsync();
     }
 }

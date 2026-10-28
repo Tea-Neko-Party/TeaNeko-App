@@ -1,6 +1,9 @@
 package org.zexnocs.teanekoagent.llm.instance.kimi;
 
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMImageDetail;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.llm.instance.openai.completions.AbstractOpenAIChatCompletionModel;
 import org.zexnocs.teanekoagent.llm.instance.openai.completions.OpenAIChatCompletionModelOptions;
@@ -11,8 +14,9 @@ import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
  * <br>注册 ID 为 {@code kimi}，通过 OpenAI Chat Completions 兼容基类复用消息、工具和响应映射。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @LLMModel(id = KimiChatModel.PROVIDER)
 public class KimiChatModel extends AbstractOpenAIChatCompletionModel {
@@ -23,12 +27,26 @@ public class KimiChatModel extends AbstractOpenAIChatCompletionModel {
     public static final String DEFAULT_MODEL = KimiModelOptions.DEFAULT_MODEL;
 
     /**
+     * 按本次具体模型名返回已验证的能力，不将供应商默认模型能力套用到未知名称。
+     *
+     * @param model 本次实际选中的具体模型名称
+     * @return 按实际模型或显式能力集合构造的不可变能力声明
+     */
+    @Override
+    public ModelCapabilities getCapabilities(String model) {
+        return model != null && java.util.Set.of("kimi-k2.6", "kimi-k2.7-code", "kimi-k2.7-code-highspeed").contains(model)
+                ? ModelCapabilities.userImages(java.util.Set.of(LLMImageDetail.AUTO))
+                : ModelCapabilities.textOnly();
+    }
+
+    /**
      * 创建 Kimi 模型适配器。
      *
      * @param apiResponseService API 响应服务
+     * @param credentialResolver 由装配方提供的 {@code ICredentialResolver} 协作依赖
      */
-    public KimiChatModel(IAPIResponseService apiResponseService) {
-        super(PROVIDER, DEFAULT_MODEL, KimiModelOptions.baseOptions(), apiResponseService);
+    public KimiChatModel(IAPIResponseService apiResponseService, ICredentialResolver credentialResolver) {
+        super(PROVIDER, DEFAULT_MODEL, KimiModelOptions.baseOptions(), apiResponseService, credentialResolver);
     }
 
     /**
@@ -45,11 +63,10 @@ public class KimiChatModel extends AbstractOpenAIChatCompletionModel {
     /**
      * 固定使用 Kimi 官方 API 地址。
      *
-     * @param options Chat Completions 参数
      * @return Kimi 官方 base URL
      */
     @Override
-    protected String resolveBaseUrl(OpenAIChatCompletionModelOptions options) {
+    protected String defaultBaseUrl() {
         return KimiModelOptions.DEFAULT_BASE_URL;
     }
 

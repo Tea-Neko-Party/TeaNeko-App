@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent.llm.instance.deepseek;
 
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
@@ -14,21 +14,23 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMe
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoapp.TeaNekoAppApplication;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * DeepSeek 模型输出测试。
  * <br>该测试直接使用 file_config 中 {@code deepseek} 的默认 options，并把模型输出打印到控制台。
- * <br>如果未配置 DeepSeek 的 {@code apiKey}，测试会自动跳过，避免无配置环境下误失败。
+ * <br>只有显式设置 TEANEKO_LIVE_LLM_TESTS=true 才启动 Spring 并调用模型，密钥从 Spring 解析。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
+@EnabledIfEnvironmentVariable(named = "TEANEKO_LIVE_LLM_TESTS", matches = "true")
 @SpringBootTest(classes = TeaNekoAppApplication.class)
 public class DeepSeekModelOutputTest {
     /**
@@ -36,6 +38,9 @@ public class DeepSeekModelOutputTest {
      */
     @Autowired
     private LLMModelService llmModelService;
+
+    @Autowired
+    private ICredentialResolver credentialResolver;
 
     /**
      * 使用 DeepSeek file_config 默认 options 调用模型并打印输出。
@@ -45,9 +50,8 @@ public class DeepSeekModelOutputTest {
         System.out.println("-------------------------------------");
         var modelId = LLMModelId.of(DeepSeekChatModel.PROVIDER);
         var defaultOptions = llmModelService.getDefaultOptions(modelId);
-        Assertions.assertInstanceOf(DeepSeekModelOptions.class, defaultOptions,
-                "DeepSeek default options should keep DeepSeekModelOptions type.");
-        assumeDeepSeekConfigured(defaultOptions.getMetadata());
+        Assertions.assertTrue(defaultOptions.findModel().isPresent());
+        credentialResolver.require(DeepSeekChatModel.PROVIDER);
 
         var messages = List.<ILLMMessage>of(
                 LLMSystemMessage.builder()
@@ -67,17 +71,6 @@ public class DeepSeekModelOutputTest {
         Assertions.assertNotNull(result, "DeepSeek result should not be null.");
         printResult(result);
         System.out.println("-------------------------------------");
-    }
-
-    /**
-     * 假定 DeepSeek 已经配置访问参数。
-     *
-     * @param metadata 默认 options metadata
-     */
-    private static void assumeDeepSeekConfigured(Map<String, Object> metadata) {
-        var apiKey = metadataValue(metadata, DeepSeekChatModel.API_KEY_METADATA);
-        Assumptions.assumeTrue(isConfigured(apiKey),
-                "Skip DeepSeek live test: config/llm/main-config.yml missing deepseek api-key.");
     }
 
     /**
@@ -125,28 +118,4 @@ public class DeepSeekModelOutputTest {
         return text.toString();
     }
 
-    /**
-     * 读取 metadata 字符串值。
-     *
-     * @param metadata metadata 映射
-     * @param key 字段名
-     * @return 字符串值
-     */
-    private static String metadataValue(Map<String, Object> metadata, String key) {
-        if (metadata == null) {
-            return null;
-        }
-        var value = metadata.get(key);
-        return value == null ? null : value.toString();
-    }
-
-    /**
-     * 判断配置值是否可用于真实 API 调用。
-     *
-     * @param value 配置值
-     * @return 如果配置值可用则返回 {@code true}
-     */
-    private static boolean isConfigured(String value) {
-        return value != null && !value.isBlank() && !value.startsWith("${");
-    }
 }

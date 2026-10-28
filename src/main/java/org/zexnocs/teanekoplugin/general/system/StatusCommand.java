@@ -20,13 +20,15 @@ import java.io.InputStreamReader;
 import java.lang.management.ManagementFactory;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 状态命令，提供系统状态信息查询功能，包括 CPU 使用率、内存使用情况和磁盘使用情况。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
 @Command(value = {"/status"},
@@ -53,6 +55,14 @@ public class StatusCommand {
     private final ILogger logger;
     private final VersionUtil versionUtil;
 
+    /**
+     * 装配状态展示、计时、日志及版本信息，不在构造阶段启动新的平台发送。
+     *
+     * @param iTimerService 本次装配使用的 {@code ITimerService} 服务
+     * @param logger 项目日志接口
+     * @param applicationName 用于本次处理的 {@code applicationName} 数据
+     * @param versionUtil 用于本次处理的 {@code versionUtil} 数据
+     */
     public StatusCommand(ITimerService iTimerService,
                          ILogger logger,
                          @Value("${spring.application.name}") String applicationName, VersionUtil versionUtil) {
@@ -66,7 +76,6 @@ public class StatusCommand {
 
     /**
      * 初始化方法，在命令类实例化后自动调用，注册定时任务监控 CPU 和内存使用率，并在超过阈值时发送警告消息给管理员。
-     *
      */
     @PostConstruct
     public void init() {
@@ -95,9 +104,10 @@ public class StatusCommand {
      * 处理状态查询命令，获取系统的 CPU 使用率、内存使用情况和磁盘使用情况，并将结果发送给用户。
      *
      * @param commandData 命令数据，包含消息接收数据等信息
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
     @DefaultCommand
-    public void status(CommandData<ITeaNekoMessageData> commandData) {
+    public CompletionStage<Void> status(CommandData<ITeaNekoMessageData> commandData) {
         var data = commandData.getRawData();
 
         // 获取 CPU 核心数
@@ -152,11 +162,12 @@ public class StatusCommand {
                 usedVirtualMemoryGB, totalVirtualMemoryGB, virtualMemoryUsagePercentage,
                 usedMemoryGB, totalMemoryGB, memoryUsagePercentage,
                 getDiskUsage());
-        data.getMessageSender().sendReplyMessage(statusMessage);
+        return data.getMessageSender().sendReplyMessageAsync(statusMessage);
     }
 
     /**
      * 获取磁盘使用情况
+     *
      * @return 磁盘使用情况字符串，包含总空间、已用空间和使用率
      */
     public String getDiskUsage() {
@@ -204,6 +215,7 @@ public class StatusCommand {
 
     /**
      * 将磁盘大小字符串转换为 GB
+     *
      * @param size 磁盘大小字符串，可能包含 G、M 或 K 后缀
      * @return 转换后的大小，以 GB 为单位
      */

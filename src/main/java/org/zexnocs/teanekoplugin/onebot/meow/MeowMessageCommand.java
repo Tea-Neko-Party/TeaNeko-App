@@ -8,12 +8,15 @@ import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 
+import java.util.concurrent.CompletionStage;
+
 /**
  * 喵呜
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Command(value = ".*呜喵.*",
         mode = Command.CommandMode.REGEX,
@@ -21,9 +24,15 @@ import org.zexnocs.teanekocore.command.api.DefaultCommand;
         permission = CommandPermission.ALL,
         supportedClients = {OnebotTeaNekoClient.class})
 public class MeowMessageCommand {
+    /**
+     * 通过当前消息发送器回应文本，并将发送完成传回命令分发链。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @DefaultCommand
-    public void meow(CommandData<ITeaNekoMessageData> commandData) {
-        commandData.getRawData().getMessageSender()
-                        .sendTextMessage("喵呜~");
+    public CompletionStage<Void> meow(CommandData<ITeaNekoMessageData> commandData) {
+        return commandData.getRawData().getMessageSender()
+                        .sendTextMessageAsync("喵呜~");
     }
 }

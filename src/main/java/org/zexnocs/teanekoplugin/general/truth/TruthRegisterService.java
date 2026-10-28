@@ -12,13 +12,19 @@ import java.time.Instant;
  * 真心话大冒险注册服务，监听骰子事件，注册参与者，并禁止在游戏期间使用骰子设置。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @EventListener
 public class TruthRegisterService {
     private final TruthService truthService;
 
+    /**
+     * 关联真心话服务，供原事件入口完成参与者登记。
+     *
+     * @param truthService 由装配方提供的 {@code TruthService} 协作依赖
+     */
     @Autowired
     public TruthRegisterService(TruthService truthService) {
         this.truthService = truthService;
@@ -46,9 +52,9 @@ public class TruthRegisterService {
         // 设置不使用默认通知
         data.setUseDefaultNotification(false);
         // 注册数据
-        truthService.join(attempt.getMessageData(),
+        event.includeCompletion(truthService.join(attempt.getMessageData(),
                 data.getDiceResultList().getFirst(),
-                Instant.now());
+                Instant.now()));
     }
 
     /**
@@ -65,8 +71,7 @@ public class TruthRegisterService {
         }
         // 取消该事件
         event.setCancelled(true);
-        data.getMessageReceiveData()
-                .getMessageSender()
-                .sendReplyMessage("真心话游戏期间禁止设置骰子！");
+        event.includeCompletion(data.getMessageReceiveData()
+                .getMessageSender().sendReplyMessageAsync("真心话游戏期间禁止设置骰子！"));
     }
 }

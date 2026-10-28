@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekoplugin.general.servant.GroupSeniorServantRule;
@@ -15,6 +16,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -23,8 +26,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 惩罚地活跃度的服务。
  *
  * @author zExNocs
- * @date 2026/03/18
+ * @date 2026/10/28
  * @since 4.3.4
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -42,6 +46,9 @@ public class GroupActivityPunishService {
     private final GroupActivityService groupActivityService;
     private final GroupActivityExemptionService groupActivityExemptionService;
 
+    /**
+     * 注册群活跃度处理所需的定时任务，运行时继续使用原配置与业务校验。
+     */
     @PostConstruct
     public void init() {
         iTimerService.registerByRate("清理惩罚缓存",
@@ -79,105 +86,90 @@ public class GroupActivityPunishService {
      * @param scopeId              被惩罚用户的 scope id
      * @param groupId              被惩罚用户的 group id
      * @param userId               被惩罚用户的平台 id
-     * @return 给管理群发送的提醒消息
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
-    public List<ITeaNekoContent> kick(
-            GroupActivityConfigData activityConfigData,
-            Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
-            ITeaNekoClient client,
-            String opScopeId,
-            String opId,
-            String scopeId,
-            String groupId,
-            String userId) {
+    public CompletionStage<List<ITeaNekoContent>> kick(
+            GroupActivityConfigData activityConfigData, Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
+            ITeaNekoClient client, String opScopeId, String opId, String scopeId, String groupId, String userId) {
         var rule = activityDataRulePair.second();
         var punishMap = punishCache.computeIfAbsent(scopeId, ignored -> new ConcurrentHashMap<>());
-        var punishValue = punishMap.computeIfAbsent(userId,
-                user -> new PunishValue(rule.getExpressionString(),
-                        activityConfigData.getKick(),
-                        activityConfigData.getRemind()));
+        var punishValue = punishMap.computeIfAbsent(userId, ignored -> new PunishValue(rule.getExpressionString(),
+                activityConfigData.getKick(), activityConfigData.getRemind()));
         var tools = client.getTeaNekoToolbox();
         var builder = tools.getMessageSenderTools().getMsgListBuilder();
-        // 如果已经处理过，则不处理
         if (punishValue.isOped(opId)) {
-            return builder.addText("您已经处理过该用户了喵!").build();
+            return CompletableFuture.completedStage(builder.addText("您已经处理过该用户了喵!").build());
         }
-        // 处理该用户
         if (punishValue.kick(opScopeId, opId)) {
-            groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (k, v) -> {
-                v.remove(userId);
-                return v;
+            return tools.getGroupKickSender().kickAsync(groupId, userId).thenApply(ignored -> {
+                groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (key, values) -> {
+                    values.remove(userId);
+                    return values;
+                });
+                punishMap.remove(userId);
+                return builder.addText("将用户" + userId + "踢出群聊" + groupId + "成功喵").build();
             });
-            punishMap.remove(userId);
-            tools.getGroupKickSender().kick(groupId, userId);
-            return builder.addText("将用户" + userId + "踢出群聊" + groupId + "成功喵").build();
         }
-        return builder.addText("""
-                        处理用户 %s 在群聊 %s 成功喵！
-                        还需要 %d 人选择踢出该用户喵
-                        还需要 %d 人选择提醒该用户喵"""
-                        .formatted(userId, groupId, punishValue.getKickCount(), punishValue.getRemindCount()))
-                .build();
+        return CompletableFuture.completedStage(builder.addText("""
+                处理用户 %s 在群聊 %s 成功喵！
+                还需要 %d 人选择踢出该用户喵
+                还需要 %d 人选择提醒该用户喵""".formatted(userId, groupId,
+                        punishValue.getKickCount(), punishValue.getRemindCount())).build());
     }
 
     /**
-     * 直接提醒用户，并加入到免惩罚名单一周。
-     * @param opId 操作人 id
-     * @param groupId 群号
-     * @param userId 用户号
-     * @return 给管理群发送的提醒消息
+     * 根据活跃度规则发送提醒，并返回可等待的真实发送链，不把排队提交作为通知完成。
+     *
+     * @param activityConfigData 用于本次处理的 {@code activityConfigData} 数据
+     * @param activityDataRulePair 用于本次处理的 {@code activityDataRulePair} 数据
+     * @param client 用于本次处理的 {@code client} 数据
+     * @param opScopeId 用于本次处理的 {@code opScopeId} 数据
+     * @param opId 用于本次处理的 {@code opId} 数据
+     * @param scopeId 本次操作所属作用域
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
-    public List<ITeaNekoContent> remind(
-            GroupActivityConfigData activityConfigData,
-            Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
-            ITeaNekoClient client,
-            String opScopeId,
-            String opId,
-            String scopeId,
-            String groupId,
-            String userId) {
+    public CompletionStage<List<ITeaNekoContent>> remind(
+            GroupActivityConfigData activityConfigData, Pair<GroupActivityData, GroupActivityRule> activityDataRulePair,
+            ITeaNekoClient client, String opScopeId, String opId, String scopeId, String groupId, String userId) {
         var rule = activityDataRulePair.second();
         var punishMap = punishCache.computeIfAbsent(scopeId, ignored -> new ConcurrentHashMap<>());
-        var punishValue = punishMap.computeIfAbsent(userId,
-                user -> new PunishValue(rule.getExpressionString(),
-                        activityConfigData.getKick(),
-                        activityConfigData.getRemind()));
+        var punishValue = punishMap.computeIfAbsent(userId, ignored -> new PunishValue(rule.getExpressionString(),
+                activityConfigData.getKick(), activityConfigData.getRemind()));
         var tools = client.getTeaNekoToolbox();
         var builder = tools.getMessageSenderTools().getMsgListBuilder();
-        // 如果已经处理过，则不处理
         if (punishValue.isOped(opId)) {
-            return builder.addText("您已经处理过该用户了喵!").build();
+            return CompletableFuture.completedStage(builder.addText("您已经处理过该用户了喵!").build());
         }
-        if(punishValue.remind(opScopeId, opId)) {
-            groupActivityExemptionService.addWithFuture(scopeId, userId, EXEMPTION_TIME)
-                    .thenAccept(ignored -> {
-                        groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (k, v) -> {
-                            v.remove(userId);
-                            return v;
-                        });
-                        punishMap.remove(userId);
-                        tools.getMessageSenderTools().getGroupBuilder(groupId)
-                                .addAtMessage(userId)
-                                .addTextMessage("""
-                             检测到你在群内活跃度过低，经过管理群决定对你进行提醒，并在一周后重新审核。
-                            被检测低活跃度原因：%s
-                            请在一周内多发言，避免被踢出群聊。""".formatted(punishValue.reason))
-                                .send();
-                    }).finish();
-            return builder.addText("将用户" + userId + "提醒成功喵").build();
+        if (punishValue.remind(opScopeId, opId)) {
+            return TaskStages.successful(groupActivityExemptionService.addWithFuture(scopeId, userId, EXEMPTION_TIME),
+                    "群活跃度豁免").thenCompose(ignored -> {
+                groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (key, values) -> {
+                    values.remove(userId);
+                    return values;
+                });
+                punishMap.remove(userId);
+                return tools.getMessageSenderTools().getGroupBuilder(groupId).addAtMessage(userId).addTextMessage("""
+                        检测到你在群内活跃度过低，经过管理群决定对你进行提醒，并在一周后重新审核。
+                        被检测低活跃度原因：%s
+                        请在一周内多发言，避免被踢出群聊。""".formatted(punishValue.reason)).sendAsync();
+            }).thenApply(ignored -> builder.addText("将用户" + userId + "提醒成功喵").build());
         }
-        return builder.addText("""
-                        处理用户 %s 在群聊 %s 成功喵！
-                        还需要 %d 人选择踢出该用户喵
-                        还需要 %d 人选择提醒该用户喵"""
-                        .formatted(userId, groupId, punishValue.getKickCount(), punishValue.getRemindCount()))
-                .build();
+        return CompletableFuture.completedStage(builder.addText("""
+                处理用户 %s 在群聊 %s 成功喵！
+                还需要 %d 人选择踢出该用户喵
+                还需要 %d 人选择提醒该用户喵""".formatted(userId, groupId,
+                        punishValue.getKickCount(), punishValue.getRemindCount())).build());
     }
 
     /**
-     * 惩罚值
+     * 群活跃度处理所需的业务数据，在原惩罚流程内使用。
      *
      * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
      */
     @RequiredArgsConstructor
     public class PunishValue {
@@ -214,6 +206,7 @@ public class GroupActivityPunishService {
 
         /**
          * 获取还剩下多少人同意踢出。
+         *
          * @return 剩下多少人同意踢出
          */
         public int getKickCount() {
@@ -222,6 +215,7 @@ public class GroupActivityPunishService {
 
         /**
          * 获取还剩下多少人同意提醒。
+         *
          * @return 剩下多少人同意提醒
          */
         public int getRemindCount() {

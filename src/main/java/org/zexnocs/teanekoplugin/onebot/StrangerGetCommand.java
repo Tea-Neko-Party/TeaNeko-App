@@ -12,12 +12,15 @@ import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
+import java.util.concurrent.CompletionStage;
+
 /**
- * onebot 中获取陌生人信息命令。规格：/sg <QQ号>。
+ * OneBot 中获取陌生人信息的命令。格式：{@code /sg <QQ号>}。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Description("获取陌生人信息。规格：/sg <QQ号>")
 @Command(value = {"/sg", "/陌生人"},
@@ -27,20 +30,31 @@ public class StrangerGetCommand {
 
     private final StrangerInfoGetSender strangerInfoGetSender;
 
+    /**
+     * 注入平台资料查询端口，查询完成后继续原消息发送链。
+     *
+     * @param strangerInfoGetSender 由装配方提供的 {@code StrangerInfoGetSender} 协作依赖
+     */
     public StrangerGetCommand(StrangerInfoGetSender strangerInfoGetSender) {
         this.strangerInfoGetSender = strangerInfoGetSender;
     }
 
+    /**
+     * 获取陌生人信息。规格：/sg &lt;QQ号&gt;；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("获取陌生人信息。规格：/sg <QQ号>")
     @DefaultCommand
-    public void execute(CommandData<OnebotMessageData> commandData, long userId) {
+    public CompletionStage<Void> execute(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
-        strangerInfoGetSender.getPlatformUserInfo(String.valueOf(userId))
-                        .thenAccept(strangerInfo -> {
+        return strangerInfoGetSender.getPlatformUserInfo(String.valueOf(userId))
+                        .thenCompose(strangerInfo -> {
                             if(strangerInfo == null) {
-                                data.getMessageSender()
-                                        .sendAtReplyMessage("无法获取该用户的信息！");
-                                return;
+                                return data.getMessageSender()
+                                        .sendAtReplyMessageAsync("无法获取该用户的信息！");
                             }
                             var date = ChinaDateUtil.Instance.convertToChinaDateTime(strangerInfo.getRegTime() * 1000);
                             var regTimeStr = ChinaDateUtil.Instance.convertToString(date);
@@ -81,9 +95,9 @@ public class StrangerGetCommand {
                                             strangerInfo.getBirthdayMonth(),
                                             strangerInfo.getBirthdayDay()))
                                     .build();
-                            data.getMessageSender()
+                            return data.getMessageSender()
                                     .addMessages(messageList)
-                                    .send();
-                        }).finish();
+                                    .sendAsync();
+                        }).asStage();
     }
 }

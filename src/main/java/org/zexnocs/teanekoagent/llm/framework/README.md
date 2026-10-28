@@ -9,8 +9,9 @@
 | [`message`](message/README.md) | 定义 system/user/assistant/tool 消息、内容片段、组成关系和 JSON 序列化规则。 |
 | `model` | 定义供应商级模型适配器 ID、模型 options、模型服务和模型适配器基类。 |
 | `response` | 定义统一响应结果、choice 和 usage。 |
-| `tool` | 定义 Function Tool、参数 schema、tool call 和工具注册服务。 |
-| `../file_config` | 定义 LLM 文件配置，用于保存默认模型适配器和各供应商默认 options。 |
+| [`tool`](tool/README.md) | Function Tool/schema、工具注册、本轮可信绑定及异步执行。 |
+| `../file_config` | 解析本地模型参数；默认路由与凭据通过独立端口注入。 |
+| [`interaction`](interaction/README.md) | 有限自动往返、共享次数/token 预算、预留结算、阶段控制、不可变 transcript 和逐次 usage。 |
 | `interfaces` | Prompt、Result、Choice、Usage 等公共接口。 |
 
 # 二. 模型接入
@@ -69,7 +70,7 @@ ILLMResult result = resultFuture.finish().join();
 
 |术语|来源|API|说明|
 |---|---|---|---|
-|base options|模型代码|`ILLMModel.getBaseOptions()`、供应商 `baseOptions()`|保证模型适配器可以运行的代码内建基础值。|
+|base options|模型代码|`ILLMModel.getBaseOptions()`、供应商 `baseOptions()`|协议和参数基础值；模型服务仍要求本地配置显式指定 model。|
 |default options|`config/agent/model.yml`|`ILLMModelService.getDefaultOptions(...)`|文件配置覆盖 base options 后得到的部署默认值。|
 |prompt options|单次 `ILLMPrompt`|`ILLMPrompt.getOptions()`|仅覆盖本次模型调用。|
 |effective options|模型调用阶段|内部合并结果|按 base、default、prompt 的顺序合并，并强制写回路由 provider。|
@@ -125,8 +126,6 @@ default-model-id: "deepseek"
 models:
   - id: "deepseek"
     model: "deepseek-v4-flash"
-    api-key: "${DEEPSEEK_API_KEY}"
-    api: "/chat/completions"
     temperature: 0.7
     max-tokens: 2048
     metadata:
@@ -136,9 +135,6 @@ models:
 
   - id: "openai"
     model: "gpt-5.5"
-    api-key: "${OPENAI_API_KEY}"
-    base-url: "https://api.openai.com/v1"
-    api: "/responses"
     metadata:
       openai.reasoningEffort: "medium"
       openai.reasoningSummary: "auto"
@@ -150,7 +146,9 @@ models:
 
 `model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-v4-flash`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
-`api-key`、`api` 和其他供应商私有字段会进入 `LLMModelOptions.metadata`，由具体模型适配器读取。DeepSeek 的 base URL 已固定为官方地址；其他供应商的 API key、base URL 或访问参数通常应来自 file config 或数据库，不应写死在模型代码中。
+密钥只由 `ICredentialResolver` 在 HTTP 请求边界从 Spring application/环境变量解析，不进入 Options、Prompt 或组件。连接覆盖也只取 Spring 配置；Prompt 中的 endpoint 不会改变实际请求地址。旧 model.yml 中的 api-key/api/base-url 必须迁移，见 [配置与迁移说明](../file_config/README.md)。
+
+`IDefaultModelResolver` 属于 LLM 层，当前装配适配器读取 main-config.yml。文件配置不可用、模型条目缺失或模型名为空时明确失败，不静默回退。`call` 保持单次请求语义；工具返回后的再调用由上层交互服务负责。
 
 扩展新供应商时，必须在 README 中补充该供应商的模型适配器 ID 映射，例如：
 
@@ -159,6 +157,30 @@ models:
 | `deepseek` | `deepseek-v4-flash` | `deepseek` |
 | `openai` | `gpt-5.5` | `openai` |
 | `kimi` | `kimi-k2.6` | `kimi` |
+
+## 3.2 具体模型输入能力
+
+`ILLMModel.getCapabilities(model)` 返回不可变的 `ModelCapabilities`。能力针对本次合并后的具体模型名，默认没有声明图像能力；新供应商可覆盖该方法，不需要导入 App 或 Agent 类型。模型服务与 AbstractLLMModel 的直接调用均在认证/HTTP 前检查内容、角色和图像细节级别。
+
+当前已核实的支持范围见 [模型文件配置说明](../file_config/README.md#图像能力)。统一内容与构造方式见 [消息说明](message/README.md#五-content-结构)。本地配置继续选择默认模型，不因能力表而自动切换供应商或模型。
+
+`body.*` 只能补充尚未建模的供应商字段，不能重复定义请求 DTO 的字段，也不能覆盖 model/messages/input/tools/stream、token 上限或服务端上下文引用。公共字段通过统一/供应商 Options 设置。Responses 的透明 provider state 只回放 reasoning item，不能把任意原生 message 或工具调用隐藏在该字段中。
+
+## 3.3 单次调用的执行策略
+
+模型服务新增 `call(modelId, prompt, execution)` 和 `call(prompt, execution)`；模型适配器新增 `call(prompt, execution)`。execution 使用 Core 的 ExecutionPolicy，通过独立参数传递：
+
+```java
+var execution = ExecutionPolicy.controlled(Duration.ofSeconds(60), control);
+var response = llmModelService.call(LLMModelId.of("deepseek"), prompt, execution);
+response.asStage().whenComplete((result, failure) -> { /* 消费最终结果 */ });
+```
+
+阶段时限与整轮剩余时间共同约束实际 HTTP；取消会结束返回链并释放订阅。阶段超时使用 APIRequestTimeoutException，整轮终止保留 ExecutionStoppedException 原因。调用前已经终止时，LLM 的参数准备入口同步拒绝，不解析路由/凭据或发出请求；已经启动的请求通过 TaskFuture 异常完成。
+
+内置 DeepSeek、OpenAI Responses、Kimi 和未注册的 OpenAI Chat Completions 实现均已接通策略。自定义适配器需要实现执行策略重载，旧接口默认明确拒绝，不静默退回不受控调用。策略不放入模型 Options、Prompt 内容、工具参数或请求 JSON；单次调用仍不执行工具循环，HTTP retryCount=0，读写缓存均禁用。
+
+原有不带策略的调用保留注解默认时限。后续交互服务/S3 再按本地配置统一传入模型阶段时限与总预算；本批没有把预算、人格或记忆循环塞进 call。
 
 # 四. Response
 
@@ -353,16 +375,19 @@ var prompt = new LLMPrompt(
 
 ## 5.5 执行模型返回的 Tool Call
 
-当模型响应中包含 `tool_calls` 时，可以把每个 `ILLMToolCall` 交给 `LLMToolService` 执行：
+新交互入口使用本轮 `LLMToolSet` 执行。先由宿主选择工具、固定绑定，再把同一个集合的 `definitions()` 放入模型 options；执行时只匹配这些绑定：
 
 ```java
-for (var toolCall : assistantMessage.getToolCalls()) {
-    String result = llmToolService.call(toolCall);
-    // 将 result 包装成 LLMToolMessage，再继续发给模型。
-}
+var tools = new LLMToolSet(objectMapper, llmToolService.getTools("allowed-package")
+        .values().stream().map(LLMToolBinding::from).toList());
+// invocationContext 由宿主创建，含 requestId、不可变绑定及 ExecutionControl。
+CompletionStage<ToolInvocationResult> pending = tools.execute(toolCall, invocationContext);
+CompletionStage<LLMToolMessage> message = pending.thenApply(ToolInvocationResult::toMessage);
 ```
 
-注解式工具方法返回 `String` 时会直接作为工具结果；返回其他对象时，框架会使用 `ObjectMapper` 序列化为 JSON 字符串。
+注解式工具支持 `CompletionStage<?>` 返回值，等待完成后才转换字符串/JSON；`CompletionStage<Void>` 完成后得到空字符串。方法可声明 `ToolInvocationContext` 参数，由宿主注入且不生成 schema。普通业务参数仍按原方法签名生成 schema。
+
+`LLMToolService.call(...)` 保留旧同步便捷语义，不验证本轮可见范围；异步或需要可信上下文的方法会在执行前明确拒绝此入口。新交互链应使用 `LLMToolSet`，详见[工具协议与离线用例](tool/README.md)。`LLMInteractionExecution` 已在其上增加共享次数预算、末次关闭工具、顺序工具批次及独立阶段时限，使用方式见[交互阶段执行](interaction/README.md)。自动模型/工具循环与完整结果汇总留待后续编排层实现。
 
 # 六. 供应商适配器职责
 

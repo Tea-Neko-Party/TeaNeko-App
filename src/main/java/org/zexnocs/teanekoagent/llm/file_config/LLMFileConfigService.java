@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.llm.file_config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
@@ -14,8 +15,9 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
  * <br>负责把 {@link LLMModelFileConfig} 中的配置项合并为框架统一的 {@link LLMModelOptions}。
  *
  * @author zExNocs
- * @date 2026/06/08
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -27,17 +29,17 @@ public class LLMFileConfigService implements ILLMFileConfigService {
 
     /**
      * 获取 LLM 模型文件配置。
-     * <br>优先读取 {@code config/agent/model.yml}；当配置尚未加载时返回默认配置对象，
-     * 避免配置项缺失影响模型注册流程。
+     * <br>配置不可用时仅阻止本次调用，不在 Bean 构造或模型注册阶段读取。
      *
      * @return LLM 模型文件配置
+     * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
     @Override
     public LLMModelFileConfig getConfig() {
         try {
             return fileConfigService.get(LLMModelFileConfig.class);
         } catch (FileConfigDataNotFoundException ignored) {
-            return new LLMModelFileConfig();
+            throw new LLMConfigurationException("LLM model.yml is unavailable; reload valid local configuration.");
         }
     }
 
@@ -48,6 +50,7 @@ public class LLMFileConfigService implements ILLMFileConfigService {
      * @param modelId 模型适配器 ID
      * @param baseOptions 模型代码自带的 base options
      * @return 合并后的文件默认 options
+     * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
     @Override
     public LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions baseOptions) {
@@ -57,9 +60,12 @@ public class LLMFileConfigService implements ILLMFileConfigService {
                         .provider(modelId.id())
                         .build()
         );
-        return getConfig()
+        var entry = getConfig()
                 .findModelConfig(modelId)
-                .map(modelConfig -> modelConfig.toOptions(base))
-                .orElse(base);
+                .orElseThrow(() -> new LLMConfigurationException("Selected LLM route has no entry in model.yml."));
+        if (entry.getModel() == null || entry.getModel().isBlank()) {
+            throw new LLMConfigurationException("Selected LLM route requires an explicit model in model.yml.");
+        }
+        return entry.toOptions(base);
     }
 }

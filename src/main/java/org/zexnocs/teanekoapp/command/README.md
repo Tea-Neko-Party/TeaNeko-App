@@ -23,7 +23,8 @@
 6. 第一个字符串成为 CommandData.body，其余字符串成为 CommandData.args。
 7. 根据 TeaNekoMessageType 转换 CommandScope。
 8. 设置 scopeId、permission、senderId、rawData 和 clientClass。
-9. ICommandDispatcher.dispatch(...) 执行命令。
+9. ICommandDispatcher.dispatch(...) 返回可等待的分发回执。
+10. 接收器在完成链末端处理异常；消息事件处理方法本身仍为 void。
 ```
 
 # 三. CommandData 映射
@@ -63,6 +64,8 @@
 | 无权限 | 回复“没有权限执行该指令”。 |
 | 不在作用域内 | 回复“指令不在作用域内”。 |
 | 非 `/` 开头 | 默认忽略，避免普通聊天触发错误回复。 |
+
+所有内置命令及错误/帮助反馈返回 `CompletionStage`。配置、权限和 scope 写入使用实际提交完成接口，成功反馈位于提交之后；帮助/错误消息和转发消息都返回发送完成链。原生接收器统一记录未处理异常，调用分发器的其他服务应消费返回的 Stage，不再以“已提交反射任务”判断命令完成。
 
 # 六. 注意事项
 

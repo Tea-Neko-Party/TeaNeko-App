@@ -26,6 +26,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -33,8 +35,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * 签到服务
  *
  * @author zExNocs
- * @date 2026/03/05
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Service
 public class SignInService {
@@ -57,6 +60,14 @@ public class SignInService {
     private final RandomUtil randomUtil;
     private final ITeaUserCoinService iTeaUserCoinService;
 
+    /**
+     * 组合定时、随机数、积分和缓存服务，签到写入与奖励仍按原业务事务执行。
+     *
+     * @param iTimerService 本次装配使用的 {@code ITimerService} 服务
+     * @param randomUtil 用于本次处理的 {@code randomUtil} 数据
+     * @param iTeaUserCoinService 本次装配使用的 {@code ITeaUserCoinService} 服务
+     * @param iCacheService 缓存注册与生命周期服务
+     */
     public SignInService(ITimerService iTimerService,
                          RandomUtil randomUtil,
                          ITeaUserCoinService iTeaUserCoinService,
@@ -69,7 +80,6 @@ public class SignInService {
 
     /**
      * 初始化，制造一个定时器每天零点准时清理 {@code todaySignInSet}
-     *
      */
     @PostConstruct
     public void _init() {
@@ -90,12 +100,13 @@ public class SignInService {
      * @param userId 用户 ID
      * @param now    当前时间点
      * @param sender 消息发送器
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
+    public CompletionStage<Void> signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
         var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
         lock.lock();
         try {
-            __signIn(userId, now, sender);
+            return __signIn(userId, now, sender);
         } finally {
             lock.unlock();
         }
@@ -107,8 +118,9 @@ public class SignInService {
      * @param userId 用户 ID
      * @param now    当前时间点
      * @param sender 消息发送器
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void __signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
+    public CompletionStage<Void> __signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
         // 获取当前时间和日期
         var currentDate = ChinaDateUtil.Instance.convertToChinaDate(now);
 
@@ -118,10 +130,7 @@ public class SignInService {
         // 检查用户是否在缓存中已经签到过了，如果是则直接返回签到过的消息
         String repeatMsg = checkRepeatSignIn(userId, currentDate, data);
         if (repeatMsg != null) {
-            if(sender != null) {
-                sender.sendAtReplyMessage(repeatMsg);
-            }
-            return;
+            return sender == null ? CompletableFuture.completedStage(null) : sender.sendAtReplyMessageAsync(repeatMsg);
         }
 
         // 计算签到奖励
@@ -134,16 +143,14 @@ public class SignInService {
         var newData = buildNewSignInData(data, now, luckyNumber, continuous);
         var record = buildRecord(now, luckyNumber, coin);
         // 更新数据库
-        pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate)
-                .pushWithFuture()
-                .thenAccept(r -> {
-                    if(sender != null) {
-                        sender.sendAtReplyMessage(
-                                buildSuccessMessage(currentDate, now, luckyNumber,
-                                        coin, continuous, newData.getTotalDays())
-                        );
-                    }
-                }).finish();
+        return pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate)
+                .pushAsync()
+                .whenComplete((ignored, error) -> {
+                    if (error != null) todaySignInSet.remove(userId);
+                })
+                .thenCompose(ignored -> sender == null ? CompletableFuture.completedStage(null)
+                        : sender.sendAtReplyMessageAsync(buildSuccessMessage(currentDate, now, luckyNumber,
+                                coin, continuous, newData.getTotalDays())));
     }
 
     /**
@@ -168,7 +175,7 @@ public class SignInService {
      * @param userId 用户 ID
      * @param currentDate 当前日期
      * @param data 签到数据
-     * @return {@link String }
+     * @return 重复或过快签到的拒绝反馈；允许继续时为 null
      */
     private String checkRepeatSignIn(UUID userId,
                                      LocalDate currentDate,
@@ -221,7 +228,7 @@ public class SignInService {
      *
      * @param date 当前日期
      * @param luckyNumber 幸运数字
-     * @return int
+     * @return 按原签到规则计算的本次积分奖励
      */
     private int calculateCoin(LocalDate date, int luckyNumber) {
         if (date.getDayOfWeek() == DayOfWeek.THURSDAY) {
@@ -285,7 +292,7 @@ public class SignInService {
      * @param now 当前时间戳
      * @param luckyNumber 幸运数字
      * @param coin 获得的猫猫币数量
-     * @return {@link SignInRecordData }
+     * @return 包含本次签到结果与时间的记录
      */
     private SignInRecordData buildRecord(Instant now,
                                          int luckyNumber,
@@ -301,6 +308,14 @@ public class SignInService {
     /**
      * 将更新后的签到数据、签到记录和用户猫猫币数量推送到数据库中。
      *
+     * @param userId 原业务边界中的目标用户标识
+     * @param target 原存储协议使用的数据目标
+     * @param chunks 用于本次处理的 {@code chunks} 数据
+     * @param newData 用于本次处理的 {@code newData} 数据
+     * @param record 用于本次处理的 {@code record} 数据
+     * @param coin 用于本次处理的 {@code coin} 数据
+     * @param currentDate 用于本次处理的 {@code currentDate} 数据
+     * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      */
     private IDatabaseTaskConfig pushDatabaseUpdate(UUID userId,
                                                    IEasyDataDto target,
@@ -329,6 +344,13 @@ public class SignInService {
     /**
      * 构建签到成功消息，包含签到时间、幸运数字、获得的猫猫币数量、连续签到天数和累计签到天数。
      *
+     * @param date 用于本次处理的 {@code date} 数据
+     * @param now 用于本次处理的 {@code now} 数据
+     * @param luckyNumber 用于本次处理的 {@code luckyNumber} 数据
+     * @param coin 用于本次处理的 {@code coin} 数据
+     * @param continuous 用于本次处理的 {@code continuous} 数据
+     * @param totalDays 用于本次处理的 {@code totalDays} 数据
+     * @return 按本方法契约生成的文本或标识
      */
     private String buildSuccessMessage(LocalDate date,
                                        Instant now,

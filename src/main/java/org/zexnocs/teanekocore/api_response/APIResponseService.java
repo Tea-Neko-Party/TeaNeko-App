@@ -9,6 +9,7 @@ import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.util.UriBuilder;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.api.APIRequestData;
 import org.zexnocs.teanekocore.api_response.api.APIRequestParam;
@@ -22,6 +23,7 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import reactor.util.retry.Retry;
 
 import java.lang.reflect.Field;
@@ -29,15 +31,19 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * APIResponseService 是一个用于处理 API 请求和响应的服务类。
  * 它使用 Spring WebClient 来发送 HTTP 请求，并使用 Reactor 来处理异步响应。
  *
  * @author zExNocs
- * @date 2026/02/17
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Service
 public class APIResponseService implements IAPIResponseService {
@@ -50,12 +56,40 @@ public class APIResponseService implements IAPIResponseService {
     /// 用于执行 API 请求的 Scheduler
     private final Scheduler scheduler;
     private final ILogger logger;
+    private final Scheduler timerScheduler;
+    private final Function<String, WebClient> webClientFactory;
 
+    /**
+     * 注入 HTTP 执行、阶段计时、缓存和客户端工厂；调度器由装配方管理，不为单个请求创建线程池。
+     *
+     * @param apiScheduler HTTP 工作使用的借用调度器
+     * @param iCacheService 缓存注册与生命周期服务
+     * @param logger 项目日志接口
+     */
     @Autowired
     public APIResponseService(Scheduler apiScheduler, ICacheService iCacheService, ILogger logger) {
-        this.scheduler = apiScheduler;
-        this.responseCache = ConcurrentMapCacheContainer.of(iCacheService);
+        this(apiScheduler, Schedulers.parallel(), iCacheService, logger, url -> WebClient.builder()
+                .baseUrl(url).defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).build());
+    }
+
+    // 测试/内部装配可借用独立时钟与传输，既有 Spring 构造入口保持不变。
+    /**
+     * 注入 HTTP 执行、阶段计时、缓存和客户端工厂；调度器由装配方管理，不为单个请求创建线程池。
+     *
+     * @param apiScheduler HTTP 工作使用的借用调度器
+     * @param timerScheduler 阶段计时使用的借用调度器
+     * @param cacheService 缓存注册与生命周期服务
+     * @param logger 项目日志接口
+     * @param webClientFactory 按可信地址创建 HTTP 客户端的工厂
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    APIResponseService(Scheduler apiScheduler, Scheduler timerScheduler, ICacheService cacheService,
+                       ILogger logger, Function<String, WebClient> webClientFactory) {
+        this.scheduler = Objects.requireNonNull(apiScheduler);
+        this.timerScheduler = Objects.requireNonNull(timerScheduler);
+        this.responseCache = ConcurrentMapCacheContainer.of(cacheService);
         this.logger = logger;
+        this.webClientFactory = Objects.requireNonNull(webClientFactory);
     }
 
     /**
@@ -67,6 +101,7 @@ public class APIResponseService implements IAPIResponseService {
      * @param skipCache    是否跳过缓存，直接请求 API。如果为 false，则会先检查 responseCache 中是否有缓存的响应数据，
      * @param <REQ>        请求数据类型，必须实现 {@link IAPIRequestData} 接口
      * @param <RES>        响应数据类型，必须实现 {@link IAPIResponseData} 接口
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
      * @throws APIRequestAnnotationNotFoundException 如果请求数据类缺少 APIRequestData 注解
      * @throws APIURLErrorException                  如果 APIRequestData 注解中的 URL 为空或格式错误
      */
@@ -78,6 +113,48 @@ public class APIResponseService implements IAPIResponseService {
             boolean skipCache
     ) throws APIRequestAnnotationNotFoundException,
             APIURLErrorException {
+        return addTaskInternal(requestData, responseType, disableCache, skipCache, ExecutionPolicy.defaults(), false);
+    }
+
+    /**
+     * 按显式策略建立单次 HTTP 任务，阶段时限覆盖排队和重试等待，取消向实际订阅传播。
+     *
+     * @param requestData 请求参数及可信连接覆盖信息
+     * @param responseType 响应反序列化类型
+     * @param disableCache 是否禁止本次响应写入缓存
+     * @param skipCache 是否跳过缓存读取
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @param <REQ> 请求数据类型
+     * @param <RES> 响应数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    @Override
+    public <REQ extends IAPIRequestData, RES extends IAPIResponseData> TaskFuture<RES> addTask(
+            REQ requestData, Class<RES> responseType, boolean disableCache, boolean skipCache,
+            ExecutionPolicy execution) {
+        return addTaskInternal(requestData, responseType, disableCache, skipCache,
+                Objects.requireNonNull(execution, "execution"), true);
+    }
+
+    /**
+     * 校验请求声明并建立单次请求生命周期；按策略约束排队、重试等待和传输，只有已接受响应可以写缓存。
+     *
+     * @param requestData 请求参数及可信连接覆盖信息
+     * @param responseType 响应反序列化类型
+     * @param disableCache 是否禁止本次响应写入缓存
+     * @param skipCache 是否跳过缓存读取
+     * @param policy 本阶段的时限与借用控制策略
+     * @param managedTimeout 是否将排队及重试等待纳入同一阶段时限
+     * @param <REQ> 请求数据类型
+     * @param <RES> 响应数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws APIRequestAnnotationNotFoundException 当该操作的校验或下游调用失败时
+     * @throws APIURLErrorException 当该操作的校验或下游调用失败时
+     */
+    private <REQ extends IAPIRequestData, RES extends IAPIResponseData> TaskFuture<RES> addTaskInternal(
+            REQ requestData, Class<RES> responseType, boolean disableCache, boolean skipCache,
+            ExecutionPolicy policy, boolean managedTimeout) {
         var apiRequestAnnotation = requestData.getClass().getAnnotation(APIRequestData.class);
         if (apiRequestAnnotation == null) {
             throw new APIRequestAnnotationNotFoundException("类 " + requestData.getClass().getName() + " 缺少 APIRequestData 注解");
@@ -95,59 +172,81 @@ public class APIResponseService implements IAPIResponseService {
         if (url == null || url.isBlank()) {
             throw new APIURLErrorException("APIRequestData 注解中的 URL 不能为空");
         }
-        // 获取 WebClient 实例
-        var future = new TaskFuture<>(logger, "订阅 api", new CompletableFuture<RES>());
-        var webClient = _getWebClient(url);
-        var params = _extractParams(requestData);
-        boolean isPost = method.equalsIgnoreCase("POST");
-        String cacheKey = url + path + "?" + params.hashCode() + "@" + responseType.getName();
-
-        // 如果不跳过缓存，则尝试从缓存中获取响应
-        if(!skipCache) {
-            var cachedResponse = responseCache.get(cacheKey);
-            if (cachedResponse != null && cachedResponse.responseType.equals(responseType)) {
-                // 如果缓存中有响应，直接调用成功回调
-                future.complete(responseType.cast(cachedResponse.responseData()));
-                return future;
+        var completion = new CompletableFuture<RES>();
+        var future = new TaskFuture<>(logger, "订阅 api", completion);
+        Duration timeout;
+        try {
+            timeout = policy.effectiveTimeout(Duration.ofMillis(apiRequestAnnotation.timeoutInMillis()));
+        } catch (RuntimeException stopped) {
+            completion.completeExceptionally(stopped);
+            return future;
+        }
+        var execution = new APIRequestExecution<>(policy, timeout, timerScheduler, completion, managedTimeout);
+        if (execution.isDone()) {
+            return future;
+        }
+        try {
+            var params = _extractParams(requestData);
+            String cacheKey = url + path + "?" + params.hashCode() + "@" + responseType.getName();
+            if (!skipCache) {
+                var cachedResponse = responseCache.get(cacheKey);
+                if (cachedResponse != null && cachedResponse.responseType.equals(responseType)) {
+                    execution.succeed(responseType.cast(cachedResponse.responseData()), ignored -> {});
+                    return future;
+                }
             }
-        }
-
-        Mono<RES> mono;
-        if(isPost) {
-            mono = _getMonoForPost(webClient, apiRequestAnnotation, requestData, params, responseType, path);
-        } else {
-            mono = _getMonoForGet(webClient, requestData, params, responseType, path);
-        }
-        // 订阅 Mono 对象
-        mono.timeout(Duration.ofMillis(apiRequestAnnotation.timeoutInMillis()))
-            .retryWhen(Retry.fixedDelay(apiRequestAnnotation.retryCount(),
-                    Duration.ofMillis(apiRequestAnnotation.retryDelayInMillis())))
-            .subscribeOn(scheduler)
-            .doOnNext(res -> {
-                // 如果没有禁用缓存且响应类型匹配，则将响应数据存入缓存
-                if(!disableCache) {
+            final String requestPath = path;
+            final boolean isPost = method.equalsIgnoreCase("POST");
+            // 实际创建/发送留到订阅阶段；排队期间取消不会启动传输。
+            Mono<RES> source = Mono.defer(() -> {
+                policy.checkActive();
+                if (execution.isDone()) {
+                    return Mono.empty();
+                }
+                var webClient = _getWebClient(url);
+                return isPost
+                        ? _getMonoForPost(webClient, apiRequestAnnotation, requestData, params, responseType, requestPath)
+                        : _getMonoForGet(webClient, requestData, params, responseType, requestPath);
+            });
+            if (!managedTimeout) {
+                // 旧入口保留每次尝试的注解超时；显式策略入口限制包括排队/重试在内的整个阶段。
+                source = source.timeout(timeout, timerScheduler);
+            }
+            if (apiRequestAnnotation.retryCount() > 0) {
+                source = source.retryWhen(Retry.fixedDelay(apiRequestAnnotation.retryCount(),
+                        Duration.ofMillis(apiRequestAnnotation.retryDelayInMillis())).scheduler(timerScheduler));
+            }
+            execution.subscribe(source, scheduler, res -> {
+                if (!disableCache) {
                     responseCache.put(cacheKey, new ResponseCache<>(responseType, res));
                 }
-            })
-            .subscribe(future::complete, future::completeExceptionally);
+            });
+        } catch (RuntimeException failure) {
+            execution.fail(failure);
+        }
         return future;
     }
 
     /**
      * 从缓存中获取 webClient
+     *
      * @param url API 的基础 URL
      * @return WebClient 实例
      */
     private WebClient _getWebClient(String url) {
-        return webClientCache.computeIfAbsent(url,
-                key -> WebClient.builder()
-                        .baseUrl(key)
-                        .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-                        .build());
+        return webClientCache.computeIfAbsent(url, webClientFactory);
     }
 
     /**
      * 获取 Mono 对象用于 GET 请求
+     *
+     * @param webClient 用于本次处理的 {@code webClient} 数据
+     * @param requestData 请求参数及可信连接覆盖信息
+     * @param params 用于本次处理的 {@code params} 数据
+     * @param responseType 响应反序列化类型
+     * @param path 用于本次处理的 {@code path} 数据
+     * @param <RES> 响应数据类型
+     * @return 满足本方法约束的 {@code Mono<RES>} 结果
      */
     private <RES extends IAPIResponseData> Mono<RES> _getMonoForGet(
             WebClient webClient,
@@ -162,6 +261,15 @@ public class APIResponseService implements IAPIResponseService {
 
     /**
      * 获取 Mono 对象用于 POST 请求
+     *
+     * @param webClient 用于本次处理的 {@code webClient} 数据
+     * @param apiRequestAnnotation 用于本次处理的 {@code apiRequestAnnotation} 数据
+     * @param requestData 请求参数及可信连接覆盖信息
+     * @param params 用于本次处理的 {@code params} 数据
+     * @param responseType 响应反序列化类型
+     * @param path 用于本次处理的 {@code path} 数据
+     * @param <RES> 响应数据类型
+     * @return 满足本方法约束的 {@code Mono<RES>} 结果
      */
     private <RES extends IAPIResponseData> Mono<RES> _getMonoForPost(
             WebClient webClient, APIRequestData apiRequestAnnotation,
@@ -188,6 +296,7 @@ public class APIResponseService implements IAPIResponseService {
 
     /**
      * 从 IAPIRequestData 对象中提取参数
+     *
      * @param obj 请求数据对象
      * @return 参数映射
      */
@@ -231,6 +340,11 @@ public class APIResponseService implements IAPIResponseService {
 
     /**
      * 构造 URI
+     *
+     * @param builder 用于本次处理的 {@code builder} 数据
+     * @param path 用于本次处理的 {@code path} 数据
+     * @param params 用于本次处理的 {@code params} 数据
+     * @return 满足本方法约束的 {@code URI} 结果
      */
     private static URI _buildUri(UriBuilder builder, String path, Map<String, Object> params) {
         var b = builder.path(path);
@@ -240,8 +354,9 @@ public class APIResponseService implements IAPIResponseService {
 
     /**
      * 构造 MultiValueMap 用于 POST 请求
+     *
      * @param map 参数映射
-     * @return MultiValueMap<String, String>
+     * @return 由原查询或表单参数转换得到的多值映射
      */
     private static MultiValueMap<String, String> _toMultiValueMap(Map<String, Object> map) {
         MultiValueMap<String, String> m = new LinkedMultiValueMap<>();
@@ -271,6 +386,11 @@ public class APIResponseService implements IAPIResponseService {
      *
      * @param responseType 缓存的响应类型
      * @param responseData 缓存的响应数据
+     * @param <RES> 本类型约定的泛型数据类型
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
      */
     private record ResponseCache<RES extends IAPIResponseData>(Class<RES> responseType, RES responseData) {}
 }

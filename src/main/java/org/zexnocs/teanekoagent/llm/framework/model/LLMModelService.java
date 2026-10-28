@@ -4,12 +4,9 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.*;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
@@ -22,8 +19,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>只扫描带有 {@link LLMModel} 注解且实现 {@link ILLMModel} 的 Bean，并通过注解声明的 {@link LLMModelId} 路由。
  *
  * @author zExNocs
- * @date 2026/05/15
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
@@ -38,9 +36,9 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     private final ILLMFileConfigService llmFileConfigService;
 
     /**
-     * Agent 文件配置服务，用于读取 Agent 默认模型适配器 ID。
+     * 默认模型路由端口，不依赖 Agent 配置类型。
      */
-    private final IAgentFileConfigService agentFileConfigService;
+    private final IDefaultModelResolver defaultModelResolver;
 
     /**
      * 模型注册表。
@@ -53,14 +51,14 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      *
      * @param beanScanner Spring Bean 扫描器
      * @param llmFileConfigService LLM 文件配置服务
-     * @param agentFileConfigService Agent 文件配置服务
+     * @param defaultModelResolver 默认模型路由端口
      */
     public LLMModelService(IBeanScanner beanScanner,
                            ILLMFileConfigService llmFileConfigService,
-                           IAgentFileConfigService agentFileConfigService) {
+                           IDefaultModelResolver defaultModelResolver) {
         this.beanScanner = beanScanner;
         this.llmFileConfigService = llmFileConfigService;
-        this.agentFileConfigService = agentFileConfigService;
+        this.defaultModelResolver = defaultModelResolver;
     }
 
     /**
@@ -82,9 +80,9 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public LLMModelId getDefaultModelId() {
-        return agentFileConfigService.findDefaultModelId()
-                .orElseThrow(() -> new IllegalStateException(
-                        "Default Agent model id is not configured. Set agent/main-config.yml default-model-id to an @LLMModel id such as deepseek."));
+        return defaultModelResolver.findDefaultModelId()
+                .orElseThrow(() -> new LLMConfigurationException(
+                        "Default LLM model route is not configured."));
     }
 
     /**
@@ -125,12 +123,83 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt) {
-        var model = getModel(modelId);
+        return callInternal(modelId, prompt, null);
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param modelId 模型适配器注册标识
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    @Override
+    public TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt, ExecutionPolicy execution) {
+        java.util.Objects.requireNonNull(execution, "execution").checkActive();
+        return callInternal(modelId, prompt, execution);
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    @Override
+    public TaskFuture<ILLMResult> call(ILLMPrompt prompt, ExecutionPolicy execution) {
+        java.util.Objects.requireNonNull(execution, "execution").checkActive();
+        return callInternal(resolveModelId(prompt), prompt, execution);
+    }
+
+    /**
+     * 取得本次有效参数以支持预算预检，复用单次调用校验且不执行供应商请求。
+     * @param prompt 固定消息和覆盖参数
+     * @return 有效参数副本，调用方可进一步收紧输出上限
+     * @throws IllegalArgumentException 当路由、选项或内容不受支持时
+     * @throws LLMConfigurationException 当本地模型配置不可用时
+     */
+    @Override public LLMModelOptions resolveOptions(ILLMPrompt prompt) {
+        var id = resolveModelId(prompt);
+        return validateOptions(id, getModel(id), prompt);
+    }
+
+    /**
+     * 合并配置并校验能力，使预检和实际调用保持同一套模型输入边界。
+     * @param modelId 可信路由
+     * @param model 已注册模型适配器
+     * @param prompt 本次输入
+     * @return 已校验参数
+     * @throws IllegalArgumentException 当模型不支持输入或选项时
+     */
+    private LLMModelOptions validateOptions(LLMModelId modelId, ILLMModel model, ILLMPrompt prompt) {
+        LLMOptionBoundary.validate(prompt.getOptions());
         var options = buildEffectiveOptions(modelId, model.getBaseOptions(), prompt.getOptions());
+        LLMOptionBoundary.validate(options);
         if (!model.supports(options)) {
-            throw new IllegalArgumentException("LLM model does not support the prompt options: " + modelId);
+            throw new IllegalArgumentException("模型不支持当前输入参数：" + modelId);
         }
-        return model.call(new LLMPrompt(prompt.getMessages(), options));
+        LLMInputValidator.validate(prompt.getMessages(), model.getCapabilities(options.getModel()));
+        return options;
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param modelId 模型适配器注册标识
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
+     */
+    private TaskFuture<ILLMResult> callInternal(LLMModelId modelId, ILLMPrompt prompt, ExecutionPolicy execution) {
+        var model = getModel(modelId);
+        var options = validateOptions(modelId, model, prompt);
+        var effective = new LLMPrompt(prompt.getMessages(), options);
+        return execution == null ? model.call(effective) : model.call(effective, execution);
     }
 
     /**

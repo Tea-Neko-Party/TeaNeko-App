@@ -5,9 +5,7 @@ import lombok.NoArgsConstructor;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
@@ -20,16 +18,22 @@ import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterJsonMappe
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.instance.LLMRequestBodyExtensions;
+import org.zexnocs.teanekoagent.llm.instance.openai.OpenAIContentMapper;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * DeepSeek 对话补全 API 与 LLM framework 之间的转换器。
  *
  * @author zExNocs
- * @date 2026/06/08
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DeepSeekChatCompletionMapper {
@@ -41,11 +45,11 @@ public final class DeepSeekChatCompletionMapper {
     /**
      * 将 LLM prompt 和 options 转换为 DeepSeek 请求数据。
      *
-     * @param prompt LLM prompt
+     * @param prompt 经过宿主装配的消息与本次模型选项
      * @param options LLM 调用参数
-     * @param baseUrl DeepSeek API base URL
-     * @param apiPath DeepSeek API path
-     * @param apiKey DeepSeek API key
+     * @param baseUrl 可信配置指定的服务地址
+     * @param apiPath 可信配置指定的站内接口路径
+     * @param apiKey 仅供认证边界使用的本地凭据，禁止进入日志或普通消息
      * @return DeepSeek 请求数据
      */
     public static DeepSeekChatCompletionRequestData toRequest(ILLMPrompt prompt,
@@ -75,7 +79,7 @@ public final class DeepSeekChatCompletionMapper {
                 .topLogprobs(deepSeekOptions.findTopLogprobs().orElse(null))
                 .streamOptions(toStreamOptions(deepSeekOptions))
                 .userId(deepSeekOptions.findUserId().orElse(null))
-                .extraBody(toExtraBody(deepSeekOptions.getMetadata()))
+                .extraBody(LLMRequestBodyExtensions.fromMetadata(deepSeekOptions.getMetadata(), DeepSeekChatCompletionRequestData.class))
                 .build();
     }
 
@@ -111,7 +115,7 @@ public final class DeepSeekChatCompletionMapper {
             var item = new LinkedHashMap<String, Object>();
             item.put("role", message.getRole().getValue());
             putIfNotBlank(item, "name", message.getName());
-            item.put("content", toContent(message.getContents()));
+            item.put("content", OpenAIContentMapper.toChatContent(message));
             if (message instanceof ILLMAssistantMessage assistantMessage) {
                 var toolCalls = assistantMessage.getToolCalls();
                 if (toolCalls != null && !toolCalls.isEmpty()) {
@@ -124,32 +128,6 @@ public final class DeepSeekChatCompletionMapper {
             result.add(item);
         }
         return List.copyOf(result);
-    }
-
-    /**
-     * 转换文本内容。
-     *
-     * @param contents LLM content 列表
-     * @return DeepSeek 文本 content
-     */
-    private static String toContent(List<ILLMContent> contents) {
-        if (contents == null || contents.isEmpty()) {
-            return "";
-        }
-        var text = new StringBuilder();
-        for (var content : contents) {
-            if (content == null) {
-                continue;
-            } else {
-                content.getContentPart();
-            }
-            if (content.getContentPart() instanceof TextLLMContentPart textPart) {
-                appendContentText(text, textPart.getText());
-            } else {
-                appendContentText(text, content.getContentPart().toString());
-            }
-        }
-        return text.toString();
     }
 
     /**
@@ -221,25 +199,6 @@ public final class DeepSeekChatCompletionMapper {
     }
 
     /**
-     * 转换 metadata 中的请求体扩展字段。
-     *
-     * @param metadata LLM metadata
-     * @return 额外请求体字段
-     */
-    private static Map<String, Object> toExtraBody(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return Map.of();
-        }
-        var result = new LinkedHashMap<String, Object>();
-        metadata.forEach((key, value) -> {
-            if (key != null && key.startsWith(EXTRA_BODY_PREFIX) && shouldWriteOptionalValue(value)) {
-                result.put(key.substring(EXTRA_BODY_PREFIX.length()), value);
-            }
-        });
-        return Map.copyOf(result);
-    }
-
-    /**
      * 转换响应候选列表。
      *
      * @param choices DeepSeek 候选列表
@@ -264,7 +223,7 @@ public final class DeepSeekChatCompletionMapper {
     /**
      * 转换 assistant message。
      *
-     * @param message DeepSeek assistant message
+     * @param message 需要发送或映射的消息
      * @return 统一 assistant message
      */
     private static LLMAssistantMessage toAssistantMessage(DeepSeekChatCompletionResponseData.Message message) {
@@ -331,11 +290,11 @@ public final class DeepSeekChatCompletionMapper {
      * 转换 token 用量信息。
      *
      * @param usage DeepSeek token 用量
-     * @return 统一 token 用量
+     * @return 统一 token 用量，供应商未提供时为 null
      */
     private static LLMUsage toUsage(DeepSeekChatCompletionResponseData.Usage usage) {
         if (usage == null) {
-            return LLMUsage.empty();
+            return null;
         }
         var completionDetails = usage.getCompletionTokensDetails();
         return LLMUsage.builder()
@@ -365,43 +324,11 @@ public final class DeepSeekChatCompletionMapper {
      * 返回非空列表；空列表作为未设置处理。
      *
      * @param list 待检查列表
-     * @return 非空列表，或 {@code null}
      * @param <T> 列表元素类型
+     * @return 非空列表，或 {@code null}
      */
     private static <T> List<T> nonEmptyList(List<T> list) {
         return list == null || list.isEmpty() ? null : list;
-    }
-
-    /**
-     * 判断可选请求字段是否需要写入。
-     *
-     * @param value 字段值
-     * @return 需要写入时返回 {@code true}
-     */
-    private static boolean shouldWriteOptionalValue(Object value) {
-        return switch (value) {
-            case null -> false;
-            case String text -> !text.isBlank();
-            case Collection<?> collection -> !collection.isEmpty();
-            case Map<?, ?> map -> !map.isEmpty();
-            default -> true;
-        };
-    }
-
-    /**
-     * 追加文本内容。
-     *
-     * @param target 文本构造器
-     * @param value 待追加文本
-     */
-    private static void appendContentText(StringBuilder target, String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        if (!target.isEmpty()) {
-            target.append(' ');
-        }
-        target.append(value);
     }
 
     /**

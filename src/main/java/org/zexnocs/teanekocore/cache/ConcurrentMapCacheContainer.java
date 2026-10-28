@@ -14,48 +14,102 @@ import java.util.function.Function;
 
 /**
  * 基于 ConcurrentHashMap 实现的缓存类，所有缓存资源的清理时间是共享的。
- * <param K> 键类型
- * <param V> 值类型
  *
+ * @param <V> 值类型
+ * @param <K> 键类型
  * @author zExNocs
- * @date 2026/02/10
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
-    /// 默认创建实例方法
+    /**
+     * 默认创建实例方法
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService) {
         // 默认过期时间为 1 小时，清理间隔为 1 分钟，参与手动清理
         return of(cacheService, Duration.ofHours(1), Duration.ofMinutes(1), true);
     }
 
+    /**
+     * 创建并登记并发缓存容器，按传入期限和清理策略管理缓存；手动清理参与开关与过期清理独立。
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTime 缓存项保留期限
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               Duration expireTime) {
         return of(cacheService, expireTime, expireTime.dividedBy(60), true);
     }
 
-    /// 指定过期时间的创建实例方法
-    /// 使用 1 / 60 的过期时间作为清理间隔时间，参与手动清理
+    /**
+     * 指定过期时间的创建实例方法
+     * 使用 1 / 60 的过期时间作为清理间隔时间，参与手动清理
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTimeMs 用于本次处理的 {@code expireTimeMs} 数据
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs) {
         return of(cacheService, Duration.ofMillis(expireTimeMs));
     }
 
+    /**
+     * 创建并登记并发缓存容器，按传入期限和清理策略管理缓存；手动清理参与开关与过期清理独立。
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTime 缓存项保留期限
+     * @param cleanInterval 过期清理检查间隔
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               Duration expireTime,
                                                               Duration cleanInterval) {
         return of(cacheService, expireTime, cleanInterval, true);
     }
 
-    /// 指定过期时间和清理间隔时间的创建实例方法
-    /// 参与手动清理
+    /**
+     * 指定过期时间和清理间隔时间的创建实例方法
+     * 参与手动清理
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTimeMs 用于本次处理的 {@code expireTimeMs} 数据
+     * @param cleanIntervalMs 用于本次处理的 {@code cleanIntervalMs} 数据
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs,
                                                               long cleanIntervalMs) {
         return of(cacheService, Duration.ofMillis(expireTimeMs), Duration.ofMillis(cleanIntervalMs), true);
     }
 
-    /// 指定过期时间
-    /// 使用 1 / 60 的过期时间作为清理间隔时间
-    /// 和是否参与手动清理的创建实例方法
+    /**
+     * 指定过期时间
+     * 使用 1 / 60 的过期时间作为清理间隔时间
+     * 和是否参与手动清理的创建实例方法
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTimeMs 用于本次处理的 {@code expireTimeMs} 数据
+     * @param participateInManualClean 是否参与外部发起的手动缓存清理
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs,
                                                               boolean participateInManualClean) {
@@ -63,6 +117,16 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
         return of(cacheService, expireTime, expireTime.dividedBy(60), participateInManualClean);
     }
 
+    /**
+     * 创建并登记并发缓存容器，按传入期限和清理策略管理缓存；手动清理参与开关与过期清理独立。
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTime 缓存项保留期限
+     * @param participateInManualClean 是否参与外部发起的手动缓存清理
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               Duration expireTime,
                                                               boolean participateInManualClean) {
@@ -71,13 +135,14 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
 
     /**
      * 完整的创建实例方法
+     *
      * @param cacheService 缓存服务实例
      * @param expireTimeMs 单个数据的过期时间，单位毫秒
      * @param cleanIntervalMs 清理间隔时间，单位毫秒
      * @param participateInManualClean 是否参与手动清理
-     * @return 创建好的 ConcurrentMapCacheContainer 实例
      * @param <K> 键类型
      * @param <V> 值类型
+     * @return 创建好的 ConcurrentMapCacheContainer 实例
      */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long expireTimeMs,
@@ -87,6 +152,17 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
                 participateInManualClean);
     }
 
+    /**
+     * 创建并登记并发缓存容器，按传入期限和清理策略管理缓存；手动清理参与开关与过期清理独立。
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param expireTime 缓存项保留期限
+     * @param cleanInterval 过期清理检查间隔
+     * @param participateInManualClean 是否参与外部发起的手动缓存清理
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               Duration expireTime,
                                                               Duration cleanInterval,
@@ -101,13 +177,14 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
 
     /**
      * 使用一个 ICacheDataFactory 来创建 ConcurrentMapCacheContainer 实例
+     *
      * @param cacheService 缓存服务实例
      * @param cleanIntervalMs 清理间隔时间，单位毫秒
      * @param iCacheDataFactory 创建 CacheData 的工厂类
      * @param participateInManualClean 是否参与手动清理
-     * @return 创建好的 ConcurrentMapCacheContainer 实例
      * @param <K> 键类型
      * @param <V> 值类型
+     * @return 创建好的 ConcurrentMapCacheContainer 实例
      */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               long cleanIntervalMs,
@@ -116,6 +193,17 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
         return of(cacheService, Duration.ofMillis(cleanIntervalMs), iCacheDataFactory, participateInManualClean);
     }
 
+    /**
+     * 创建并登记并发缓存容器，按传入期限和清理策略管理缓存；手动清理参与开关与过期清理独立。
+     *
+     * @param cacheService 缓存注册与生命周期服务
+     * @param cleanInterval 过期清理检查间隔
+     * @param iCacheDataFactory 缓存数据包装与有效期工厂
+     * @param participateInManualClean 是否参与外部发起的手动缓存清理
+     * @param <K> 本方法约定的泛型数据类型
+     * @param <V> 本方法约定的泛型数据类型
+     * @return 满足本方法约束的 {@code ConcurrentMapCacheContainer<K, V>} 结果
+     */
     public static <K, V> ConcurrentMapCacheContainer<K, V> of(ICacheService cacheService,
                                                               Duration cleanInterval,
                                                               ICacheDataFactory<V> iCacheDataFactory,
@@ -145,6 +233,13 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     /// 创建 CacheData 的工厂类
     private final ICacheDataFactory<V> iCacheDataFactory;
 
+    /**
+     * 固定缓存数据工厂和清理策略，记录初始清理时间；容器注册由工厂入口完成。
+     *
+     * @param participateInManualClean 是否参与外部发起的手动缓存清理
+     * @param cleanInterval 过期清理检查间隔
+     * @param iCacheDataFactory 缓存数据包装与有效期工厂
+     */
     private ConcurrentMapCacheContainer(boolean participateInManualClean,
                                         Duration cleanInterval,
                                         ICacheDataFactory<V> iCacheDataFactory) {
@@ -174,6 +269,22 @@ public class ConcurrentMapCacheContainer<K, V> implements ICacheContainer {
     public void put(K key, V value) {
         cache.put(key, iCacheDataFactory.createCacheData(value));
     }
+
+    /**
+     * 仅在键尚不存在时原子写入缓存。
+     *
+     * @param key 键
+     * @param value 新值
+     * @return 原有值；成功写入时返回 {@code null}
+     */
+    public V putIfAbsent(K key, V value) {
+        ICacheData<V> previous = cache.putIfAbsent(
+                key,
+                iCacheDataFactory.createCacheData(value)
+        );
+        return previous == null ? null : previous.getValue();
+    }
+
 
     /**
      * 访问一个缓存项，并更新其最后访问时间

@@ -43,8 +43,9 @@ FileConfigService.TEMPLATE_PATH // templates/config
 | `@FileConfig(value, path, type)` | 标记配置数据类。`value` 是文件名，`path` 是相对 `config/` 的目录，`type` 默认 `JSON`。 |
 | `IFileConfigData` | 文件配置数据标记接口，继承 `Serializable`。实现类需要无参构造器。 |
 | `FileConfigType.JSON` | `.json` 文件，内置解析器支持带 `#` 注释的 JSON。 |
-| `FileConfigType.YAML` | `.yaml` 文件。 |
-| `IFileConfigService.get(Class<T>)` | 获取已加载的配置实例。 |
+| `FileConfigType.YAML` | `.yml` 文件。 |
+| `IFileConfigService.get(Class<T>)` | 获取最后一次成功加载的配置实例。 |
+| `IFileConfigService.requireCurrent(Class<T>)` | 读取最近一次加载成功的数据，最新加载失败时明确拒绝。 |
 | `IFileConfigService.write(IFileConfigData)` | 写回配置文件并刷新缓存。 |
 | `IFileConfigService.reload()` | 重新扫描并加载配置。 |
 | `@FileTypeParser(FileConfigType.X)` | 标记自定义文件类型解析器。 |
@@ -86,3 +87,13 @@ classpath:templates/config/teaneko/bot.json
 | 自定义解析器 | 同一个 `FileConfigType` 只应有一个解析器；重复注册时保留先扫描到的解析器并记录 warn。 |
 | 写入 | `write` 会创建父目录、写文件并更新缓存。 |
 | 初始化顺序 | `FileTypeScanner` 的优先级高于 `FileConfigService`，保证解析器先注册。 |
+
+# 六. 兼容读取与严格读取
+
+`IFileConfigService.get(type)` 返回最后一次成功加载的数据。后续重载失败时保留原有效对象，兼容已有业务的缓存读法；从未加载成功则抛出 FileConfigDataNotFoundException。
+
+`requireCurrent(type)` 仅接受最近一次已完成加载成功的数据。解析失败、解析器缺失、空解析结果或根目录不可用时明确失败，不沿用残留旧值冒充当前成功。数据与该类型的加载状态作为同一缓存记录原子发布；不提供跨多个配置类型的事务快照。
+
+成功重载或写入会发布新的有效记录。失败记录保留最后有效值供 get 使用，只保存状态，不缓存原始异常或文件内容。严格读取的错误消息不包含配置值或原始解析异常链。根目录读取失败需要通过后续成功重载恢复；原始加载诊断仍由既有文件服务日志负责。
+
+自定义 IFileConfigService 实现若未提供严格状态支持，requireCurrent 明确拒绝，不能静默退回 get。新 Agent 使用严格读取主配置及模型配置，避免重载失败后继续执行；其他现有调用的读取语义保持兼容。

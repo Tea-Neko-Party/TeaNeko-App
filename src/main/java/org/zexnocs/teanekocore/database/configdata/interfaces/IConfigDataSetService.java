@@ -7,16 +7,144 @@ import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerF
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
+import java.util.concurrent.CompletionStage;
+
 /**
  * 配置数据修改服务接口，提供修改配置数据的方法。
  * <br>4.3.4: 支持 checker 检测域设置，并自定义失败语言。
  *
  * @author zExNocs
- * @date 2026/02/16
+ * @date 2026/10/28
  * @since 4.0.0
- * @version 4.3.4
+ * @version 4.5.0-l
  */
 public interface IConfigDataSetService {
+
+    /**
+     * 校验和构建变更可同步抛错；Stage 仅在持久化结束后成功，失败由调用方处理。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param value 待处理的值
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    CompletionStage<Void> setRuleConfigFieldAsync(@NonNull ConfigManager manager, String key, String field, String value)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException;
+
+    /**
+     * 设置配置字段，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param value 待处理的值
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    default CompletionStage<Void> setRuleConfigFieldAsync(@NonNull ConfigManager manager, IConfigKey key, String field, String value)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException {
+        return setRuleConfigFieldAsync(manager, key.getKey(), field, value);
+    }
+
+    /**
+     * 向配置列表追加项，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param value 待处理的值
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    CompletionStage<Void> addToRuleConfigListFiledAsync(@NonNull ConfigManager manager, String key, String field, String value)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException;
+
+    /**
+     * 向配置列表追加项，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param value 待处理的值
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    default CompletionStage<Void> addToRuleConfigListFiledAsync(@NonNull ConfigManager manager, IConfigKey key, String field, String value)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException {
+        return addToRuleConfigListFiledAsync(manager, key.getKey(), field, value);
+    }
+
+    /**
+     * 按索引移除配置列表项，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param index 目标项索引或展示页码，按当前入口约定解释
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    CompletionStage<Void> removeFromRuleConfigListFiledAsync(@NonNull ConfigManager manager, String key, String field, int index)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException;
+
+    /**
+     * 按索引移除配置列表项，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @param index 目标项索引或展示页码，按当前入口约定解释
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    default CompletionStage<Void> removeFromRuleConfigListFiledAsync(@NonNull ConfigManager manager, IConfigKey key, String field, int index)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException {
+        return removeFromRuleConfigListFiledAsync(manager, key.getKey(), field, index);
+    }
+
+    /**
+     * 清空配置列表，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    CompletionStage<Void> clearRuleConfigListFiledAsync(@NonNull ConfigManager manager, String key, String field)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException;
+
+    /**
+     * 清空配置列表，返回阶段等待实际数据库提交与缓存处理；失败继续传播给调用者。
+     *
+     * @param manager 目标配置管理器声明
+     * @param key 定位目标数据的键
+     * @param field 需要操作的配置字段名称
+     * @return 等待数据库提交与缓存更新结束的阶段；校验或提交失败继续传播
+     * @throws ConfigDataNotFoundException 当该操作的校验或下游调用失败时
+     * @throws NoSuchFieldException 当该操作的校验或下游调用失败时
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
+     */
+    default CompletionStage<Void> clearRuleConfigListFiledAsync(@NonNull ConfigManager manager, IConfigKey key, String field)
+            throws ConfigDataNotFoundException, NoSuchFieldException, IllegalAccessException {
+        return clearRuleConfigListFiledAsync(manager, key.getKey(), field);
+    }
 
     /**
      * 使用字段的方法设置群管理规则的配置。
@@ -39,6 +167,7 @@ public interface IConfigDataSetService {
 
     /**
      * 使用字段的方法设置群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName  字段名称
@@ -58,6 +187,7 @@ public interface IConfigDataSetService {
 
     /**
      * 为 Config 中 List 的字段添加一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -91,8 +221,9 @@ public interface IConfigDataSetService {
      * @throws ConfigDataNotFoundException 如果未找到规则配置
      * @throws NoSuchFieldException 如果未找到指定字段
      * @throws IllegalArgumentException 如果字段值不合法
-      @throws IllegalAccessException 如果无法访问字段
+     *       @throws IllegalAccessException 如果无法访问字段
      * @throws ObjectFieldUtil.FieldNotListException 如果指定字段不是 List 类型
+     * @throws IllegalAccessException 当该操作的校验或下游调用失败时
      */
     void addToRuleConfigListFiled(@NonNull ConfigManager configManager, String key, String fieldName, String value)
             throws ConfigDataNotFoundException,
@@ -104,6 +235,7 @@ public interface IConfigDataSetService {
 
     /**
      * 为 Config 中 List 的字段移除一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -125,6 +257,7 @@ public interface IConfigDataSetService {
 
     /**
      * 为 Config 中 List 的字段移除一个值。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -144,6 +277,7 @@ public interface IConfigDataSetService {
 
     /**
      * 清理一个群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称
@@ -162,6 +296,7 @@ public interface IConfigDataSetService {
 
     /**
      * 清理一个群管理规则的配置。
+     *
      * @param configManager 配置管理器
      * @param key 规则配置的键
      * @param fieldName 字段名称

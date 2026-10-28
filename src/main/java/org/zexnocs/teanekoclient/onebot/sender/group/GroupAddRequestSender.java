@@ -11,13 +11,15 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 同意/拒绝加群请求发送器
  *
  * @author zExNocs
- * @date 2026/03/04
+ * @date 2026/10/28
  * @since 4.0.12
+ * @version 4.5.0-l
  */
 @Component("GroupAddRequestSender")
 @SuppressWarnings("rawtypes")
@@ -60,6 +62,40 @@ public class GroupAddRequestSender extends AbstractOnebotSender<GroupAddRequestS
      */
     public void reject(String flag, String reason) {
         send(GroupAddRequestSendParamsData.builder()
+                    .flag(flag)
+                    .approve(false)
+                    .reason(reason)
+                    .build(),
+            Duration.ZERO,
+            3,
+            Duration.ofMillis(200));
+    }
+
+    /**
+     * 通过原平台发送链接受入群请求，校验最终回执后才完成。
+     *
+     * @param flag 原平台请求回执标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> approveAsync(String flag) {
+        return sendAsync(GroupAddRequestSendParamsData.builder()
+                    .flag(flag)
+                    .approve(true)
+                    .build(),
+            Duration.ZERO,
+            3,
+            Duration.ofMillis(200));
+    }
+
+    /**
+     * 通过原平台发送链拒绝入群请求，保留原请求标识及拒绝原因。
+     *
+     * @param flag 原平台请求回执标识
+     * @param reason 首次生效的终止原因
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> rejectAsync(String flag, String reason) {
+        return sendAsync(GroupAddRequestSendParamsData.builder()
                     .flag(flag)
                     .approve(false)
                     .reason(reason)

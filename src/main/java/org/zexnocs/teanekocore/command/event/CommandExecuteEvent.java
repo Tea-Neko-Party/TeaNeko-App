@@ -9,6 +9,7 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandExecutor;
 import org.zexnocs.teanekocore.event.AbstractEvent;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 在执行 command 方法之前推送的事件。
@@ -16,8 +17,9 @@ import java.lang.reflect.Method;
  * <br>如果取消该事件，则不会执行该命令
  *
  * @author zExNocs
- * @date 2026/03/14
+ * @date 2026/10/28
  * @since 4.3.1
+ * @version 4.5.0-l
  */
 @Getter
 public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
@@ -37,6 +39,8 @@ public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
     /// 方法执行的方法参数
     private final Object[] args;
 
+    private volatile CompletionStage<Object> completion;
+
     /**
      * 事件的构造函数。
      *
@@ -44,6 +48,8 @@ public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
      * @param mapData       command 的原始数据
      * @param method        执行的方法
      * @param args          方法执行的方法参数
+     * @param executor 本地实际执行器
+     * @param subCommandKey 用于本次处理的 {@code subCommandKey} 数据
      */
     public CommandExecuteEvent(@NonNull ICommandExecutor executor,
                                @NonNull CommandData<?> data,
@@ -65,7 +71,7 @@ public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
     @Override
     public void _afterNotify() {
         var commandAnnotation = mapData.getCommandAnnotation();
-        executor.execute(
+        completion = executor.execute(
                 mapData.getCommand(),
                 method,
                 args,

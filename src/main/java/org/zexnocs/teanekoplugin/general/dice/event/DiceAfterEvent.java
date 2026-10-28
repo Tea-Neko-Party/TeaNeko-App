@@ -1,17 +1,22 @@
 package org.zexnocs.teanekoplugin.general.dice.event;
 
-import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekoplugin.general.dice.data.DiceResultData;
 
 /**
  * 骰子投掷后事件，已经获取到骰子结果数据，在通知处理器之后调用。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
-public class DiceAfterEvent extends AbstractEvent<DiceResultData> {
+public class DiceAfterEvent extends DiceEvent<DiceResultData> {
 
+    /**
+     * 保存已生成的骰子结果，供后置监听与默认通知读取。
+     *
+     * @param data 本次处理的输入数据
+     */
     public DiceAfterEvent(DiceResultData data) {
         super(data);
     }
@@ -28,16 +33,15 @@ public class DiceAfterEvent extends AbstractEvent<DiceResultData> {
         }
         // 获取话术
         var message = _generateDiceMessage(data);
-        data.getAttemptDiceData().getMessageData()
-                .getMessageSender()
-                .sendReplyMessage(message);
+        includeCompletion(data.getAttemptDiceData().getMessageData()
+                .getMessageSender().sendReplyMessageAsync(message));
     }
 
     /**
      * 根据骰子结果数据生成话术消息。
      *
      * @param resultData 骰子结果数据
-     * @return {@link String }
+     * @return 根据本次骰子结果生成的用户反馈文本
      */
     private String _generateDiceMessage(DiceResultData resultData) {
         StringBuilder builder = new StringBuilder();

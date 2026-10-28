@@ -63,6 +63,12 @@
 | `IGetGroupMemberListSender` | 获取群成员列表。 |
 | `IPlatformUserGetSender` | 获取平台用户信息。 |
 
+普通消息和转发构造器都提供 `sendAsync(): CompletionStage<Void>`，等待实际发送任务的回执；异步异常继续传播，旧适配器返回的 null 回执会转为 `MessageSendFailedException`。普通消息另有 `sendReplyMessageAsync`、`sendAtReplyMessageAsync`、`sendTextMessageAsync`，可直接接入命令完成链。需要消息 ID 时仍使用 `sendWithFuture()`。
+
+转发构造器的 `sendByPartAsync(partSize)` 冻结消息列表和本次发送配置，依次等待每段回执；任一段失败后停止剩余分段，已经发送的段不会回滚。空列表不发送，非正数分段大小同步抛出 `IllegalArgumentException`。`MessageSendStages` 复用分段顺序与回执检查，不依赖 OneBot。
+
+现有 `send()`、`sendByPart()` 保留供不等待的调用者使用；OneBot 的 `sendByPart()` 仍分别提交各段并安装终端错误日志。新的完成链接口不额外安装日志，由最外层调用者处理异常。构造器不是线程安全对象；列表快照不承诺深拷贝任意可变内容对象。
+
 # 六. 注意事项
 
 | 项 | 说明 |

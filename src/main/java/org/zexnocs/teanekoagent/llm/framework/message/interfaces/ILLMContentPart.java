@@ -1,14 +1,12 @@
 package org.zexnocs.teanekoagent.llm.framework.message.interfaces;
 
-import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
-
 /**
  * Content Part 类型。
  *
- * @see ITeaNekoContentPart
  * @author zExNocs
- * @date 2026/03/19
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
-public interface ILLMContentPart extends ITeaNekoContentPart {
+public interface ILLMContentPart {
 }

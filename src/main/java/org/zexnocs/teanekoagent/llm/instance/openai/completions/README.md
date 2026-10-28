@@ -82,7 +82,9 @@ flowchart TB
 
 `OpenAIChatCompletionsModel` 没有 `@LLMModel`，也不是 Spring Bean，因此不会出现在 `LLMModelService` 注册表中，`model.yml` 不应配置 `id: openai-completions`。
 
-通用 mapper 会忽略空字符串、空集合和空 map。`body.<name>` 会转换为请求体的 `<name>` 字段，`header.<name>` 会转换为 HTTP 请求头。OpenAI 专用实现会将统一的 `thinking: true/false` 分别转换为 `reasoning_effort: medium/none`；需要其他强度时可直接配置 `body.reasoning_effort`。
+认证由 `ICredentialResolver` 在请求边界按 provider 解析，连接覆盖只取 Spring。子类的 `defaultBaseUrl()` / `defaultApiPath()` 声明内建默认值，不读取 Prompt。详见 [配置与迁移说明](../../../file_config/README.md)。
+
+通用 mapper 会忽略空字符串、空集合和空 map。`body.<name>` 会转换为请求体的 `<name>` 字段，`header.<name>` 会转换为非敏感 HTTP 请求头；认证字段在模型调用边界被拒绝。OpenAI 专用实现会将统一的 `thinking: true/false` 分别转换为 `reasoning_effort: medium/none`；需要其他强度时可直接配置 `body.reasoning_effort`。
 
 # 六. 快速扩展兼容模型
 
@@ -93,7 +95,7 @@ flowchart TB
 public class VendorChatModel extends AbstractOpenAIChatCompletionModel {
     public static final String PROVIDER = "vendor";
 
-    public VendorChatModel(IAPIResponseService apiResponseService) {
+    public VendorChatModel(IAPIResponseService apiResponseService, ICredentialResolver credentialResolver) {
         super(
                 PROVIDER,
                 "vendor-model",
@@ -102,8 +104,14 @@ public class VendorChatModel extends AbstractOpenAIChatCompletionModel {
                         "vendor-model",
                         "https://api.vendor.example/v1"
                 ),
-                apiResponseService
+                apiResponseService,
+                credentialResolver
         );
+    }
+
+    @Override
+    protected String defaultBaseUrl() {
+        return "https://api.vendor.example/v1";
     }
 }
 ```
@@ -124,7 +132,7 @@ public class VendorChatModel extends AbstractOpenAIChatCompletionModel {
 |`ILLMTool`|`tools[].function`|
 |`responseFormat = JSON`|`response_format.type = json_object`|
 
-兼容供应商返回的 `reasoning_content` 保存在 `ILLMMessage.providerMetadata` 的 `openai.chat.reasoningContent` 中，并可在后续工具调用轮次回传；它不会作为用户可见正文。
+兼容供应商返回的 `reasoning_content` 保存在 `ILLMMessage.providerMetadata` 的 `openai.chat.reasoningContent` 中，并可在后续工具调用轮次回传；它不会作为用户可见正文。显式 `message.refusal` 映射为统一 `finishReason=refusal`，拒绝说明保留为可呈现正文；拒绝状态不会被普通 `stop` 覆盖。供应商未提供 usage 时返回 null，不填充零用量。
 
 # 八. 阅读顺序
 
@@ -135,3 +143,6 @@ public class VendorChatModel extends AbstractOpenAIChatCompletionModel {
 |$3$|[../README.md](../responses/README.md)|比较 OpenAI Responses API 与 Chat Completions API。|
 |$4$|[../../kimi/README.md](../../kimi/README.md)|查看供应商专用 options 如何复用本兼容层。|
 |$5$|[README.md](README.md)|了解通用请求映射、配置和快速扩展方式。|
+
+
+图像输入使用统一 `ImageLLMContentPart`，按顺序映射为真实的协议内容块，纯文本保持既有格式。所选模型、角色及 detail 必须符合 [已声明的图像能力](../../../file_config/README.md#图像能力)，未核实的模型不会自动继承同供应商其他模型的能力。body 扩展不能覆盖 DTO 已建模字段及模型、输入、工具或上下文控制字段。

@@ -2,22 +2,24 @@ package org.zexnocs.teanekoapp.sender.api.sender_box;
 
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.response.api.IMessageSendResponseData;
+import org.zexnocs.teanekoapp.sender.MessageSendStages;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 用于构建 node 信息的接口。
  *
  * @author zExNocs
- * @date 2026/02/24
+ * @date 2026/10/28
  * @since 4.0.9
+ * @version 4.5.0-l
  */
 public interface IForwardMessageSenderBuilder {
     /**
      * 发送转发消息。
-     *
      */
     default void send() {
         sendWithFuture().finish();
@@ -31,11 +33,29 @@ public interface IForwardMessageSenderBuilder {
     TaskFuture<IMessageSendResponseData> sendWithFuture();
 
     /**
+     * 等待发送回执，发送异常或空回执都会使 Stage 失败。
+     *
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    default CompletionStage<Void> sendAsync() {
+        return MessageSendStages.awaitResponse(sendWithFuture());
+    }
+
+    /**
      * 以分段的方式发送消息。
      *
      * @param partSize 每段的大小
      */
     void sendByPart(int partSize);
+
+    /**
+     * 顺序发送全部分段并等待每段回执；失败后停止剩余分段。
+     * 空消息列表直接完成，partSize 必须为正数。
+     *
+     * @param partSize 每个分段包含的最大条目数
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    CompletionStage<Void> sendByPartAsync(int partSize);
 
 
     /**
@@ -43,6 +63,7 @@ public interface IForwardMessageSenderBuilder {
      * 默认没有延迟，即立即发送。
      *
      * @param delay 发送延迟
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setDelay(Duration delay);
 
@@ -51,6 +72,7 @@ public interface IForwardMessageSenderBuilder {
      * 默认 8 次。
      *
      * @param count retry 次数
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setRetryCount(int count);
 
@@ -59,6 +81,7 @@ public interface IForwardMessageSenderBuilder {
      * 默认 200ms
      *
      * @param interval retry 间隔
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setRetryInterval(Duration interval);
 
@@ -67,20 +90,21 @@ public interface IForwardMessageSenderBuilder {
      * 默认开启
      *
      * @param recordFailed 是否记录发送失败的消息到数据库中，默认为 true
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setRecordFailed(boolean recordFailed);
 
     /**
      * 获取 bot name
      *
-     * @return bot name
+     * @return 当前发送器提供的机器人显示名称
      */
     String getBotName();
 
     /**
      * 获取 bot ID
      *
-     * @return bot ID
+     * @return 当前发送器提供的机器人平台标识
      */
     String getBotId();
 
@@ -88,7 +112,7 @@ public interface IForwardMessageSenderBuilder {
      * 设置外显
      *
      * @param prompt 外显文本
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setPrompt(String prompt);
 
@@ -96,7 +120,7 @@ public interface IForwardMessageSenderBuilder {
      * 设置底下文本
      *
      * @param summary 底下文本
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setSummary(String summary);
 
@@ -104,7 +128,7 @@ public interface IForwardMessageSenderBuilder {
      * 设置内容
      *
      * @param source 内容
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder setSource(String source);
 
@@ -112,7 +136,7 @@ public interface IForwardMessageSenderBuilder {
      * 使用 bot 作为发送者发送该消息。
      *
      * @param message 消息内容
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     default IForwardMessageSenderBuilder addBotText(String message) {
         return addText(getBotId(), getBotName(), message);
@@ -122,7 +146,7 @@ public interface IForwardMessageSenderBuilder {
      * 添加一群文本
      *
      * @param textList 消息内容列表
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     default IForwardMessageSenderBuilder addBotAllText(List<String> textList) {
         return addAllText(getBotId(), getBotName(), textList);
@@ -142,7 +166,7 @@ public interface IForwardMessageSenderBuilder {
      * 添加一群消息
      *
      * @param messageListList 消息内容列表
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     default IForwardMessageSenderBuilder addBotAllList(List<List<ITeaNekoContent>> messageListList) {
         return addAllList(getBotId(), getBotName(), messageListList);
@@ -154,7 +178,7 @@ public interface IForwardMessageSenderBuilder {
      * @param userId   用户 ID
      * @param nickname 用户昵称
      * @param message  消息内容
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     IForwardMessageSenderBuilder addText(String userId, String nickname, String message);
 
@@ -164,7 +188,7 @@ public interface IForwardMessageSenderBuilder {
      * @param userId   用户 ID
      * @param nickname 用户昵称
      * @param textList 消息内容列表
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     default IForwardMessageSenderBuilder addAllText(String userId, String nickname, List<String> textList) {
         for (var item : textList) {
@@ -189,7 +213,7 @@ public interface IForwardMessageSenderBuilder {
      * @param userId          用户 ID
      * @param nickname        用户昵称
      * @param messageListList 消息内容列表
-     * @return {@link IForwardMessageSenderBuilder }
+     * @return 当前构建器，供调用方继续组合后提交
      */
     default IForwardMessageSenderBuilder addAllList(String userId, String nickname, List<List<ITeaNekoContent>> messageListList) {
         for (var item : messageListList) {

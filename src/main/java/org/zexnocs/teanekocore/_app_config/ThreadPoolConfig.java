@@ -15,8 +15,9 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
  * 线程池配置类，负责配置应用程序中使用的线程池。
  *
  * @author zExNocs
- * @date 2026/02/11
+ * @date 2026/10/28
  * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Configuration
 public class ThreadPoolConfig {
@@ -26,7 +27,7 @@ public class ThreadPoolConfig {
      *
      * @return 任务线程池
      */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public ScheduledThreadPoolExecutor taskExecutor() {
         // 获取 cpu 核心数
         int cpu = Runtime.getRuntime().availableProcessors();
@@ -43,7 +44,7 @@ public class ThreadPoolConfig {
         executor.setRejectedExecutionHandler((r, e) -> {
             // 保存被拒绝的任务
             // todo: 通知手动处理
-            throw new RejectedExecutionException("Task executor is full");
+            throw new RejectedExecutionException("任务执行线程池已满。");
         });
 
         return executor;
@@ -54,7 +55,7 @@ public class ThreadPoolConfig {
      *
      * @return 定时器 Scheduler
      */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public ThreadPoolTaskScheduler timerScheduler() {
         // 创建一个单线程的 ThreadPoolTaskScheduler
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
@@ -69,7 +70,7 @@ public class ThreadPoolConfig {
      *
      * @return 虚拟线程池执行器
      */
-    @Bean
+    @Bean(destroyMethod = "shutdown")
     public ExecutorService virtualExecutor() {
         // 使用虚拟线程执行器，每个任务都是独立虚拟线程
         return Executors.newThreadPerTaskExecutor(Thread.ofVirtual().factory());
@@ -78,9 +79,9 @@ public class ThreadPoolConfig {
     /**
      * 专门为 api 请求设计的 Scheduler
      *
-     * @return {@link Scheduler }
+     * @return 由 Spring 管理、供 API 工作使用的调度器
      */
-    @Bean
+    @Bean(destroyMethod = "dispose")
     public Scheduler apiScheduler() {
         var availableProcessors = Runtime.getRuntime().availableProcessors();
         return Schedulers.newBoundedElastic(

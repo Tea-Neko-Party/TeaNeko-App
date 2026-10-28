@@ -1,51 +1,23 @@
 ---
-# --- Agent model 配置 ---
-# 模型适配器默认参数列表
-# 该文件只记录每个模型适配器 ID 下的默认调用参数，不记录默认模型适配器 ID
-# Agent 默认模型适配器 ID 请在 config/agent/main-config.yml 的 default-model-id 中配置
-# 添加一个新的 model 配置项时：
-# 1. id 必须等于模型类 @LLMModel 注解声明的 ID，例如 deepseek。
-# 2. model 是该供应商默认调用的模型名称，例如 deepseek-v4-flash；不参与路由。
-# 3. 未填写的通用参数会继续使用模型代码中的 base options。
-# 4. api-key、api 以及供应商私有参数应来自 file config 或数据库；DeepSeek 的 base URL 由适配器固定为官方地址。
+# 模型参数配置；默认路由在 config/agent/main-config.yml 的 default-model-id 中选择。
+# 必须为选定路由填写实际模型名；空列表不会自动回退到代码中的模型名。
+# 密钥及连接覆盖只放在 Spring Boot application 配置中，不能写在本文件。
+# 详见 src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md 的迁移说明。
 models: []
 
-# 示例：
+# 示例（模型名是占位符，请替换）：
 # models:
 #   - id: "deepseek"
-#     model: "deepseek-v4-flash"
-#     api-key: "${DEEPSEEK_API_KEY}"
-#     api: "/chat/completions"
-#     temperature: 0.7
+#     model: "YOUR_DEPLOYED_MODEL"
 #     max-tokens: 2048
 #     metadata:
 #       deepseek.reasoningEffort: "medium"
-#       deepseek.topLogprobs: 5
-#       deepseek.streamIncludeUsage: true
 #
-#   - id: "openai"
-#     model: "gpt-5.5"
-#     api-key: "${OPENAI_API_KEY}"
-#     base-url: "https://api.openai.com/v1"
-#     api: "/responses"
-#     max-tokens: 2048
-#     metadata:
-#       openai.organization: ""
-#       openai.project: ""
-#       openai.reasoningEffort: "medium"
-#       openai.reasoningSummary: "auto"
-#       openai.verbosity: "medium"
-#       openai.store: false
-#       openai.parallelToolCalls: true
-#       openai.topLogprobs: 3
-#
-#   - id: "kimi"
-#     model: "kimi-k2.6"
-#     api-key: "${KIMI_API_KEY}"
-#     api: "/chat/completions"
-#     max-tokens: 4096
-#     thinking: true
-#     metadata:
-#       kimi.thinkingKeep: true
-#       kimi.promptCacheKey: ""
-#       kimi.safetyIdentifier: ""
+# Spring application.yml 示例，与本文件分开：
+# tea-neko:
+#   llm:
+#     providers:
+#       deepseek:
+#         api-key: "${DEEPSEEK_API_KEY:}"
+#         # base-url: "https://your-trusted-gateway.example/v1"
+#         # api-path: "/chat/completions"

@@ -24,8 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>扫描所有 {@link ILLMTool} Bean，并按工具名称统一执行模型发起的 tool call。
  *
  * @author zExNocs
- * @date 2026/05/15
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Service
 public class LLMToolService extends AbstractScanner implements ILLMToolService {
@@ -49,7 +50,7 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
      * 创建大语言模型工具注册与调用服务。
      *
      * @param beanScanner Spring Bean 扫描器
-     * @param objectMapper Jackson ObjectMapper
+     * @param objectMapper 项目 JSON 解析与转换器
      */
     public LLMToolService(IBeanScanner beanScanner,
                           @Qualifier("customObjectMapper") ObjectMapper objectMapper) {
@@ -196,13 +197,17 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
                 getMethodDescription(method),
                 method.getName()
         );
+        var executor = new ReflectiveLLMToolExecutor(objectMapper, bean, method);
+        var contextual = java.util.concurrent.CompletionStage.class.isAssignableFrom(method.getReturnType())
+                || java.util.Arrays.stream(method.getParameterTypes()).anyMatch(t -> t == ToolInvocationContext.class);
         return LLMTool.builder()
                 .name(toolName)
                 .description(toolDescription)
                 .parameters(LLMFunctionParameterSchemaFactory.fromMethod(method))
                 .strict(mapping.strict())
                 .toolPackage(firstNonBlank(mapping.toolPackage(), providerPackage, ""))
-                .executor(new ReflectiveLLMToolExecutor(objectMapper, bean, method))
+                .executor(executor)
+                .contextualExecutor(contextual ? executor : null)
                 .build();
     }
 

@@ -3,29 +3,29 @@ package org.zexnocs.teanekoagent.llm.instance.openai.completions;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.AbstractLLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
-
-import java.util.Map;
-import java.util.Optional;
 
 /**
  * OpenAI Chat Completions 兼容模型的抽象适配器。
  * <br>子类只需声明 provider、默认模型、endpoint 和供应商参数限制，即可复用消息、工具、JSON 输出及 usage 映射。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel {
-    /** API key 在 metadata 中的字段名。 */
-    public static final String API_KEY_METADATA = "apiKey";
-
     /** API 响应服务。 */
     private final IAPIResponseService apiResponseService;
+
+    private final ICredentialResolver credentialResolver;
 
     /**
      * 创建 Chat Completions 兼容模型。
@@ -34,13 +34,16 @@ public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel
      * @param model 默认模型名称
      * @param baseOptions 模型代码自带的 base options
      * @param apiResponseService API 响应服务
+     * @param credentialResolver Spring 凭据与可信连接解析端口
      */
     protected AbstractOpenAIChatCompletionModel(String provider,
                                                 String model,
                                                 OpenAIChatCompletionModelOptions baseOptions,
-                                                IAPIResponseService apiResponseService) {
+                                                IAPIResponseService apiResponseService,
+                                                ICredentialResolver credentialResolver) {
         super(provider, model, baseOptions);
         this.apiResponseService = apiResponseService;
+        this.credentialResolver = credentialResolver;
     }
 
     /**
@@ -94,23 +97,21 @@ public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel
     }
 
     /**
-     * 解析本次请求的 base URL。
+     * 声明供应商内建 base URL，不读取 Prompt 选项。
      *
-     * @param options Chat Completions 参数
-     * @return base URL
+     * @return 供应商内建的可信默认服务地址
      */
-    protected String resolveBaseUrl(OpenAIChatCompletionModelOptions options) {
-        return options.findBaseUrl().orElse(OpenAIChatCompletionModelOptions.DEFAULT_BASE_URL);
+    protected String defaultBaseUrl() {
+        return OpenAIChatCompletionModelOptions.DEFAULT_BASE_URL;
     }
 
     /**
-     * 解析本次请求的 API path。
+     * 声明供应商内建 API path，不读取 Prompt 选项。
      *
-     * @param options Chat Completions 参数
-     * @return API path
+     * @return 供应商内建的默认站内接口路径
      */
-    protected String resolveApiPath(OpenAIChatCompletionModelOptions options) {
-        return options.findApiPath().orElse(OpenAIChatCompletionModelOptions.DEFAULT_API_PATH);
+    protected String defaultApiPath() {
+        return OpenAIChatCompletionModelOptions.DEFAULT_API_PATH;
     }
 
     /**
@@ -122,18 +123,39 @@ public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel
      */
     @Override
     protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options) {
+        return doCall(prompt, options, null);
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param options 本次有效模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws IllegalStateException 当执行状态、装配契约或返回的完成信号不符合要求时
+     */
+    @Override
+    protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options, ExecutionPolicy execution) {
+        if (execution != null) {
+            execution.checkActive();
+        }
         var chatOptions = prepareOptions(options);
-        var apiKey = requireMetadata(chatOptions.getMetadata(), API_KEY_METADATA);
-        var request = OpenAIChatCompletionMapper.toRequest(prompt, chatOptions, apiKey);
-        request.setBaseUrl(trimTrailingSlash(resolveBaseUrl(chatOptions)));
-        request.setApiPath(normalizeApiPath(resolveApiPath(chatOptions)));
+        var access = credentialResolver.require(getProvider());
+        var request = OpenAIChatCompletionMapper.toRequest(prompt, chatOptions, access.apiKey());
+        request.setBaseUrl(access.baseUrlOr(defaultBaseUrl()));
+        request.setApiPath(access.apiPathOr(defaultApiPath()));
         try {
-            return apiResponseService.addTask(
-                            request,
-                            OpenAIChatCompletionResponseData.class,
-                            true,
-                            true)
+            if (execution != null) {
+                execution.checkActive();
+            }
+            var response = execution == null
+                    ? apiResponseService.addTask(request, OpenAIChatCompletionResponseData.class, true, true)
+                    : apiResponseService.addTask(request, OpenAIChatCompletionResponseData.class, true, true, execution);
+            return response
                     .thenApply(OpenAIChatCompletionMapper::toResult);
+        } catch (ExecutionStoppedException stopped) {
+            throw stopped;
         } catch (Exception exception) {
             throw new IllegalStateException(
                     "%s chat completion request failed.".formatted(getProvider()),
@@ -142,55 +164,4 @@ public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel
         }
     }
 
-    /**
-     * 读取必填 metadata 文本。
-     *
-     * @param metadata metadata
-     * @param key 字段名
-     * @return 非空字段值
-     */
-    private static String requireMetadata(Map<String, Object> metadata, String key) {
-        return metadataString(metadata, key)
-                .orElseThrow(() -> new IllegalStateException(
-                        "Chat Completions metadata '%s' is required.".formatted(key)));
-    }
-
-    /**
-     * 读取可选 metadata 文本。
-     *
-     * @param metadata metadata
-     * @param key 字段名
-     * @return 字符串 Optional
-     */
-    private static Optional<String> metadataString(Map<String, Object> metadata, String key) {
-        if (metadata == null || metadata.get(key) == null) {
-            return Optional.empty();
-        }
-        var value = metadata.get(key).toString();
-        return value.isBlank() ? Optional.empty() : Optional.of(value);
-    }
-
-    /**
-     * 移除 base URL 末尾斜杠。
-     *
-     * @param value base URL
-     * @return 规范化 base URL
-     */
-    private static String trimTrailingSlash(String value) {
-        var result = value;
-        while (result.endsWith("/")) {
-            result = result.substring(0, result.length() - 1);
-        }
-        return result;
-    }
-
-    /**
-     * 确保 API path 以斜杠开头。
-     *
-     * @param value API path
-     * @return 规范化 API path
-     */
-    private static String normalizeApiPath(String value) {
-        return value.startsWith("/") ? value : "/" + value;
-    }
 }

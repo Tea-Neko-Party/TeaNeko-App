@@ -19,6 +19,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -39,9 +40,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>4.2.1: 支持从模板中读取。
  *
  * @author zExNocs
- * @date 2026/03/13
+ * @date 2026/10/28
  * @since 4.2.0
- * @version 4.2.1
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -61,12 +62,14 @@ public class FileConfigService implements IFileConfigService {
     private final ILogger iLogger;
 
     /// config 缓存，支持热加载
-    private final Map<Class<? extends IFileConfigData>, IFileConfigData> configCache = new ConcurrentHashMap<>();
+    private final Map<Class<? extends IFileConfigData>, ConfigEntry> configCache = new ConcurrentHashMap<>();
+    private volatile boolean rootUnavailable;
 
     /**
-     * 获取 config 实例
+     * 获取最后一次成功的数据，最近一次加载失败时仍保留兼容读法。
      *
      * @param clazz 需要返回的 config class
+     * @param <T> 配置数据类型
      * @return config 实例
      * @throws FileConfigDataNotFoundException 因为异常原因未找到该 config data
      */
@@ -74,9 +77,25 @@ public class FileConfigService implements IFileConfigService {
     public @NonNull <T extends IFileConfigData> T get(Class<T> clazz) throws FileConfigDataNotFoundException {
         return clazz.cast(
                 Optional.ofNullable(configCache.get(clazz))
+                        .map(ConfigEntry::data)
                         .orElseThrow(() -> new FileConfigDataNotFoundException(
                                 "未找到 config data: " + clazz.getName()))
         );
+    }
+
+    /**
+     * 以同一条原子缓存记录检查数据和最近加载状态，不把残留旧值当作当前成功配置。
+     * @param clazz 配置类型
+     * @param <T> 配置数据类型
+     * @return 当前加载成功的数据
+     * @throws FileConfigDataNotFoundException 当目录不可用、数据缺失或最近加载失败时
+     */
+    @Override public <T extends IFileConfigData> T requireCurrent(Class<T> clazz) throws FileConfigDataNotFoundException {
+        var entry = configCache.get(Objects.requireNonNull(clazz, "配置类型不能为空。"));
+        if (rootUnavailable || entry == null || !entry.current() || entry.data() == null) {
+            throw new FileConfigDataNotFoundException("当前文件配置不可用，请修复并重载：" + clazz.getName());
+        }
+        return clazz.cast(entry.data());
     }
 
     /**
@@ -108,7 +127,7 @@ public class FileConfigService implements IFileConfigService {
         parser.fromDataToWrite(file, data);
 
         // 更新缓存
-        configCache.put(data.getClass(), data);
+        configCache.put(data.getClass(), new ConfigEntry(data, true));
     }
 
     /**
@@ -124,14 +143,17 @@ public class FileConfigService implements IFileConfigService {
 
     /**
      * 热重载方法。
-     * 扫描所有的类，并尝试读取配置。
+     * 扫描所有配置并逐类发布完成状态；失败保留最后有效值供 get 使用，requireCurrent 明确拒绝。
      */
     @Override
     public void reload() {
         // 确保目录存在
         try {
             Files.createDirectories(ROOT_PATH);
+            rootUnavailable = false;
         } catch (IOException e) {
+            rootUnavailable = true;
+            configCache.replaceAll((type, previous) -> new ConfigEntry(previous.data(), false));
             iLogger.error(getClass().getSimpleName(),
                     "无法创建配置目录: " + ROOT_PATH, e);
             return;
@@ -144,6 +166,7 @@ public class FileConfigService implements IFileConfigService {
             // 获取解析器
             var parser = fileTypeScanner.get(annotation.type());
             if(parser == null) {
+                markUnavailable(clazz);
                 iLogger.error(getClass().getSimpleName(),
                         "未找到解析器: " + annotation.type());
                 continue;
@@ -161,12 +184,21 @@ public class FileConfigService implements IFileConfigService {
                     // 否则从 template 中复制读取
                     data = loadFromTemplate(file, clazz, parser);
                 }
-                configCache.put(clazz, data);
+                configCache.put(clazz, new ConfigEntry(Objects.requireNonNull(data, "配置解析结果不能为空。"), true));
             } catch (Exception e) {
+                markUnavailable(clazz);
                 iLogger.error(getClass().getSimpleName(),
                         "加载配置失败: " + file, e);
             }
         }
+    }
+
+    /**
+     * 原子标记该类型最近一次加载失败，保留旧数据兼容其他模块而不暴露原始解析异常。
+     * @param type 本次加载失败的配置类型
+     */
+    private void markUnavailable(Class<? extends IFileConfigData> type) {
+        configCache.compute(type, (ignored, previous) -> new ConfigEntry(previous == null ? null : previous.data(), false));
     }
 
     /**
@@ -175,6 +207,7 @@ public class FileConfigService implements IFileConfigService {
      * @param file   文件
      * @param clazz  需要返回的 config class
      * @param parser 解析器
+     * @param <T> 配置数据类型
      * @return {@link T } 加载出的数据
      * @throws IOException IO 异常
      */
@@ -192,6 +225,7 @@ public class FileConfigService implements IFileConfigService {
      * @param file       file 路径
      * @param clazz      数据类型
      * @param parser     数据解析器
+     * @param <T> 配置数据类型
      * @return {@link T } 数据类型
      * @throws IOException IO 异常
      */
@@ -255,4 +289,15 @@ public class FileConfigService implements IFileConfigService {
                 .toString()
                 .replace('\\', '/');
     }
+
+    /**
+     * 最近一次加载结果与最后有效值的原子记录，失败状态不缓存原始异常或文件内容。
+     * @param data 最后有效数据，尚未成功时为空
+     * @param current 最近一次已完成加载是否成功
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
+    private record ConfigEntry(IFileConfigData data, boolean current) {}
 }

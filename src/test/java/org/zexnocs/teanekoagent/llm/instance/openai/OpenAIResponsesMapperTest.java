@@ -28,8 +28,9 @@ import java.util.Map;
  * <br>验证消息历史、Function Tool、输出 item 和 token usage 的双向转换。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class OpenAIResponsesMapperTest {
     /**
@@ -152,7 +153,7 @@ class OpenAIResponsesMapperTest {
     }
 
     /**
-     * 验证输出文本、拒绝内容、Function Call 和 usage 会映射为统一 LLM Result。
+     * 验证文本、拒绝、工具和 usage 均被保留，拒绝语义优先于工具结束标记。
      */
     @Test
     void mapsResponseOutputAndUsageToFrameworkResult() {
@@ -204,7 +205,7 @@ class OpenAIResponsesMapperTest {
         var choice = result.getFirstChoice().orElseThrow();
         var assistant = result.getFirstMessage().orElseThrow();
 
-        Assertions.assertEquals("tool_calls", choice.getFinishReason());
+        Assertions.assertEquals("refusal", choice.getFinishReason());
         Assertions.assertEquals("answer\nrefused detail", text(assistant.getContents()));
         Assertions.assertEquals("call-2", assistant.getToolCalls().getFirst().getId());
         var providerItems = Assertions.assertInstanceOf(

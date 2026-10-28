@@ -2,23 +2,28 @@ package org.zexnocs.teanekocore.database.base.interfaces;
 
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseTaskRepeatedSubmissionException;
 import org.zexnocs.teanekocore.framework.function.VoidCallable;
 
 import java.util.Collection;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 数据库任务配置接口。
  * 主要用于获取 TimerTaskConfig 和将任务 push 到数据库服务中。
  *
  * @author zExNocs
- * @date 2026/02/15
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 public interface IDatabaseTaskConfig {
     /**
      * 获取任务名称。
+     *
      * @return 任务名称
      */
     String getName();
@@ -36,15 +41,28 @@ public interface IDatabaseTaskConfig {
      * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
      * 此外，会获取 TaskFuture 对象来获取执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      *
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link Void }>> 任务结果的 future 对象
+     * @return 承载数据库任务最终结果的 {@code TaskFuture<ITaskResult<Void>>}
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     TaskFuture<ITaskResult<Void>> pushWithFuture() throws DatabaseTaskRepeatedSubmissionException;
 
     /**
+     * 提交并等待事务和缓存处理结束，失败状态或异常均传给调用方。
+     * 不额外提交任务或安装终端日志；调用方负责在业务链末端处理异常。
+     * 重复提交仍同步抛出 DatabaseTaskRepeatedSubmissionException。
+     *
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     * @throws DatabaseTaskRepeatedSubmissionException 当该操作的校验或下游调用失败时
+     */
+    default CompletionStage<Void> pushAsync() throws DatabaseTaskRepeatedSubmissionException {
+        return TaskStages.successful(pushWithFuture(), getName());
+    }
+
+    /**
      * 添加数据库事务任务。
      *
      * @param task 任务
+     * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     IDatabaseTaskConfig addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
@@ -53,6 +71,7 @@ public interface IDatabaseTaskConfig {
      * 添加缓存任务。
      *
      * @param task 缓存任务
+     * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     IDatabaseTaskConfig addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
@@ -63,6 +82,7 @@ public interface IDatabaseTaskConfig {
      * 参数的 task 会被视为已经 push 过。
      *
      * @param config 任务
+     * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     IDatabaseTaskConfig merge(@NonNull IDatabaseTaskConfig config) throws DatabaseTaskRepeatedSubmissionException;
@@ -92,7 +112,8 @@ public interface IDatabaseTaskConfig {
 
     /**
      * 获取 TaskConfig。
-     * @return TaskConfig
+     *
+     * @return 实际承载当前数据库写入配置的任务对象
      */
     ITaskConfig<Void> __getTaskConfig();
 }

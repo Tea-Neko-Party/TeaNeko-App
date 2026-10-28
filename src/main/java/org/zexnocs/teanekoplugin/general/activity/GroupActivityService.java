@@ -21,14 +21,17 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 群活跃度总调度器
  *
  * @author zExNocs
- * @date 2026/03/17
+ * @date 2026/10/28
  * @since 4.3.4
+ * @version 4.5.0-l
  */
 @RequiredArgsConstructor
 @ConfigManager(
@@ -57,7 +60,7 @@ public class GroupActivityService {
      * 线程安全的扫描指定群中所有成员活跃度，扫描完成后会将结果保存在 activityDataMap 中
      *
      * @param scopeId 区域 ID
-     * @return {@link TaskFuture }<{@link ? }> 扫描完 future，包含 (userID → (活跃度数据, 违反的活跃度规则))
+     * @return 等待扫描结束的 {@code TaskFuture<?>}，结果按用户标识关联活跃度数据与违反的规则
      * @throws ConfigDataNotFoundException 当未找到指定的ConfigData时抛出此异常。
      */
     @Nullable
@@ -73,7 +76,9 @@ public class GroupActivityService {
      * 正式扫描方法
      *
      * @param scopeId       区域 ID
-     * @return {@link TaskFuture }<{@link ? }> 扫描完 future
+     * @param currentTime 用于本次处理的 {@code currentTime} 数据
+     * @param map 按当前操作语义定位的输入映射
+     * @return 等待扫描结束的 {@code TaskFuture<?>}
      * @throws ConfigDataNotFoundException 当未找到指定的ConfigData时抛出此异常。
      */
     @Nullable
@@ -95,29 +100,26 @@ public class GroupActivityService {
         var tools = client.getTeaNekoToolbox();
         var config = iConfigDataService.getConfigData(this, GroupActivityConfigData.class, scopeId)
                 .orElseThrow(() -> new ConfigDataNotFoundException("该 scope 未注册: %s".formatted(scopeId)));
-        // 获取缓存 rules
-        var rules = getRules(scopeId, config, tools);
-
-        // 报告扫描开始
-        for(var monitorGroupId : config.getGroups()) {
-            tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
-                    .sendTextMessage("开始扫描群 %s 中的成员活跃度...".formatted(groupId));
-        }
-
-        // 开始扫描
-        return tools.getGroupMemberListSender().get(groupId)
-                .thenAccept(list -> processList(list, scopeId, currentTime, rules, map))
-                .thenApply(_ -> {
-                    for(var monitorGroupId : config.getGroups()) {
-                        tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
-                                .sendTextMessage("扫描完毕，扫描出 %d 低活跃度成员".formatted(map.size()));
-                    }
-                    return map;
-                });
+        var stage = getRules(scopeId, config, tools).thenCompose(rules ->
+                notifyGroups(tools, config, "开始扫描群 %s 中的成员活跃度...".formatted(groupId))
+                        .thenCompose(ignored -> tools.getGroupMemberListSender().get(groupId).asStage())
+                        .thenApply(members -> {
+                            processList(members, scopeId, currentTime, rules, map);
+                            return map;
+                        })
+                        .thenCompose(result -> notifyGroups(tools, config,
+                                "扫描完毕，扫描出 %d 低活跃度成员".formatted(result.size())).thenApply(ignored -> result)));
+        return TaskFuture.fromStage(logger, "群活跃度扫描", stage);
     }
 
     /**
      * 处理 list
+     *
+     * @param list 按原始顺序处理的内容列表
+     * @param scopeId 本次操作所属作用域
+     * @param currentTime 用于本次处理的 {@code currentTime} 数据
+     * @param rules 用于本次处理的 {@code rules} 数据
+     * @param map 按当前操作语义定位的输入映射
      */
     private void processList(List<? extends IGroupMemberResponseData> list,
                              String scopeId,
@@ -161,8 +163,12 @@ public class GroupActivityService {
     /**
      * 缓存所有的 rules；同时检测不合法的 rule 并删除
      *
+     * @param scopeId 本次操作所属作用域
+     * @param config 用于本次处理的 {@code config} 数据
+     * @param tools 用于本次处理的 {@code tools} 数据
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
-    private List<GroupActivityRule> getRules(String scopeId, GroupActivityConfigData config, ITeaNekoToolbox tools) {
+    private CompletionStage<List<GroupActivityRule>> getRules(String scopeId, GroupActivityConfigData config, ITeaNekoToolbox tools) {
         // 提前缓存所有的 rule
         List<GroupActivityRule> rules = new ArrayList<>();
 
@@ -194,26 +200,38 @@ public class GroupActivityService {
                 removedList.add(HashPair.of(i, expression));
             }
         }
-        // 如果有不合法的，则删除
-        if(!removedList.isEmpty()) {
-            for(var pair : removedList) {
+        CompletionStage<Void> cleanup = CompletableFuture.completedStage(null);
+        // 每次提交后再按递减索引删除下一项，避免索引移动或配置覆盖。
+        for (var pair : removedList.reversed()) {
+            cleanup = cleanup.thenCompose(ignored -> {
                 try {
-                    iConfigDataService.removeFromRuleConfigListFiled(
-                            this.getClass().getAnnotation(ConfigManager.class),
-                            scopeId,
-                            "rules",
-                            pair.first());
+                    return iConfigDataService.removeFromRuleConfigListFiledAsync(
+                            getClass().getAnnotation(ConfigManager.class), scopeId, "rules", pair.first());
                 } catch (NoSuchFieldException | IllegalAccessException | ConfigDataNotFoundException e) {
-                    logger.errorWithReport(getClass().getSimpleName(),
-                            "未知的错误", e);
+                    return CompletableFuture.failedStage(e);
                 }
-            }
-            for(var monitorGroupId : config.getGroups()) {
-                tools.getMessageSenderTools().getGroupBuilder(monitorGroupId)
-                        .sendTextMessage("存在不合理的活跃度规则，已自动删除:\n%s".formatted(
-                                removedList.stream().map(Pair::second).reduce((a, b) -> a + "\n" + b).orElse("")));
-            }
+            });
         }
-        return rules;
+        if (!removedList.isEmpty()) {
+            var invalid = removedList.stream().map(Pair::second).reduce((first, second) -> first + "\n" + second).orElse("");
+            cleanup = cleanup.thenCompose(ignored -> notifyGroups(tools, config, "存在不合理的活跃度规则，已自动删除:\n" + invalid));
+        }
+        return cleanup.thenApply(ignored -> rules);
+    }
+
+    /**
+     * 按配置通知目标群组，组合全部发送阶段以便命令等待通知结束。
+     *
+     * @param tools 用于本次处理的 {@code tools} 数据
+     * @param config 用于本次处理的 {@code config} 数据
+     * @param text 待处理的业务文本
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    private CompletionStage<Void> notifyGroups(ITeaNekoToolbox tools, GroupActivityConfigData config, String text) {
+        CompletionStage<Void> stage = CompletableFuture.completedStage(null);
+        for (var group : config.getGroups()) {
+            stage = stage.thenCompose(ignored -> tools.getMessageSenderTools().getGroupBuilder(group).sendTextMessageAsync(text));
+        }
+        return stage;
     }
 }

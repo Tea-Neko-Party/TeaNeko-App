@@ -5,9 +5,7 @@ import lombok.NoArgsConstructor;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
@@ -20,6 +18,8 @@ import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterJsonMappe
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.instance.LLMRequestBodyExtensions;
+import org.zexnocs.teanekoagent.llm.instance.openai.OpenAIContentMapper;
 
 import java.time.Instant;
 import java.util.*;
@@ -28,8 +28,9 @@ import java.util.*;
  * OpenAI Responses API 与 TeaNeko LLM framework 之间的转换器。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class OpenAIResponsesMapper {
@@ -42,9 +43,9 @@ public final class OpenAIResponsesMapper {
     /**
      * 将统一 Prompt 和 options 转换为 OpenAI Responses 请求。
      *
-     * @param prompt LLM Prompt
+     * @param prompt 经过宿主装配的消息与本次模型选项
      * @param options 模型参数
-     * @param apiKey OpenAI API key
+     * @param apiKey 仅供认证边界使用的本地凭据，禁止进入日志或普通消息
      * @return OpenAI Responses 请求数据
      */
     public static OpenAIResponsesRequestData toRequest(ILLMPrompt prompt,
@@ -78,7 +79,7 @@ public final class OpenAIResponsesMapper {
                 .serviceTier(openAIOptions.findServiceTier().orElse(null))
                 .truncation(openAIOptions.findTruncation().orElse(null))
                 .metadata(nonEmptyMap(openAIOptions.getRequestMetadata()))
-                .extraBody(toExtraBody(openAIOptions.getMetadata()))
+                .extraBody(LLMRequestBodyExtensions.fromMetadata(openAIOptions.getMetadata(), OpenAIResponsesRequestData.class))
                 .build();
     }
 
@@ -105,7 +106,7 @@ public final class OpenAIResponsesMapper {
      * 将对话消息转换为 Responses API input items。
      *
      * @param messages LLM 消息列表
-     * @return Responses input items
+     * @return 保持原顺序、工具配对及透明状态的 Responses 输入项
      */
     private static List<Map<String, Object>> toInput(List<ILLMMessage> messages) {
         if (messages == null || messages.isEmpty()) {
@@ -117,14 +118,14 @@ public final class OpenAIResponsesMapper {
                 result.add(toFunctionCallOutput(toolMessage));
                 continue;
             }
-            var content = toContent(message.getContents());
+            var content = OpenAIContentMapper.toResponsesContent(message);
             if (!(message instanceof ILLMAssistantMessage assistantMessage)) {
                 result.add(toInputMessage(message, content));
                 continue;
             }
             result.addAll(providerInputItems(assistantMessage));
             var toolCalls = assistantMessage.getToolCalls();
-            if (!content.isBlank() || toolCalls == null || toolCalls.isEmpty()) {
+            if (!(content instanceof String text) || !text.isBlank() || toolCalls == null || toolCalls.isEmpty()) {
                 result.add(toInputMessage(message, content));
             }
             if (toolCalls != null) {
@@ -137,8 +138,9 @@ public final class OpenAIResponsesMapper {
     /**
      * 读取 assistant message 中保存的 OpenAI 透明 input items。
      *
-     * @param message assistant message
+     * @param message 需要发送或映射的消息
      * @return 可回传给 Responses API 的 input items
+     * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
      */
     private static List<Map<String, Object>> providerInputItems(ILLMAssistantMessage message) {
         var metadata = message.getProviderMetadata();
@@ -147,8 +149,9 @@ public final class OpenAIResponsesMapper {
         }
         var result = new ArrayList<Map<String, Object>>();
         for (var item : items) {
-            if (!(item instanceof Map<?, ?> map)) {
-                continue;
+            if (!(item instanceof Map<?, ?> map) || !"reasoning".equals(map.get("type"))
+                    || !Set.of("type", "id", "summary", "encrypted_content", "status").containsAll(map.keySet())) {
+                throw new IllegalArgumentException("Unsupported opaque Responses state; use explicit messages and tool calls.");
             }
             var copy = new LinkedHashMap<String, Object>();
             map.forEach((key, value) -> {
@@ -166,11 +169,11 @@ public final class OpenAIResponsesMapper {
     /**
      * 转换普通 message input item。
      *
-     * @param message LLM message
+     * @param message 需要发送或映射的消息
      * @param content 文本正文
-     * @return OpenAI message input item
+     * @return 由统一消息映射的 Responses 消息输入项
      */
-    private static Map<String, Object> toInputMessage(ILLMMessage message, String content) {
+    private static Map<String, Object> toInputMessage(ILLMMessage message, Object content) {
         var item = new LinkedHashMap<String, Object>();
         item.put("type", "message");
         item.put("role", message.getRole().getValue());
@@ -182,7 +185,7 @@ public final class OpenAIResponsesMapper {
      * 转换历史 Function Call input item。
      *
      * @param toolCall 工具调用
-     * @return OpenAI Function Call item
+     * @return 保留调用 ID、名称与参数的函数调用输入项
      */
     private static Map<String, Object> toFunctionCall(ILLMToolCall toolCall) {
         var item = new LinkedHashMap<String, Object>();
@@ -197,40 +200,14 @@ public final class OpenAIResponsesMapper {
      * 转换工具执行结果 input item。
      *
      * @param toolMessage 工具结果消息
-     * @return OpenAI Function Call Output item
+     * @return 与原函数调用 ID 配对的工具结果输入项
      */
     private static Map<String, Object> toFunctionCallOutput(ILLMToolMessage toolMessage) {
         var item = new LinkedHashMap<String, Object>();
         item.put("type", "function_call_output");
         putIfNotBlank(item, "call_id", toolMessage.getToolCallId());
-        item.put("output", toContent(toolMessage.getContents()));
+        item.put("output", OpenAIContentMapper.toResponsesContent(toolMessage));
         return item;
-    }
-
-    /**
-     * 将 LLM Content 列表合并为 Responses 文本正文。
-     *
-     * @param contents LLM Content 列表
-     * @return 合并后的文本
-     */
-    private static String toContent(List<ILLMContent> contents) {
-        if (contents == null || contents.isEmpty()) {
-            return "";
-        }
-        var text = new StringBuilder();
-        for (var content : contents) {
-            if (content == null) {
-                continue;
-            } else {
-                content.getContentPart();
-            }
-            if (content.getContentPart() instanceof TextLLMContentPart textPart) {
-                appendText(text, textPart.getText());
-            } else {
-                appendText(text, content.getContentPart().toString());
-            }
-        }
-        return text.toString();
     }
 
     /**
@@ -303,26 +280,7 @@ public final class OpenAIResponsesMapper {
     }
 
     /**
-     * 提取 metadata 中以 {@code body.} 开头的额外请求字段。
-     *
-     * @param metadata 模型 metadata
-     * @return 额外请求字段
-     */
-    private static Map<String, Object> toExtraBody(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return Map.of();
-        }
-        var result = new LinkedHashMap<String, Object>();
-        metadata.forEach((key, value) -> {
-            if (key != null && key.startsWith(EXTRA_BODY_PREFIX) && shouldWriteOptionalValue(value)) {
-                result.put(key.substring(EXTRA_BODY_PREFIX.length()), value);
-            }
-        });
-        return Map.copyOf(result);
-    }
-
-    /**
-     * 聚合 Responses output items 为统一候选结果。
+     * 聚合 Responses 输出项为统一候选，保留拒绝语义且不将推理状态并入可见正文。
      *
      * @param response OpenAI 响应
      * @return 统一候选列表
@@ -332,6 +290,7 @@ public final class OpenAIResponsesMapper {
         var toolCalls = new ArrayList<ILLMToolCall>();
         var logprobs = new ArrayList<Map<String, Object>>();
         var providerInputItems = new ArrayList<Map<String, Object>>();
+        boolean refused = false;
         var output = response.getOutput();
         if (output != null) {
             for (var item : output) {
@@ -358,6 +317,7 @@ public final class OpenAIResponsesMapper {
                     if (content == null) {
                         continue;
                     }
+                    refused |= "refusal".equals(content.getType());
                     appendText(text, "refusal".equals(content.getType())
                             ? content.getRefusal()
                             : content.getText());
@@ -376,7 +336,7 @@ public final class OpenAIResponsesMapper {
                 .build();
         var choice = LLMChoice.builder()
                 .index(0)
-                .finishReason(toFinishReason(response, toolCalls))
+                .finishReason(refused ? "refusal" : toFinishReason(response, toolCalls))
                 .message(message)
                 .logprobs(logprobs.isEmpty() ? Map.of() : Map.of("output_text", List.copyOf(logprobs)))
                 .build();
@@ -387,7 +347,7 @@ public final class OpenAIResponsesMapper {
      * 将 reasoning 输出转换为下一轮可回传的透明 input item。
      *
      * @param item reasoning 输出 item
-     * @return reasoning input item
+     * @return 仅含受支持透明字段的推理状态输入项
      */
     private static Map<String, Object> toReasoningInputItem(OpenAIResponsesResponseData.OutputItem item) {
         var result = new LinkedHashMap<String, Object>();
@@ -401,7 +361,7 @@ public final class OpenAIResponsesMapper {
     }
 
     /**
-     * 根据响应状态和工具调用计算统一结束原因。
+     * 根据响应状态和工具调用计算统一结束原因，未完整或失败的响应不能开放工具副作用。
      *
      * @param response OpenAI 响应
      * @param toolCalls 工具调用列表
@@ -409,15 +369,12 @@ public final class OpenAIResponsesMapper {
      */
     private static String toFinishReason(OpenAIResponsesResponseData response,
                                          List<ILLMToolCall> toolCalls) {
-        if (!toolCalls.isEmpty()) {
-            return "tool_calls";
-        }
         if (response.getIncompleteDetails() != null
                 && response.getIncompleteDetails().getReason() != null) {
             return response.getIncompleteDetails().getReason();
         }
         return switch (firstNotBlank(response.getStatus(), "completed")) {
-            case "completed" -> "stop";
+            case "completed" -> toolCalls.isEmpty() ? "stop" : "tool_calls";
             case "incomplete" -> "length";
             default -> response.getStatus();
         };
@@ -426,12 +383,12 @@ public final class OpenAIResponsesMapper {
     /**
      * 转换 OpenAI token usage。
      *
-     * @param usage OpenAI usage
-     * @return 统一 token usage
+     * @param usage 用于本次处理的 {@code usage} 数据
+     * @return 统一 token usage，供应商未提供时为 null
      */
     private static LLMUsage toUsage(OpenAIResponsesResponseData.Usage usage) {
         if (usage == null) {
-            return LLMUsage.empty();
+            return null;
         }
         var cachedTokens = usage.getInputTokensDetails() == null
                 ? 0
@@ -453,28 +410,12 @@ public final class OpenAIResponsesMapper {
      * 将空 map 规范化为 {@code null}，使可选字段不参与序列化。
      *
      * @param value 待检查 map
-     * @return 非空 map 副本或 {@code null}
      * @param <K> key 类型
      * @param <V> value 类型
+     * @return 非空 map 副本或 {@code null}
      */
     private static <K, V> Map<K, V> nonEmptyMap(Map<K, V> value) {
         return value == null || value.isEmpty() ? null : Map.copyOf(value);
-    }
-
-    /**
-     * 判断额外请求字段是否包含有效值。
-     *
-     * @param value 字段值
-     * @return 需要写入时返回 {@code true}
-     */
-    private static boolean shouldWriteOptionalValue(Object value) {
-        return switch (value) {
-            case null -> false;
-            case String text -> !text.isBlank();
-            case Collection<?> collection -> !collection.isEmpty();
-            case Map<?, ?> map -> !map.isEmpty();
-            default -> true;
-        };
     }
 
     /**

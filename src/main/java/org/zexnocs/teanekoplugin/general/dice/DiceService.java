@@ -4,6 +4,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.utils.RandomUtil;
 import org.zexnocs.teanekoplugin.general.dice.data.DiceAttemptData;
@@ -16,14 +17,16 @@ import org.zexnocs.teanekoplugin.general.dice.event.DiceBeforeEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 骰子服务，提供投骰子相关功能。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Service
 public class DiceService {
@@ -33,6 +36,12 @@ public class DiceService {
     private final IEventService eventService;
     private final RandomUtil randomUtil;
 
+    /**
+     * 装配原业务事件与随机数服务，骰子状态和通知通过现有事件链推进。
+     *
+     * @param eventService 由装配方提供的 {@code IEventService} 协作依赖
+     * @param randomUtil 用于本次处理的 {@code randomUtil} 数据
+     */
     @Autowired
     public DiceService(IEventService eventService, RandomUtil randomUtil) {
         this.eventService = eventService;
@@ -59,11 +68,14 @@ public class DiceService {
      *
      * @param messageData   消息数据
      * @param expectedValue 期望最小值
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void attemptDice(ITeaNekoMessageData messageData, int expectedValue) {
+    public CompletionStage<Void> attemptDice(ITeaNekoMessageData messageData, int expectedValue) {
         // 推送投骰子事件
         var attemptDiceData = new DiceAttemptData(messageData, expectedValue, getDiceData(messageData.getScopeId()));
-        eventService.pushEvent(new DiceBeforeEvent(attemptDiceData, this));
+        var event = new DiceBeforeEvent(attemptDiceData, this);
+        return TaskStages.successful(eventService.pushEventWithFuture(event), "投骰子前事件")
+                .thenCompose(ignored -> event.getCompletion());
     }
 
 
@@ -71,24 +83,28 @@ public class DiceService {
      * 去投骰子。
      *
      * @param attemptDiceData 投骰子数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void goDice(DiceAttemptData attemptDiceData) {
+    public CompletionStage<Void> goDice(DiceAttemptData attemptDiceData) {
         // 推送投骰子事件
         var resultData = DiceResultData.builder()
                 .attemptDiceData(attemptDiceData)
                 .diceResultList(_generateDiceResult(attemptDiceData.getDiceData()))
                 .build();
         // 推送投骰子事件
-        eventService.pushEvent(new DiceAfterEvent(resultData));
+        var event = new DiceAfterEvent(resultData);
+        return TaskStages.successful(eventService.pushEventWithFuture(event), "投骰子后事件")
+                .thenCompose(ignored -> event.getCompletion());
     }
 
     /**
      * 设置骰子数据。
      *
      * @param data         消息数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void setDiceData(DiceSetData data) {
-        setDiceData(data.getMessageReceiveData(), data.getDiceCount(), data.getDiceMaxValue());
+    public CompletionStage<Void> setDiceData(DiceSetData data) {
+        return setDiceData(data.getMessageReceiveData(), data.getDiceCount(), data.getDiceMaxValue());
     }
 
     /**
@@ -97,13 +113,14 @@ public class DiceService {
      * @param data         消息数据
      * @param diceCount    骰子次数
      * @param diceMaxValue 骰子最大值
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void setDiceData(ITeaNekoMessageData data, int diceCount, int diceMaxValue) {
+    public CompletionStage<Void> setDiceData(ITeaNekoMessageData data, int diceCount, int diceMaxValue) {
         diceCount = Math.min(diceCount, MAX_DICE_COUNT);
         var scopeId = data.getScopeId();
         diceDataMap.put(scopeId, new DiceData(scopeId, diceCount, diceMaxValue));
-        data.getMessageSender()
-                .sendReplyMessage("设置成功，当前投掷次数：" + diceCount + "，最大值：" + diceMaxValue);
+        return data.getMessageSender()
+                .sendReplyMessageAsync("设置成功，当前投掷次数：" + diceCount + "，最大值：" + diceMaxValue);
     }
 
     /**

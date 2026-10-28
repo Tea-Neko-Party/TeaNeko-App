@@ -4,13 +4,13 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.IDefaultModelResolver;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatModel;
 import org.zexnocs.teanekoagent.llm.instance.kimi.KimiChatModel;
 import org.zexnocs.teanekoagent.llm.instance.openai.completions.OpenAIChatCompletionsModel;
 import org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesModel;
-import org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
@@ -21,8 +21,9 @@ import java.util.Map;
  * <br>验证模型服务只扫描带有 {@link LLMModel} 注解的接口实现，并使用注解 ID 注册模型。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class LLMModelServiceRegistrationTest {
     /**
@@ -32,7 +33,7 @@ class LLMModelServiceRegistrationTest {
     void registersAnnotatedModelByAnnotationIdOnly() {
         var beanScanner = Mockito.mock(IBeanScanner.class);
         var fileConfigService = Mockito.mock(ILLMFileConfigService.class);
-        var agentFileConfigService = Mockito.mock(IAgentFileConfigService.class);
+        var defaultModelResolver = Mockito.mock(IDefaultModelResolver.class);
         var annotation = Mockito.mock(LLMModel.class);
         var model = Mockito.mock(ILLMModel.class);
         Mockito.when(annotation.id()).thenReturn("annotation-model");
@@ -40,7 +41,7 @@ class LLMModelServiceRegistrationTest {
         Mockito.when(beanScanner.getBeansWithAnnotationAndInterface(LLMModel.class, ILLMModel.class))
                 .thenReturn(Map.of("modelBean", IndependentPair.of(annotation, model)));
 
-        var service = new LLMModelService(beanScanner, fileConfigService, agentFileConfigService);
+        var service = new LLMModelService(beanScanner, fileConfigService, defaultModelResolver);
         service.init();
 
         Assertions.assertSame(model, service.getModel(LLMModelId.of("annotation-model")));

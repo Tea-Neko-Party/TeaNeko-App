@@ -15,8 +15,9 @@ import java.util.Optional;
  * <br>用于统一承载不同供应商返回的 completion/chat response。
  *
  * @author zExNocs
- * @date 2026/05/15
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Getter
 @Setter
@@ -55,10 +56,9 @@ public class LLMResult implements ILLMResult {
     private String model;
 
     /**
-     * 本次请求和响应的 token 用量信息。
+     * 供应商报告的 token 用量；未提供时保留空值，不将未知用量伪装为零。
      */
-    @Builder.Default
-    private ILLMUsage usage = LLMUsage.empty();
+    private ILLMUsage usage;
 
     /**
      * 获取第一个候选响应。

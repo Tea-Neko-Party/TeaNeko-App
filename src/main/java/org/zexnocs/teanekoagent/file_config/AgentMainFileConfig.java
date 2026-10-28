@@ -1,4 +1,4 @@
-package org.zexnocs.teanekoagent_old.file_config;
+package org.zexnocs.teanekoagent.file_config;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -15,8 +15,9 @@ import java.util.Optional;
  * <br>该配置存放 agent 运行时共享配置，不包含各模型适配器的详细默认参数。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @FileConfig(
         value = "main-config",
@@ -27,6 +28,9 @@ import java.util.Optional;
 @Setter
 @NoArgsConstructor
 public class AgentMainFileConfig implements IFileConfigData {
+    /** 本地 Agent 总开关，关闭时不继续检查模型或凭据。 */
+    private boolean enabled = true;
+
     /**
      * 默认模型适配器 ID。
      * <br>该值通常与供应商 ID 相同，例如 {@code deepseek}。

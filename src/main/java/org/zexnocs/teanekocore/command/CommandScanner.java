@@ -19,12 +19,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * 指令扫描器
  * 扫描指令、默认指令和子指令
  *
+ * @author zExNocs
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  * @see Command
  * @see DefaultCommand
  * @see SubCommand
- * @author zExNocs
- * @date 2026/02/18
- * @since 4.0.0
  */
 @Service("commandScanner")
 public class CommandScanner extends AbstractScanner {
@@ -38,6 +39,12 @@ public class CommandScanner extends AbstractScanner {
     private final Map<String, CommandMapData> regexpCommandMap = new ConcurrentHashMap<>();
     private final IBeanScanner iBeanScanner;
 
+    /**
+     * 注入组件发现与日志服务，扫描时统一验证命令方法的公开性和异步契约。
+     *
+     * @param logger 项目日志接口
+     * @param iBeanScanner 本次装配使用的 {@code IBeanScanner} 服务
+     */
     @Autowired
     public CommandScanner(ILogger logger, IBeanScanner iBeanScanner) {
         this.logger = logger;
@@ -46,7 +53,8 @@ public class CommandScanner extends AbstractScanner {
 
     /**
      * 获取全部前缀指令。
-     * @return Map<String, CommandMapData> 前缀指令集合
+     *
+     * @return 前缀与注册命令数据的映射，类型为 {@code Map<String, CommandMapData>}
      */
     protected Map<String, CommandMapData> getPrefixCommandMap() {
         return prefixCommandMap;
@@ -55,8 +63,9 @@ public class CommandScanner extends AbstractScanner {
     /**
      * 获取前缀指令。
      * 如果指令不存在，返回null。
+     *
      * @param command 指令名
-     * @return CommandMapData
+     * @return 匹配的前缀命令数据，未匹配时为 null
      */
     public CommandMapData getPrefixCommand(String command) {
         if(command == null || command.isBlank()) {
@@ -67,7 +76,8 @@ public class CommandScanner extends AbstractScanner {
 
     /**
      * 获取正则指令所有的 key。
-     * @return Collection<String> 正则指令集合
+     *
+     * @return 正则命令标识集合，类型为 {@code Collection<String>}
      */
     public Collection<String> getRegexpCommandKeys() {
         return regexpCommandMap.keySet();
@@ -76,8 +86,9 @@ public class CommandScanner extends AbstractScanner {
     /**
      * 获取正则指令。
      * 如果指令不存在，返回null。
+     *
      * @param command 指令名
-     * @return CommandMapData
+     * @return 匹配的正则命令数据，未匹配时为 null
      */
     public CommandMapData getRegexpCommand(String command) {
         if(command == null || command.isBlank()) {
@@ -88,7 +99,6 @@ public class CommandScanner extends AbstractScanner {
 
     /**
      * 扫描指令。
-     *
      */
     protected synchronized void _scan() {
         var beanPairs = iBeanScanner.getBeansWithAnnotation(Command.class);
@@ -111,6 +121,9 @@ public class CommandScanner extends AbstractScanner {
             DefaultCommand defaultCommandAnnotation = null;
             var subCommandMap = new ConcurrentHashMap<String, Pair<SubCommand, Method>>();
             for(var method: clazz.getDeclaredMethods()) {
+                if (method.isAnnotationPresent(DefaultCommand.class) || method.isAnnotationPresent(SubCommand.class)) {
+                    CommandMethodContract.requireAsync(method);
+                }
                 // 如果是默认指令方法
                 if(method.isAnnotationPresent(DefaultCommand.class)) {
                     if(defaultCommandMethod != null) {
@@ -162,7 +175,6 @@ public class CommandScanner extends AbstractScanner {
 
     /**
      * 清理原始数据的方法。
-     *
      */
     @Override
     protected void _clear() {

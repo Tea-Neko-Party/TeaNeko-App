@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoagent_old.file_config.interfaces;
 
+import org.zexnocs.teanekoagent.file_config.AgentMainFileConfig;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent_old.file_config.AgentMainFileConfig;
 import org.zexnocs.teanekoagent_old.file_config.AgentTokenMonitorFileConfig;
 
 import java.util.Optional;
@@ -11,8 +11,9 @@ import java.util.Optional;
  * <br>用于读取 agent 运行时相关文件配置，并为业务代码提供带默认值的配置对象。
  *
  * @author zExNocs
- * @date 2026/06/11
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 public interface IAgentFileConfigService {
     /**

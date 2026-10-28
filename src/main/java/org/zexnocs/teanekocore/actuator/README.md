@@ -6,6 +6,7 @@
 |:---:|---|
 | `task` | 异步任务模型。提供 `TaskConfig`、`TaskService`、`TaskFuture`、任务阶段链和重试策略。 |
 | `timer` | 定时器模型。按固定频率、固定延迟、智能频率或 Cron 表达式周期性提交 task。 |
+| `execution` | 可共享资源预算、执行取消/截止时间与父子运行控制，不创建新的线程池。 |
 
 # 二. Task 模块
 
@@ -75,6 +76,13 @@
 | `TaskFuture.finish()` | 链尾异常处理入口，默认写入 `ILogger#errorWithReport`。 |
 | `TaskFuture.finish(Consumer<Throwable>)` | 自定义异常处理。 |
 | `TaskFuture.unwrapException(Throwable)` | 解包 `CompletionException`、`ExecutionException`、`TaskRetryRuntimeException`、`TaskNoRetryRuntimeException`。 |
+| `TaskFuture.asStage()` | 返回只读 CompletionStage 视图，不阻塞，也不安装终端日志；完成/取消视图不会改写根任务。 |
+| `TaskFuture.fromStage(logger, name, stage)` | 将 CompletionStage 的实际完成/失败接入 TaskFuture 链。 |
+| `TaskFuture.thenCompose(...)` | 非阻塞组合任意 CompletionStage，而不局限于 CompletableFuture。 |
+| `TaskStages.successful(task, operation)` | 等待 `TaskFuture<ITaskResult<T>>` 并展开业务值；最终失败状态转换为 `TaskUnsuccessfulException`，原异常继续传播。 |
+| `TaskStages.requireSuccess(result, operation)` | 在已有 TaskFuture 链中校验最终任务状态并取值；成功的 Void/null 值合法，null 结果对象非法。 |
+
+`TaskStages` 不额外提交任务、不重试，也不安装终端日志。使用它把任务接入业务 Stage 后，由业务入口在链尾处理异常；只调用 `asStage()` 不会自动把 `isSuccess() == false` 变成异常。
 
 ## 5. TaskStage API
 

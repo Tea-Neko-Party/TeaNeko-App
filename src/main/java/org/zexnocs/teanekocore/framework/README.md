@@ -10,6 +10,7 @@
 | `lifescycle` | 生命周期与暂停控制接口。 |
 | `pair` | pair 数据结构。 |
 | `state` | 状态机接口和带锁实现。 |
+| [`composition`](composition/README.md) | 类型安全组件、实体快照与版本化提交、基于 CompletionStage 的有序 System 管线。 |
 
 # 二. 主要 API
 

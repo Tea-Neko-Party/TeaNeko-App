@@ -1,15 +1,18 @@
 package org.zexnocs.teanekocore.command.event;
 
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.CommandDispatcher;
-import org.zexnocs.teanekocore.command.CommandMapData;
+import org.zexnocs.teanekocore.command.CommandResult;
 import org.zexnocs.teanekocore.command.interfaces.ICommandErrorHandler;
 import org.zexnocs.teanekocore.command.interfaces.IHelpSubCommandHandler;
 import org.zexnocs.teanekocore.event.AbstractEvent;
+
+import java.util.concurrent.CompletionStage;
 
 /**
  * 指令被 dispatch 前推送的事件。
@@ -19,8 +22,9 @@ import org.zexnocs.teanekocore.event.AbstractEvent;
  * 不适合其他的 {@link org.zexnocs.teanekocore.command.interfaces.ICommandDispatcher}
  *
  * @author zExNocs
- * @date 2026/03/14
+ * @date 2026/10/28
  * @since 4.3.1
+ * @version 4.5.0-l
  */
 @Getter
 @Setter
@@ -36,6 +40,9 @@ public class CommandDispatchEvent extends AbstractEvent<CommandData<?>> {
     @Nullable
     private IHelpSubCommandHandler helpSubCommandHandler;
 
+    @Setter(AccessLevel.NONE)
+    private volatile CompletionStage<CommandResult> completion;
+
     /**
      * 事件的构造函数。
      *
@@ -46,8 +53,8 @@ public class CommandDispatchEvent extends AbstractEvent<CommandData<?>> {
      */
     public CommandDispatchEvent(CommandDispatcher dispatcher,
                                 @NonNull CommandData<?> data,
-                                @NonNull ICommandErrorHandler errorHandler,
-                                @NonNull IHelpSubCommandHandler helpSubCommandHandler) {
+                                @Nullable ICommandErrorHandler errorHandler,
+                                @Nullable IHelpSubCommandHandler helpSubCommandHandler) {
         super(data);
         this.dispatcher = dispatcher;
         this.errorHandler = errorHandler;
@@ -59,19 +66,15 @@ public class CommandDispatchEvent extends AbstractEvent<CommandData<?>> {
      */
     @Override
     public void _afterNotify() {
-        // 如果为空则创建一个什么也不做的错误处理器
-        var errorHandler = this.errorHandler != null ? this.errorHandler : new ICommandErrorHandler() {
-            @Override public void handleCommandClosed(CommandData<?> commandData) {}
-            @Override public void handleMethodNotFound(CommandData<?> commandData) {}
-            @Override public void handleArgsError(CommandData<?> commandData) {}
-            @Override public void handleNoPermission(CommandData<?> commandData) {}
-            @Override public void handleNotInScope(CommandData<?> commandData) {}
+        var errors = errorHandler != null ? errorHandler : new ICommandErrorHandler() {};
+        var help = helpSubCommandHandler != null ? helpSubCommandHandler : new IHelpSubCommandHandler() {
+            /**
+             * 提供此反馈实现允许识别的帮助关键字，供原命令分发优先级判断。
+             *
+             * @return 满足本方法约束的 {@code String[]} 结果
+             */
+            @Override public String[] getHelpCommandKey() { return new String[0]; }
         };
-        // 如果为空则创建一个什么也不做的 handler
-        var helpSubCommandHandler = this.helpSubCommandHandler != null ? this.helpSubCommandHandler : new IHelpSubCommandHandler() {
-            @Override public String[] getHelpCommandKey() {return new String[0];}
-            @Override public void handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args) {}
-        };
-        this.dispatcher.__dispatchForEvent(this.getData(), errorHandler, helpSubCommandHandler);
+        completion = dispatcher.__dispatchForEvent(getData(), errors, help);
     }
 }

@@ -11,13 +11,15 @@ import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoServi
 import org.zexnocs.teanekoplugin.general.info.personal.PersonalInfoService;
 
 import java.util.UUID;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 个人信息服务，提供获取用户信息的功能。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Service("infoService")
 public class InfoService {
@@ -28,6 +30,14 @@ public class InfoService {
     private final RandomUtil randomUtil;
     private final ITeaUserCoinService iTeaUserCoinService;
 
+    /**
+     * 组合简介、留言、积分与展示依赖，统一构造当前资料的发送内容。
+     *
+     * @param randomUtil 用于本次处理的 {@code randomUtil} 数据
+     * @param personalInfoService 由装配方提供的 {@code PersonalInfoService} 协作依赖
+     * @param messageBoardInfoService 由装配方提供的 {@code MessageBoardInfoService} 协作依赖
+     * @param iTeaUserCoinService 本次装配使用的 {@code ITeaUserCoinService} 服务
+     */
     @Autowired
     public InfoService(RandomUtil randomUtil,
                        PersonalInfoService personalInfoService,
@@ -44,10 +54,11 @@ public class InfoService {
      * 获取用户信息并发送到群聊。
      *
      * @param data     消息数据
-     * @param target    target uuid
+     * @param target 原存储协议使用的数据目标
      * @param targetId  target 平台 id
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void sentGeneralInfo(ITeaNekoMessageData data, UUID target, String targetId) {
+    public CompletionStage<Void> sentGeneralInfo(ITeaNekoMessageData data, UUID target, String targetId) {
         // 获取随机留言
         var messageList = messageBoardInfoService.getMessageList(target);
         String randomMessage;
@@ -62,15 +73,14 @@ public class InfoService {
 
         if(data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             // 如果是群组，则只显示群组消息
-            data.getClient().getTeaNekoToolbox().getGroupMemberInfoSender()
+            return data.getClient().getTeaNekoToolbox().getGroupMemberInfoSender()
                     .get(data.getUserData().getGroupId(), targetId)
-                    .thenAccept(r -> {
+                    .thenCompose(r -> {
                         if(r == null) {
-                            data.getMessageSender()
+                            return data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())
                                     .addTextMessage("未找到用户信息")
-                                    .send();
-                            return;
+                                    .sendAsync();
                         }
                         var joinTime = r.getJoinInstant() == null ?
                                 "null" : ChinaDateUtil.Instance.convertToDateTimeString(r.getJoinInstant());
@@ -99,22 +109,21 @@ public class InfoService {
                                         coinInt,
                                         personalInfoService.getPersonInfo(target),
                                         randomMessage));
-                        data.getMessageSender()
+                        return data.getMessageSender()
                                 .addMessages(builder.build())
-                                .send();
+                                .sendAsync();
                     })
-                    .finish();
+                    .asStage();
         } else {
             // 否则显示个人信息
-            data.getClient().getTeaNekoToolbox().getPlatformUserGetSender()
+            return data.getClient().getTeaNekoToolbox().getPlatformUserGetSender()
                     .getPlatformUserInfo(targetId)
-                    .thenAccept(r -> {
+                    .thenCompose(r -> {
                         if(r == null) {
-                            data.getMessageSender()
+                            return data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())
                                     .addTextMessage("未找到用户信息")
-                                    .send();
-                            return;
+                                    .sendAsync();
                         }
                         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getMsgListBuilder()
                                 .addReply(data.getMessageId())
@@ -135,11 +144,11 @@ public class InfoService {
                                         coinInt,
                                         personalInfoService.getPersonInfo(target),
                                         randomMessage));
-                        data.getMessageSender()
+                        return data.getMessageSender()
                                 .addMessages(builder.build())
-                                .send();
+                                .sendAsync();
                     })
-                    .finish();
+                    .asStage();
         }
     }
 }

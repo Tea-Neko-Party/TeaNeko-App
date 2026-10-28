@@ -45,7 +45,7 @@
 | `IPlatformUserGetSender` | 获取平台用户信息。 |
 | `IPlatformUserInfoConstructor` | 把平台用户 ID 构造成 TeaNeko 消息内容列表。 |
 | `IAvatarGetter` | 根据平台用户 ID 获取头像 URL。 |
-| `IGroupKickSender` | 执行群成员踢出操作。 |
+| `IGroupKickSender` | 执行群成员踢出操作；`kickAsync(...)` 等待平台结果，`kick(...)` 为原便捷入口。 |
 
 # 五. 接入示例
 

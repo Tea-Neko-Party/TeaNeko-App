@@ -3,12 +3,14 @@ package org.zexnocs.teanekoagent.llm.file_config;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekocore.file_config.api.FileConfig;
 import org.zexnocs.teanekocore.file_config.api.FileConfigType;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,8 +20,9 @@ import java.util.Optional;
  * <br>默认模型适配器 ID 属于 Agent 主配置，存放在 {@code config/agent/main-config.yml}。
  *
  * @author zExNocs
- * @date 2026/06/11
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @FileConfig(
         value = "model",
@@ -42,11 +45,18 @@ public class LLMModelFileConfig implements IFileConfigData {
      *
      * @param modelId 模型适配器 ID。
      * @return 对应配置项。
+     * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
     public Optional<LLMModelFileConfigParameter> findModelConfig(LLMModelId modelId) {
         var models = getModels();
         if (modelId == null || models == null) {
-            return Optional.empty();
+            throw new LLMConfigurationException("LLM model.yml requires a models list and a selected route.");
+        }
+        var ids = new HashSet<LLMModelId>();
+        for (var entry : models) {
+            if (entry == null || entry.findModelId().isEmpty() || !ids.add(entry.findModelId().orElseThrow())) {
+                throw new LLMConfigurationException("LLM model.yml contains an empty or duplicate model route.");
+            }
         }
         return models.stream()
                 .filter(modelConfig -> modelConfig.findModelId()

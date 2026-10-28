@@ -17,6 +17,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
 
 import java.util.*;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
@@ -24,8 +25,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * 点赞指令，允许用户给自己的资料卡点赞，并且可以选择加入到每天凌晨1点的定时点赞队列中。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Description("""
         让机器人给你个人资料卡点赞。
@@ -53,6 +55,13 @@ public class LikeCommand {
     private final ITimerService iTimerService;
     private final ILogger logger;
 
+    /**
+     * 装配点赞发送与定时服务，当前点赞动作等待实际回执，未来队列任务独立运行。
+     *
+     * @param likeSender 由装配方提供的 {@code LikeSender} 协作依赖
+     * @param iTimerService 本次装配使用的 {@code ITimerService} 服务
+     * @param logger 项目日志接口
+     */
     @Autowired
     public LikeCommand(LikeSender likeSender,
                        ITimerService iTimerService, ILogger logger) {
@@ -99,6 +108,8 @@ public class LikeCommand {
     /**
      * 处理点赞请求的方法。
      * 包括点赞和将点赞记录存储到数据库。
+     *
+     * @return 满足本方法约束的 {@code EmptyTaskResult} 结果
      */
     public EmptyTaskResult processLike() {
         // 清理已经点赞过的用户ID集合
@@ -120,20 +131,26 @@ public class LikeCommand {
         return EmptyTaskResult.INSTANCE;
     }
 
+    /**
+     * &quot;直接进行点赞；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param times 请求次数，实际允许范围仍由业务校验
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             "直接进行点赞。
             参数：1. 次数，默认 10 次。
             例如 "/like 20" 为自己点赞 20 次。""")
     @DefaultCommand
-    public void like(CommandData<OnebotMessageData> commandData,
+    public CompletionStage<Void> like(CommandData<OnebotMessageData> commandData,
                      @DefaultValue("10") int times) {
         var data = commandData.getRawData();
         var userId = data.getOnebotRawMessageData().getUserId();
 
         if(!likedUserIds.add(userId)) {
-            data.getMessageSender()
-                    .sendAtReplyMessage("你已经点赞过了喵！");
-            return;
+            return data.getMessageSender()
+                    .sendAtReplyMessageAsync("你已经点赞过了喵！");
         }
 
         if(times < 1) {
@@ -141,89 +158,106 @@ public class LikeCommand {
         } else if(times > 10) {
             times = 10;
         }
-        likeSender.like(userId, times)
-                .thenAccept(result -> {
+        return likeSender.like(userId, times)
+                .thenCompose(result -> {
                     if(result.isSuccess()) {
-                        data.getMessageSender()
-                                        .sendAtReplyMessage("点赞成功了喵！");
+                        return data.getMessageSender()
+                                        .sendAtReplyMessageAsync("点赞成功了喵！");
                     } else {
-                        data.getMessageSender()
-                                .sendAtReplyMessage("已经点赞过了喵！");
+                        return data.getMessageSender()
+                                .sendAtReplyMessageAsync("已经点赞过了喵！");
                     }
-                });
+                }).asStage();
     }
 
+    /**
+     * 将用户添加到定时凌晨1点点赞队列；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             管理员指令
             将用户添加到定时凌晨1点点赞队列。
             参数：1. 用户QQ号
             例如"/like add 123" 将 qq号为 123 用户添加到点赞队列。""")
     @SubCommand(value = "add", permission = CommandPermission.ADMIN)
-    public void addToQueue(CommandData<OnebotMessageData> commandData, long userId) {
+    public CompletionStage<Void> addToQueue(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
         if(userIdQueue.contains(userId)) {
-            data.getMessageSender()
-                    .sendAtReplyMessage("该用户已经在队列中了喵！");
-            return;
+            return data.getMessageSender()
+                    .sendAtReplyMessageAsync("该用户已经在队列中了喵！");
         }
-        userIdQueue.add(userId);
         var dto = GeneralEasyData.of(DATABASE_NAMESPACE).get(DATABASE_LIST_TARGET);
         var list = dto.get(DATABASE_LIST_KEY, new ArrayList<String>());
         list.add(String.valueOf(userId));
         var task = dto.getTaskConfig("用户添加到点赞队列的数据库");
         task.set(DATABASE_LIST_KEY, list);
-        task.push();
-        data.getMessageSender()
-                .sendAtReplyMessage("添加成功了喵！");
+        return task.pushAsync().thenCompose(ignored -> {
+            userIdQueue.add(userId);
+            return data.getMessageSender()
+                .sendAtReplyMessageAsync("添加成功了喵！");
+        });
     }
 
+    /**
+     * 将用户从定时凌晨1点点赞队列中移除；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             管理员指令
             将用户从定时凌晨1点点赞队列中移除。
             参数：1. 用户QQ号
             例如"/like remove 123" 将 qq号为 123 用户从点赞队列中移除。""")
     @SubCommand(value = "remove", permission = CommandPermission.ADMIN)
-    public void removeFromQueue(CommandData<OnebotMessageData> commandData, long userId) {
+    public CompletionStage<Void> removeFromQueue(CommandData<OnebotMessageData> commandData, long userId) {
         var data = commandData.getRawData();
         if(!userIdQueue.contains(userId)) {
-            data.getMessageSender()
-                    .sendAtReplyMessage("该用户已经不在队列中了喵！");
-            return;
+            return data.getMessageSender()
+                    .sendAtReplyMessageAsync("该用户已经不在队列中了喵！");
         }
-        userIdQueue.remove(userId);
         var dto = GeneralEasyData.of(DATABASE_NAMESPACE).get(DATABASE_LIST_TARGET);
         var list = dto.get(DATABASE_LIST_KEY, new ArrayList<String>());
         list.remove(String.valueOf(userId));
         var task = dto.getTaskConfig("用户从点赞队列移除的数据库");
         task.set(DATABASE_LIST_KEY, list);
-        task.push();
-        data.getMessageSender()
-                .sendAtReplyMessage("移除成功了喵！");
+        return task.pushAsync().thenCompose(ignored -> {
+            userIdQueue.remove(userId);
+            return data.getMessageSender()
+                .sendAtReplyMessageAsync("移除成功了喵！");
+        });
     }
 
     /**
      * 用户自己可以添加到点赞队列中。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
     @Description("""
             将自己添加到定时凌晨1点点赞队列。
             例如"/like join" 将自己添加到点赞队列。""")
     @SubCommand(value = "join")
-    public void joinQueue(CommandData<OnebotMessageData> commandData) {
+    public CompletionStage<Void> joinQueue(CommandData<OnebotMessageData> commandData) {
         var data = commandData.getRawData();
         long userId = data.getOnebotRawMessageData().getUserId();
         if(userIdQueue.contains(userId)) {
-            data.getMessageSender()
-                    .sendAtReplyMessage("你已经在队列中了喵！");
-            return;
+            return data.getMessageSender()
+                    .sendAtReplyMessageAsync("你已经在队列中了喵！");
         }
-        userIdQueue.add(userId);
         var dto = GeneralEasyData.of(DATABASE_NAMESPACE).get(DATABASE_LIST_TARGET);
         var list = dto.get(DATABASE_LIST_KEY, new ArrayList<String>());
         list.add(String.valueOf(userId));
         var task = dto.getTaskConfig("用户添加到点赞队列的数据库");
         task.set(DATABASE_LIST_KEY, list);
-        task.push();
-        data.getMessageSender()
-                .sendAtReplyMessage("添加成功了喵！");
+        return task.pushAsync().thenCompose(ignored -> {
+            userIdQueue.add(userId);
+            return data.getMessageSender()
+                .sendAtReplyMessageAsync("添加成功了喵！");
+        });
     }
 }

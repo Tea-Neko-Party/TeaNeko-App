@@ -27,7 +27,9 @@ import java.util.concurrent.CompletableFuture;
  * 用于注册任务、提交任务结果。
  *
  * @author zExNocs
- * @date 2026/02/13
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Service
 public class TaskService implements ITaskService {
@@ -36,6 +38,14 @@ public class TaskService implements ITaskService {
     private final ITaskExecuteService iTaskExecuteService;
     private final ITaskRetryService iTaskRetryService;
 
+    /**
+     * 装配任务执行与重试服务，并将任务缓存从普通手动清理中隔离，避免清缓存使在途回执丢失。
+     *
+     * @param iCacheService 缓存注册与生命周期服务
+     * @param logger 项目日志接口
+     * @param iTaskExecuteService 本次装配使用的 {@code ITaskExecuteService} 服务
+     * @param iTaskRetryService 本次装配使用的 {@code ITaskRetryService} 服务
+     */
     @Lazy
     @Autowired
     public TaskService(ICacheService iCacheService,
@@ -57,6 +67,7 @@ public class TaskService implements ITaskService {
      * @param key    任务的唯一标识符
      * @param config 任务的配置
      * @param clazz  任务结果的类型
+     * @param <T> 本方法约定的泛型数据类型
      * @return TaskFuture，用于获取任务结果；TaskFuture 务必调用 .finish() 函数来保证处理异常。
      * @throws TaskDuplicateKeyException 如果指定的 key 已经被使用
      */
@@ -70,7 +81,10 @@ public class TaskService implements ITaskService {
         // 创建一个新的 Task 对象
         var future = new TaskFuture<>(logger, config.getName(), new CompletableFuture<ITaskResult<T>>());
         var task = new Task<>(key, config, future, clazz);
-        taskMap.put(key, task);
+        // 原子注册，避免多个区域同时提交相同键时覆盖彼此的任务。
+        if (taskMap.putIfAbsent(key, task) != null) {
+            throw new TaskDuplicateKeyException(key.toString());
+        }
         // 执行任务
         iTaskExecuteService.__executeTask(task);
         return future;
@@ -121,7 +135,14 @@ public class TaskService implements ITaskService {
         return _forceComplete((ITask<Object>) task, (ITaskResult<Object>) result);
     }
 
-    /// 强制进行类型转化使得 task 与 result 的类型一致
+    /**
+     * 强制进行类型转化使得 task 与 result 的类型一致
+     *
+     * @param task 用于本次处理的 {@code task} 数据
+     * @param result 已经形成的处理结果
+     * @param <T> 本方法约定的泛型数据类型
+     * @return 当前校验或原子操作是否满足本方法约定的条件
+     */
     private <T> boolean _forceComplete(ITask<T> task, ITaskResult<T> result) {
         return task.getFuture().complete(result);
     }
@@ -177,7 +198,14 @@ public class TaskService implements ITaskService {
     }
 
     // ---------- Task 专用的 TaskCache -------------
-    /// TaskCache 用于包装 Task 对象，使其能够存储在 taskMap 中。
+    /**
+     * TaskCache 用于包装 Task 对象，使其能够存储在 taskMap 中。
+     *
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
     @AllArgsConstructor
     private class TaskCache implements ICacheData<ITask<?>> {
         /// task 对象
@@ -185,6 +213,8 @@ public class TaskService implements ITaskService {
 
         /**
          * 获取缓存的值
+         *
+         * @return 满足本方法约束的 {@code ITask<?>} 结果
          */
         @Override
         public ITask<?> getValue() {
@@ -193,6 +223,7 @@ public class TaskService implements ITaskService {
 
         /**
          * 更新缓存的访问时间
+         *
          * @param currentTime 当前时间点
          */
         @Override
@@ -202,6 +233,7 @@ public class TaskService implements ITaskService {
 
         /**
          * 是否过期
+         *
          * @param currentTime 当前时间点
          * @return 是否过期
          */
@@ -212,6 +244,7 @@ public class TaskService implements ITaskService {
 
         /**
          * 过期后任务将会以异常形式完成。
+         *
          * @param currentTime 当前时间点
          * @param value         当前缓存的值，过期后可能需要进行一些清理或其他操作
          * @return 是否需要删除该缓存。返回 true 则会删除，返回 false 则不会删除。
@@ -242,7 +275,14 @@ public class TaskService implements ITaskService {
         }
     }
 
-    /// TaskCache 的工厂类
+    /**
+     * TaskCache 的工厂类
+     *
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
     private class TaskCacheFactory implements ICacheDataFactory<ITask<?>> {
         /**
          * 创建一个 ICacheData 对象。

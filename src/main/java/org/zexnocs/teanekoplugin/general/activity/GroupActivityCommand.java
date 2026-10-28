@@ -1,9 +1,9 @@
 package org.zexnocs.teanekoplugin.general.activity;
 
 import lombok.RequiredArgsConstructor;
-import org.apache.logging.log4j.util.TriConsumer;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
@@ -12,13 +12,16 @@ import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekoplugin.general.MainGroupConfigManager;
 
 import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 群活跃度指令
  *
  * @author zExNocs
- * @date 2026/03/18
+ * @date 2026/10/28
  * @since 4.3.4
+ * @version 4.5.0-l
  */
 @Description("""
         管理群活跃度相关指令。
@@ -38,45 +41,64 @@ public class GroupActivityCommand {
     private final GroupActivityPunishService groupActivityPunishService;
     private final GroupActivityQueryService groupActivityQueryService;
 
+    /**
+     * 以转发的形式查看当前群成员的活跃度具体信息；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param groupId 目标群组标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             以转发的形式查看当前群成员的活跃度具体信息。
             规格：/ga <群ID>。
             群 ID 可选，默认查询配置中的第一个群。""")
     @DefaultCommand
-    public void allInfo(CommandData<ITeaNekoMessageData> commandData,
+    public CompletionStage<Void> allInfo(CommandData<ITeaNekoMessageData> commandData,
                         @DefaultValue("") String groupId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (_, targetScopeId, _) -> {
-            var map = groupActivityService.getActivityDataMap().get(targetScopeId);
-            var allDatils = groupActivityQueryService
-                    .getAllDetail(data.getClient(), groupId, map);
-            data.getForwardMessageSender().addBotAllList(allDatils)
-                    .sendByPart(8);
+        return withValidGroupContext(data, groupId, context -> {
+            var map = groupActivityService.getActivityDataMap().get(context.scopeId());
+            var details = groupActivityQueryService.getAllDetail(data.getClient(), context.groupId(), map);
+            return data.getForwardMessageSender().addBotAllList(details).sendByPartAsync(8);
         });
     }
 
+    /**
+     * 扫描被监控群的所有成员的活跃度。是线程安全的；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param groupId 目标群组标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             扫描被监控群的所有成员的活跃度。是线程安全的。
             使用方法：/scan <?groupId>
             如果没有 <groupId>，则使用默认的主群
             扫描前提是当前群处于扫描群的监控列表中""")
     @SubCommand(value = {"scan", "扫描"}, permission = CommandPermission.ADMIN)
-    public void scan(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String groupId) {
+    public CompletionStage<Void> scan(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("") String groupId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (_, targetScopeId, _) -> {
+        return withValidGroupContext(data, groupId, context -> {
             try {
-                var future = groupActivityService.scanWithFuture(targetScopeId);
-                if(future != null) {
-                    future.finish();
-                }
+                var task = groupActivityService.scanWithFuture(context.scopeId());
+                if (task == null) return CompletableFuture.failedStage(new IllegalStateException("无法解析被扫描区域"));
+                return task.asStage().thenApply(ignored -> null);
             } catch (ConfigDataNotFoundException e) {
-                // 不可能发生
-                data.getMessageSender().sendReplyMessage("发生了未知错误喵！");
-                throw new RuntimeException(e);
+                return data.getMessageSender().sendReplyMessageAsync("发生了未知错误喵！")
+                        .thenCompose(ignored -> CompletableFuture.failedStage(e));
             }
         });
     }
 
+    /**
+     * 规格：/ga add-white &lt;用户ID&gt; &lt;群ID?&gt; &lt;天数?&gt;；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param userId 原业务边界中的目标用户标识
+     * @param groupId 目标群组标识
+     * @param day 用于本次处理的 {@code day} 数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             管理员指令。将用户添加到扫描白名单。
             规格：/ga add-white <用户ID> <群ID?> <天数?>
@@ -84,7 +106,7 @@ public class GroupActivityCommand {
             天数可选，默认 30 天；不可超过 90 天。
             优先使用默认群ID。也就是说如果参数只有两个，第二个参数表示天数。""")
     @SubCommand(value = {"add-white", "添加白名单"}, permission = CommandPermission.ADMIN)
-    public void addWhite(CommandData<ITeaNekoMessageData> commandData,
+    public CompletionStage<Void> addWhite(CommandData<ITeaNekoMessageData> commandData,
                          String userId,
                          @DefaultValue("") String groupId,
                          @DefaultValue("-1") int day) {
@@ -101,154 +123,112 @@ public class GroupActivityCommand {
                     Duration.ofDays(90).toMillis()
             );
         }
-        withValidGroupContext(commandData.getRawData(), groupId, (finalGroupId, targetScopeId, _) ->
-                groupActivityExemptionService.addWithFuture(targetScopeId, userId, Duration.ofMillis(interval))
-                .thenAccept(ignored -> {
-                    groupActivityService.getActivityDataMap().computeIfPresent(targetScopeId, (_, v) -> {
-                        v.remove(userId);
-                        return v;
+        return withValidGroupContext(data, groupId, context ->
+                TaskStages.successful(groupActivityExemptionService.addWithFuture(context.scopeId(), userId, Duration.ofMillis(interval)),
+                        "群活跃度白名单").thenCompose(ignored -> {
+                    groupActivityService.getActivityDataMap().computeIfPresent(context.scopeId(), (key, values) -> {
+                        values.remove(userId);
+                        return values;
                     });
-                    groupActivityPunishService.getPunishCache().computeIfPresent(targetScopeId, (_, v) -> {
-                        v.remove(userId);
-                        return v;
+                    groupActivityPunishService.getPunishCache().computeIfPresent(context.scopeId(), (key, values) -> {
+                        values.remove(userId);
+                        return values;
                     });
-                    data.getMessageSender().sendReplyMessage("""
-                    已经将用户 %s 添加到群 %s 的白名单中。
-                    时间：%s 天""".formatted(
-                            userId,
-                            finalGroupId,
-                            Duration.ofMillis(interval).toDays()));
-                }).finish());
+                    return data.getMessageSender().sendReplyMessageAsync("""
+                            已经将用户 %s 添加到群 %s 的白名单中。
+                            时间：%s 天""".formatted(userId, context.groupId(), Duration.ofMillis(interval).toDays()));
+                }));
     }
 
+    /**
+     * 以踢出的方式惩罚活跃度不足的用户；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             以踢出的方式惩罚活跃度不足的用户。
             规格：/ga 踢出 <群ID?> <用户ID>
             群ID可选，默认查询配置中的主群。""")
     @SubCommand(value = {"kick", "踢出"})
-    public void kick(CommandData<ITeaNekoMessageData> commandData,
+    public CompletionStage<Void> kick(CommandData<ITeaNekoMessageData> commandData,
                      @DefaultValue("") String groupId,
                      String userId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (finalGroupId, targetScopeId, config) -> {
-            var map = groupActivityService.getActivityDataMap().get(targetScopeId);
-            if(map == null) {
-                data.getMessageSender().sendTextMessage("该用户不属于低活跃度用户喵");
-                return;
-            }
-            var pair = map.get(userId);
-            if(pair == null) {
-                data.getMessageSender().sendTextMessage("该用户不属于低活跃度用户喵");
-                return;
-            }
-            var messageList = groupActivityPunishService.kick(
-                    config,
-                    pair,
-                    data.getClient(),
-                    data.getScopeId(),
-                    data.getUserData().getUserIdInPlatform(),
-                    targetScopeId,
-                    finalGroupId,
-                    userId);
-            data.getMessageSender().addMessages(messageList).send();
+        return withValidGroupContext(data, groupId, context -> {
+            var map = groupActivityService.getActivityDataMap().get(context.scopeId());
+            var pair = map == null ? null : map.get(userId);
+            if (pair == null) return data.getMessageSender().sendTextMessageAsync("该用户不属于低活跃度用户喵");
+            return groupActivityPunishService.kick(context.config(), pair, data.getClient(),
+                    data.getScopeId(), data.getUserData().getUserIdInPlatform(), context.scopeId(), context.groupId(), userId)
+                    .thenCompose(messages -> data.getMessageSender().addMessages(messages).sendAsync());
         });
     }
 
+    /**
+     * 以提醒的方式惩罚活跃度不足的用户；完成信号覆盖实际业务及其反馈，仍由原命令链校验权限。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @Description("""
             以提醒的方式惩罚活跃度不足的用户。
             规格：/ga 提醒 <群ID?> <用户ID>
             群ID可选，默认查询配置中的第一个群。""")
     @SubCommand(value = {"remind", "提醒"})
-    public void remind(CommandData<ITeaNekoMessageData> commandData,
+    public CompletionStage<Void> remind(CommandData<ITeaNekoMessageData> commandData,
                        @DefaultValue("") String groupId,
                        String userId) {
         var data = commandData.getRawData();
-        withValidGroupContext(data, groupId, (finalGroupId, targetScopeId, config) -> {
-            var map = groupActivityService.getActivityDataMap().get(targetScopeId);
-            if(map == null) {
-                data.getMessageSender().sendTextMessage("该用户不属于低活跃度用户喵");
-                return;
-            }
-            var pair = map.get(userId);
-            if(pair == null) {
-                data.getMessageSender().sendTextMessage("该用户不属于低活跃度用户喵");
-                return;
-            }
-            var messageList = groupActivityPunishService.remind(
-                    config,
-                    pair,
-                    data.getClient(),
-                    data.getScopeId(),
-                    data.getUserData().getUserIdInPlatform(),
-                    targetScopeId,
-                    finalGroupId,
-                    userId);
-            data.getMessageSender().addMessages(messageList).send();
+        return withValidGroupContext(data, groupId, context -> {
+            var map = groupActivityService.getActivityDataMap().get(context.scopeId());
+            var pair = map == null ? null : map.get(userId);
+            if (pair == null) return data.getMessageSender().sendTextMessageAsync("该用户不属于低活跃度用户喵");
+            return groupActivityPunishService.remind(context.config(), pair, data.getClient(),
+                    data.getScopeId(), data.getUserData().getUserIdInPlatform(), context.scopeId(), context.groupId(), userId)
+                    .thenCompose(messages -> data.getMessageSender().addMessages(messages).sendAsync());
         });
     }
 
     /**
      * 获取主群聊 ID。
      * <br>如果为 null，说明失败。
-     */
-    private String getMainGroup(ITeaNekoMessageData data) {
-        // 尝试解析出默认主群
-        var mainGroupConfig = mainGroupConfigManager.getConfig(data.getScopeId()).orElse(null);
-        if(mainGroupConfig != null) {
-            return mainGroupConfig.getValue();
-        } else {
-            data.getMessageSender().sendReplyMessage("未知群聊喵！");
-            return null;
-        }
-    }
-
-    /**
-     * check config。
-     * <br>如果失败返回 true
-     * <br>否则返回 false
-     */
-    private boolean checkConfig(ITeaNekoMessageData data, GroupActivityConfigData config) {
-        if(config == null) {
-            data.getMessageSender().sendReplyMessage("该群并没有注册活跃度规则喵！");
-            return true;
-        }
-
-        // 如果该群的监视规则里没有当前群
-        if(!config.getGroups().contains(data.getUserData().getGroupId())) {
-            data.getMessageSender().sendReplyMessage("不支持的群聊喵！");
-            return true;
-        }
-        return false;
-    }
-
-    /**
-     * 提取出的公共方法。
      *
-     * @param data        message data
-     * @param groupId     输入的 group ID，不是 final Group ID
-     * @param consumer    验证成功后
+     * @param groupId 目标群组标识
+     * @param scopeId 本次操作所属作用域
+     * @param config 用于本次处理的 {@code config} 数据
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
      */
-    private void withValidGroupContext(
-            ITeaNekoMessageData data,
-            String groupId,
-            TriConsumer<String, String, GroupActivityConfigData> consumer
-    ) {
-        // 解析 group ID
+    private record GroupContext(String groupId, String scopeId, GroupActivityConfigData config) {}
+
+    /**
+     * 解析并校验群上下文后调用异步业务，拒绝反馈也进入同一完成链。
+     *
+     * @param data 本次处理的输入数据
+     * @param groupId 目标群组标识
+     * @param callback 用于本次处理的 {@code callback} 数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    private CompletionStage<Void> withValidGroupContext(ITeaNekoMessageData data, String groupId,
+            java.util.function.Function<GroupContext, CompletionStage<Void>> callback) {
         if (groupId.isBlank()) {
-            groupId = getMainGroup(data);
-            if (groupId == null) {
-                return;
-            }
+            var main = mainGroupConfigManager.getConfig(data.getScopeId()).orElse(null);
+            if (main == null) return data.getMessageSender().sendReplyMessageAsync("未知群聊喵！");
+            groupId = main.getValue();
         }
-        // 解析 scopeId
-        var targetScopeId = teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
-        // 解析 config
-        var config = iConfigDataService
-                .getConfigData(groupActivityService, GroupActivityConfigData.class, targetScopeId)
-                .orElse(null);
-        if (checkConfig(data, config)) {
-            return;
+        var scopeId = teaNekoScopeService.getGroupScopeId(data.getClient(), groupId);
+        var config = iConfigDataService.getConfigData(groupActivityService, GroupActivityConfigData.class, scopeId).orElse(null);
+        if (config == null) return data.getMessageSender().sendReplyMessageAsync("该群并没有注册活跃度规则喵！");
+        if (!config.getGroups().contains(data.getUserData().getGroupId())) {
+            return data.getMessageSender().sendReplyMessageAsync("不支持的群聊喵！");
         }
-        consumer.accept(groupId, targetScopeId, config);
+        return callback.apply(new GroupContext(groupId, scopeId, config));
     }
 }

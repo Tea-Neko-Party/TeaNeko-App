@@ -7,6 +7,7 @@ import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -18,8 +19,9 @@ import java.util.Map;
  * <br>验证配置复制、可选字段过滤、参与者名称和模型能力声明。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class OpenAIChatCompletionsModelTest {
     /**
@@ -66,7 +68,7 @@ class OpenAIChatCompletionsModelTest {
      */
     @Test
     void validatesProviderAndNonStreamingContract() {
-        var model = new OpenAIChatCompletionsModel(Mockito.mock(IAPIResponseService.class));
+        var model = new OpenAIChatCompletionsModel(Mockito.mock(IAPIResponseService.class), Mockito.mock(ICredentialResolver.class));
 
         Assertions.assertTrue(model.supports(OpenAIChatCompletionModelOptions.baseOptions()));
         Assertions.assertFalse(model.supports(LLMModelOptions.builder()
@@ -99,8 +101,9 @@ class OpenAIChatCompletionsModelTest {
      * 暴露受保护参数转换方法的测试模型。
      *
      * @author zExNocs
-     * @date 2026/06/10
+     * @date 2026/10/28
      * @since 4.4.1
+     * @version 4.5.0-l
      */
     private static final class TestOpenAIChatCompletionsModel extends OpenAIChatCompletionsModel {
         /**
@@ -109,7 +112,7 @@ class OpenAIChatCompletionsModelTest {
          * @param apiResponseService API 响应服务
          */
         private TestOpenAIChatCompletionsModel(IAPIResponseService apiResponseService) {
-            super(apiResponseService);
+            super(apiResponseService, Mockito.mock(ICredentialResolver.class));
         }
 
         /**

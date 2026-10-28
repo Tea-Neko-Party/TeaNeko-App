@@ -77,6 +77,10 @@ classDiagram
         -text String
     }
     class DefaultContentPart
+    class ImageLLMContentPart {
+        -url String
+        -detail LLMImageDetail
+    }
     class ILLMToolCall {
         <<interface>>
     }
@@ -101,6 +105,7 @@ classDiagram
     LLMContent "1" *-- "1" ILLMContentPart : contentPart
     ILLMContentPart <|.. TextLLMContentPart
     ILLMContentPart <|.. DefaultContentPart
+    ILLMContentPart <|.. ImageLLMContentPart
     LLMAssistantMessage "1" o-- "0..*" ILLMToolCall : toolCalls
 ```
 
@@ -134,7 +139,7 @@ flowchart TB
     A -. "tool" .-> L
 ```
 
-`LLMContent` 自身不直接保存具体文本字段，而是通过 `contentPart` 组合实际内容。当前内置的 `TextLLMContentPart` 保存文本；无法映射到已知类型的内容可以使用 `DefaultContentPart` 承载。
+`LLMContent` 自身不直接保存具体文本字段，而是通过 `contentPart` 组合实际内容。当前内置的 `TextLLMContentPart` 保存文本，`ImageLLMContentPart` 保存不可变图像引用。`DefaultContentPart` 仅承载尚未映射的数据；调用时未知类型会被明确拒绝，不再用 toString 充当模型正文。内容接口不继承 App 消息接口，平台消息转换留在上层适配器。
 
 # 四. 消息角色
 
@@ -167,7 +172,22 @@ List<ILLMContent> contents = LLMContentListBuilder.builder()
         .build();
 ```
 
-`build()` 返回不可变列表。当前 builder 直接支持文本内容；新增图片、音频或文件类型时，应先实现新的 `ILLMContentPart`，再扩展 builder 和供应商映射器。
+`build()` 返回不可变列表，后续继续使用 builder 不会改写已构造的列表。图文输入示例：
+
+```java
+var contents = LLMContentListBuilder.builder()
+        .addText("请描述这张图")
+        .addImage("https://example.test/image.png")
+        .addText("重点看右侧")
+        .build();
+var prompt = new LLMPrompt(LLMUserMessage.builder().contents(contents).build());
+```
+
+`addImage(url, LLMImageDetail.LOW)` 可明确指定细节级别；`addImageBytes("image/png", bytes)` 将调用方提供的字节编码为 data URL，不保留原始可变数组。支持 JPEG/PNG/GIF/WebP；内联表示上限为 32 MiB，供应商实际请求限制仍可能更严格。只接收 HTTP(S) 或合法的图像 base64 data URL，不自动读取本地路径、下载图片或上传供应商文件。
+
+统一内容类型为 `image`，供应商 mapper 转成自己的协议：Chat Completions 使用 `image_url: {url, detail?}`，Responses 使用 `input_image` 加 `image_url`、`detail`。混合内容保持原顺序与数组结构；纯文本仍保持既有的空格合并格式。通用 Message JSON 只是统一内容表示，不能当作供应商请求直接发送。
+
+当前适配器只实现 user 消息中的图像输入，system/assistant/tool 图片明确拒绝。模型调用使用合并后实际 model 的 `ModelCapabilities` 校验；未知模型默认没有声明视觉能力，但仍允许正常文本调用。类型/part 不一致、空内容项和未知类型都会报错，不静默丢弃。新增音频/文件或其他图像来源时，应同时扩展统一内容、能力校验与目标供应商映射。
 
 # 六. 构造 Message List
 
@@ -289,3 +309,7 @@ flowchart TB
 |$3$|[AbstractLLMMessage.java](AbstractLLMMessage.java)|了解公共字段和 content JSON 序列化规则。|
 |$4$|[LLMMessageListBuilder.java](LLMMessageListBuilder.java)|了解常规消息列表的构造入口。|
 |$5$|[content/LLMContentListBuilder.java](content/LLMContentListBuilder.java)|了解文本 content 的构造方式。|
+
+# 可复用协议快照
+
+`LLMProtocolSnapshots` 将消息、工具调用、响应及透明 JSON 状态冻结为可回放数据；它由交互内部工具上移到协议层，供 Agent 等上层复用。类型改名保留原 since，校验与深拷贝行为保持一致。`LLMModelOptionsSnapshot` 提供组件可持有的封装：导出的参数容器每次独立，嵌套集合只读，工具执行绑定不存入参数快照。

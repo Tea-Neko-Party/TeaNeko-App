@@ -4,6 +4,7 @@ import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 /**
@@ -11,8 +12,9 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
  * <br>封装供应商级 ID、基础模型名称和 base options 的合并逻辑，具体供应商只需要实现实际调用方法。
  *
  * @author zExNocs
- * @date 2026/05/15
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
@@ -87,7 +89,7 @@ public abstract class AbstractLLMModel implements ILLMModel {
     /**
      * 获取当前模型代码自带的基础调用选项。
      *
-     * @return base options
+     * @return 适配器的内建基础选项，不包含文件或单次请求覆盖
      */
     @Override
     public ILLMModelOptions getBaseOptions() {
@@ -103,7 +105,40 @@ public abstract class AbstractLLMModel implements ILLMModel {
      */
     @Override
     public TaskFuture<ILLMResult> call(ILLMPrompt prompt) {
-        return doCall(prompt, LLMModelOptions.merge(baseOptions, prompt.getOptions()));
+        return callInternal(prompt, null);
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    @Override
+    public TaskFuture<ILLMResult> call(ILLMPrompt prompt, ExecutionPolicy execution) {
+        java.util.Objects.requireNonNull(execution, "execution").checkActive();
+        return callInternal(prompt, execution);
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
+     */
+    private TaskFuture<ILLMResult> callInternal(ILLMPrompt prompt, ExecutionPolicy execution) {
+        LLMOptionBoundary.validate(prompt.getOptions());
+        var options = LLMModelOptions.merge(baseOptions, prompt.getOptions());
+        LLMOptionBoundary.validate(options);
+        if (!supports(options)) {
+            throw new IllegalArgumentException("LLM model does not support the prompt options: " + provider);
+        }
+        LLMInputValidator.validate(prompt.getMessages(), getCapabilities(options.getModel()));
+        return execution == null ? doCall(prompt, options) : doCall(prompt, options, execution);
     }
 
     /**
@@ -115,4 +150,17 @@ public abstract class AbstractLLMModel implements ILLMModel {
      * @return 模型调用结果 Future
      */
     protected abstract TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options);
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param options 本次有效模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws UnsupportedOperationException 当该入口或适配器尚不支持请求的执行方式时
+     */
+    protected TaskFuture<ILLMResult> doCall(ILLMPrompt prompt, LLMModelOptions options, ExecutionPolicy execution) {
+        throw new UnsupportedOperationException("LLM adapter does not support execution policies.");
+    }
 }

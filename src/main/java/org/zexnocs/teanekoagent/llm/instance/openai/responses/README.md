@@ -64,9 +64,6 @@ flowchart TB
 models:
   - id: "openai"
     model: "gpt-5.5"
-    api-key: "${OPENAI_API_KEY}"
-    base-url: "https://api.openai.com/v1"
-    api: "/responses"
     max-tokens: 2048
     metadata:
       openai.organization: ""
@@ -78,7 +75,7 @@ models:
       openai.parallelToolCalls: true
 ```
 
-`api-key`、`base-url` 和 `api` 会进入 `LLMModelOptions.metadata`。OpenAI 适配器不会在代码中保存访问密钥。
+密钥及可选连接覆盖只取 Spring application/环境变量，不进入 Options。详见 [配置与迁移说明](../../../file_config/README.md)。
 
 # 五. Responses Message 映射
 
@@ -144,7 +141,7 @@ reasoning 模型返回的 reasoning item 会保存在 assistant message 的 `pro
 |输入 token 减缓存 token|`promptCacheMissTokens`|
 |`output_tokens_details.reasoning_tokens`|`reasoningTokens`|
 
-当响应包含 Function Call 时，统一 choice 的 `finishReason` 为 `tool_calls`。未完整生成时优先使用 `incomplete_details.reason`。
+拒绝内容映射为统一 `finishReason=refusal`。未完整生成时优先使用 `incomplete_details.reason`，失败状态也不能因包含 Function Call 而变成可执行工具响应。完整响应包含 Function Call 时使用 `tool_calls`，普通完整输出使用 `stop`。供应商未提供 usage 时返回 null，不将未知用量填为零。
 
 # 九. 官方资料
 
@@ -163,3 +160,7 @@ reasoning 模型返回的 reasoning item 会保存在 assistant message 的 `pro
 |$3$|[../../file_config/README.md](../../../file_config/README.md)|了解 OpenAI 默认 options 的文件配置与合并顺序。|
 |$4$|[README.md](README.md)|比较 OpenAI Responses 与 Chat Completions，并了解 Responses 适配器。|
 |$5$|[completions/README.md](../completions/README.md)|了解 Chat Completions 通用层和兼容供应商扩展方式。|
+
+
+图像输入使用统一 `ImageLLMContentPart`，按顺序映射为真实的协议内容块，纯文本保持既有格式。所选模型、角色及 detail 必须符合 [已声明的图像能力](../../../file_config/README.md#图像能力)，未核实的模型不会自动继承同供应商其他模型的能力。body 扩展不能覆盖 DTO 已建模字段及模型、输入、工具或上下文控制字段。
+Responses 图文消息使用 `input_text` / `input_image` 内容数组；透明状态只允许 reasoning item，function_call 与 function_call_output 继续由显式统一工具消息生成。

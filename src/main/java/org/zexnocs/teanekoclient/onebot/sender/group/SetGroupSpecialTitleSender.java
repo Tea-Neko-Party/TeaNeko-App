@@ -11,13 +11,15 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 设置群头衔发送器
  *
  * @author zExNocs
- * @date 2026/03/04
+ * @date 2026/10/28
  * @since 4.0.12
+ * @version 4.5.0-l
  */
 @SuppressWarnings("rawtypes")
 @Component("setGroupSpecialTitleSender")
@@ -44,6 +46,7 @@ public class SetGroupSpecialTitleSender extends AbstractOnebotSender<SetGroupSpe
      * @param userId       成员QQ号
      * @param specialTitle 头衔，长度限制为6个汉字
      * @param duration     头衔有效期，单位为秒
+     * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
      */
     public void setGroupSpecialTitle(long groupId, long userId, String specialTitle, long duration) {
         if (specialTitle == null) {
@@ -72,5 +75,44 @@ public class SetGroupSpecialTitleSender extends AbstractOnebotSender<SetGroupSpe
      */
     public void setGroupSpecialTitle(long groupId, long userId, String specialTitle) {
         setGroupSpecialTitle(groupId, userId, specialTitle, 0);
+    }
+
+    /**
+     * 提交群头衔变更并等待平台回执，实际限制仍由原业务和发送链执行。
+     *
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @param specialTitle 需要提交的群头衔文本
+     * @param duration 需要换算或推进的时长
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
+     */
+    public CompletionStage<Void> setGroupSpecialTitleAsync(long groupId, long userId, String specialTitle, long duration) {
+        if (specialTitle == null) {
+            specialTitle = "";
+        }
+        if(specialTitle.length() > 6) {
+            throw new IllegalArgumentException("头衔长度不能超过6个汉字");
+        }
+
+        SetGroupSpecialTitleRequestSendParamsData paramsData = SetGroupSpecialTitleRequestSendParamsData
+                .builder()
+                .groupId(groupId)
+                .userId(userId)
+                .specialTitle(specialTitle)
+                .duration(duration)
+                .build();
+        return sendAsync(paramsData, Duration.ZERO, 3, Duration.ofMillis(200));
+    }
+    /**
+     * 提交群头衔变更并等待平台回执，实际限制仍由原业务和发送链执行。
+     *
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @param title 需要提交的群头衔文本
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> setGroupSpecialTitleAsync(long groupId, long userId, String title) {
+        return setGroupSpecialTitleAsync(groupId, userId, title, 0);
     }
 }

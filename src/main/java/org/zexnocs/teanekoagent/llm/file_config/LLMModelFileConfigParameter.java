@@ -1,11 +1,14 @@
 package org.zexnocs.teanekoagent.llm.file_config;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMOptionBoundary;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 
@@ -22,12 +25,13 @@ import java.util.Optional;
  * models:
  *   - id: "deepseek"
  *     model: "deepseek-v4-flash"
- *     api-key: "${DEEPSEEK_API_KEY}"
+ *     max-tokens: 2048
  * }</pre>
  *
  * @author zExNocs
- * @date 2026/06/08
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Getter
 @Setter
@@ -57,21 +61,20 @@ public class LLMModelFileConfigParameter {
     private String model;
 
     /**
-     * 通用 API 配置。
-     * <br>具体含义由模型供应商适配器解释，例如 API endpoint 或 API name。
+     * 旧连接配置，仅用于识别并提示迁移到 Spring application 的 api-path。
      */
     @Nullable
     private String api;
 
     /**
-     * API key。
-     * <br>不会写入代码；模型适配器应从 options metadata 或数据库中读取该值。
+     * 旧密钥字段，仅用于报告迁移错误，不会写入 Options 或导出 JSON。
      */
     @Nullable
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String apiKey;
 
     /**
-     * 供应商 API base URL。
+     * 旧连接地址，仅用于识别并提示迁移到 Spring application 的 base-url。
      */
     @Nullable
     private String baseUrl;
@@ -171,8 +174,20 @@ public class LLMModelFileConfigParameter {
      *
      * @param baseOptions 模型代码中声明的 base options
      * @return 合并后的模型调用参数
+     * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
     public LLMModelOptions toOptions(ILLMModelOptions baseOptions) {
+        if (apiKey != null || api != null || baseUrl != null) {
+            throw new LLMConfigurationException("Move model.yml api-key/api/base-url to Spring application LLM provider configuration.");
+        }
+        LLMOptionBoundary.validateMetadata(metadata);
+        if (metadata != null && metadata.keySet().stream().anyMatch(key ->
+                key != null && switch (key.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "")) {
+                    case "api", "apipath", "baseurl", "endpoint" -> true;
+                    default -> false;
+                })) {
+            throw new LLMConfigurationException("Move model.yml connection metadata to Spring application LLM provider configuration.");
+        }
         var modelId = findModelId();
         var mergedMetadata = new LinkedHashMap<String, Object>();
         if (baseOptions != null) {
@@ -181,9 +196,6 @@ public class LLMModelFileConfigParameter {
         if (metadata != null) {
             mergedMetadata.putAll(metadata);
         }
-        putIfNotBlank(mergedMetadata, "api", api);
-        putIfNotBlank(mergedMetadata, "apiKey", apiKey);
-        putIfNotBlank(mergedMetadata, "baseUrl", baseUrl);
         var overrides = LLMModelOptions.builder()
                 .provider(modelId.map(LLMModelId::id).orElse(blankToNull(provider)))
                 .model(blankToNull(model))
@@ -201,19 +213,6 @@ public class LLMModelFileConfigParameter {
                 .metadata(new LinkedHashMap<>(mergedMetadata))
                 .build();
         return LLMModelOptions.merge(baseOptions, overrides);
-    }
-
-    /**
-     * 当字符串非空时写入 metadata。
-     *
-     * @param metadata metadata 映射
-     * @param key metadata key
-     * @param value metadata value
-     */
-    private static void putIfNotBlank(Map<String, Object> metadata, String key, @Nullable String value) {
-        if (value != null && !value.isBlank()) {
-            metadata.put(key, value);
-        }
     }
 
     /**

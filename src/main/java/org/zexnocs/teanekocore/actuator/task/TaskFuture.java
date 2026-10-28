@@ -6,8 +6,10 @@ import org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeExcepti
 import org.zexnocs.teanekocore.actuator.task.exception.TaskRetryRuntimeException;
 import org.zexnocs.teanekocore.logger.ILogger;
 
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.BiConsumer;
@@ -22,9 +24,11 @@ import java.util.function.Function;
  * {@code finish()}
  * 方法来处理异常
  *
+ * @param <T> 组件值类型
  * @author zExNocs
- * @date 2026/02/11
- *
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 public class TaskFuture<T> {
     /// 共享资源
@@ -40,6 +44,10 @@ public class TaskFuture<T> {
     /**
      * 构造函数，用于初始化 Future 对象。
      * 是 root Future
+     *
+     * @param logger 项目日志接口
+     * @param taskName 用于识别任务的诊断名称
+     * @param future 承载最终结果的根任务
      */
     public TaskFuture(ILogger logger, String taskName, CompletableFuture<T> future) {
         this.future = future;
@@ -48,24 +56,68 @@ public class TaskFuture<T> {
 
     /**
      * 构造函数，用于初始化 Future 对象。
+     *
      * @param future Future 对象
+     * @param state 当前管线执行状态
      */
     private TaskFuture(CompletableFuture<T> future, SharedState state) {
         this.future = future;
         this.state = state;
     }
 
+    /**
+     * 将 JDK 异步完成阶段接入现有任务链，不阻塞，也不提前安装终端日志处理器。
+     * 调用方仍在链尾选择 finish() 或自己的异常处理方式。
+     *
+     * @param logger 项目日志接口
+     * @param taskName 用于识别任务的诊断名称
+     * @param stage 需要观察或组合的完成阶段
+     * @param <T> 本方法约定的泛型数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    public static <T> TaskFuture<T> fromStage(ILogger logger, String taskName, CompletionStage<? extends T> stage) {
+        Objects.requireNonNull(stage, "stage");
+        var future = new CompletableFuture<T>();
+        stage.whenComplete((result, failure) -> {
+            if (failure == null) {
+                future.complete(result);
+            } else {
+                future.completeExceptionally(failure);
+            }
+        });
+        return new TaskFuture<>(logger, taskName, future);
+    }
+
+    /**
+     * 只读完成阶段视图，不调用 finish()，不暴露根 CompletableFuture 的完成能力。
+     * 取消后台操作应通过对应执行控制/任务服务完成，不能依赖取消此视图。
+     *
+     * @return 承载本次异步处理实际结果的可组合完成阶段
+     */
+    public CompletionStage<T> asStage() {
+        return future.minimalCompletionStage();
+    }
+
     // --------- 共享资源管理部分 ---------
 
-    /// 共享的状态对象，用于在 Future 链中共享日志记录和任务名称等信息。
-    ///
-    /// @param logger   日志
-    /// @param taskName 任务名称
+    /**
+     * 共享的状态对象，用于在 Future 链中共享日志记录和任务名称等信息。
+     *
+     * @param logger   日志
+     * @param taskName 任务名称
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
     private record SharedState(ILogger logger, String taskName) {}
 
     /**
      * 手动在 Future 结束时调用，用于处理异常日志等操作。
      * 如果 Future 以异常结束，则会记录错误日志。
+     *
+     * @return 满足本方法约束的 {@code CompletableFuture<T>} 结果
      */
     public CompletableFuture<T> finish() {
         // 判断是否已经完成，防止重复调用 finish() 方法。
@@ -90,6 +142,7 @@ public class TaskFuture<T> {
     /**
      * 手动指定异常处理的 finish 方法，用于自定义异常处理逻辑。
      * 如果 Future 以异常结束，则会调用 exceptionHandler 来处理异常。
+     *
      * @param exceptionHandler 异常处理函数，接受一个 Throwable 参数。
      * @return Future 对象
      */
@@ -112,6 +165,7 @@ public class TaskFuture<T> {
     // --------- Future 管理部分 ---------
     /**
      * 是否已经完成 Future 的执行。
+     *
      * @return 是否已经完成 Future 的执行
      */
     public boolean isDone() {
@@ -120,6 +174,7 @@ public class TaskFuture<T> {
 
     /**
      * 提交 Task 的执行结果。
+     *
      * @param result Task 的执行结果
      * @return 是否成功提交结果，若 Task 已经完成或以异常结束，则返回 false
      */
@@ -129,6 +184,7 @@ public class TaskFuture<T> {
 
     /**
      * 以异常结束 Future 的执行。
+     *
      * @param ex 结束 Task 的异常
      * @return 是否成功以异常结束 Task 的执行，若 Task 已经完成或以异常结束，则返回 false
      */
@@ -136,37 +192,76 @@ public class TaskFuture<T> {
         return future.completeExceptionally(ex);
     }
 
-    /// 包装的 thenApply 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的 thenApply 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param fn 用于本次处理的 {@code fn} 数据
+     * @param <U> 本方法约定的泛型数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public <U> TaskFuture<U> thenApply(Function<? super T, ? extends U> fn) {
         return new TaskFuture<>(future.thenApply(fn), state);
     }
 
-    /// 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
-    public <U> TaskFuture<U> thenCompose(Function<? super T, ? extends CompletableFuture<U>> fn) {
+    /**
+     * 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param fn 用于本次处理的 {@code fn} 数据
+     * @param <U> 本方法约定的泛型数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
+    public <U> TaskFuture<U> thenCompose(Function<? super T, ? extends CompletionStage<U>> fn) {
         return new TaskFuture<>(future.thenCompose(fn), state);
     }
 
-    /// 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的 thenCompose 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param fn 用于本次处理的 {@code fn} 数据
+     * @param <U> 本方法约定的泛型数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public <U> TaskFuture<U> thenComposeTask(Function<? super T, ? extends TaskFuture<U>> fn) {
         return new TaskFuture<>(future.thenCompose(t -> fn.apply(t).getFuture()), state);
     }
 
-    /// 包装的 thenAccept 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的 thenAccept 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param action 需要运行的处理回调
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public TaskFuture<Void> thenAccept(Consumer<? super T> action) {
         return new TaskFuture<>(future.thenAccept(action), state);
     }
 
-    /// 包装的异常处理方法，用于在 Future 上注册异常处理函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的异常处理方法，用于在 Future 上注册异常处理函数，并返回新的 TaskFuture 对象。
+     *
+     * @param fn 用于本次处理的 {@code fn} 数据
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public TaskFuture<T> exceptionally(Function<Throwable, ? extends T> fn) {
         return new TaskFuture<>(future.exceptionally(fn), state);
     }
 
-    /// 包装的 handle 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的 handle 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param fn 用于本次处理的 {@code fn} 数据
+     * @param <U> 本方法约定的泛型数据类型
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public <U> TaskFuture<U> handle(BiFunction<? super T, Throwable, ? extends U> fn) {
         return new TaskFuture<>(future.handle(fn), state);
     }
 
-    /// 包装的 whenComplete 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+    /**
+     * 包装的 whenComplete 方法，用于在 Future 上注册回调函数，并返回新的 TaskFuture 对象。
+     *
+     * @param action 需要运行的处理回调
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     */
     public TaskFuture<T> whenComplete(BiConsumer<? super T, ? super Throwable> action) {
         return new TaskFuture<>(future.whenComplete(action), state);
     }
@@ -174,6 +269,7 @@ public class TaskFuture<T> {
     // ----------- 其他方法 ---------------
     /**
      * 将异常从 CompletionException 或 ExecutionException 中解包。
+     *
      * @param t 需要解包的异常。
      * @return 解包后的异常
      */

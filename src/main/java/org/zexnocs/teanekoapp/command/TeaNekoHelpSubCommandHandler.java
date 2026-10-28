@@ -14,12 +14,16 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import java.util.Collections;
 import java.util.Optional;
 import java.util.StringJoiner;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * TeaNeko 的帮助子指令处理器，
  *
  * @author zExNocs
- * @date 2026/02/26
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Service
 public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
@@ -35,6 +39,14 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
     /// 指令作用域管理器
     private final ICommandScopeManager iCommandScopeManager;
 
+    /**
+     * 装配子命令帮助所需的元数据、权限与作用域查询，不在帮助中绕过原校验。
+     *
+     * @param logger 项目日志接口
+     * @param commandDescriptionScanner 由装配方提供的 {@code CommandDescriptionScanner} 协作依赖
+     * @param iCommandPermissionManager 本次装配使用的 {@code ICommandPermissionManager} 服务
+     * @param iCommandScopeManager 本次装配使用的 {@code ICommandScopeManager} 服务
+     */
     @Autowired
     public TeaNekoHelpSubCommandHandler(ILogger logger,
                                         CommandDescriptionScanner commandDescriptionScanner,
@@ -52,16 +64,17 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
      * @param commandData 指令数据
      * @param mapData     指令映射数据
      * @param args        剩下的指令参数
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
     @Override
-    public void handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args) {
+    public CompletionStage<Void> handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args) {
         ITeaNekoMessageData data;
         try{
             data = (ITeaNekoMessageData) commandData.getRawData();
         } catch (ClassCastException e) {
             logger.errorWithReport("OneBotHelpSubCommandHandler",
                     "该指令的 rawData 不是 MessageReceiveData 类型，无法处理帮助指令", e);
-            return;
+            return CompletableFuture.completedStage(null);
         }
         // 处理帮助指令
         var messageSender = data.getClient()
@@ -74,8 +87,7 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
                 (descriptionData.getCommandDescription() == null &&
                  descriptionData.getSubCommandDescriptionMap().isEmpty() &&
                  descriptionData.getDefaultCommandDescription() == null)) {
-            messageSender.addReplyTextMessage("该指令没有帮助信息").send();
-            return;
+            return messageSender.addReplyTextMessage("该指令没有帮助信息").sendAsync();
         }
         var builder = data.getClient().getTeaNekoToolbox().getMessageSenderTools().getForwardBuilder(data);
         StringBuilder mainTitle = new StringBuilder();
@@ -152,6 +164,6 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
         }
 
         // 发送
-        builder.send();
+        return builder.sendAsync();
     }
 }

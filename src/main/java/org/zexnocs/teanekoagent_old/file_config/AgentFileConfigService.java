@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent_old.file_config;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.file_config.AgentMainFileConfig;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService;
 import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundException;
@@ -14,8 +15,9 @@ import java.util.Optional;
  * <br>负责从 TeaNeko Core 文件配置系统中读取 agent 运行时配置，并在配置缺失时提供默认值。
  *
  * @author zExNocs
- * @date 2026/06/11
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor

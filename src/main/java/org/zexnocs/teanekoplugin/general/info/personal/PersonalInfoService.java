@@ -8,13 +8,16 @@ import org.zexnocs.teanekoplugin.general.info.InfoService;
 
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 个人简介服务类，提供获取和设置个人简介信息的功能。
  *
  * @author zExNocs
- * @date 2026/03/07
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Service
 public class PersonalInfoService {
@@ -24,6 +27,8 @@ public class PersonalInfoService {
 
     /**
      * 获取个人介绍信息
+     *
+     * @param uuid 用于本次处理的 {@code uuid} 数据
      * @return 个人介绍信息
      */
     public String getPersonInfo(UUID uuid) {
@@ -37,14 +42,15 @@ public class PersonalInfoService {
 
     /**
      * 设置个人介绍信息
+     *
      * @param teaUser 用户
      * @param personalInfo 个人介绍信息
-     * @return 设置结果
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
-    public String setPersonInfo(UUID teaUser, String personalInfo) {
+    public CompletionStage<String> setPersonInfo(UUID teaUser, String personalInfo) {
         // 判断个人介绍信息长度
         if (personalInfo.length() > MAXIMUM_LENGTH) {
-            return "个人介绍信息过长，最大长度为" + MAXIMUM_LENGTH + "个字符";
+            return CompletableFuture.completedStage("个人介绍信息过长，最大长度为" + MAXIMUM_LENGTH + "个字符");
         }
         var util = ChinaDateUtil.Instance;
         var dto = GeneralEasyData.of(InfoService.INFO_NAMESPACE).get(teaUser.toString());
@@ -59,7 +65,6 @@ public class PersonalInfoService {
         var debugTask = debugData.getTaskConfig("记录个人介绍信息");
         debugTask.set(util.convertToString(currentDate), personalInfo);
         task.merge(debugTask);
-        task.push();
-        return "个人介绍信息设置成功喵~";
+        return task.pushAsync().thenApply(ignored -> "个人介绍信息设置成功喵~");
     }
 }

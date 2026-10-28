@@ -3,7 +3,7 @@ package org.zexnocs.teanekocore.command;
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.command.event.CommandDispatchEvent;
@@ -14,17 +14,20 @@ import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.lang.reflect.Method;
+import java.util.Arrays;
+import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
+import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
 
 /**
- * 指令总调度器。
- * 1. 寻找是否存在指令
- * 2. 判断指令是否有权限
- * 3. 判断指令作用域
- * 4. 执行指令
+ * 复用原事件、参数、作用域和权限链，返回等待反馈及业务完成的分发结果。
  *
  * @author zExNocs
- * @date 2025/04/25
+ * @date 2026/10/28
  * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -38,252 +41,191 @@ public class CommandDispatcher implements ICommandDispatcher {
     private final IEventService iEventService;
 
     /**
-     * 指令调度器，先推送事件
+     * 经过分发事件链匹配命令，并等待处理方法及反馈完成；取消、拒绝和未匹配也产生可观察回执。
      *
-     * @param data 指令数据
-     * @param errorHandler 错误处理器
-     * @param helpSubCommandHandler 帮助子指令处理器
+     * @param data 本次处理的输入数据
+     * @param errorHandler 参数、权限和作用域拒绝的反馈处理器
+     * @param helpHandler 帮助反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
      */
     @Override
-    public void dispatch(@NonNull CommandData<?> data, ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpSubCommandHandler) {
-        // 推送事件
-        iEventService.pushEvent(new CommandDispatchEvent(this, data, errorHandler, helpSubCommandHandler));
+    public CompletionStage<CommandResult> dispatch(@NonNull CommandData<?> data,
+            ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpHandler) {
+        try {
+            var event = new CommandDispatchEvent(this, data, errorHandler, helpHandler);
+            return TaskStages.successful(iEventService.pushEventWithFuture(event), "命令分发事件")
+                    .thenCompose(ignored -> {
+                        if (event.getCompletion() != null) return event.getCompletion();
+                        if (event.isCancelled()) return result(CANCELLED);
+                        return CompletableFuture.failedStage(new IllegalStateException("Dispatch event did not dispatch"));
+                    });
+        } catch (Exception e) {
+            return CompletableFuture.failedStage(e);
+        }
     }
 
     /**
-     * 实际调度方法，在事件中执行
+     * 仅供 CommandDispatchEvent 在同步监听器完成后调用。
      *
+     * @param data 本次处理的输入数据
+     * @param errors 命令错误反馈处理器
+     * @param help 帮助反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
      */
-    public void __dispatchForEvent(@NonNull CommandData<?> data, ICommandErrorHandler errorHandler, IHelpSubCommandHandler helpSubCommandHandler) {
-        var commandBody = data.getBody();
-        // 首先尝试解析成前缀指令
-        var prefixMapData = commandScanner.getPrefixCommand(commandBody);
-        if(prefixMapData != null) {
-            // 判断指令是否关闭
-            if(prefixMapData.getCommandAnnotation().enable()) {
-                __handlePrefixCommand(data, prefixMapData, errorHandler, helpSubCommandHandler);
-            } else {
-                errorHandler.handleCommandClosed(data);
-            }
-            return;
+    public CompletionStage<CommandResult> __dispatchForEvent(@NonNull CommandData<?> data,
+            ICommandErrorHandler errors, IHelpSubCommandHandler help) {
+        var prefix = commandScanner.getPrefixCommand(data.getBody());
+        if (prefix != null) {
+            return prefix.getCommandAnnotation().enable()
+                    ? handlePrefix(data, prefix, errors, help)
+                    : feedback(errors.handleCommandClosed(data), DISABLED);
         }
-        // 尝试解析成正则指令
-        var sb = new StringBuilder();
-        sb.append(commandBody);
-        for(var arg: data.getArgs()) {
-            sb.append(" ").append(arg);
+        var args = data.getArgs() == null ? new String[0] : data.getArgs();
+        var body = data.getBody() + (args.length == 0 ? "" : " " + String.join(" ", args));
+        for (var key : commandScanner.getRegexpCommandKeys()) {
+            if (!body.matches(key)) continue;
+            var map = commandScanner.getRegexpCommand(key);
+            if (map == null) continue;
+            return map.getCommandAnnotation().enable()
+                    ? handleRegex(data, map, errors)
+                    : feedback(errors.handleCommandClosed(data), DISABLED);
         }
-        var regexpBody = sb.toString();
-        var regexpKeySet = commandScanner.getRegexpCommandKeys();
-        for(var key: regexpKeySet) {
-            if(regexpBody.matches(key)) {
-                var regexpMapData = commandScanner.getRegexpCommand(key);
-                if (regexpMapData == null) {
-                    // 理论上不应该发生，说明在获取正则指令时发生了问题，直接跳过
-                    continue;
-                }
-                if(regexpMapData.getCommandAnnotation().enable()) {
-                    __handleRegexpCommand(data, regexpMapData, errorHandler);
-                } else {
-                    errorHandler.handleCommandClosed(data);
-                }
-                return;
-            }
-        }
-    }
-
-
-    // -------------- 前缀指令处理 --------------
-    /**
-     * 处理前缀指令。
-     * @param data 指令输入数据
-     * @param mapData 指令匹配映射数据
-     * @param errorHandler 错误处理器
-     */
-    private void __handlePrefixCommand(@NonNull CommandData<?> data,
-                                       CommandMapData mapData,
-                                       ICommandErrorHandler errorHandler,
-                                       IHelpSubCommandHandler helpSubCommandHandler) {
-        var args = data.getArgs();
-        // 尝试解析成 sub command
-        if(args != null && args.length > 0) {
-            // 首先判断是不是 help 子指令
-            var helpSubCommandKey = helpSubCommandHandler.getHelpCommandKey();
-            for(var key: helpSubCommandKey) {
-                if(args[0].equalsIgnoreCase(key)) {
-                    var newArgs = new String[args.length - 1];
-                    System.arraycopy(args, 1, newArgs, 0, args.length - 1);
-                    helpSubCommandHandler.handleSubHelp(data, mapData, newArgs);
-                    return;
-                }
-            }
-            // 否则尝试解析成其他子指令
-            var subCommandMethodPair = mapData.getSubCommand(args[0]);
-            if(subCommandMethodPair != null) {
-                var newArgs = new String[args.length - 1];
-                System.arraycopy(args, 1, newArgs, 0, args.length - 1);
-                Object[] processedArgs;
-                try {
-                    processedArgs = argumentProcessor.process(subCommandMethodPair.getSecond(), newArgs, data);
-                } catch (CommandDataTypeMismatchException ignore) {
-                    // 如果参数类型不匹配，说明是子类数据获得了父类数据，正常现象，直接跳过
-                    return;
-                }
-                if(processedArgs == null) {
-                    errorHandler.handleArgsError(data);
-                } else {
-                    __handleSubCommand(data, mapData, errorHandler,
-                            subCommandMethodPair.getFirst(),
-                            subCommandMethodPair.getSecond(),
-                            processedArgs);
-                }
-                return;
-            }
-        }
-        // 尝试解析成 default command
-        var defaultCommandMethod = mapData.getDefaultCommandMethod();
-        var defaultCommand = mapData.getDefaultCommandAnnotation();
-        if(defaultCommandMethod != null && defaultCommand != null) {
-            Object[] processedArgs;
-            try {
-                processedArgs = argumentProcessor.process(defaultCommandMethod, args, data);
-            } catch (CommandDataTypeMismatchException ignore) {
-                // 如果参数类型不匹配，说明是子类数据获得了父类数据，正常现象，直接跳过
-                return;
-            }
-            if(processedArgs == null) {
-                errorHandler.handleArgsError(data);
-            } else {
-                __handleDefaultCommand(data, mapData, errorHandler,
-                        defaultCommand,
-                        defaultCommandMethod,
-                        processedArgs);
-            }
-            return;
-        }
-
-        // 否则处理为指令未找到
-        errorHandler.handleMethodNotFound(data);
-    }
-
-    // -------------- 正则指令处理 --------------
-    /**
-     * 处理正则指令。
-     * @param data 指令输入数据
-     * @param mapData 指令匹配映射数据
-     * @param errorHandler 错误处理器
-     */
-    private void __handleRegexpCommand(@NonNull CommandData<?> data, CommandMapData mapData, ICommandErrorHandler errorHandler) {
-        // 前缀指令只能使用默认指令，并且默认指令的参数要么为空，要么为 CommandData<?> 类型
-        var defaultCommandMethod = mapData.getDefaultCommandMethod();
-        var defaultCommand = mapData.getDefaultCommandAnnotation();
-        if(defaultCommandMethod == null || defaultCommand == null) {
-            errorHandler.handleMethodNotFound(data);
-            return;
-        }
-        // 处理参数
-        var parameterTypes = defaultCommandMethod.getParameterTypes();
-        if(parameterTypes.length == 0) {
-            __handleDefaultCommand(data, mapData, errorHandler, defaultCommand, defaultCommandMethod, new Object[0]);
-        } else if (parameterTypes.length == 1 && parameterTypes[0] == CommandData.class) {
-            __handleDefaultCommand(data, mapData, errorHandler, defaultCommand, defaultCommandMethod, new Object[]{data});
-        } else {
-            logger.errorWithReport("CommandDispatcher",
-                    "正则指令参数错误，要么没有参数，要么参数为 CommandData<?> 类型。指令：" + mapData.getCommand(),
-                    new IllegalArgumentException("正则指令错误。"));
-        }
-    }
-
-
-    // -------------- 指令具体处理 --------------
-    /**
-     * 处理子指令。
-     * @param data 指令输入数据
-     * @param mapData 指令匹配映射数据
-     * @param errorHandler 错误处理器
-     * @param subCommand  子指令注解
-     * @param commandMethod 子指令方法
-     * @param args 参数
-     */
-    private void __handleSubCommand(@NonNull CommandData<?> data,
-                                    CommandMapData mapData,
-                                    ICommandErrorHandler errorHandler,
-                                    SubCommand subCommand,
-                                    Method commandMethod,
-                                    Object[] args) {
-        var commandAnnotation = mapData.getCommandAnnotation();
-        // 判断指令作用域
-        if(!scopeManager.inScope(commandAnnotation, subCommand, data)) {
-            errorHandler.handleNotInScope(data);
-            return;
-        }
-
-        // 判断指令是否有权限
-        if(!permissionManager.hasPermission(commandAnnotation, subCommand, data)) {
-            errorHandler.handleNoPermission(data);
-            return;
-        }
-        // 执行指令
-        iEventService.pushEvent(new CommandExecuteEvent(
-                commandExecutor,
-                data,
-                mapData,
-                subCommand.value()[0],
-                commandMethod,
-                args
-        ));
-
-        logger.info(this.getClass().getName(), """
-                执行指令 %s 中子指令 %s, 执行ID: %s, 权限: %s / %s"""
-                .formatted(data.getBody(), subCommand.value()[0],
-                        data.getSenderId(),
-                        data.getPermission(),
-                        subCommand.permission().equals(CommandPermission.DEFAULT) ?
-                                mapData.getCommandAnnotation().permission() : subCommand.permission()));
+        return result(NOT_MATCHED);
     }
 
     /**
-     * 处理默认指令。
-     * @param data 指令输入数据
-     * @param mapData 指令匹配映射数据
-     * @param errorHandler 错误处理器
-     * @param defaultCommand 默认指令注解
-     * @param commandMethod 默认指令方法
-     * @param args 参数
+     * 按帮助、子命令、默认方法的优先级选择入口，保留原始可信命令数据及剩余参数。
+     *
+     * @param data 本次处理的输入数据
+     * @param map 按当前操作语义定位的输入映射
+     * @param errors 命令错误反馈处理器
+     * @param help 帮助反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
      */
-    private void __handleDefaultCommand(@NonNull CommandData<?> data,
-                                        CommandMapData mapData,
-                                        ICommandErrorHandler errorHandler,
-                                        DefaultCommand defaultCommand,
-                                        Method commandMethod,
-                                        Object[] args) {
-        var commandAnnotation = mapData.getCommandAnnotation();
-        // 判断指令作用域
-        if(!scopeManager.inScope(commandAnnotation, defaultCommand, data)) {
-            errorHandler.handleNotInScope(data);
-            return;
+    private CompletionStage<CommandResult> handlePrefix(CommandData<?> data, CommandMapData map,
+            ICommandErrorHandler errors, IHelpSubCommandHandler help) {
+        var args = data.getArgs() == null ? new String[0] : data.getArgs();
+        if (args.length > 0) {
+            for (var key : help.getHelpCommandKey()) {
+                if (args[0].equalsIgnoreCase(key)) {
+                    return feedback(help.handleSubHelp(data, map, Arrays.copyOfRange(args, 1, args.length)), HELP);
+                }
+            }
+            var sub = map.getSubCommand(args[0]);
+            if (sub != null) {
+                return processAndExecute(data, map, sub.getSecond(), sub.getFirst(),
+                        Arrays.copyOfRange(args, 1, args.length), errors);
+            }
         }
-        // 判断指令是否有权限
-        if(!permissionManager.hasPermission(commandAnnotation, defaultCommand, data)) {
-            errorHandler.handleNoPermission(data);
-            return;
+        var method = map.getDefaultCommandMethod();
+        if (method == null || map.getDefaultCommandAnnotation() == null) {
+            return feedback(errors.handleMethodNotFound(data), METHOD_NOT_FOUND);
         }
-        // 执行指令
-        iEventService.pushEvent(new CommandExecuteEvent(
-                commandExecutor,
-                data,
-                mapData,
-                null,
-                commandMethod,
-                args
-        ));
+        return processAndExecute(data, map, method, null, args, errors);
+    }
 
-        logger.info(this.getClass().getName(), """
-                执行指令 %s 中默认指令, 执行ID: %s, 权限: %s / %s"""
-                .formatted(data.getBody(),
-                        data.getSenderId(),
-                        data.getPermission(),
-                        defaultCommand.permission().equals(CommandPermission.DEFAULT) ?
-                                mapData.getCommandAnnotation().permission() : defaultCommand.permission()));
+    /**
+     * 完成参数绑定后进入原执行链；类型不适用和参数错误按各自状态结束，错误反馈亦被等待。
+     *
+     * @param data 本次处理的输入数据
+     * @param map 按当前操作语义定位的输入映射
+     * @param method 已选定的目标方法
+     * @param sub 匹配到的子命令声明；默认命令可为空
+     * @param args 待绑定的命令参数
+     * @param errors 命令错误反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
+     */
+    private CompletionStage<CommandResult> processAndExecute(CommandData<?> data, CommandMapData map,
+            Method method, SubCommand sub, String[] args, ICommandErrorHandler errors) {
+        final Object[] processed;
+        try {
+            processed = argumentProcessor.process(method, args, data);
+        } catch (CommandDataTypeMismatchException ignored) {
+            return result(DATA_TYPE_MISMATCH);
+        }
+        if (processed == null) return feedback(errors.handleArgsError(data), INVALID_ARGUMENTS);
+        return execute(data, map, method, sub, processed, errors);
+    }
+
+    /**
+     * 处理正则命令的既有参数形式，拒绝不支持的签名，不绕过执行阶段的权限和事件检查。
+     *
+     * @param data 本次处理的输入数据
+     * @param map 按当前操作语义定位的输入映射
+     * @param errors 命令错误反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
+     */
+    private CompletionStage<CommandResult> handleRegex(CommandData<?> data, CommandMapData map,
+            ICommandErrorHandler errors) {
+        var method = map.getDefaultCommandMethod();
+        if (method == null || map.getDefaultCommandAnnotation() == null) {
+            return feedback(errors.handleMethodNotFound(data), METHOD_NOT_FOUND);
+        }
+        var parameters = method.getParameterTypes();
+        if (parameters.length == 0) return execute(data, map, method, null, new Object[0], errors);
+        if (parameters.length == 1 && parameters[0] == CommandData.class) {
+            return execute(data, map, method, null, new Object[]{data}, errors);
+        }
+        logger.errorWithReport("CommandDispatcher", "正则指令参数错误：" + map.getCommand(),
+                new IllegalArgumentException("正则指令只支持无参或单个 CommandData 参数"));
+        return result(INVALID_ARGUMENTS);
+    }
+
+    /**
+     * 在原客户端、作用域、权限和事件链中执行已绑定方法，拒绝反馈与业务完成共同构成回执。
+     *
+     * @param data 本次处理的输入数据
+     * @param map 按当前操作语义定位的输入映射
+     * @param method 已选定的目标方法
+     * @param sub 匹配到的子命令声明；默认命令可为空
+     * @param args 待绑定的命令参数
+     * @param errors 命令错误反馈处理器
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
+     */
+    private CompletionStage<CommandResult> execute(CommandData<?> data, CommandMapData map, Method method,
+            SubCommand sub, Object[] args, ICommandErrorHandler errors) {
+        var command = map.getCommandAnnotation();
+        DefaultCommand defaults = map.getDefaultCommandAnnotation();
+        boolean inScope = sub == null ? scopeManager.inScope(command, defaults, data)
+                : scopeManager.inScope(command, sub, data);
+        if (!inScope) return feedback(errors.handleNotInScope(data), OUT_OF_SCOPE);
+        boolean permitted = sub == null ? permissionManager.hasPermission(command, defaults, data)
+                : permissionManager.hasPermission(command, sub, data);
+        if (!permitted) return feedback(errors.handleNoPermission(data), PERMISSION_DENIED);
+        var event = new CommandExecuteEvent(commandExecutor, data, map,
+                sub == null ? null : sub.value()[0], method, args);
+        logger.info(getClass().getName(), "提交指令 %s，方法 %s，发送者 %s，权限 %s"
+                .formatted(data.getBody(), method.getName(), data.getSenderId(), data.getPermission()));
+        return TaskStages.successful(iEventService.pushEventWithFuture(event), "命令执行事件")
+                .thenCompose(ignored -> {
+                    if (event.getCompletion() != null) {
+                        return event.getCompletion().thenApply(value -> new CommandResult(COMPLETED, value));
+                    }
+                    if (event.isCancelled()) return result(CANCELLED);
+                    return CompletableFuture.failedStage(new IllegalStateException("Execute event did not execute"));
+                });
+    }
+
+    /**
+     * 为无需执行处理方法的分支创建已完成回执，保证所有分发路径均能结束。
+     *
+     * @param status 本次处理的终止状态
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
+     */
+    private static CompletionStage<CommandResult> result(CommandResult.Status status) {
+        return CompletableFuture.completedStage(CommandResult.of(status));
+    }
+
+    /**
+     * 等待帮助或错误反馈结束后生成对应回执；发送失败继续向调用方传播。
+     *
+     * @param stage 需要观察或组合的完成阶段
+     * @param status 本次处理的终止状态
+     * @return 包含分发状态与实际处理结果的完成阶段；反馈或业务失败以异常完成
+     * @throws NullPointerException 当必需的输入或依赖为空时
+     */
+    private static CompletionStage<CommandResult> feedback(CompletionStage<?> stage, CommandResult.Status status) {
+        return Objects.requireNonNull(stage, "Command feedback returned no stage")
+                .thenApply(ignored -> CommandResult.of(status));
     }
 }

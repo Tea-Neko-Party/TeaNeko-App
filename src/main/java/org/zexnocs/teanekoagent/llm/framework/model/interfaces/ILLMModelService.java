@@ -6,6 +6,7 @@ import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
 import java.util.List;
@@ -16,8 +17,9 @@ import java.util.Map;
  * <br>用于查询已注册模型适配器，并统一发起模型调用。
  *
  * @author zExNocs
- * @date 2026/05/15
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 public interface ILLMModelService {
     /**
@@ -43,6 +45,18 @@ public interface ILLMModelService {
      * @return 合并后的默认 options
      */
     LLMModelOptions getDefaultOptions(LLMModelId modelId);
+
+    /**
+     * 解析并校验本次有效模型参数，不发起模型请求、不消耗调用次数。
+     * token 预算通过此入口取得真实本地输出上限，不能猜测模型默认值。
+     *
+     * @param prompt 本次固定消息及参数覆盖
+     * @return 路由、模型和文件默认值合并后的参数副本
+     * @throws UnsupportedOperationException 当实现尚未提供预算预检能力时
+     */
+    default LLMModelOptions resolveOptions(ILLMPrompt prompt) {
+        throw new UnsupportedOperationException("模型服务尚未提供有效参数预检能力。");
+    }
 
     /**
      * 根据模型适配器 ID 获取已注册的大语言模型实例。
@@ -88,6 +102,31 @@ public interface ILLMModelService {
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
     TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt);
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param modelId 模型适配器注册标识
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws UnsupportedOperationException 当该入口或适配器尚不支持请求的执行方式时
+     */
+    default TaskFuture<ILLMResult> call(LLMModelId modelId, ILLMPrompt prompt, ExecutionPolicy execution) {
+        throw new UnsupportedOperationException("LLM model service does not support execution policies.");
+    }
+
+    /**
+     * 校验有效输入并提交一次模型请求，显式策略向实际 HTTP 资源传递；不在此入口执行工具循环或自动重试。
+     *
+     * @param prompt 经过宿主装配的消息与本次模型选项
+     * @param execution 显式阶段策略，包含可选时限和借用执行控制
+     * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
+     * @throws UnsupportedOperationException 当该入口或适配器尚不支持请求的执行方式时
+     */
+    default TaskFuture<ILLMResult> call(ILLMPrompt prompt, ExecutionPolicy execution) {
+        throw new UnsupportedOperationException("LLM model service does not support execution policies.");
+    }
 
     /**
      * 使用默认模型适配器执行一次大语言模型调用。

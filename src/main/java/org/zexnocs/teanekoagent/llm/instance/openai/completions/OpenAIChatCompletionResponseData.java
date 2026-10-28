@@ -13,8 +13,9 @@ import java.util.Map;
  * OpenAI Chat Completions 兼容响应数据。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @Getter
 @Setter
@@ -67,8 +68,9 @@ public class OpenAIChatCompletionResponseData implements IAPIResponseData {
      * Chat Completions assistant 消息。
      *
      * @author zExNocs
-     * @date 2026/06/10
+     * @date 2026/10/28
      * @since 4.4.1
+     * @version 4.5.0-l
      */
     @Getter
     @Setter
@@ -82,6 +84,9 @@ public class OpenAIChatCompletionResponseData implements IAPIResponseData {
 
         /** 最终回答文本。 */
         private String content;
+
+        /** 供应商显式拒绝说明，空字符串仍保留拒绝语义。 */
+        private String refusal;
 
         /** 兼容供应商返回的推理内容。 */
         @JsonProperty("reasoning_content")

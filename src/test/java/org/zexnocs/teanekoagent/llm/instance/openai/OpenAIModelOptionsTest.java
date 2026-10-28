@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIModelOptions;
 import org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesModel;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
@@ -15,8 +16,9 @@ import java.util.Map;
  * OpenAI 模型参数与能力声明测试。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class OpenAIModelOptionsTest {
     /**
@@ -52,7 +54,7 @@ class OpenAIModelOptionsTest {
      */
     @Test
     void rejectsUnsupportedResponsesOptions() {
-        var model = new OpenAIResponsesModel(Mockito.mock(IAPIResponseService.class));
+        var model = new OpenAIResponsesModel(Mockito.mock(IAPIResponseService.class), Mockito.mock(ICredentialResolver.class));
 
         Assertions.assertTrue(model.supports(OpenAIModelOptions.baseOptions()));
         Assertions.assertFalse(model.supports(LLMModelOptions.builder()

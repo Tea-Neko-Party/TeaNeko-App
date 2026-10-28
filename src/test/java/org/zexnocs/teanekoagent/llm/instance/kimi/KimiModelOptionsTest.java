@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 
 import java.util.List;
@@ -13,8 +14,9 @@ import java.util.Map;
  * Kimi 模型参数和能力声明测试。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 class KimiModelOptionsTest {
     /**
@@ -46,7 +48,7 @@ class KimiModelOptionsTest {
      */
     @Test
     void validatesKimiModelSpecificOptions() {
-        var model = new KimiChatModel(Mockito.mock(IAPIResponseService.class));
+        var model = new KimiChatModel(Mockito.mock(IAPIResponseService.class), Mockito.mock(ICredentialResolver.class));
 
         Assertions.assertTrue(model.supports(KimiModelOptions.baseOptions()));
         Assertions.assertFalse(model.supports(LLMModelOptions.builder()

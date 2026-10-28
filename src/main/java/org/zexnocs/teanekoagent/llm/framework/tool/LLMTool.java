@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.llm.framework.tool;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolExecutor;
@@ -11,8 +12,9 @@ import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolExecutor;
  * <br>包含工具描述、参数 schema、严格模式和本地执行器。
  *
  * @author zExNocs
- * @date 2026/03/30
+ * @date 2026/10/28
  * @since 4.4.0
+ * @version 4.5.0-l
  */
 @Getter
 @Setter
@@ -72,6 +74,10 @@ public class LLMTool implements ILLMTool {
      */
     @JsonIgnore
     private ILLMToolExecutor executor;
+
+    /** 异步/可信上下文执行入口；绑定时优先使用，不进入模型定义 JSON。 */
+    @JsonIgnore
+    private IContextualToolExecutor contextualExecutor;
 
     /**
      * 创建 Function Tool。
@@ -134,6 +140,9 @@ public class LLMTool implements ILLMTool {
      */
     @Override
     public String call(String arguments) throws Exception {
+        if (contextualExecutor != null) {
+            throw new UnsupportedOperationException("Contextual tools require a trusted tool binding.");
+        }
         if (executor == null) {
             throw new UnsupportedOperationException("Tool executor is not configured: " + name);
         }

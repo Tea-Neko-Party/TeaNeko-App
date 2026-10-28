@@ -9,13 +9,15 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 茶猫帮助指令。
  *
  * @author zExNocs
- * @date 2026/02/28
+ * @date 2026/10/28
  * @since 4.0.11
+ * @version 4.5.0-l
  */
 @Command(value = {"/help"},
         scope = CommandScope.ALL,
@@ -26,6 +28,13 @@ public class TeaNekoHelpCommand {
     private final ICommandPermissionManager commandPermissionManager;
     private final ICommandScopeManager commandScopeManager;
 
+    /**
+     * 组合命令说明、权限和作用域服务，帮助内容只展示当前调用者实际可见的入口。
+     *
+     * @param commandDescriptionScanner 由装配方提供的 {@code CommandDescriptionScanner} 协作依赖
+     * @param commandPermissionManager 由装配方提供的 {@code ICommandPermissionManager} 协作依赖
+     * @param commandScopeManager 由装配方提供的 {@code ICommandScopeManager} 协作依赖
+     */
     public TeaNekoHelpCommand(CommandDescriptionScanner commandDescriptionScanner,
                               ICommandPermissionManager commandPermissionManager,
                               ICommandScopeManager commandScopeManager) {
@@ -34,8 +43,15 @@ public class TeaNekoHelpCommand {
         this.commandScopeManager = commandScopeManager;
     }
 
+    /**
+     * 按当前作用域和调用者权限筛选可见帮助，分页发送并等待全部展示完成。
+     *
+     * @param commandData 含可信来源和操作者的命令数据
+     * @param index 目标项索引或展示页码，按当前入口约定解释
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
     @DefaultCommand
-    public void help(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("1") int index) {
+    public CompletionStage<Void> help(CommandData<ITeaNekoMessageData> commandData, @DefaultValue("1") int index) {
         int MAX_NUMBER_PER_PAGE = 10;
         var data = commandData.getRawData();
         var messageSender = data.getClient().getTeaNekoToolbox().getMessageSenderTools()
@@ -50,9 +66,8 @@ public class TeaNekoHelpCommand {
         // 获取总页数
         int totalPage = (int) Math.ceil((double) sortedKeys.size() / MAX_NUMBER_PER_PAGE);
         // 判断当前页数是否超过总页数
-        if (index > totalPage) {
-            messageSender.addAtReplyTextMessage("当前页数超过总页数。页数范围为[1," + totalPage + "]").send();
-            return;
+        if (index < 1 || index > totalPage) {
+            return messageSender.addAtReplyTextMessage("当前页数超过总页数。页数范围为[1," + totalPage + "]").sendAsync();
         }
         // 获取当前页数的指令
         int startIndex = (index - 1) * MAX_NUMBER_PER_PAGE;
@@ -84,6 +99,6 @@ public class TeaNekoHelpCommand {
             builder.addBotText("输入 /help " + (index + 1) + " 查看下一页");
         }
         // 发送
-        builder.send();
+        return builder.sendAsync();
     }
 }

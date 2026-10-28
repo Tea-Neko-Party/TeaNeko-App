@@ -12,13 +12,15 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 踢出群成员发送器
  *
  * @author zExNocs
- * @date 2026/03/04
+ * @date 2026/10/28
  * @since 4.0.12
+ * @version 4.5.0-l
  */
 @SuppressWarnings("rawtypes")
 @Component("GroupKickSender")
@@ -82,5 +84,53 @@ public class GroupKickSender extends AbstractOnebotSender<GroupKickSendParamsDat
     @Override
     public void kick(String groupId, String userId) {
         kick(Long.parseLong(groupId), Long.parseLong(userId));
+    }
+
+    /**
+     * 通过原平台发送链移出指定成员，等待实际平台回执，不以任务提交冒充完成。
+     *
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> kickAsync(long groupId, long userId) {
+        return sendAsync(GroupKickSendParamsData.builder()
+                    .groupId(groupId)
+                    .userId(userId)
+                    .rejectAddRequest(false)
+                    .build(),
+            Duration.ZERO,
+            3,
+            Duration.ofMillis(200));
+    }
+
+    /**
+     * 按原平台规则移出成员并拒绝再次加群，等待该动作的最终回执。
+     *
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> kickRejectAsync(long groupId, long userId) {
+        return sendAsync(GroupKickSendParamsData.builder()
+                    .groupId(groupId)
+                    .userId(userId)
+                    .rejectAddRequest(true)
+                    .build(),
+            Duration.ZERO,
+            3,
+            Duration.ofMillis(200));
+    }
+
+    /**
+     * 通过原平台发送链移出指定成员，等待实际平台回执，不以任务提交冒充完成。
+     *
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    @Override
+    public CompletionStage<Void> kickAsync(String groupId, String userId) {
+        return kickAsync(Long.parseLong(groupId), Long.parseLong(userId));
     }
 }

@@ -15,15 +15,18 @@ import java.util.Optional;
  * 配置数据服务接口，提供获取、注册、注销和修改配置数据的方法。
  *
  * @author zExNocs
- * @date 2026/02/16
+ * @date 2026/10/28
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
-public interface IConfigDataService {
+public interface IConfigDataService extends IConfigDataRegisterService, IConfigDataSetService {
     /**
      * 根据 key 获取对应 manager 的配置数据。
      *
      * @param configManager 配置管理器，需要实现 {@link ConfigManager} 注解
      * @param configClass   配置类
-     * @param key           config key
+     * @param key 定位目标数据的键
+     * @param <T> 本方法约定的泛型数据类型
      * @return 配置数据
      * @throws IllegalArgumentException 如果规则注解中的配置类为空
      */
@@ -40,7 +43,8 @@ public interface IConfigDataService {
      *
      * @param configManager 配置管理器，需要实现 {@link ConfigManager} 注解
      * @param configClass   配置类
-     * @param key           config key
+     * @param key 定位目标数据的键
+     * @param <T> 本方法约定的泛型数据类型
      * @return 配置数据
      * @throws IllegalArgumentException 如果规则注解中的配置类为空
      */
@@ -51,8 +55,8 @@ public interface IConfigDataService {
     /**
      * 获取注册该 config 的所有 key
      *
-     * @param configManager manager
-     * @return key
+     * @param configManager 目标配置管理器声明
+     * @return 当前管理器已登记的配置键集合
      * @throws IllegalArgumentException 如果找不到规则注解
      */
     default List<String> getAllConfigKeys(Object configManager) {
@@ -66,8 +70,8 @@ public interface IConfigDataService {
     /**
      * 获取注册该 config 的所有 key
      *
-     * @param configManager manager
-     * @return key
+     * @param configManager 目标配置管理器声明
+     * @return 当前管理器已登记的配置键集合
      */
     List<String> getAllConfigKeys(ConfigManager configManager);
 
@@ -94,7 +98,7 @@ public interface IConfigDataService {
      *
      * @param configManager 配置管理器
      * @param key           配置键
-     * @return 如果注销成功，则返回 true; 否则返回 false。
+     * @return 找到并提交删除时返回 true，否则返回 false；需要等待完成时使用 unregisterConfigAsync。
      */
     default boolean unregisterConfig(@NonNull ConfigManager configManager, IConfigKey key) {
         return unregisterConfig(configManager, key.getKey());
@@ -105,7 +109,7 @@ public interface IConfigDataService {
      *
      * @param configManager 配置管理器
      * @param key           配置键
-     * @return 如果注销成功，则返回 true; 否则返回 false。
+     * @return 找到并提交删除时返回 true，否则返回 false；需要等待完成时使用 unregisterConfigAsync。
      */
     boolean unregisterConfig(@NonNull ConfigManager configManager, String key);
 

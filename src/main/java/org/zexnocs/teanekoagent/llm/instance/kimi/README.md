@@ -14,7 +14,7 @@
 |---|---|
 |注册 ID|`kimi`|
 |默认模型|`kimi-k2.6`|
-|固定 base URL|`https://api.moonshot.cn/v1`|
+|内建 base URL|`https://api.moonshot.cn/v1`|
 |默认 API path|`/chat/completions`|
 |协议|OpenAI Chat Completions 兼容协议|
 |流式响应|当前适配器不支持|
@@ -23,8 +23,6 @@
 models:
   - id: "kimi"
     model: "kimi-k2.6"
-    api-key: "${KIMI_API_KEY}"
-    api: "/chat/completions"
     max-tokens: 4096
     thinking: true
     metadata:
@@ -34,6 +32,8 @@ models:
 ```
 
 模型路由只使用 `id: kimi`。`model` 可以覆盖为 `kimi-k2.7-code`、`kimi-k2.6` 或其他兼容模型名称。
+
+密钥及可选连接覆盖只取 Spring application/环境变量，详见 [配置与迁移说明](../../file_config/README.md)。
 
 # 三. 调用流程
 
@@ -132,3 +132,6 @@ Kimi thinking 结果通过 `reasoning_content` 返回。该字段不会作为 as
 |$3$|[../openai/completions/README.md](../openai/completions/README.md)|了解 Kimi 复用的 Chat Completions 通用 DTO、mapper 和抽象模型。|
 |$4$|[../../file_config/README.md](../../file_config/README.md)|了解 `id: kimi` 配置及 options 合并顺序。|
 |$5$|[README.md](README.md)|了解 Kimi endpoint、thinking 和模型参数限制。|
+
+
+图像输入使用统一 `ImageLLMContentPart`，按顺序映射为真实的协议内容块，纯文本保持既有格式。所选模型、角色及 detail 必须符合 [已声明的图像能力](../../file_config/README.md#图像能力)，未核实的模型不会自动继承同供应商其他模型的能力。body 扩展不能覆盖 DTO 已建模字段及模型、输入、工具或上下文控制字段。

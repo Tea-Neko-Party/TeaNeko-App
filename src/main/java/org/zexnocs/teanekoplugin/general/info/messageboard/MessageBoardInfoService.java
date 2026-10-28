@@ -9,13 +9,16 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 留言信息服务类。
  *
  * @author zExNocs
- * @date 2026/03/06
+ * @date 2026/10/28
  * @since 4.1.0
+ * @version 4.5.0-l
  */
 @Service("messageInfoService")
 public class MessageBoardInfoService {
@@ -48,12 +51,12 @@ public class MessageBoardInfoService {
      * @param sender 留言发送者
      * @param target 留言接收者
      * @param message 留言信息
-     * @return 设置结果
+     * @return 承载本次异步处理实际结果的可组合完成阶段
      */
-    public String setMessage(UUID sender, UUID target, String message) {
+    public CompletionStage<String> setMessage(UUID sender, UUID target, String message) {
         // 判断留言信息长度
         if (message.length() > MAXIMUM_LENGTH) {
-            return "留言信息过长，最大长度为" + MAXIMUM_LENGTH + "个字符";
+            return CompletableFuture.completedStage("留言信息过长，最大长度为" + MAXIMUM_LENGTH + "个字符");
         }
         var util = ChinaDateUtil.Instance;
         var currentTime = Instant.now();
@@ -67,7 +70,6 @@ public class MessageBoardInfoService {
         task.set(sender.toString(), newData);
         debugTask.set(sender + "_" + timeInfo, message);
         task.merge(debugTask);
-        task.push();
-        return "给予留言成功喵~";
+        return task.pushAsync().thenApply(ignored -> "给予留言成功喵~");
     }
 }

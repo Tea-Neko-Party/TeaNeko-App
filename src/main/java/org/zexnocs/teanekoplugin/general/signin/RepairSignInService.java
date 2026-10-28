@@ -5,6 +5,7 @@ import lombok.Data;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.easydata.cleanable.CleanableEasyData;
@@ -20,14 +21,17 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedList;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 补签系统。
  *
  * @author zExNocs
- * @date 2026/03/16
+ * @date 2026/10/28
  * @since 4.3.4
+ * @version 4.5.0-l
  */
 @Service
 public class RepairSignInService {
@@ -37,6 +41,12 @@ public class RepairSignInService {
     /** UUID -> 锁对象 */
     private final ConcurrentMapCacheContainer<UUID, ReentrantLock> userLocks;
 
+    /**
+     * 装配原签到业务和补签缓存，使补签复用原事务与反馈规则。
+     *
+     * @param signInService 由装配方提供的 {@code SignInService} 协作依赖
+     * @param iCacheService 缓存注册与生命周期服务
+     */
     public RepairSignInService(SignInService signInService, ICacheService iCacheService) {
         this.signInService = signInService;
         this.userLocks = ConcurrentMapCacheContainer.of(iCacheService);
@@ -44,8 +54,15 @@ public class RepairSignInService {
 
     /**
      * 线性安全的补签
+     *
+     * @param sender 由装配方提供的 {@code IEasyMessageSenderBuilder} 协作依赖
+     * @param userId 原业务边界中的目标用户标识
+     * @param now 用于本次处理的 {@code now} 数据
+     * @param k 用于本次处理的 {@code k} 数据
+     * @param card 用于本次处理的 {@code card} 数据
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
+    public CompletionStage<Void> repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
                              UUID userId,
                              Instant now,
                              int k,
@@ -53,7 +70,7 @@ public class RepairSignInService {
         var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
         lock.lock();
         try {
-            __repairSignIn(sender, userId, now, k, card);
+            return __repairSignIn(sender, userId, now, k, card);
         } finally {
             lock.unlock();
         }
@@ -63,12 +80,13 @@ public class RepairSignInService {
      * 补签
      *
      * @param sender 发送器，用于发送信息
-     * @param userId uuid
+     * @param userId 原业务边界中的目标用户标识
      * @param now    当前时间点
      * @param k      修补的最大个数
      * @param card   用于扣除补签卡，如果为 null 则不扣除
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    public void __repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
+    public CompletionStage<Void> __repairSignIn(@Nullable IEasyMessageSenderBuilder sender,
                              UUID userId,
                              Instant now,
                              int k,
@@ -82,20 +100,14 @@ public class RepairSignInService {
 
         // 1. 今天没签到
         if (!currentDate.isEqual(lastDate)) {
-            if(sender != null) {
-                sender.sendReplyMessage("主人今天还没有签到喵！请先签到喵~");
-            }
-            return;
+            return sender == null ? CompletableFuture.completedStage(null) : sender.sendReplyMessageAsync("主人今天还没有签到喵！请先签到喵~");
         }
 
         var chunks = new LinkedList<>(target.getList(SignInChunkData.KEY, SignInChunkData.class));
 
         // 2. 只有一个 chunk
         if (chunks.size() <= 1) {
-            if(sender != null) {
-                sender.sendReplyMessage("主人目前没有可补签的断档喵！");
-            }
-            return;
+            return sender == null ? CompletableFuture.completedStage(null) : sender.sendReplyMessageAsync("主人目前没有可补签的断档喵！");
         }
 
         // 3. 开始构造新的 chunks
@@ -141,10 +153,7 @@ public class RepairSignInService {
         }
         // 如果没有合适的补签区间
         if (repairedRanges.isEmpty()) {
-            if(sender != null) {
-                sender.sendReplyMessage("主人目前没有可补签的断档喵！");
-            }
-            return;
+            return sender == null ? CompletableFuture.completedStage(null) : sender.sendReplyMessageAsync("主人目前没有可补签的断档喵！");
         }
         // 实际的 repair 个数
         int repairCount = k - remain;
@@ -179,31 +188,30 @@ public class RepairSignInService {
         }
 
         // ---- 8. 提交任务 ----
-        recordTask.pushWithFuture()
-                .whenComplete((r, e) -> {
-                    if(e instanceof InsufficientItemCountException) {
-                        // 如果是数量不足，则警告一下
-                        if(sender != null) {
-                            sender.sendReplyMessage("补签卡不足哦~");
-                        }
-                        return;
-                    }
-                    if(e == null && sender != null) {
-                        sender.sendReplyMessage("""
+        return recordTask.pushAsync()
+                .thenCompose(ignored -> sender == null ? CompletableFuture.completedStage(null)
+                        : sender.sendReplyMessageAsync("""
                             主人补签成功喵！
                             本次补签的天数：%d
                             本次补签日期：%s
                             当前连续签到：%d 天
-                            当前累计签到：%d 天""".formatted(
-                                repairCount,
-                                String.join(", ", repairedRanges),
-                                chunks.getLast().getContinuous(),
-                                newData.getTotalDays()));
+                            当前累计签到：%d 天""".formatted(repairCount,
+                                String.join(", ", repairedRanges), chunks.getLast().getContinuous(), newData.getTotalDays())))
+                .exceptionallyCompose(error -> {
+                    if (TaskFuture.unwrapException(error) instanceof InsufficientItemCountException && sender != null) {
+                        return sender.sendReplyMessageAsync("补签卡不足哦~");
                     }
-                }).finish();
+                    return CompletableFuture.failedStage(error);
+                });
     }
 
-    /** 格式化连续日期区间，如 [05-03, 05-10] */
+    /**
+     * 格式化连续日期区间，如 [05-03, 05-10]
+     *
+     * @param start 用于本次处理的 {@code start} 数据
+     * @param end 用于本次处理的 {@code end} 数据
+     * @return 按本方法契约生成的文本或标识
+     */
     private String formatRange(LocalDate start, LocalDate end) {
         // 如果 start 和 end 相等，那么不使用区间而是单个时间
         if(start.isEqual(end)) {
@@ -216,7 +224,14 @@ public class RepairSignInService {
         );
     }
 
-    /** 自定义记录数据类 */
+    /**
+     * 自定义记录数据类
+     *
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
     @Data
     @Builder
     public static class RepairRecordData {

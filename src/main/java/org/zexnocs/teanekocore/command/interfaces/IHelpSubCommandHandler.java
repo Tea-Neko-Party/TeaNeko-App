@@ -3,12 +3,16 @@ package org.zexnocs.teanekocore.command.interfaces;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.CommandMapData;
 
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
 /**
  * 帮助指令处理器接口
  *
  * @author zExNocs
- * @date 2026/02/18
+ * @date 2026/10/28
  * @since 4.0.0
+ * @version 4.5.0-l
  */
 public interface IHelpSubCommandHandler {
     /**
@@ -26,6 +30,9 @@ public interface IHelpSubCommandHandler {
      * @param commandData 指令数据
      * @param mapData     指令映射数据
      * @param args        剩下的指令参数
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
-    void handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args);
+    default CompletionStage<Void> handleSubHelp(CommandData<?> commandData, CommandMapData mapData, String[] args) {
+        return CompletableFuture.completedStage(null);
+    }
 }

@@ -5,9 +5,7 @@ import lombok.NoArgsConstructor;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
@@ -19,6 +17,8 @@ import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterJsonMappe
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.instance.LLMRequestBodyExtensions;
+import org.zexnocs.teanekoagent.llm.instance.openai.OpenAIContentMapper;
 
 import java.time.Instant;
 import java.util.*;
@@ -27,8 +27,9 @@ import java.util.*;
  * OpenAI Chat Completions 兼容 API 与 LLM framework 之间的转换器。
  *
  * @author zExNocs
- * @date 2026/06/10
+ * @date 2026/10/28
  * @since 4.4.1
+ * @version 4.5.0-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class OpenAIChatCompletionMapper {
@@ -38,9 +39,9 @@ public final class OpenAIChatCompletionMapper {
     /**
      * 将统一 Prompt 和 options 转换为 Chat Completions 请求。
      *
-     * @param prompt LLM Prompt
+     * @param prompt 经过宿主装配的消息与本次模型选项
      * @param options 模型参数
-     * @param apiKey API key
+     * @param apiKey 仅供认证边界使用的本地凭据，禁止进入日志或普通消息
      * @return Chat Completions 请求数据
      */
     public static OpenAIChatCompletionRequestData toRequest(ILLMPrompt prompt,
@@ -68,7 +69,7 @@ public final class OpenAIChatCompletionMapper {
                 .parallelToolCalls(options.findParallelToolCalls().orElse(null))
                 .logprobs(options.findLogprobs().orElse(null))
                 .topLogprobs(options.findTopLogprobs().orElse(null))
-                .extraBody(toExtraBody(options.getMetadata()))
+                .extraBody(LLMRequestBodyExtensions.fromMetadata(options.getMetadata(), OpenAIChatCompletionRequestData.class))
                 .build();
     }
 
@@ -116,7 +117,7 @@ public final class OpenAIChatCompletionMapper {
             if (message instanceof ILLMToolMessage toolMessage) {
                 putIfNotBlank(item, "tool_call_id", toolMessage.getToolCallId());
             }
-            item.put("content", toContent(message.getContents()));
+            item.put("content", OpenAIContentMapper.toChatContent(message));
             result.add(item);
         }
         return List.copyOf(result);
@@ -125,7 +126,7 @@ public final class OpenAIChatCompletionMapper {
     /**
      * 读取 assistant message 中保存的兼容供应商 reasoning_content。
      *
-     * @param message assistant message
+     * @param message 需要发送或映射的消息
      * @return reasoning_content 或空字符串
      */
     private static String reasoningContent(ILLMAssistantMessage message) {
@@ -134,32 +135,6 @@ public final class OpenAIChatCompletionMapper {
             return "";
         }
         return metadata.get(REASONING_CONTENT_METADATA).toString();
-    }
-
-    /**
-     * 将 LLM Content 列表合并为文本正文。
-     *
-     * @param contents LLM Content 列表
-     * @return 合并后的文本
-     */
-    private static String toContent(List<ILLMContent> contents) {
-        if (contents == null || contents.isEmpty()) {
-            return "";
-        }
-        var text = new StringBuilder();
-        for (var content : contents) {
-            if (content == null) {
-                continue;
-            } else {
-                content.getContentPart();
-            }
-            if (content.getContentPart() instanceof TextLLMContentPart textPart) {
-                appendText(text, textPart.getText());
-            } else {
-                appendText(text, content.getContentPart().toString());
-            }
-        }
-        return text.toString();
     }
 
     /**
@@ -219,27 +194,6 @@ public final class OpenAIChatCompletionMapper {
     }
 
     /**
-     * 提取 metadata 中以 {@code body.} 开头的额外请求字段。
-     *
-     * @param metadata 模型 metadata
-     * @return 额外请求字段
-     */
-    private static Map<String, Object> toExtraBody(Map<String, Object> metadata) {
-        if (metadata == null || metadata.isEmpty()) {
-            return Map.of();
-        }
-        var result = new LinkedHashMap<String, Object>();
-        metadata.forEach((key, value) -> {
-            if (key != null
-                    && key.startsWith(OpenAIChatCompletionModelOptions.EXTRA_BODY_PREFIX)
-                    && shouldWriteOptionalValue(value)) {
-                result.put(key.substring(OpenAIChatCompletionModelOptions.EXTRA_BODY_PREFIX.length()), value);
-            }
-        });
-        return Map.copyOf(result);
-    }
-
-    /**
      * 提取 metadata 中以 {@code header.} 开头的额外请求头。
      *
      * @param metadata 模型 metadata
@@ -261,7 +215,7 @@ public final class OpenAIChatCompletionMapper {
     }
 
     /**
-     * 转换 Chat Completions 响应候选列表。
+     * 转换 Chat Completions 响应候选列表，显式拒绝标记优先于普通结束原因。
      *
      * @param choices Chat Completions 候选列表
      * @return 统一候选列表
@@ -274,7 +228,8 @@ public final class OpenAIChatCompletionMapper {
         for (var choice : choices) {
             result.add(LLMChoice.builder()
                     .index(choice.getIndex())
-                    .finishReason(choice.getFinishReason())
+                    .finishReason(choice.getMessage() != null && choice.getMessage().getRefusal() != null
+                            ? "refusal" : choice.getFinishReason())
                     .message(toAssistantMessage(choice.getMessage()))
                     .logprobs(choice.getLogprobs() == null ? Map.of() : choice.getLogprobs())
                     .build());
@@ -283,7 +238,7 @@ public final class OpenAIChatCompletionMapper {
     }
 
     /**
-     * 转换 Chat Completions assistant 消息。
+     * 转换 Chat Completions assistant 消息，将拒绝说明作为可呈现正文保留。
      *
      * @param message Chat Completions assistant 消息
      * @return 统一 assistant 消息
@@ -302,7 +257,7 @@ public final class OpenAIChatCompletionMapper {
         return LLMAssistantMessage.builder()
                 .name(firstNotBlank(message.getName(), ""))
                 .contents(LLMContentListBuilder.builder()
-                        .addText(firstNotBlank(message.getContent(), ""))
+                        .addText(firstNotBlank(message.getRefusal(), firstNotBlank(message.getContent(), "")))
                         .build())
                 .toolCalls(toFrameworkToolCalls(message.getToolCalls()))
                 .providerMetadata(Map.copyOf(providerMetadata))
@@ -335,12 +290,12 @@ public final class OpenAIChatCompletionMapper {
     /**
      * 转换 Chat Completions token usage。
      *
-     * @param usage Chat Completions usage
-     * @return 统一 token usage
+     * @param usage 用于本次处理的 {@code usage} 数据
+     * @return 统一 token usage，供应商未提供时为 null
      */
     private static LLMUsage toUsage(OpenAIChatCompletionResponseData.Usage usage) {
         if (usage == null) {
-            return LLMUsage.empty();
+            return null;
         }
         var cachedTokens = usage.getPromptTokenDetails() == null
                 ? 0
@@ -362,8 +317,8 @@ public final class OpenAIChatCompletionMapper {
      * 返回非空列表，空列表按未设置处理。
      *
      * @param value 待检查列表
-     * @return 非空列表或 {@code null}
      * @param <T> 列表元素类型
+     * @return 非空列表或 {@code null}
      */
     private static <T> List<T> nonEmptyList(List<T> value) {
         return value == null || value.isEmpty() ? null : value;
@@ -383,22 +338,6 @@ public final class OpenAIChatCompletionMapper {
             case Map<?, ?> map -> !map.isEmpty();
             default -> true;
         };
-    }
-
-    /**
-     * 追加非空文本。
-     *
-     * @param target 文本构造器
-     * @param value 待追加文本
-     */
-    private static void appendText(StringBuilder target, String value) {
-        if (value == null || value.isBlank()) {
-            return;
-        }
-        if (!target.isEmpty()) {
-            target.append(' ');
-        }
-        target.append(value);
     }
 
     /**
