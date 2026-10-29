@@ -7,6 +7,8 @@ import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.agent.summary.AgentSummarySnapshot;
+import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -33,7 +35,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 空闲会话按 TTL 和容量惰性淘汰；切换代次不移除仍占运行槽的旧邮箱。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -50,6 +52,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private final @Nullable AgentMemoryBoundary memory;
     private final AgentMemoryBoundary observations;
     private final @Nullable IAgentPersonalitySource personalities;
+    private final @Nullable IAgentConversationSummaries summaries;
     private final Object lock = new Object();
     private final Map<AgentConversationKey, Mailbox> mailboxes = new LinkedHashMap<>();
     private final ConcurrentLinkedQueue<Mailbox> retired = new ConcurrentLinkedQueue<>();
@@ -144,6 +147,27 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
             IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
             @Nullable IAgentPersonalitySource personalities) {
+        this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, personalities, null);
+    }
+    /**
+     * 显式组合后台摘要，邮箱只管理纯数据采用及成功轮次交接，不拥有摘要控制。
+     * @param turns 独立轮次端口
+     * @param defaults 排队策略
+     * @param executor 借用业务执行器
+     * @param scheduler 借用调度器
+     * @param clock 时间来源
+     * @param logger 固定日志
+     * @param conversations 会话保留策略
+     * @param policy 窗口策略
+     * @param mapper 协议转换器
+     * @param references 可选空间端口
+     * @param personalities 可选人格端口
+     * @param summaries 可选会话压缩端口
+     */
+    public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
+            @Nullable IAgentPersonalitySource personalities, @Nullable IAgentConversationSummaries summaries) {
         this.turns = Objects.requireNonNull(turns, "独立轮次端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "排队策略端口不能为空。");
         this.conversations = Objects.requireNonNull(conversations, "会话保留策略端口不能为空。");
@@ -156,6 +180,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         observations = new AgentMemoryBoundary(references, turns, executor, scheduler, clock);
         this.memory = references == null ? null : observations;
         this.personalities = personalities;
+        this.summaries = summaries;
     }
 
     /**
@@ -288,7 +313,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 return replayAccess(handle, request, raw).thenComposeAsync(checked -> {
                     control.checkActive();
                     if (checked.status() != AgentRunResult.Status.SUCCESS || checked.promptTranscript() == null
-                            || checked.promptTranscript().input().fragments().isEmpty() && checked.promptTranscript().input().personality() == null) {
+                            || checked.promptTranscript().input().fragments().isEmpty() && checked.promptTranscript().input().personality() == null
+                                    && checked.promptTranscript().input().summary() == null) {
                         return CompletableFuture.completedStage(checked);
                     }
                     return control.guard(Objects.requireNonNull(turns.verifyPromptReplay(handle, request, checked, control), "资料重放阶段不能为空。"))
@@ -378,7 +404,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     changed++;
                     var stamp = new AgentConversationStamp(box.key, UUID.randomUUID());
                     patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))
-                            .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty())
+                            .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
                             .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
                     for (var entry : List.copyOf(box.requests.values())) {
                         if (entry == head) { entry.stamp = stamp; continue; }
@@ -587,7 +613,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 changed = true;
                 mailbox.entity.commit(mailbox.entity.snapshot().revision(), ComponentPatch.builder()
                         .put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(mailbox).lastActivity())))
-                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty())
+                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
                         .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty()).build());
                 mailbox.waiting.clear();
                 for (var entry : List.copyOf(mailbox.requests.values())) {
@@ -870,7 +896,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             if (previous != null && !previous.equals(identity)) {
                 var stamp = new AgentConversationStamp(box.key, UUID.randomUUID()); head.stamp = stamp;
                 patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))
-                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
+                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT).put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
                 for (var entry : List.copyOf(box.requests.values())) {
                     if (entry == head || entry.phase == Phase.FINISHED) { continue; }
                     entry.stopped = AgentRunResult.Status.STALE_CONVERSATION; detach(entry, now); cancelled.add(entry);
@@ -888,7 +914,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private void startPrepared(Entry entry, @Nullable MemoryNamespaceReference reference) {
         try {
-            final AgentConversationWindow window;
+            AgentConversationWindow window;
+            final AgentSummarySnapshot previousSummary;
             synchronized (lock) {
                 if (entry.phase != Phase.PREPARING) { return; }
                 var box = Objects.requireNonNull(entry.mailbox);
@@ -898,6 +925,22 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 }
                 entry.memoryReference = reference;
                 window = box.entity.snapshot().require(AgentConversationWindow.COMPONENT);
+                previousSummary = box.entity.snapshot().find(AgentSummarySnapshot.COMPONENT).orElse(null);
+            }
+            if (summaries != null && reference != null && entry.personalityIdentity != null) {
+                try {
+                    var selected = summaries.select(Objects.requireNonNull(entry.stamp), reference, entry.personalityIdentity, window, previousSummary);
+                    synchronized (lock) {
+                        var box = Objects.requireNonNull(entry.mailbox);
+                        if (entry.phase != Phase.PREPARING || !Objects.equals(entry.stamp, state(box).stamp())
+                                || box.entity.snapshot().require(AgentConversationWindow.COMPONENT) != window) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+                        var patch = ComponentPatch.builder().put(AgentConversationWindow.COMPONENT, selected.window());
+                        if (selected.summary() == null) { patch.remove(AgentSummarySnapshot.COMPONENT); }
+                        else { patch.put(AgentSummarySnapshot.COMPONENT, selected.summary()); }
+                        box.entity.commit(box.entity.snapshot().revision(), patch.build());
+                    }
+                    window = selected.window(); entry.summary = selected.summary();
+                } catch (RuntimeException ignored) { report(); entry.summary = null; }
             }
             try { entry.options = Objects.requireNonNull(policy.resolve(entry.handle, entry.request), "窗口策略不能为空。"); }
             catch (RuntimeException failure) { report(); stop(entry, AgentRunResult.Status.CONFIGURATION_ERROR, false); return; }
@@ -906,12 +949,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             try {
                 var original = entry.request;
                 var fixed = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), original.messages(), original.conversation(),
-                        original.memoryReference(), original.userText(), original.inputMaxBytes(), entry.personalityIdentity);
-                prepared = engine.prepare(fixed, Objects.requireNonNull(entry.stamp), window, entry.options, entry.reservedPersonalityBytes); entry.prepared = prepared;
+                        original.memoryReference(), original.userText(), original.inputMaxBytes(), entry.personalityIdentity, entry.summary);
+                prepared = engine.prepare(fixed, Objects.requireNonNull(entry.stamp), window, entry.options,
+                        Math.addExact(entry.reservedPersonalityBytes, entry.summary == null ? 0 : engine.summaryBytes(entry.summary))); entry.prepared = prepared;
             }
             catch (AgentConversationEngine.InputTooLargeException failure) { stop(entry, AgentRunResult.Status.INPUT_TOO_LARGE, false); return; }
             var base = prepared.request();
-            var request = reference == null ? base : new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), base.conversation(), reference, base.userText(), base.inputMaxBytes(), base.personalityIdentity());
+            var request = reference == null ? base : new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), base.conversation(), reference, base.userText(), base.inputMaxBytes(), base.personalityIdentity(), base.summary());
             entry.startedAt = clock.instant();
             var execution = Objects.requireNonNull(reference != null ? turns.prepareReferenced(entry.handle, request, entry.independent ? null : entry.lifetime)
                     : entry.independent ? turns.prepare(entry.handle, request) : turns.prepare(entry.handle, request, entry.lifetime), "独立轮次端口返回的句柄不能为空。");
@@ -993,9 +1037,19 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private void commitFinished(Entry entry, @Nullable AgentRunResult raw, @Nullable Throwable failure) {
         var outcome = result(entry, raw, failure);
         AgentConversationWindow updated = null;
+        AgentConversationWindow summaryCandidate = null;
         var prepared = entry.prepared;
         if (prepared != null) {
-            try { updated = engine.complete(prepared, outcome); }
+            try {
+                var turn = engine.completedTurn(prepared, outcome);
+                if (turn != null) {
+                    updated = prepared.window().append(turn, prepared.options());
+                    if (summaries != null) {
+                        var all = new ArrayList<>(prepared.window().turns()); all.add(turn);
+                        summaryCandidate = new AgentConversationWindow(all, prepared.window().discardedTurns(), false);
+                    }
+                }
+            }
             catch (RuntimeException invalid) { outcome = restate(outcome, AgentRunResult.Status.INVALID_RESPONSE); }
         }
         var now = activityTime(entry);
@@ -1018,6 +1072,9 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             next = detach(entry, now);
         }
         drainRetired();
+        if (summaries != null && accepted.status() == AgentRunResult.Status.SUCCESS && summaryCandidate != null) {
+            try { summaries.offer(entry.handle, accepted, summaryCandidate, entry.summary); } catch (RuntimeException ignored) { report(); }
+        }
         deliver(entry, accepted, next);
     }
 
@@ -1270,7 +1327,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             this.key = key; this.retention = retention;
             entity = new Entity(EntityId.random(), ComponentPatch.builder().put(AgentConversationState.COMPONENT,
                     new AgentConversationState(new AgentConversationStamp(key, UUID.randomUUID()), now))
-                    .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty())
+                    .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
                     .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty()).build());
         }
 
@@ -1323,6 +1380,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         volatile AgentConversationOptions options = AgentConversationOptions.defaults();
         volatile AgentConversationEngine.@Nullable Prepared prepared;
         volatile @Nullable String personalityIdentity;
+        volatile @Nullable AgentSummarySnapshot summary;
         volatile long reservedPersonalityBytes;
         volatile @Nullable MemoryNamespaceReference memoryReference;
         volatile @Nullable Instant startedAt;

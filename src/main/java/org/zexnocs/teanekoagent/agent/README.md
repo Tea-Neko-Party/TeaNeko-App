@@ -50,7 +50,7 @@ var second = agentFactory.create(definition);
 /cfg unreg agent
 ```
 
-登记默认启用且使用最低被动模式。缺失记录始终返回 unregistered，读取适配器不自动注册，也不回退到旧 `agent-personality` 默认值。允许字段为 enabled、mode、historyMaxMessages 和 inputMaxBytes；认证/连接字段、correctionKey 均不能从这里写入。模式只是门控数据，自动触发和主动任务尚未实现。
+登记默认启用且使用最低被动模式。缺失记录始终返回 unregistered，读取适配器不自动注册，也不回退到旧 `agent-personality` 默认值。除 enabled、mode、historyMaxMessages 和 inputMaxBytes，现已开放独立记忆、人格及文本历史开关/描述字段；认证/连接字段、correctionKey 均不能从这里写入。模式只是门控数据，自动触发和主动任务尚未实现。
 
 主文件 `config/agent/main-config.yml` 新增 `enabled: true` 作为新 Agent 总开关；交互次数、时限和可选 token 预算继续由 `tea-neko.llm.interaction` 提供。全局关闭后不继续读取模型或凭据。注册、注销和诊断管理入口不经过 Agent 执行门控，避免未开启时无法开通。
 
@@ -107,7 +107,7 @@ Spring 默认邮箱与独立轮次共用必需的 `IAgentMemoryReferences`。队
 
 真实轮次结束后，邮箱在原轮次的剩余执行时限内复核原引用和当前准入，再仲裁 epoch 与窗口提交。只对引用和 stamp 一致的完整 SUCCESS 追加历史；拒绝仍保留交互和 usage。缓存 retry 或同 ID run 在交付前复核当前引用、准入及 epoch，不发起新模型或工具。重放观察使用当前排队等待上限，父取消和观察超时不停止原执行。队首解析计入排队时限，服务关闭会结束自己拥有的引用观察，不关闭借用父控制、执行器或存储。
 
-旧构造方法仍允许可信宿主显式创建无持久化记忆邮箱，结果不具备此保护。默认完整装配现已提供 namespace 注册/绑定、引用协调、事实/画像读写、自动记忆资料及人格，持久化历史和自动摘要继续按后续阶段接入。最终已完成仲裁的结果不追溯撤回；未来平台出站仍必须复核结果携带的引用和代次。
+旧构造方法仍允许可信宿主显式创建无持久化记忆邮箱，结果不具备此保护。默认完整装配现已提供 namespace 注册/绑定、引用协调、事实/画像读写、自动记忆资料、人格及持久化文本历史，后台自动摘要现已接入。最终已完成仲裁的结果不追溯撤回；未来平台出站仍必须复核结果携带的引用和代次。
 
 ## 会话顺序、等待与请求级取消
 
@@ -212,8 +212,12 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 `AgentRunResult` 区分成功、跳过、配置不可用、取消、超时、预算不足、空/截断/拒绝/非法响应及失败。拒绝时仍可保留 `interaction` 诊断和已观察用量/动作；不推断尚未完成动作是否已产生外部副作用，也不声称回滚。总 `budgetUsage` 是交付时的宿主共享读数，具体轮次的模型/工具记录使用 interaction 的局部数据，不能跨轮重复汇总父总额。
 
+默认完整装配已接入 [持久化文本历史与 history_query](../history/README.md)。用户凭据和纯文本成功答案分别等待历史提交，不保存临时 Prompt 或工具诊断；查询限定当前 client/scope 与持久化空间/人格边界，重启后可查，切换后不回灌旧分区。平台旁观采集与已知消息 ID 补取按后续平台阶段接入。
+
+默认完整装配已接入 [后台自动摘要](summary/README.md)，已登记 scope 默认开启 autoSummaryEnabled。后台只处理已验证成功的完整轮次，独立限额且不阻塞当前回答；下一队首核对完整覆盖指纹和当前边界后才压缩旧窗口，最近轮次保留。摘要以独立 USER 数据进入实际输入，在投影中移除，不生成个人事实。
+
 六、七、八参数的结果重载构造方法直接接收可空的 `AgentAccessDecision` 和 `LLMInteractionResult`，缺失传 `null`；`access()` 和 `interaction()` 仍返回 `Optional`，记录的规范构造与现有快照读取语义保持一致。
 
 只有最终 SUCCESS 提供 `answer()` 和 `committableTranscript()`。scope 在交付前失效时，即使已有成功模型候选，也只保留在诊断中。取消会等待控制终止通知及诊断观察器登记，不等待不响应取消的远端异步结果；迟到结果不能提交组件或改写已交付结果。
 
-`answer()` 当前仍是统一模型候选；受控决策、结构化发送计划及实际平台出站尚未接入，不能将内部结构化 JSON 直接作为平台回复。S4 已提供完整窗口、输入限制与内存请求重放；S5 已实现 [namespace 注册与绑定事务基础](../memory/namespace/README.md)、独立轮次及默认会话的引用保护、[事实/偏好事务存储和显式旧资料导入](../memory/fact/README.md)、[独立 Recall 的筛选和证据预算](../memory/recall/README.md)、[按 UUID 的可追溯画像](../memory/profile/README.md) 及 [可信记忆访问和实际模型工具](../memory/access/README.md)，已默认接入自动记忆 Prompt、授权重放及 [人格与补正生命周期](../personality/README.md)。持久化历史、自动摘要、自动补正生成及管理命令继续推进。内存 epoch 不代表分布式原子授权，也不代表其他业务或平台发送的持久化幂等。
+`answer()` 当前仍是统一模型候选；受控决策、结构化发送计划及实际平台出站尚未接入，不能将内部结构化 JSON 直接作为平台回复。S4 已提供完整窗口、输入限制与内存请求重放；S5 已实现 [namespace 注册与绑定事务基础](../memory/namespace/README.md)、独立轮次及默认会话的引用保护、[事实/偏好事务存储和显式旧资料导入](../memory/fact/README.md)、[独立 Recall 的筛选和证据预算](../memory/recall/README.md)、[按 UUID 的可追溯画像](../memory/profile/README.md) 及 [可信记忆访问和实际模型工具](../memory/access/README.md)，已默认接入自动记忆 Prompt、授权重放及 [人格与补正生命周期](../personality/README.md)。持久化文本历史、实际检索及 [自动上下文摘要](summary/README.md) 也已接入；自动补正生成及管理命令继续推进。内存 epoch 不代表分布式原子授权，也不代表其他业务或平台发送的持久化幂等。

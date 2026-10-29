@@ -7,9 +7,11 @@ import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.agent.AgentService;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.agent.history.IAgentHistoryRecorder;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
+import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
@@ -23,7 +25,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * 装配独立 Agent 轮次，借用 Core 执行资源，不创建默认实例或启动后台业务。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -67,14 +69,17 @@ public class AgentExecutionConfig {
      * @param references 固定空间端口
      * @param prompts 可选本轮资料端口提供者
      * @param personalities 可选人格源，与默认邮箱共用同一实例
+     * @param history 可选历史记录端口
+     * @param summaries 可选摘要使用复核
      * @return 拥有本轮资源、借用共享执行器的服务
      */
     @Bean(name = "agentTurnService", destroyMethod = "close")
     public AgentService agentTurnServiceWithPrompt(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
             @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references,
-            ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities) {
+            ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentHistoryRecorder> history,
+            ObjectProvider<IAgentConversationSummaries> summaries) {
         return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper, executor, scheduler,
-                Clock.systemUTC(), logger, references, prompts.getIfAvailable(IAgentPromptSource::empty), personalities.getIfAvailable());
+                Clock.systemUTC(), logger, references, prompts.getIfAvailable(IAgentPromptSource::empty), personalities.getIfAvailable(), history.getIfAvailable(), summaries.getIfAvailable());
     }
 }

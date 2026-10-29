@@ -11,6 +11,7 @@ import org.zexnocs.teanekoagent.agent.conversation.IAgentConversationPolicy;
 import org.zexnocs.teanekoagent.agent.conversation.IAgentQueueDefaults;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
@@ -22,7 +23,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * 默认 Agent 服务经会话邮箱调用独立轮次，Bean 类型区分两条显式边界。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -61,13 +62,14 @@ public class AgentConversationConfig {
      * @param logger 日志
      * @param references 实际记忆引用端口
      * @param personalities 可选人格端口提供者
+     * @param summaries 可选后台摘要及压缩端口
      * @return 默认实际 Agent 邮箱
      */
     @Bean(name = "agentService", destroyMethod = "close")
     public AgentConversationService agentServiceWithPersonality(IAgentTurnService turns, IAgentQueueDefaults defaults,
             IAgentConversationDefaults conversations, IAgentConversationPolicy policy, ObjectMapper mapper,
             @Qualifier("virtualExecutor") ExecutorService executor, @Qualifier("taskExecutor") ScheduledExecutorService scheduler,
-            ILogger logger, IAgentMemoryReferences references, ObjectProvider<IAgentPersonalitySource> personalities) {
-        return new AgentConversationService(turns, defaults, executor, scheduler, Clock.systemUTC(), logger, conversations, policy, mapper, references, personalities.getIfAvailable());
+            ILogger logger, IAgentMemoryReferences references, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentConversationSummaries> summaries) {
+        return new AgentConversationService(turns, defaults, executor, scheduler, Clock.systemUTC(), logger, conversations, policy, mapper, references, personalities.getIfAvailable(), summaries.getIfAvailable());
     }
 }

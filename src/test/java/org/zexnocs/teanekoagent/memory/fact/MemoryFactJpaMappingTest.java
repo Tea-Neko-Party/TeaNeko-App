@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.parser.PartTree;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.zexnocs.teanekoagent.adapter.history.HistoryDataObject;
+import org.zexnocs.teanekoagent.adapter.history.HistoryRepository;
 import org.zexnocs.teanekoagent.adapter.memory.MemoryFactDataObject;
 import org.zexnocs.teanekoagent.adapter.memory.MemoryFactRepository;
 import org.zexnocs.teanekoagent.adapter.memory.MemoryNamespaceWriteRepository;
@@ -23,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * 离线验证新增 JPA 映射与旧表实体共存，以及当前 Hibernate 对实际锁查询的解析。
  * 不建立 JDBC 连接，不执行 DDL 或宣称已完成 MySQL 行锁实机验收。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -40,7 +42,7 @@ class MemoryFactJpaMappingTest {
                 .applySetting("hibernate.connection.provider_class", "org.hibernate.engine.jdbc.connections.internal.UserSuppliedConnectionProviderImpl")
                 .build();
         try {
-            var metadata = new MetadataSources(registry).addAnnotatedClass(GeneralEasyDataObject.class).addAnnotatedClass(MemoryFactDataObject.class)
+            var metadata = new MetadataSources(registry).addAnnotatedClass(GeneralEasyDataObject.class).addAnnotatedClass(MemoryFactDataObject.class).addAnnotatedClass(HistoryDataObject.class)
                     .addAnnotatedClass(Class.forName("org.zexnocs.teanekoagent_old.database.LLMRelatedEasyDataObject")).buildMetadata();
             try (var factory = metadata.buildSessionFactory(); var session = factory.openSession()) {
                 var method = MemoryNamespaceWriteRepository.class.getMethod("lockNamespace", String.class);
@@ -64,6 +66,10 @@ class MemoryFactJpaMappingTest {
                         String.class, String.class, String.class, Pageable.class);
                 assertDoesNotThrow(() -> new PartTree(page.getName(), MemoryFactDataObject.class));
                 assertNotNull(factory.getMetamodel().entity(MemoryFactDataObject.class));
+                assertNotNull(factory.getMetamodel().entity(HistoryDataObject.class));
+                for (var historyMethod : HistoryRepository.class.getDeclaredMethods()) {
+                    assertDoesNotThrow(() -> new PartTree(historyMethod.getName(), HistoryDataObject.class));
+                }
             }
         } finally { StandardServiceRegistryBuilder.destroy(registry); }
     }

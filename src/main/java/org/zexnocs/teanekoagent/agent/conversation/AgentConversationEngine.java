@@ -7,6 +7,7 @@ import org.zexnocs.teanekoagent.agent.AgentUserText;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.summary.AgentSummarySnapshot;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
@@ -27,7 +28,7 @@ import java.util.Map;
  * 负责窗口装配、协议提交验证和缓存度量；不持有邮箱锁、执行控制或外部资源。
  * 所有深层冻结和 JSON 工作由邮箱拥有者在锁外调用。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -103,7 +104,7 @@ public final class AgentConversationEngine {
         while (!kept.turns().isEmpty() && kept.bytes() > options.maxInputBytes() - reservedBytes - ownBytes) { kept = kept.dropOldest(); }
         var history = kept.messages();
         var messages = new ArrayList<>(history); messages.addAll(fresh);
-        var request = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), messages, stamp, null, original.userText(), options.maxInputBytes(), original.personalityIdentity());
+        var request = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), messages, stamp, null, original.userText(), options.maxInputBytes(), original.personalityIdentity(), original.summary());
         return new Prepared(request, kept, options, history.size(), codec.signature(request.messages()));
     }
 
@@ -126,10 +127,24 @@ public final class AgentConversationEngine {
      * @throws IllegalArgumentException 当结果缺失输入前缀、工具配对或最终候选不一致时
      */
     public @Nullable AgentConversationWindow complete(Prepared prepared, AgentRunResult result) {
+        var turn = completedTurn(prepared, result);
+        return turn == null ? null : prepared.window().append(turn, prepared.options());
+    }
+    /**
+     * 只生成通过原协议验证的成功轮次，供窗口提交和后台摘要共同使用。
+     * @param prepared 原装配数据
+     * @param result 原结果
+     * @return 完整新增轮次；非成功为空
+     * @throws IllegalArgumentException 当原输入、工具配对或最终候选不一致时
+     */
+    public AgentConversationWindow.@Nullable Turn completedTurn(Prepared prepared, AgentRunResult result) {
         if (result.status() != AgentRunResult.Status.SUCCESS) { return null; }
         var interaction = result.interaction().orElseThrow();
         var transcript = interaction.transcript();
         var projection = result.promptTranscript();
+        if (prepared.request().summary() != null && (projection == null || projection.input().summary() != prepared.request().summary())) {
+            throw new IllegalArgumentException("成功轮次没有使用邮箱固定的摘要。");
+        }
         var expectedPersonality = prepared.request().personalityIdentity();
         if (expectedPersonality != null && (projection == null || projection.input().personality() == null
                 || !expectedPersonality.equals(projection.input().personality().identity()))) {
@@ -161,8 +176,17 @@ public final class AgentConversationEngine {
             throw new IllegalArgumentException("成功轮次的最终候选与完整历史不一致。");
         }
         var delta = transcript.subList(prepared.historyMessages(), transcript.size());
-        var turn = new AgentConversationWindow.Turn(result.requestId(), prepared.request().actor(), delta, codec.signature(delta));
-        return prepared.window().append(turn, prepared.options());
+        return new AgentConversationWindow.Turn(result.requestId(), prepared.request().actor(), delta, codec.signature(delta));
+    }
+
+    /**
+     * 在历史准备前预留必需摘要消息及包装的完整字节。
+     * @param summary 当前摘要
+     * @return 实际编码增量
+     */
+    public long summaryBytes(AgentSummarySnapshot summary) {
+        List<ILLMMessage> probe = List.of(LLMUserMessage.builder().contents(List.of()).build());
+        return codec.signature(new AgentPromptInput(probe, List.of(), 0, null, summary).messages()).bytes() - codec.signature(probe).bytes();
     }
 
     /**
@@ -176,6 +200,7 @@ public final class AgentConversationEngine {
             var projection = result.promptTranscript();
             if (projection != null) {
                 bytes = add(bytes, codec.serializedBytes(projection.input()));
+                if (projection.input().summary() != null) { bytes = add(bytes, codec.serializedBytes(projection.input().summary().text())); }
                 bytes = add(bytes, codec.signature(projection.messages()).bytes());
             }
             var runtime = result.access().flatMap(AgentAccessDecision::runtime);

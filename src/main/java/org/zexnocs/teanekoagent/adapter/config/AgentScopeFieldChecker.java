@@ -9,7 +9,7 @@ import java.util.Arrays;
  * 校验作用域开关、活动模式及窗口覆盖，拒绝未知字段，不承担调用者权限校验。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -22,7 +22,8 @@ public final class AgentScopeFieldChecker implements IConfigFieldChecker {
      */
     @Override public String isValid(String field, String value) {
         if ("enabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
-                || "customPersonalityEnabled".equals(field) || "personalityCorrectionsEnabled".equals(field) || "personalityLearningEnabled".equals(field)) {
+                || "customPersonalityEnabled".equals(field) || "personalityCorrectionsEnabled".equals(field) || "personalityLearningEnabled".equals(field)
+                || "historyCaptureEnabled".equals(field) || "historyReadEnabled".equals(field) || "autoSummaryEnabled".equals(field)) {
             return "true".equals(value) || "false".equals(value) ? null : "Agent 开关只能为 true 或 false。";
         }
         if ("personalityId".equals(field)) { return value != null && value.length() <= 128 ? null : "人格 ID 不能超过 128 字符。"; }

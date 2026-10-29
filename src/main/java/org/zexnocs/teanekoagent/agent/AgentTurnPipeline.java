@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.agent;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.agent.history.IAgentHistoryRecorder;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
@@ -9,6 +10,7 @@ import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
+import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
@@ -34,7 +36,7 @@ import java.util.function.Function;
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -50,6 +52,8 @@ final class AgentTurnPipeline {
     private final IAgentPromptSource prompts;
     private final @Nullable IAgentPersonalitySource personalities;
     private final LLMMessageCodec codec;
+    private final @Nullable IAgentHistoryRecorder history;
+    private final @Nullable IAgentConversationSummaries summaries;
 
     /**
      * 装配并校验稳定顺序，不在每条请求中重新编译或扫描 System。
@@ -62,14 +66,17 @@ final class AgentTurnPipeline {
      * @param references 可选持久化空间端口；为空时使用显式无记忆模式
      * @param prompts 可等待的本轮临时参考资料端口
      * @param personalities 可选独立人格端口
+     * @param history 可选历史记录端口
+     * @param summaries 可选摘要使用复核
      */
     AgentTurnPipeline(Function<EntityId, AgentTurn> turns, AgentAccessGate gate,
             ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities) {
+            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities,
+            @Nullable IAgentHistoryRecorder history, @Nullable IAgentConversationSummaries summaries) {
         this.turns = turns; this.gate = gate; this.interactions = interactions;
         this.tools = tools; this.mapper = mapper; this.executor = executor;
         this.references = references;
-        this.prompts = prompts; this.personalities = personalities; codec = new LLMMessageCodec(mapper);
+        this.prompts = prompts; this.personalities = personalities; this.history = history; this.summaries = summaries; codec = new LLMMessageCodec(mapper);
         pipeline = SystemPipeline.compile(List.of(
                 new Step(new SystemDescriptor("agent.admit", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.SCOPE_POLICY), Set.of(), Set.of()), this::admit),
@@ -122,7 +129,7 @@ final class AgentTurnPipeline {
                             return List.copyOf(values);
                         })).thenComposeAsync(fragments -> {
                 context.control().checkActive(); turn.guard(gate, false);
-                var input = AgentPromptInput.bounded(request.messages(), fragments, request.inputMaxBytes(), codec, personality);
+                var input = AgentPromptInput.bounded(request.messages(), fragments, request.inputMaxBytes(), codec, personality, request.summary());
                 return verifyPrompt(turn, request, input).thenApplyAsync(ignored -> {
                     turn.guard(gate, false);
                     return SystemResult.continueWith(ComponentPatch.builder().put(AgentComponents.PROMPT_INPUT, input).build());
@@ -141,7 +148,7 @@ final class AgentTurnPipeline {
         var request = snapshot.require(AgentComponents.REQUEST);
         var reference = snapshot.find(AgentComponents.MEMORY_REFERENCE).orElse(null);
         return Objects.equals(reference, request.memoryReference()) ? request : new AgentRunRequest(request.requestId(), request.actor(), request.activity(),
-                request.messages(), request.conversation(), reference, request.userText(), request.inputMaxBytes(), request.personalityIdentity());
+                request.messages(), request.conversation(), reference, request.userText(), request.inputMaxBytes(), request.personalityIdentity(), request.summary());
     }
 
     /**
@@ -150,7 +157,11 @@ final class AgentTurnPipeline {
      * @return 实际交互结束后才完成的补丁
      */
     private CompletionStage<SystemResult> interact(SystemContext context) {
-        return CompletableFuture.supplyAsync(() -> startInteraction(context), executor).thenCompose(Function.identity());
+        return CompletableFuture.supplyAsync(() -> {
+            var turn = turns.apply(context.snapshot().id());
+            return history == null ? CompletableFuture.<Void>completedStage(null)
+                    : history.record(fixedRequest(context.snapshot()), context.snapshot().require(AgentComponents.PROMPT_INPUT), null, turn.control()).exceptionallyCompose(turn::rejectContext);
+        }, executor).thenCompose(Function.identity()).thenComposeAsync(ignored -> startInteraction(context), executor);
     }
 
     /**
@@ -170,7 +181,7 @@ final class AgentTurnPipeline {
         var toolRequest = fixedRequest(context.snapshot());
         List<LLMToolBinding> selected = definition.activities().contains(AgentActivity.TOOL)
                 ? List.copyOf(tools.select(definition, toolRequest, runtime)) : List.of();
-        boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null;
+        boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null || input.summary() != null;
         var bound = selected.stream().map(binding -> !guarded
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))
                 : binding.guardedAsync((call, trusted) -> guard(turn, true), executor)).toList();
@@ -187,7 +198,7 @@ final class AgentTurnPipeline {
                         turn.observe(result, null); return result;
                     }).thenApplyAsync(result -> {
                         var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
-                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null)) {
+                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null)) {
                             var projection = AgentPromptTranscript.create(input, result, codec); turn.observe(result, projection);
                             patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
                         }
@@ -199,7 +210,7 @@ final class AgentTurnPipeline {
     }
 
     /**
-     * 切回业务执行器复核交付；仅写本轮结果，不持久化历史或发送平台消息。
+     * 切回业务执行器复核交付，等待已启用的纯文本历史提交，再复核后写本轮结果。
      * 本步骤只借用控制和轮次，外层异步完成链负责统一回收。
      * @param context 已观察交互的组件快照
      * @return 完成结果补丁
@@ -208,7 +219,12 @@ final class AgentTurnPipeline {
         return CompletableFuture.supplyAsync(() -> {
             context.control().checkActive();
             var turn = turns.apply(context.snapshot().id());
-            return guard(turn, false).thenApply(ignored -> SystemResult.continueWith(
+            return guard(turn, false).thenComposeAsync(ignored -> {
+                var answer = turn.result(null).answer().orElse(null);
+                return history == null || answer == null ? CompletableFuture.completedStage(null)
+                        : history.record(fixedRequest(context.snapshot()), context.snapshot().require(AgentComponents.PROMPT_INPUT), answer, turn.control())
+                                .exceptionallyCompose(turn::rejectContext).thenComposeAsync(saved -> guard(turn, false), executor);
+            }, executor).thenApply(ignored -> SystemResult.continueWith(
                     ComponentPatch.builder().put(AgentComponents.OUTCOME, turn.result(null)).build()));
         }, executor).thenCompose(Function.identity());
     }
@@ -241,6 +257,10 @@ final class AgentTurnPipeline {
             var personality = input.personality();
             CompletionStage<Void> checked = personality == null ? CompletableFuture.completedStage(null)
                     : Objects.requireNonNull(personalities, "实际人格源不能为空。").verify(request.actor().scope(), personality, turn.control());
+            if (input.summary() != null) {
+                checked = checked.thenComposeAsync(ignored -> Objects.requireNonNull(summaries, "实际摘要端口不能为空。")
+                        .verify(request, input.summary(), turn.control()), executor);
+            }
             return turn.control().guard(checked.thenComposeAsync(ignored -> input.fragments().isEmpty() ? CompletableFuture.completedStage(null)
                     : Objects.requireNonNull(prompts.verify(request, input, turn.control()), "Prompt 来源复核不能返回空阶段。"), executor))
                 .exceptionallyCompose(turn::rejectContext); }

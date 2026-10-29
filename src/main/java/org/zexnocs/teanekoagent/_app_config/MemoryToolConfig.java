@@ -1,9 +1,11 @@
 package org.zexnocs.teanekoagent._app_config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.zexnocs.teanekoagent.adapter.history.AgentHistoryToolSource;
 import org.zexnocs.teanekoagent.adapter.memory.AgentMemoryToolSource;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.memory.access.IMemoryAccessPolicy;
@@ -16,7 +18,7 @@ import java.util.concurrent.ExecutorService;
 /**
  * 提供明确的默认记忆工具源，用户自定义工具策略可完整替换，不合并全局工具目录。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -29,11 +31,14 @@ public class MemoryToolConfig {
      * @param defaults 读取默认预算
      * @param mapper 项目 JSON 转换器
      * @param executor Core 借用业务执行器
+     * @param history 可选历史工具源
      * @return 可由宿主替换的明确工具源
      */
     @Bean @ConditionalOnMissingBean(IAgentToolSource.class)
-    public AgentMemoryToolSource agentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults,
-            ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor) {
-        return new AgentMemoryToolSource(access, policies, defaults, mapper, executor);
+    public IAgentToolSource agentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults,
+            ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor, ObjectProvider<AgentHistoryToolSource> history) {
+        var memory = new AgentMemoryToolSource(access, policies, defaults, mapper, executor); var historyTools = history.getIfAvailable();
+        if (historyTools == null) { return memory; }
+        return (definition, request, runtime) -> java.util.stream.Stream.concat(memory.select(definition, request, runtime).stream(), historyTools.select(definition, request).stream()).toList();
     }
 }

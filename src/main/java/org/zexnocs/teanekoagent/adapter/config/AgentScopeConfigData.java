@@ -12,7 +12,7 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 不提供认证、连接或补正 key 的普通 cfg 写入入口。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -20,6 +20,14 @@ import org.zexnocs.teanekocore.framework.description.Description;
 public class AgentScopeConfigData implements IConfigData {
     @Description("是否启用当前作用域的 Agent 功能。")
     private boolean enabled = true;
+
+    @Description("是否保存当前作用域的文本历史；采集不启动模型。")
+    private boolean historyCaptureEnabled = true;
+    @Description("是否允许模型查询当前作用域和有效绑定内的文本历史。")
+    private boolean historyReadEnabled = true;
+
+    @Description("是否自动压缩成功会话轮次；摘要独立于事实学习，默认开启。")
+    private boolean autoSummaryEnabled = true;
 
     @Description("是否允许记忆检索、画像读取及记忆注入。")
     private boolean memoryReadEnabled = true;

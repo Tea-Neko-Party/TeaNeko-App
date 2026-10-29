@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.agent;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.conversation.AgentConversationStamp;
+import org.zexnocs.teanekoagent.agent.summary.AgentSummarySnapshot;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
@@ -21,15 +22,33 @@ import java.util.UUID;
  * @param userText 当前原始用户文本凭据，不从 messages 历史推导；缺失时不授权明确新增
  * @param inputMaxBytes 宿主完整模型输入协议字节上限；默认邮箱覆盖为本轮窗口策略，旧独立入口保持不额外限额
  * @param personalityIdentity 邮箱固定的人格身份提示，不携带人格正文，实际源仍须重新解析
+ * @param summary 邮箱固定的已生成摘要；普通入口覆盖调用者提示，实际使用仍须复核
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/10/30
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity,
                               List<ILLMMessage> messages, @Nullable AgentConversationStamp conversation,
                               @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes,
-                              @Nullable String personalityIdentity) {
+                              @Nullable String personalityIdentity, @Nullable AgentSummarySnapshot summary) {
+    /**
+     * 保留尚未采用会话摘要的完整构造。
+     * @param requestId 原请求
+     * @param actor 原身份
+     * @param activity 原活动
+     * @param messages 原消息
+     * @param conversation 原代次
+     * @param memoryReference 原空间
+     * @param userText 当前原文
+     * @param inputMaxBytes 完整字节预算
+     * @param personalityIdentity 实际人格提示
+     */
+    public AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity, List<ILLMMessage> messages,
+            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText,
+            long inputMaxBytes, @Nullable String personalityIdentity) {
+        this(requestId, actor, activity, messages, conversation, memoryReference, userText, inputMaxBytes, personalityIdentity, null);
+    }
     /**
      * 保留没有人格身份交接的完整请求构造。
      * @param requestId 原请求
@@ -114,6 +133,7 @@ public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActi
      * @param userText 可选当前原始用户文本，不允许系统任务或其他来源消息携带
      * @param inputMaxBytes 宿主固定的完整协议字节预算，必须为正
      * @param personalityIdentity 可选人格身份提示，不能作为授权或人格正文
+     * @param summary 可选已生成摘要，不从正文取得授权
      * @throws IllegalArgumentException 当消息协议或透明状态无法安全冻结时
      * @throws NullPointerException 当必需字段为空时
      */
