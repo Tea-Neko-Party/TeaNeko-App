@@ -4,6 +4,7 @@ import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.agent.conversation.AgentConversationStamp;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.framework.composition.ComponentKey;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 
@@ -11,7 +12,7 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
  * Agent 底座的类型化数据键；组件仅保存不可变定义、状态和可信身份，不保存服务。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -25,6 +26,7 @@ public final class AgentComponents {
     public static final ComponentKey<EntityId> INSTANCE = ComponentKey.of("agent.instance", EntityId.class);
     public static final ComponentKey<AgentRunRequest> REQUEST = ComponentKey.of("agent.request", AgentRunRequest.class);
     public static final ComponentKey<AgentConversationStamp> CONVERSATION = ComponentKey.of("agent.conversation", AgentConversationStamp.class);
+    public static final ComponentKey<MemoryNamespaceReference> MEMORY_REFERENCE = ComponentKey.of("agent.memory-reference", MemoryNamespaceReference.class);
     public static final ComponentKey<LLMInteractionResult> INTERACTION = ComponentKey.of("agent.interaction", LLMInteractionResult.class);
     public static final ComponentKey<AgentRunResult> OUTCOME = ComponentKey.of("agent.outcome", AgentRunResult.class);
 

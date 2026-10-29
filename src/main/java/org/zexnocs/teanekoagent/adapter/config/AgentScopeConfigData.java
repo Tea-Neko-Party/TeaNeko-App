@@ -12,7 +12,7 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 不承接旧人格配置中的认证、连接或补正字段。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -23,6 +23,12 @@ public class AgentScopeConfigData implements IConfigData {
 
     @Description("活动模式：PASSIVE_BASIC、PASSIVE_CONTEXTUAL 或 ACTIVE。")
     private String mode = AgentScopePolicy.Mode.PASSIVE_BASIC.name();
+
+    @Description("短期历史消息上限，0 关闭窗口，-1 使用本地默认值；不拆开完整工具轮次。")
+    private int historyMaxMessages = -1;
+
+    @Description("统一协议 JSON 输入字节上限，必须为正，-1 使用本地默认值。")
+    private long inputMaxBytes = -1;
 
     /**
      * 为已存在的登记记录建立不可变策略，非法旧数据不能自动改为启用。

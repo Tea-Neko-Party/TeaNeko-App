@@ -7,14 +7,33 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 默认 Agent 会话入口，同 client/scope/实例进入同一顺序邮箱，群内不按用户拆分。
- * 不发送平台消息、不自动写历史，不将请求身份解释为永久授权。
+ * 提交完整成功轮次的内存窗口，不发送平台消息，不将请求身份解释为永久授权。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public interface IAgentService {
+    /**
+     * 显式重试只观察已知执行或重放保留结果，未知、过期或淘汰时不会重新执行模型和工具。
+     * @param handle 原目标实例
+     * @param request 含原 ID、身份和新增输入的原始请求
+     * @return 只读原结果或明确的冲突、失效、不可重放状态
+     * @throws NullPointerException 当实例或请求为空时
+     */
+    CompletionStage<AgentRunResult> retry(AgentHandle handle, AgentRunRequest request);
+
+    /**
+     * 为有父控制的重试提供独立观察视图；父取消只结束本次观察，不取消原执行或重置预算。
+     * @param handle 原目标实例
+     * @param request 原始请求
+     * @param parent 本次观察借用的父控制
+     * @return 受当前父截止时间约束的只读结果
+     * @throws NullPointerException 当必需参数为空时
+     */
+    CompletionStage<AgentRunResult> retry(AgentHandle handle, AgentRunRequest request, ExecutionControl parent);
+
     /**
      * 排队执行独立请求，出队后根据实际就绪设置建立父总预算和截止时间。
      * COLLECT 和 TOOL 属于独立能力入口，不能在本入口触发模型轮次。

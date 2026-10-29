@@ -6,8 +6,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.agent.AgentService;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
-import org.zexnocs.teanekoagent.agent.IAgentTurnService;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
@@ -21,7 +21,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * 装配独立 Agent 轮次，借用 Core 执行资源，不创建默认实例或启动后台业务。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -35,6 +35,7 @@ public class AgentExecutionConfig {
 
     /**
      * 注入运行依赖并预编译管线，构造时不读取配置或执行就绪检查。
+     * 返回具体实现以声明实际关闭方法，业务使用方仍按独立轮次接口注入。
      * @param gate 统一准入入口
      * @param interactions 完整 LLM 交互端口
      * @param tools 显式工具策略提供者，缺失时选择空工具策略，不依赖配置类扫描顺序
@@ -42,13 +43,14 @@ public class AgentExecutionConfig {
      * @param executor Core 业务执行器
      * @param scheduler Core 计时器
      * @param logger 项目日志
+     * @param references 当前持久化空间引用端口
      * @return 拥有本服务轮次、借用共享资源的异步执行服务
      */
     @Bean(destroyMethod = "close")
-    public IAgentTurnService agentTurnService(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
+    public AgentService agentTurnService(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
-            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger) {
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references) {
         return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper,
-                executor, scheduler, Clock.systemUTC(), logger);
+                executor, scheduler, Clock.systemUTC(), logger, references);
     }
 }

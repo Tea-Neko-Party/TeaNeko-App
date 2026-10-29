@@ -31,7 +31,7 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*
  * 此类型不自动循环、不提交业务历史，模型响应与工具调用的关联由上层编排验证。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  * @see LLMCallLimits
@@ -136,10 +136,11 @@ public final class LLMInteractionExecution implements AutoCloseable {
     }
 
     /**
-     * 在模型阶段开始前预占一次请求；失败的新尝试仍计数，取消的排队任务不会发起调用。
+     * 在模型阶段完成宿主准入后预占一次请求；失败的新尝试仍计数，取消的排队任务不会发起调用。
      * 可见工具始终取自本轮绑定，局部或共享额度只剩末次请求时强制无工具收束。
      * 在排队前冻结消息及嵌套元数据；调用方只须避免在复制期间并发修改原对象。
      * 启用 token 预算时先预检参数及估算输入，预留成功才计模型尝试；完成后按报告结算。
+     * 异步宿主守卫属于同一阶段时限，完成后切回业务执行器再预占额度和发起请求。
      *
      * @param prompt 本次显式消息与模型参数，不在此处自动追加历史
      * @return 单次模型请求实际完成的只读阶段；预算、取消或传输失败异常完成
@@ -170,31 +171,33 @@ public final class LLMInteractionExecution implements AutoCloseable {
                 }
                 var effective = prepared;
                 var inputEstimate = estimate;
-                guard.check(context.withControl(stage));
-                stage.checkActive();
-                var allowed = stage.whileActive(() -> {
-                    requireCapacity(MODEL_REQUESTS, 1);
-                    var reserved = tokenBudget.enabled() ? tokenBudget.reserve(inputEstimate, effective) : null;
-                    try {
-                        reserve(MODEL_REQUESTS);
-                    } catch (RuntimeException failure) {
-                        if (reserved != null) { reserved.close(); }
-                        throw failure;
-                    }
-                    held.set(reserved);
-                    attempt.set(Math.toIntExact(localBudget.used(MODEL_REQUESTS)));
-                    return canOfferTools();
-                });
-                effective.setTools(allowed ? tools.definitions() : List.of());
-                effective.setToolChoice(allowed ? effective.findToolChoice().orElse("auto") : "none");
-                var callPolicy = tokenBudget.enabled() ? LLMOptionsPolicy.RESOLVED : optionsPolicy;
-                var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective, callPolicy),
-                        ExecutionPolicy.controlled(settings.modelTimeout(), stage)), "模型端口返回的任务不能为空。");
-                return pending.asStage().thenApply(result -> stage.whileActive(() -> {
-                    if (result == null) { throw new InvalidModelResponseException(); }
-                    toolRoundAvailable = allowed && !"none".equals(effective.getToolChoice());
-                    return result;
-                }));
+                return Objects.requireNonNull(guard.checkAsync(context.withControl(stage)), "模型准入阶段不能为空。")
+                        .thenComposeAsync(ignored -> {
+                            stage.checkActive();
+                            var allowed = stage.whileActive(() -> {
+                                requireCapacity(MODEL_REQUESTS, 1);
+                                var reserved = tokenBudget.enabled() ? tokenBudget.reserve(inputEstimate, effective) : null;
+                                try {
+                                    reserve(MODEL_REQUESTS);
+                                } catch (RuntimeException failure) {
+                                    if (reserved != null) { reserved.close(); }
+                                    throw failure;
+                                }
+                                held.set(reserved);
+                                attempt.set(Math.toIntExact(localBudget.used(MODEL_REQUESTS)));
+                                return canOfferTools();
+                            });
+                            effective.setTools(allowed ? tools.definitions() : List.of());
+                            effective.setToolChoice(allowed ? effective.findToolChoice().orElse("auto") : "none");
+                            var callPolicy = tokenBudget.enabled() ? LLMOptionsPolicy.RESOLVED : optionsPolicy;
+                            var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective, callPolicy),
+                                    ExecutionPolicy.controlled(settings.modelTimeout(), stage)), "模型端口返回的任务不能为空。");
+                            return pending.asStage().thenApply(result -> stage.whileActive(() -> {
+                                if (result == null) { throw new InvalidModelResponseException(); }
+                                toolRoundAvailable = allowed && !"none".equals(effective.getToolChoice());
+                                return result;
+                            }));
+                        }, executor);
             });
             return pendingStage.handle((result, failure) -> completeModel(attempt.get(), held.get(), result, failure));
         });

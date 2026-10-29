@@ -8,13 +8,17 @@ import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * 固定一次交互的 schema 与执行目标；模型可见定义不携带执行器。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -81,6 +85,25 @@ public final class LLMToolBinding {
             guard.accept(call, context);
             context.control().checkActive();
             return executor.call(call, context);
+        });
+    }
+
+    /**
+     * 等待异步宿主检查后切回指定业务执行器，取消或超时后的迟到允许不得执行工具。
+     * @param guard 生命周期锁外的异步准入检查
+     * @param businessExecutor 借用的工具业务执行器
+     * @return 使用原冻结定义和实际执行器的独立受控绑定
+     * @throws NullPointerException 当守卫或执行器为空时
+     */
+    public LLMToolBinding guardedAsync(BiFunction<ILLMToolCall, ToolInvocationContext, CompletionStage<Void>> guard, Executor businessExecutor) {
+        Objects.requireNonNull(guard, "异步工具准入守卫不能为空。"); Objects.requireNonNull(businessExecutor, "工具业务执行器不能为空。");
+        return new LLMToolBinding(this, (call, context) -> {
+            context.control().checkActive();
+            return Objects.requireNonNull(guard.apply(call, context), "异步工具准入阶段不能为空。")
+                    .thenComposeAsync(ignored -> {
+                        try { context.control().checkActive(); return executor.call(call, context); }
+                        catch (Exception failure) { return CompletableFuture.failedStage(failure); }
+                    }, businessExecutor);
         });
     }
 

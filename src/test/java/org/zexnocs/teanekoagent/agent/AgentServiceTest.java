@@ -6,8 +6,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent._app_config.AgentExecutionConfig;
 import org.zexnocs.teanekoagent.agent.access.*;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
@@ -655,8 +657,8 @@ class AgentServiceTest {
     @Test void assemblyCreatesNoRuntimeWork() {
         var config = new AgentExecutionConfig(); var executor = mock(ExecutorService.class);
         var beans = new DefaultListableBeanFactory();
-        var built = (AgentService) config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
-                executor, runtime.scheduler, logger);
+        var built = config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
+                executor, runtime.scheduler, logger, mock(IAgentMemoryReferences.class));
         try (built) { verifyNoInteractions(scopes, readiness, models, executor); }
     }
 
@@ -666,8 +668,13 @@ class AgentServiceTest {
         doAnswer(invocation -> { runtime.execute(invocation.getArgument(0)); return null; }).when(executor).execute(any(Runnable.class));
         var beans = new DefaultListableBeanFactory(); beans.registerSingleton("明确工具源", tools);
         select((call, context) -> CompletableFuture.completedStage("工具结果"));
-        var built = (AgentService) config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
-                executor, runtime.scheduler, logger);
+        var references = mock(IAgentMemoryReferences.class);
+        var fixed = new org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
+                org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
+        when(references.resolve(any())).thenReturn(CompletableFuture.completedStage(fixed));
+        when(references.verify(any())).thenReturn(CompletableFuture.completedStage(null));
+        var built = config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
+                executor, runtime.scheduler, logger, references);
         try (built) {
             var result = built.run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture(); runtime.runAll();
             assertEquals("work", requireOptions(prompts.getFirst()).getTools().getFirst().getName());
@@ -675,5 +682,32 @@ class AgentServiceTest {
             verify(tools).select(any(), any(), any());
         }
         verify(executor, never()).shutdown();
+    }
+
+    /** 验证最小 Spring 装配支持接口注入和实际关闭方法，销毁时结束冷轮次并保留借用执行器。 */
+    @Test void springBeanDestructionCompletesOwnedColdExecution() {
+        var executor = mock(ExecutorService.class);
+        var handle = agent();
+        final AgentRunExecution cold;
+        try (var context = new AnnotationConfigApplicationContext()) {
+            var beans = context.getBeanFactory();
+            beans.registerSingleton("agentAccessGate", gate);
+            beans.registerSingleton("llmInteractionService", interactions);
+            beans.registerSingleton("objectMapper", new ObjectMapper());
+            beans.registerSingleton("virtualExecutor", executor);
+            beans.registerSingleton("taskExecutor", runtime.scheduler);
+            beans.registerSingleton("projectLogger", logger);
+            beans.registerSingleton("memoryReferences", mock(IAgentMemoryReferences.class));
+            context.register(AgentExecutionConfig.class);
+            context.refresh();
+            var assembled = context.getBean(IAgentTurnService.class);
+            assertSame(assembled, context.getBean(AgentService.class));
+            cold = assembled.prepare(handle, request(AgentActivity.SERVICE));
+            assertFalse(cold.result().toCompletableFuture().isDone());
+        }
+        assertEquals(CANCELLED, cold.result().toCompletableFuture().join().status());
+        assertFalse(handle.isClosed());
+        verifyNoInteractions(scopes, readiness, models, executor);
+        verify(runtime.scheduler, never()).shutdown();
     }
 }

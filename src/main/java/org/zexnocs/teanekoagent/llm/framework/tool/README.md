@@ -37,6 +37,8 @@ schema 仅包含 fact；`ToolInvocationContext` 从参数 schema 中排除，由
 
 宿主可用 `binding.guarded((call, context) -> ...)` 在实际执行器前加入动态检查；返回新绑定复用原冻结定义，不公开执行器，也不改变 schema。检查在生命周期锁外执行，前后复核阶段控制。宿主拒绝可抛 `LLMOperationRejectedException`；同步、异步以及完成包装中的该异常均向交互层传播以停止余下动作，不转换成普通可恢复错误或成功输出。业务授权守卫不可将任意原始异常信息复制到模型结果。
 
+异步准入使用 `binding.guardedAsync((call, context) -> stage, businessExecutor)`；守卫完成后切回指定业务执行器，重新检查阶段控制再进入原执行器。两次检查之间不持有生命周期锁，不阻塞等待数据库，不创建或关闭线程池。守卫等待受调用方传入的控制约束；在完整交互中计入工具阶段时限，取消/超时后的迟到允许不会执行实际工具。
+
 ## 完成、错误和资源归属
 
 注解方法返回 Stage 时先展开再序列化结果：String 保持原文，其他对象转 JSON，Void/null 业务值转为空字符串；声明 Stage 却返回 null 属于失败。同步的 `LLMToolService.call` 保持原便捷语义，但异步/上下文工具会在业务启动前拒绝此入口。

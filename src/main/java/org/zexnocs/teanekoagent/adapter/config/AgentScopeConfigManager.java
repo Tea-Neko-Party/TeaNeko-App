@@ -8,11 +8,11 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
  * 该管理器只声明配置，构造 Bean 不加载作用域数据。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
-@ConfigManager(value = "agent", description = "Agent 作用域开关与活动模式",
+@ConfigManager(value = "agent", description = "Agent 作用域开关、活动模式与历史窗口",
         configType = AgentScopeConfigData.class, fieldChecker = AgentScopeFieldChecker.class,
         namespaces = {TeaNekoConfigNamespaces.GENERAL, TeaNekoConfigNamespaces.PRIVATE, TeaNekoConfigNamespaces.GROUP})
 public class AgentScopeConfigManager {}

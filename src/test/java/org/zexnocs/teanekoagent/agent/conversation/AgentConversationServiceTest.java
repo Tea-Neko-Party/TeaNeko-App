@@ -3,21 +3,11 @@ package org.zexnocs.teanekoagent.agent.conversation;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoagent.agent.*;
-import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
-import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
-import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
-import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -36,7 +26,7 @@ import static org.mockito.Mockito.*;
  * 使用可控冷轮次验证邮箱状态仲裁、共享身份、排队时限与锁外资源操作。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -48,7 +38,7 @@ class AgentConversationServiceTest {
     private final AtomicReference<AgentQueueSettings> settings = new AtomicReference<>(AgentQueueSettings.defaults());
     private final AtomicReference<AgentConversationSettings> retention = new AtomicReference<>(AgentConversationSettings.defaults());
     private final ILogger logger = mock(ILogger.class);
-    private final Backend backend = new Backend();
+    private final AgentConversationTestBackend backend = new AgentConversationTestBackend();
     private final AgentConversationService service = new AgentConversationService(backend, settings::get,
             runtime, runtime.scheduler, runtime.clock, logger, retention::get);
 
@@ -530,12 +520,12 @@ class AgentConversationServiceTest {
         }
     }
 
-    /** 验证相同在途 requestId 明确拒绝，不让另一个调用者获得或替换已有结果。 */
-    @Test void duplicateRequestIsNotSilentlyMergedAndIdentifierCanBeReusedAfterFinish() {
+    /** 验证相同在途 requestId 明确拒绝，完成后匹配原请求则复用结果而不重新执行。 */
+    @Test void duplicateRequestIsRejectedWhileActiveAndReplayedAfterFinish() {
         var a = request(); service.run(handle, a); runtime.runAll();
         assertEquals(AgentRunResult.Status.DUPLICATE_REQUEST, service.run(handle, a).toCompletableFuture().join().status()); complete(a);
-        var retry = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a);
-        assertEquals(AgentRunResult.Status.SUCCESS, retry.join().status()); assertEquals(2, backend.started.size());
+        var retry = service.run(handle, a).toCompletableFuture(); runtime.runAll();
+        assertEquals(AgentRunResult.Status.SUCCESS, retry.join().status()); assertEquals(1, backend.started.size());
     }
 
     /** 验证实例关闭结束其运行和排队项，不影响其他实例。 */
@@ -694,117 +684,4 @@ class AgentConversationServiceTest {
         }
     }
 
-    /**
-     * 不执行模型的可控冷轮次端口，业务完成与取消回执分别由用例推进。
-     * @author zExNocs
-     * @date 2026/10/28
-     * @since 4.0.0
-     * @version 4.5.0-l
-     */
-    private static final class Backend implements IAgentTurnService, AutoCloseable {
-        final Map<UUID, Call> calls = new ConcurrentHashMap<>();
-        final List<UUID> started = Collections.synchronizedList(new ArrayList<>());
-        final AtomicBoolean autoAck = new AtomicBoolean(true);
-        final AtomicBoolean immediate = new AtomicBoolean();
-        final AtomicBoolean charge = new AtomicBoolean();
-        final AtomicBoolean racing = new AtomicBoolean();
-        final AtomicInteger concurrentStarts = new AtomicInteger();
-        final AtomicInteger maxConcurrentStarts = new AtomicInteger();
-        final AtomicReference<Runnable> beforePrepare = new AtomicReference<>(() -> {});
-
-        /**
-         * 仅创建独立控制及冷句柄。
-         * @param handle 目标实例
-         * @param request 固定请求
-         * @return 尚未开始业务的句柄
-         */
-        @Override public AgentRunExecution prepare(AgentHandle handle, AgentRunRequest request) {
-            return create(handle, request, ExecutionControl.create(LLMCallLimits.defaults().newBudget()));
-        }
-
-        /**
-         * 保留同一父预算及链路。
-         * @param handle 目标实例
-         * @param request 固定请求
-         * @param parent 借用的总控制
-         * @return 冷执行句柄
-         */
-        @Override public AgentRunExecution prepare(AgentHandle handle, AgentRunRequest request, ExecutionControl parent) {
-            return create(handle, request, parent.child());
-        }
-
-        /**
-         * 先创建资源和观察关系，只有显式 start 才登记实际业务调用。
-         * @param handle 实例
-         * @param request 请求
-         * @param control 本用例拥有的控制
-         * @return 受控冷句柄
-         */
-        private AgentRunExecution create(AgentHandle handle, AgentRunRequest request, ExecutionControl control) {
-            beforePrepare.get().run();
-            var call = new Call(handle, request, control);
-            calls.put(request.requestId(), call);
-            var link = control.onTermination(reason -> {
-                if (autoAck.get()) { call.complete(reason == ExecutionControl.StopReason.DEADLINE_EXCEEDED
-                        ? AgentRunResult.Status.TIMED_OUT : AgentRunResult.Status.CANCELLED); }
-            });
-            call.result.whenComplete((value, failure) -> { link.close(); control.close(); });
-            return new AgentRunExecution(call.result, () -> {
-                try {
-                    control.checkActive();
-                    if (charge.get()) { control.consume(LLMCallLimits.MODEL_REQUESTS, 1); }
-                    started.add(request.requestId());
-                    if (racing.get()) {
-                        int current = concurrentStarts.incrementAndGet(); maxConcurrentStarts.accumulateAndGet(current, Math::max);
-                        try { Thread.yield(); } finally { concurrentStarts.decrementAndGet(); }
-                    }
-                    if (immediate.get()) { call.complete(AgentRunResult.Status.SUCCESS); }
-                } catch (BudgetExceededException failure) { call.complete(AgentRunResult.Status.BUDGET_EXCEEDED); }
-            }, control::cancel, candidate -> candidate.isWithin(control.id()));
-        }
-
-        /** 释放本用例仍持有的控制和未完成回执。 */
-        @Override public void close() { calls.values().forEach(call -> call.control.cancel()); }
-    }
-
-    /**
-     * 单次替身业务，成功结果使用真实不可变协议容器。
-     * @author zExNocs
-     * @date 2026/10/28
-     * @since 4.0.0
-     * @version 4.5.0-l
-     */
-    private static final class Call {
-        final AgentHandle handle;
-        final AgentRunRequest request;
-        final ExecutionControl control;
-        final CompletableFuture<AgentRunResult> result = new CompletableFuture<>();
-
-        /**
-         * 保存当前替身拥有的数据与控制。
-         * @param handle 目标实例
-         * @param request 当前请求
-         * @param control 当前控制
-         */
-        Call(AgentHandle handle, AgentRunRequest request, ExecutionControl control) {
-            this.handle = handle; this.request = request; this.control = control;
-        }
-
-        /**
-         * 完成真实回执；取消后的重复成功不会改写已交付结果。
-         * @param status 业务状态
-         */
-        void complete(AgentRunResult.Status status) {
-            var runtime = new AgentRuntimeSnapshot(new LLMModelOptionsSnapshot(LLMModelOptions.builder()
-                    .provider("test").model("离线模型").build()), ModelCapabilities.textOnly(), LLMInteractionSettings.defaults());
-            var access = new AgentAccessDecision(AgentAccessDecision.Reason.ALLOWED,
-                    Optional.of(new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE)),
-                    Optional.of(new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime))));
-            var message = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText("替身回答").build()).build();
-            var interaction = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(message), message,
-                    List.of(), List.of(), Map.of());
-            result.complete(new AgentRunResult(handle.id(), request.requestId(), status, Optional.of(access),
-                    status == AgentRunResult.Status.SUCCESS ? Optional.of(interaction) : Optional.empty(), control.budget().snapshot()));
-        }
-    }
 }

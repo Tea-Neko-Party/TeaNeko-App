@@ -9,6 +9,7 @@ import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekocore.logger.ILogger;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,7 +25,7 @@ import static org.mockito.Mockito.*;
 /**
  * 验证排队及会话保留配置懒读取、范围和脱敏失败，不启动应用或数据库。
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -80,12 +81,14 @@ class AgentQueueDefaultsTest {
     @Test void defaultServiceAssemblyRequiresMailboxAndDoesNoWork() {
         var port = mock(IAgentTurnService.class); var defaults = mock(IAgentQueueDefaults.class);
         var conversations = mock(IAgentConversationDefaults.class);
+        var policy = mock(IAgentConversationPolicy.class);
         var executor = mock(ExecutorService.class); var scheduler = mock(ScheduledExecutorService.class);
-        var built = new AgentConversationConfig().agentService(port, defaults, conversations, executor, scheduler, mock(ILogger.class));
+        var built = new AgentConversationConfig().agentService(port, defaults, conversations, policy, new ObjectMapper(),
+                executor, scheduler, mock(ILogger.class), mock(org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences.class));
         assertInstanceOf(AgentConversationService.class, built);
         assertInstanceOf(IAgentConversationControl.class, built);
         built.close();
-        verifyNoInteractions(port, defaults, conversations, executor, scheduler);
+        verifyNoInteractions(port, defaults, conversations, policy, executor, scheduler);
     }
     /** 验证默认值及下一次调用的配置覆盖，旧快照保持不变。 */
     @Test void defaultAndReloadedSettingsAreIndependent() {

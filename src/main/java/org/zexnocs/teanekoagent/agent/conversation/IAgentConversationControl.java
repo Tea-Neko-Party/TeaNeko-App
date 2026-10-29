@@ -2,18 +2,32 @@ package org.zexnocs.teanekoagent.agent.conversation;
 
 import org.zexnocs.teanekoagent.agent.AgentHandle;
 import org.zexnocs.teanekoagent.agent.AgentScope;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+
 import java.util.Optional;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 宿主会话生命周期端口；管理调用者负责权限，不能直接作为开放的模型工具。
- * 不创建记忆空间、不删除持久化数据，也不替代后续 namespace 绑定事务。
+ * 引用同步可按需登记缺失的默认共享空间；不删除持久化数据，也不替代 namespace 绑定事务。
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public interface IAgentConversationControl {
+    /**
+     * 持久化绑定提交后读取当前引用并协调同 scope 的所有实例；不以旧操作回执恢复状态。
+     * 调用方负责管理权限，并保持借用父控制存活至完成。
+     * @param scope 真实作用域
+     * @param parent 借用管理控制
+     * @return 实际更换 epoch 的会话数
+     * @throws UnsupportedOperationException 当实现尚未支持持久化引用同步时
+     */
+    default CompletionStage<Integer> synchronizeMemory(AgentScope scope, ExecutionControl parent) {
+        throw new UnsupportedOperationException("会话端口尚未支持持久化记忆引用同步。");
+    }
     /**
      * 读取只含不可变数据的快照；不创建会话或延长空闲有效期。
      * @param handle 目标实例

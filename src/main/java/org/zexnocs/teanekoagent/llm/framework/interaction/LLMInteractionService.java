@@ -5,11 +5,11 @@ import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
@@ -33,7 +33,7 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * 不创建线程池，不处理 Agent 人格、记忆、平台发送或业务历史提交。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  * @see LLMInteractionExecution
@@ -165,29 +165,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * @throws IllegalArgumentException 当工具历史不完整、孤立或重复时
      */
     private static Set<String> validateHistory(List<ILLMMessage> messages) {
-        var ids = new HashSet<String>();
-        var pending = new ArrayDeque<ILLMToolCall>();
-        for (var message : messages) {
-            if (message instanceof ILLMToolMessage tool) {
-                var expected = pending.pollFirst();
-                if (expected == null || !expected.getId().equals(tool.getToolCallId())
-                        || !expected.getName().equals(tool.getName())) {
-                    throw new IllegalArgumentException("工具历史的调用 ID、名称或顺序不匹配。");
-                }
-            } else {
-                if (!pending.isEmpty()) {
-                    throw new IllegalArgumentException("工具调用尚未完整回填，不能继续其他消息。");
-                }
-                if (message instanceof ILLMAssistantMessage assistant) {
-                    validateCalls(assistant.getToolCalls(), ids);
-                    pending.addAll(assistant.getToolCalls());
-                }
-            }
-        }
-        if (!pending.isEmpty()) {
-            throw new IllegalArgumentException("初始历史包含未完成的工具调用。");
-        }
-        return ids;
+        return LLMMessageHistory.validateComplete(messages);
     }
 
     /**
@@ -198,15 +176,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * @throws IllegalArgumentException 当工具协议非法或调用 ID 重复时
      */
     private static void validateCalls(List<ILLMToolCall> calls, Set<String> ids) {
-        var added = new HashSet<String>();
-        for (var call : calls) {
-            if (!"function".equals(call.getType()) || call.getId() == null || call.getId().isBlank()
-                    || call.getName() == null || call.getName().isBlank() || call.getArguments() == null
-                    || ids.contains(call.getId()) || !added.add(call.getId())) {
-                throw new IllegalArgumentException("模型工具调用格式非法或 ID 已使用。");
-            }
-        }
-        ids.addAll(added);
+        LLMMessageHistory.validateCalls(calls, ids);
     }
 
     /**

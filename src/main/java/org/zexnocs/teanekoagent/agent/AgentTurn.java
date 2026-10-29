@@ -3,9 +3,12 @@ package org.zexnocs.teanekoagent.agent;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -45,6 +48,8 @@ final class AgentTurn implements AutoCloseable {
     private volatile @Nullable ExecutionControl execution;
     private volatile @Nullable AgentAccessDecision access;
     private volatile @Nullable LLMInteractionResult observed;
+    private volatile @Nullable MemoryNamespaceReference memoryReference;
+    private final AtomicReference<AgentRunResult.Status> memoryRejected = new AtomicReference<>();
 
     /**
      * 接管当前轮的轻量生命周期，不读取配置或执行工具。
@@ -111,6 +116,65 @@ final class AgentTurn implements AutoCloseable {
                 .put(AgentComponents.RUNTIME, runtime)
                 .put(AgentComponents.SCOPE_POLICY, decision.scope().orElseThrow()).build()));
         return true;
+    }
+
+    /**
+     * 在实际控制建立后固定空间引用；只借用本轮控制，异步完成和关闭仍由外层拥有者负责。
+     * @param references 空间端口；显式无持久化记忆的轮次为空
+     * @return 引用已固定或原始终止原因；失效不刷新成另一个空间
+     */
+    @SuppressWarnings("resource")
+    CompletionStage<Void> resolveMemory(@Nullable IAgentMemoryReferences references) {
+        if (references == null) { return CompletableFuture.completedStage(null); }
+        try {
+            var expected = request.memoryReference();
+            CompletionStage<MemoryNamespaceReference> source = expected == null ? references.resolve(request.actor().scope())
+                    : references.verify(expected).thenApply(ignored -> expected);
+            return control().guard(Objects.requireNonNull(source, "空间引用解析阶段不能为空。"))
+                    .thenAccept(value -> {
+                        if (value == null || !value.scope().equals(request.actor().scope())) {
+                            throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE);
+                        }
+                        lifetime.whileActive(() -> {
+                            entity.commit(entity.snapshot().revision(), ComponentPatch.builder().put(AgentComponents.MEMORY_REFERENCE, value).build());
+                            memoryReference = value;
+                            return null;
+                        });
+                    }).exceptionallyCompose(this::rejectMemory);
+        } catch (RuntimeException failure) { return rejectMemory(failure); }
+    }
+
+    /**
+     * 异步复核已固定引用，不在生命周期锁内访问存储，不关闭借用的本轮控制。
+     * @param references 空间端口，显式无持久化记忆的轮次为空
+     * @return 一致时完成，失效通过交互专用拒绝终止后继动作
+     */
+    @SuppressWarnings("resource")
+    CompletionStage<Void> verifyMemory(@Nullable IAgentMemoryReferences references) {
+        if (references == null) { return CompletableFuture.completedStage(null); }
+        var fixed = memoryReference;
+        if (fixed == null) { return rejectMemory(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE)); }
+        try {
+            return control().guard(Objects.requireNonNull(references.verify(fixed), "空间引用复核阶段不能为空。"))
+                    .exceptionallyCompose(this::rejectMemory);
+        } catch (RuntimeException failure) { return rejectMemory(failure); }
+    }
+
+    /**
+     * 保存首次引用拒绝，保留取消/超时类别，不把数据库失败当成可恢复的普通工具文本。
+     * @param failure 原始阶段失败，仅用于类型分类
+     * @return 原始停止或交互专用拒绝的异常阶段
+     */
+    private CompletionStage<Void> rejectMemory(Throwable failure) {
+        while ((failure instanceof CompletionException || failure instanceof ExecutionException) && failure.getCause() != null) { failure = failure.getCause(); }
+        if (failure instanceof ExecutionStoppedException) { return CompletableFuture.failedStage(failure); }
+        var status = failure instanceof AgentMemoryReferenceException memory ? switch (memory.reason()) {
+            case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
+            case DISABLED -> AgentRunResult.Status.SKIPPED;
+            case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
+        } : AgentRunResult.Status.CONFIGURATION_ERROR;
+        memoryRejected.compareAndSet(null, status);
+        return CompletableFuture.failedStage(new LLMOperationRejectedException());
     }
 
     /**
@@ -219,13 +283,14 @@ final class AgentTurn implements AutoCloseable {
             };
         } else {
             var outcome = entity.snapshot().find(AgentComponents.OUTCOME).orElse(null);
-            status = reason != null ? stopStatus(reason) : failure != null ? failureStatus(failure)
+            var memoryFailure = memoryRejected.get();
+            status = reason != null ? stopStatus(reason) : memoryFailure != null ? memoryFailure : failure != null ? failureStatus(failure)
                     : outcome != null ? outcome.status() : interaction == null ? AgentRunResult.Status.FAILED
                     : AgentRunResult.Status.valueOf(interaction.status().name());
         }
         var budget = current == null ? lifetime.budget() : current.budget();
         return new AgentRunResult(handle.id(), request.requestId(), status, Optional.ofNullable(denied == null ? access : denied),
-                Optional.ofNullable(interaction), budget.snapshot());
+                Optional.ofNullable(interaction), budget.snapshot(), request.conversation(), memoryReference);
     }
 
     /**

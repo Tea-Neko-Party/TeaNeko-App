@@ -1,9 +1,12 @@
 package org.zexnocs.teanekoagent.agent;
 
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.SystemPipeline;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -19,10 +22,10 @@ import java.util.function.Function;
 
 /**
  * 独立轮次的异步入口及资源拥有者，复用预编译管线与既有 LLM 交互服务。
- * 同实例可执行不同轮次；本类不冒充尚未接入的会话队列、历史或持久化幂等。
+ * 同实例可执行不同轮次；默认会话服务在本端口外组合队列与窗口，本类只拥有独立轮次。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -32,13 +35,14 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private final ScheduledExecutorService scheduler;
     private final Clock clock;
     private final ILogger logger;
+    private final @Nullable IAgentMemoryReferences references;
     private final ConcurrentMap<EntityId, AgentTurn> turns = new ConcurrentHashMap<>();
     private final Object lifecycleLock = new Object();
     private final SystemPipeline pipeline;
     private boolean closed;
 
     /**
-     * 装配空服务并预编译管线，不读取配置、创建实例或发起业务。
+     * 装配显式无持久化记忆的独立轮次，不读取配置、创建实例或发起业务。
      * @param gate 全活动准入门控
      * @param interactions 完整 LLM 交互端口
      * @param tools 显式本轮工具选择端口
@@ -47,17 +51,80 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @param scheduler 借用计时器
      * @param clock 独立请求时钟
      * @param logger 项目诊断日志
+     * @throws NullPointerException 当必需依赖为空时
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger) {
+        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, null, true);
+    }
+
+    /**
+     * 装配固定持久化空间引用的独立轮次，构造期间不解析空间或写入数据库。
+     * 会话请求必须同时提供邮箱固定的空间引用，原引用仍由实际运行守卫复核。
+     * @param gate 统一门控
+     * @param interactions 完整 LLM 交互端口
+     * @param tools 显式工具选择端口
+     * @param mapper 本地 JSON 转换器
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param clock 轮次时钟
+     * @param logger 固定诊断日志
+     * @param references 必需的当前空间解析和复核端口
+     * @throws NullPointerException 当必需依赖为空时
+     */
+    public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
+            ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
+            IAgentMemoryReferences references) {
+        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger,
+                Objects.requireNonNull(references, "持久化空间引用端口不能为空。"), false);
+    }
+
+    /**
+     * 统一组装资源和预编译管线，不把显式无记忆模式当作已获得持久化空间授权。
+     * @param gate 统一门控
+     * @param interactions 交互端口
+     * @param tools 工具选择
+     * @param mapper JSON 转换器
+     * @param executor 借用执行器
+     * @param scheduler 借用计时器
+     * @param clock 时钟
+     * @param logger 日志
+     * @param references 可选空间端口
+     * @param detachedMemory 是否使用既有显式无持久化记忆入口
+     * @throws NullPointerException 当必需依赖为空时
+     */
+    private AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
+            ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
+            @Nullable IAgentMemoryReferences references, boolean detachedMemory) {
         this.gate = Objects.requireNonNull(gate, "Agent 门控不能为空。");
         this.executor = Objects.requireNonNull(executor, "业务执行器不能为空。");
         this.scheduler = Objects.requireNonNull(scheduler, "计时器不能为空。");
         this.clock = Objects.requireNonNull(clock, "轮次时钟不能为空。");
         this.logger = Objects.requireNonNull(logger, "日志端口不能为空。");
+        this.references = detachedMemory ? null : Objects.requireNonNull(references, "空间引用端口不能为空。");
         pipeline = new AgentTurnPipeline(this::requireTurn, gate,
                 Objects.requireNonNull(interactions, "交互端口不能为空。"), Objects.requireNonNull(tools, "工具源不能为空。"),
-                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor).pipeline;
+                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor, this.references).pipeline;
+    }
+
+    /**
+     * 在业务执行器复核缓存结果的当前准入，不创建轮次、执行工具或预占预算。
+     * @param handle 目标实例
+     * @param request 原始请求
+     * @return 当前准入或服务已停止的异常阶段
+     * @throws NullPointerException 当实例或请求为空时
+     */
+    @Override public CompletionStage<AgentAccessDecision> checkAccess(AgentHandle handle, AgentRunRequest request) {
+        Objects.requireNonNull(handle, "Agent 实例不能为空。");
+        Objects.requireNonNull(request, "Agent 请求不能为空。");
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                synchronized (lifecycleLock) {
+                    if (closed) { throw new ExecutionStoppedException(ExecutionControl.StopReason.CLOSED); }
+                }
+                return gate.evaluate(handle, request.actor(), request.activity());
+            }, executor);
+        } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
     }
 
     /**
@@ -107,11 +174,30 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     }
 
     /**
+     * 接收邮箱固定的同一引用，显式无记忆服务拒绝此能力。
+     * @param handle 目标实例
+     * @param request 含会话和空间的请求
+     * @param parent 可选借用父控制
+     * @return 尚未执行业务的句柄
+     * @throws UnsupportedOperationException 当服务没有空间端口时
+     * @throws NullPointerException 当实例或请求为空时
+     */
+    @Override public AgentRunExecution prepareReferenced(AgentHandle handle, AgentRunRequest request, @Nullable ExecutionControl parent) {
+        if (references == null) { throw new UnsupportedOperationException("当前独立轮次未装配持久化记忆引用保护。"); }
+        Objects.requireNonNull(handle, "Agent 实例不能为空。"); Objects.requireNonNull(request, "固定引用请求不能为空。");
+        if (request.conversation() == null || request.memoryReference() == null) {
+            return completed(new AgentRunResult(handle.id(), request.requestId(), AgentRunResult.Status.CONFIGURATION_ERROR,
+                    Optional.empty(), Optional.empty(), Map.of()));
+        }
+        return prepareInternal(handle, request, parent);
+    }
+
+    /**
      * 登记当前拥有关系和完成观察器，业务准备由返回句柄显式启动。
      * @param handle 目标实例
      * @param request 已固定请求
      * @param parent 可选借用父控制
-     * @return 已登记取消和完成观察的冷执行句柄；跨实例的会话绑定在分配控制前拒绝
+     * @return 已登记取消和完成观察的冷执行句柄；跨实例绑定和当前不支持的持久化会话组合在分配控制前拒绝
      * @throws NullPointerException 当实例或请求为空时
      */
     private AgentRunExecution prepareInternal(AgentHandle handle, AgentRunRequest request, @Nullable ExecutionControl parent) {
@@ -121,6 +207,11 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                 || request.conversation() != null && !request.conversation().key().agentId().equals(handle.id())) {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
                     AgentRunResult.Status.INVALID_INPUT, Optional.empty(), Optional.empty(), Map.of()));
+        }
+        if (references != null && request.conversation() != null && request.memoryReference() == null
+                || references == null && request.memoryReference() != null) {
+            return completed(new AgentRunResult(handle.id(), request.requestId(),
+                    AgentRunResult.Status.CONFIGURATION_ERROR, Optional.empty(), Optional.empty(), Map.of()));
         }
         final AgentTurn turn;
         try {
@@ -168,8 +259,11 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                 return turn.prepare(gate.evaluate(turn.handle, turn.request.actor(), turn.request.activity()), scheduler, clock);
             }, executor).thenComposeAsync(prepared -> {
                 turn.lifetime.checkActive();
-                return prepared ? turn.control().guard(pipeline.execute(turn.entity, turn.control()))
-                        : CompletableFuture.completedStage(null);
+                if (!prepared) { return CompletableFuture.completedStage(null); }
+                if (references == null) { return turn.control().guard(pipeline.execute(turn.entity, turn.control())); }
+                return turn.resolveMemory(references).thenComposeAsync(ignored -> {
+                    turn.lifetime.checkActive(); return turn.control().guard(pipeline.execute(turn.entity, turn.control()));
+                }, executor);
             }, executor).whenComplete((value, failure) -> {
                 if (failure == null) { work.complete(value); } else { work.completeExceptionally(failure); }
             });

@@ -313,3 +313,5 @@ flowchart TB
 # 可复用协议快照
 
 `LLMProtocolSnapshots` 将消息、工具调用、响应及透明 JSON 状态冻结为可回放数据；它由交互内部工具上移到协议层，供 Agent 等上层复用。类型改名保留原 since，校验与深拷贝行为保持一致。`LLMModelOptionsSnapshot` 提供组件可持有的封装：导出的参数容器每次独立，嵌套集合只读，工具执行绑定不存入参数快照。
+
+`LLMMessageHistory.validateComplete` 校验完整工具往返、调用 ID 与名称对应关系；交互服务和上层窗口使用同一份规则。`LLMMessageCodec.signature` 对明确的统一协议字段生成规范化 UTF-8 字节数与 SHA-256，包含图片引用和 providerMetadata，透明对象键排序后参与指纹。它用于缓存边界和内容比较，不代表供应商请求大小或 token 数，也不调用模型、配置或 Agent 服务。
