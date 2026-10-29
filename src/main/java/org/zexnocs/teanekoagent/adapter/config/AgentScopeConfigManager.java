@@ -12,7 +12,7 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
  * @since 4.0.0
  * @version 4.5.0-l
  */
-@ConfigManager(value = "agent", description = "Agent 作用域开关、活动模式与历史窗口",
+@ConfigManager(value = "agent", description = "Agent 作用域、人格与记忆开关、活动模式和历史窗口",
         configType = AgentScopeConfigData.class, fieldChecker = AgentScopeFieldChecker.class,
         namespaces = {TeaNekoConfigNamespaces.GENERAL, TeaNekoConfigNamespaces.PRIVATE, TeaNekoConfigNamespaces.GROUP})
 public class AgentScopeConfigManager {}

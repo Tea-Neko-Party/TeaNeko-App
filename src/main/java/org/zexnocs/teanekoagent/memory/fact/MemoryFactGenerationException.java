@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.memory.fact;
 
+import java.io.Serial;
+
 /**
  * 区分空间缺失与数据代次失效，不把旧引用当作确定没有相关记忆。
  * @author zExNocs
@@ -8,6 +10,7 @@ package org.zexnocs.teanekoagent.memory.fact;
  * @version 4.5.0-l
  */
 public final class MemoryFactGenerationException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final boolean missingNamespace;
     /**

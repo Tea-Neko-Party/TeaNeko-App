@@ -6,12 +6,12 @@ import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMToolMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.*;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
@@ -74,7 +74,7 @@ class AgentConversationEngineTest {
                 Optional.of(new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime))));
         var interaction = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, transcript, candidate, List.of(), List.of(), Map.of());
         return new AgentRunResult(stamp.key().agentId(), prepared.request().requestId(), AgentRunResult.Status.SUCCESS,
-                Optional.of(access), Optional.of(interaction), Map.of());
+                access, interaction, Map.of());
     }
 
     /**
@@ -86,6 +86,80 @@ class AgentConversationEngineTest {
     private AgentRunResult success(AgentConversationEngine.Prepared prepared, String text) {
         var candidate = answer(text); var messages = new ArrayList<>(prepared.request().messages()); messages.add(candidate);
         return success(prepared, messages, candidate);
+    }
+
+    /**
+     * 构造通过实际输入校验的资料结果，仍由会话引擎复核原始请求和预算。
+     * @param prepared 邮箱固定输入
+     * @param input 需要验证的布局
+     * @return 绑定同一原始交互的投影结果
+     */
+    private AgentRunResult projected(AgentConversationEngine.Prepared prepared, AgentPromptInput input) {
+        var candidate = answer("回答"); var messages = new ArrayList<>(input.messages()); messages.add(candidate);
+        var raw = success(prepared, messages, candidate); var interaction = raw.interaction().orElseThrow();
+        return new AgentRunResult(raw.agentId(), raw.requestId(), raw.status(), raw.access(), raw.interaction(), raw.budgetUsage(),
+                raw.conversation(), raw.memoryReference(), AgentPromptTranscript.create(input, interaction, codec));
+    }
+
+    /** 验证资料布局即使内部有效也不能替换邮箱固定问题，保留原前缀校验。 */
+    @Test void internallyValidProjectionCannotReplacePreparedOriginal() {
+        var prepared = engine.prepare(request("原问题"), stamp, AgentConversationWindow.empty(), AgentConversationOptions.defaults());
+        var different = engine.prepare(request("替换问题"), stamp, AgentConversationWindow.empty(), AgentConversationOptions.defaults());
+        var input = new AgentPromptInput(different.request().messages(), List.of(new AgentPromptFragment("memory", "资料")), 0);
+        assertThrows(IllegalArgumentException.class, () -> engine.complete(prepared, projected(prepared, input)));
+    }
+
+    /** 验证带资料的实际输入必须满足邮箱预算，不能仅以去除资料后的较短投影获得提交。 */
+    @Test void originalFitsButSupplementExceedsPreparedBudgetCannotCommit() {
+        var request = request("原问题"); var initial = engine.prepare(request, stamp, AgentConversationWindow.empty(), AgentConversationOptions.defaults());
+        var options = new AgentConversationOptions(40, initial.signature().bytes(), 32, 1048576);
+        var prepared = engine.prepare(request, stamp, AgentConversationWindow.empty(), options);
+        var input = new AgentPromptInput(prepared.request().messages(), List.of(new AgentPromptFragment("memory", "完整资料")), 0);
+        assertThrows(IllegalArgumentException.class, () -> engine.complete(prepared, projected(prepared, input)));
+    }
+
+    /** 验证投影只能绑定原交互实例，缓存同时计量实际诊断与临时布局，而非仅计去除资料后的窗口。 */
+    @Test void projectionIsBoundToObservedInteractionAndIncludedInReplayCost() {
+        var prepared = engine.prepare(request("原问题"), stamp, AgentConversationWindow.empty(), AgentConversationOptions.defaults());
+        var input = new AgentPromptInput(prepared.request().messages(), List.of(new AgentPromptFragment("memory", "资料".repeat(100))), 0);
+        var result = projected(prepared, input);
+        var raw = new AgentRunResult(result.agentId(), result.requestId(), result.status(), result.access().orElse(null), result.interaction().orElse(null), result.budgetUsage());
+        assertTrue(engine.resultBytes(result) > engine.resultBytes(raw));
+        assertEquals(2, Objects.requireNonNull(engine.complete(prepared, result)).messages().size());
+        var unrelated = success(prepared, "其他交互");
+        assertThrows(IllegalArgumentException.class, () -> new AgentRunResult(result.agentId(), result.requestId(), result.status(), result.access(),
+                unrelated.interaction(), result.budgetUsage(), null, null, result.promptTranscript()));
+    }
+
+    /** 验证可选原文凭据经过历史装配仍保持独立，消息列表不反向产生授权凭据。 */
+    @Test void originalUserTextSurvivesPreparationWithoutBecomingHistoryMetadata() {
+        var base = request("规范化输入"); var original = new AgentUserText(base.actor().sourceId(), "记住：我喜欢茶");
+        var input = new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, original);
+        var prepared = engine.prepare(input, stamp, AgentConversationWindow.empty(), AgentConversationOptions.defaults());
+        assertSame(original, prepared.request().userText()); assertEquals(1, prepared.request().messages().size());
+        assertTrue(prepared.request().messages().getFirst().getProviderMetadata().isEmpty()); assertNull(base.userText());
+        assertFalse(new ObjectMapper().writeValueAsString(original).contains("我喜欢茶"));
+    }
+
+    /** 验证相同消息/请求下增添、删除或改变授权原文均改变重放身份，不复用其他授权的完成记录。 */
+    @Test void replayIdentityIncludesOriginalAuthorizationText() {
+        var base = request("相同输入");
+        var first = new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, new AgentUserText(base.actor().sourceId(), "记住：茶"));
+        var changed = new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, new AgentUserText(base.actor().sourceId(), "记住：咖啡"));
+        assertNotEquals(engine.identity(base), engine.identity(first)); assertNotEquals(engine.identity(first), engine.identity(changed));
+        assertEquals(engine.identity(first), engine.identity(new AgentRunRequest(first.requestId(), first.actor(), first.activity(), first.messages(), null, null, first.userText())));
+        var surrogateA = new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, new AgentUserText(base.actor().sourceId(), "记住：" + (char) 0xD800));
+        var surrogateB = new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, new AgentUserText(base.actor().sourceId(), "记住：" + (char) 0xD801));
+        assertNotEquals(engine.identity(surrogateA), engine.identity(surrogateB));
+    }
+
+    /** 验证其他来源、系统任务及超大原文不能借新字段携带当前用户的授权凭据。 */
+    @Test void originalTextRequiresCurrentHumanSourceAndBoundedSize() {
+        var base = request("输入");
+        assertThrows(IllegalArgumentException.class, () -> new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), null, null, new AgentUserText("其他消息", "记住：茶")));
+        var system = new AgentActorContext(scope, AgentActorContext.Origin.SYSTEM, Optional.empty(), "", "任务", "目标");
+        assertThrows(IllegalArgumentException.class, () -> new AgentRunRequest(base.requestId(), system, base.activity(), base.messages(), null, null, new AgentUserText("任务", "记住：茶")));
+        assertThrows(IllegalArgumentException.class, () -> new AgentUserText("消息", "字".repeat(65537)));
     }
 
     /** 验证多个用户共享窗口时保留各自稳定身份，原始输入没有被修改。 */
@@ -197,7 +271,7 @@ class AgentConversationEngineTest {
         var result = success(prepared, "回答");
         assertTrue(engine.resultBytes(result) < 1048576);
         var failed = new AgentRunResult(result.agentId(), result.requestId(), AgentRunResult.Status.CANCELLED,
-                result.access(), result.interaction(), result.budgetUsage());
+                result.access().orElse(null), result.interaction().orElse(null), result.budgetUsage());
         assertNull(engine.complete(prepared, failed));
     }
 }

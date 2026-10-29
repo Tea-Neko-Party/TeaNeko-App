@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.agent;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.conversation.AgentConversationStamp;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
@@ -23,6 +24,7 @@ import java.util.*;
  * @param budgetUsage 交付时宿主共享总预算读数，派生轮次不把它冒充自身增量
  * @param conversation 会话拥有者固定的代次；独立执行或未准入时可为空，出站前仍需复核
  * @param memoryReference 实际固定的持久化空间引用；未启用此能力或解析失败时为空
+ * @param promptTranscript 可选已验证的本轮临时输入/历史投影，原交互诊断始终保留实际模型输入
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
@@ -31,21 +33,39 @@ import java.util.*;
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                              Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
                              Map<BudgetKey, ResourceBudget.Usage> budgetUsage, @Nullable AgentConversationStamp conversation,
-                             @Nullable MemoryNamespaceReference memoryReference) {
+                             @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript) {
+    /**
+     * 保留没有临时 Prompt 投影的既有结果构造。
+     * @param agentId 实际实例
+     * @param requestId 原请求标识
+     * @param status 最终状态
+     * @param access 可选门控诊断，null 表示尚未取得
+     * @param interaction 可选原始交互，null 表示尚未观察
+     * @param budgetUsage 预算读数
+     * @param conversation 可选会话代次
+     * @param memoryReference 可选空间引用
+     * @throws NullPointerException 当必需字段为空时
+     * @throws IllegalArgumentException 当结果合同不一致时
+     */
+    public AgentRunResult(EntityId agentId, UUID requestId, Status status, @Nullable AgentAccessDecision access,
+            @Nullable LLMInteractionResult interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
+            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference) {
+        this(agentId, requestId, status, Optional.ofNullable(access), Optional.ofNullable(interaction), budgetUsage, conversation, memoryReference, null);
+    }
     /**
      * 构造尚未关联持久化空间的会话结果，保留既有调用方式。
      * @param agentId 实际实例
      * @param requestId 原始请求 ID
      * @param status 最终状态
-     * @param access 门控诊断
-     * @param interaction 已观察交互
+     * @param access 可选门控诊断，null 表示尚未取得
+     * @param interaction 可选已观察交互，null 表示尚未观察
      * @param budgetUsage 预算读数
      * @param conversation 可选会话代次
      * @throws NullPointerException 当必需结果字段为空时
      * @throws IllegalArgumentException 当成功数据或会话实例不一致时
      */
-    public AgentRunResult(EntityId agentId, UUID requestId, Status status, Optional<AgentAccessDecision> access,
-            Optional<LLMInteractionResult> interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
+    public AgentRunResult(EntityId agentId, UUID requestId, Status status, @Nullable AgentAccessDecision access,
+            @Nullable LLMInteractionResult interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
             @Nullable AgentConversationStamp conversation) {
         this(agentId, requestId, status, access, interaction, budgetUsage, conversation, null);
     }
@@ -55,14 +75,14 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      * @param agentId 实际实例
      * @param requestId 请求标识
      * @param status 最终状态
-     * @param access 门控结果
-     * @param interaction 已观察交互
+     * @param access 可选门控结果，null 表示尚未取得
+     * @param interaction 可选已观察交互，null 表示尚未观察
      * @param budgetUsage 预算读数
      * @throws NullPointerException 当必需结果字段为空时
      * @throws IllegalArgumentException 当成功结果缺少成功交互或准入时
      */
-    public AgentRunResult(EntityId agentId, UUID requestId, Status status, Optional<AgentAccessDecision> access,
-            Optional<LLMInteractionResult> interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage) {
+    public AgentRunResult(EntityId agentId, UUID requestId, Status status, @Nullable AgentAccessDecision access,
+            @Nullable LLMInteractionResult interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage) {
         this(agentId, requestId, status, access, interaction, budgetUsage, null);
     }
 
@@ -76,6 +96,7 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      * @param budgetUsage 宿主预算观察值
      * @param conversation 可选可信会话代次
      * @param memoryReference 可选实际空间引用
+     * @param promptTranscript 可选已验证历史投影，必须绑定同一份原始交互
      * @throws NullPointerException 当必需结果字段为空时
      * @throws IllegalArgumentException 当成功结果缺少成功交互或准入、代次属于其他实例，或会话与空间作用域不一致时
      */
@@ -86,6 +107,9 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
         Objects.requireNonNull(access, "门控结果容器不能为空。");
         Objects.requireNonNull(interaction, "交互结果容器不能为空。");
         budgetUsage = Map.copyOf(budgetUsage);
+        if (promptTranscript != null && interaction.orElse(null) != promptTranscript.interaction()) {
+            throw new IllegalArgumentException("Prompt 历史投影与结果的原交互不一致。");
+        }
         if (conversation != null && !conversation.key().agentId().equals(agentId)) {
             throw new IllegalArgumentException("结果会话代次不属于当前 Agent 实例。");
         }
@@ -107,11 +131,12 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
     }
 
     /**
-     * 提供可提交的完整历史；实际提交仍须由会话层校验代次和当前门控。
+     * 提供已验证的完整历史投影；本轮临时资料不重复沉积，提交仍须校验原输入、代次和当前门控。
      * @return 只有本轮成功时存在的完整消息链
      */
     public Optional<List<ILLMMessage>> committableTranscript() {
-        return status == Status.SUCCESS ? interaction.flatMap(LLMInteractionResult::committableTranscript) : Optional.empty();
+        return status != Status.SUCCESS ? Optional.empty() : promptTranscript != null ? Optional.of(promptTranscript.messages())
+                : interaction.flatMap(LLMInteractionResult::committableTranscript);
     }
 
     /**

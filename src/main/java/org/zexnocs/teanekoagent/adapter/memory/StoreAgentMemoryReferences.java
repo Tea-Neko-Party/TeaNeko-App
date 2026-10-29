@@ -4,6 +4,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.agent.access.IAgentScopePolicyPort;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.memory.namespace.IMemoryNamespaceBindingStore;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;

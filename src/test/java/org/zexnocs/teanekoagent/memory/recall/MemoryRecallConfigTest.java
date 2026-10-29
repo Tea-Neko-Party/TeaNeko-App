@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Timeout;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 import org.zexnocs.teanekoagent._app_config.MemoryFactConfig;
+import org.zexnocs.teanekoagent._app_config.SpringMemoryRecallDefaults;
 import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.memory.fact.MemoryEventTime;

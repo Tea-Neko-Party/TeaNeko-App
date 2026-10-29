@@ -5,6 +5,8 @@ import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
@@ -49,7 +51,8 @@ final class AgentTurn implements AutoCloseable {
     private volatile @Nullable AgentAccessDecision access;
     private volatile @Nullable LLMInteractionResult observed;
     private volatile @Nullable MemoryNamespaceReference memoryReference;
-    private final AtomicReference<AgentRunResult.Status> memoryRejected = new AtomicReference<>();
+    private final AtomicReference<AgentRunResult.Status> contextRejected = new AtomicReference<>();
+    private volatile @Nullable AgentPromptTranscript promptTranscript;
 
     /**
      * 接管当前轮的轻量生命周期，不读取配置或执行工具。
@@ -140,8 +143,8 @@ final class AgentTurn implements AutoCloseable {
                             memoryReference = value;
                             return null;
                         });
-                    }).exceptionallyCompose(this::rejectMemory);
-        } catch (RuntimeException failure) { return rejectMemory(failure); }
+                    }).exceptionallyCompose(this::rejectContext);
+        } catch (RuntimeException failure) { return rejectContext(failure); }
     }
 
     /**
@@ -153,27 +156,35 @@ final class AgentTurn implements AutoCloseable {
     CompletionStage<Void> verifyMemory(@Nullable IAgentMemoryReferences references) {
         if (references == null) { return CompletableFuture.completedStage(null); }
         var fixed = memoryReference;
-        if (fixed == null) { return rejectMemory(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE)); }
+        if (fixed == null) { return rejectContext(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE)); }
         try {
             return control().guard(Objects.requireNonNull(references.verify(fixed), "空间引用复核阶段不能为空。"))
-                    .exceptionallyCompose(this::rejectMemory);
-        } catch (RuntimeException failure) { return rejectMemory(failure); }
+                    .exceptionallyCompose(this::rejectContext);
+        } catch (RuntimeException failure) { return rejectContext(failure); }
     }
 
     /**
-     * 保存首次引用拒绝，保留取消/超时类别，不把数据库失败当成可恢复的普通工具文本。
+     * 保存首次引用或资料拒绝，保留取消/超时类别，不把来源故障当成可恢复的普通工具文本。
      * @param failure 原始阶段失败，仅用于类型分类
+     * @param <T> 被拒绝阶段的结果类型
      * @return 原始停止或交互专用拒绝的异常阶段
      */
-    private CompletionStage<Void> rejectMemory(Throwable failure) {
-        while ((failure instanceof CompletionException || failure instanceof ExecutionException) && failure.getCause() != null) { failure = failure.getCause(); }
+    <T> CompletionStage<T> rejectContext(Throwable failure) {
+        for (int depth = 0; depth < 32 && (failure instanceof CompletionException || failure instanceof ExecutionException); depth++) {
+            var cause = failure.getCause(); if (cause == null || cause == failure) { break; } failure = cause;
+        }
         if (failure instanceof ExecutionStoppedException) { return CompletableFuture.failedStage(failure); }
         var status = failure instanceof AgentMemoryReferenceException memory ? switch (memory.reason()) {
             case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
             case DISABLED -> AgentRunResult.Status.SKIPPED;
             case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
+        } : failure instanceof AgentPromptException prompt ? switch (prompt.reason()) {
+            case DISABLED -> AgentRunResult.Status.SKIPPED;
+            case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
+            case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
+            case INPUT_TOO_LARGE -> AgentRunResult.Status.INPUT_TOO_LARGE;
         } : AgentRunResult.Status.CONFIGURATION_ERROR;
-        memoryRejected.compareAndSet(null, status);
+        contextRejected.compareAndSet(null, status);
         return CompletableFuture.failedStage(new LLMOperationRejectedException());
     }
 
@@ -242,9 +253,10 @@ final class AgentTurn implements AutoCloseable {
     /**
      * 保留已观察完成的只读交互，不允许迟到结果在交付后修改本轮记录。
      * @param result 完整交互诊断
+     * @param projection 可选已验证历史投影，必须绑定原交互
      */
-    void observe(LLMInteractionResult result) {
-        if (!closed.get()) { observed = Objects.requireNonNull(result, "交互结果不能为空。"); }
+    void observe(LLMInteractionResult result, @Nullable AgentPromptTranscript projection) {
+        if (!closed.get()) { observed = Objects.requireNonNull(result, "交互结果不能为空。"); promptTranscript = projection; }
     }
 
     /**
@@ -283,14 +295,16 @@ final class AgentTurn implements AutoCloseable {
             };
         } else {
             var outcome = entity.snapshot().find(AgentComponents.OUTCOME).orElse(null);
-            var memoryFailure = memoryRejected.get();
+            var memoryFailure = contextRejected.get();
             status = reason != null ? stopStatus(reason) : memoryFailure != null ? memoryFailure : failure != null ? failureStatus(failure)
                     : outcome != null ? outcome.status() : interaction == null ? AgentRunResult.Status.FAILED
                     : AgentRunResult.Status.valueOf(interaction.status().name());
         }
         var budget = current == null ? lifetime.budget() : current.budget();
+        var projection = promptTranscript;
         return new AgentRunResult(handle.id(), request.requestId(), status, Optional.ofNullable(denied == null ? access : denied),
-                Optional.ofNullable(interaction), budget.snapshot(), request.conversation(), memoryReference);
+                Optional.ofNullable(interaction), budget.snapshot(), request.conversation(), memoryReference,
+                projection != null && projection.interaction() == interaction ? projection : null);
     }
 
     /**

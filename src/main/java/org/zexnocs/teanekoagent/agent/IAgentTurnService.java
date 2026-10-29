@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -16,6 +17,17 @@ import java.util.concurrent.CompletionStage;
  * @version 4.5.0-l
  */
 public interface IAgentTurnService {
+    /**
+     * 只读复核旧交互实际使用资料的重放资格，旧实现默认拒绝，不重启模型或工具。
+     * @param handle 原目标实例
+     * @param request 原始可信请求
+     * @param result 已结束或在途完成后的原结果
+     * @param control 借用的本次观察控制
+     * @return 原资料明确可重放时为 true
+     */
+    default CompletionStage<Boolean> verifyPromptReplay(AgentHandle handle, AgentRunRequest request, AgentRunResult result, ExecutionControl control) {
+        control.checkActive(); return CompletableFuture.completedStage(false);
+    }
     /**
      * 准备邮箱已固定引用的轮次；实现必须复核原引用并保留逐模型、工具和交付守卫。
      * 旧端口默认拒绝，不能通过普通 prepare 静默忽略空间保护。

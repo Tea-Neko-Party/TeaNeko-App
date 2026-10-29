@@ -152,8 +152,8 @@ final class AgentConversationTestCall {
         var transcript = new ArrayList<>(request.messages()); transcript.add(message);
         var interaction = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, transcript, message,
                 List.of(), List.of(), Map.of());
-        result.complete(new AgentRunResult(handle.id(), request.requestId(), status, Optional.of(access),
-                status == AgentRunResult.Status.SUCCESS ? Optional.of(interaction) : Optional.empty(), control.budget().snapshot(),
+        result.complete(new AgentRunResult(handle.id(), request.requestId(), status, access,
+                status == AgentRunResult.Status.SUCCESS ? interaction : null, control.budget().snapshot(),
                 request.conversation(), request.memoryReference()));
     }
 

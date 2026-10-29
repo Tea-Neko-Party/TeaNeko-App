@@ -5,7 +5,10 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 
 import java.time.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -16,14 +19,14 @@ import static org.mockito.Mockito.*;
  * 手动推进业务队列、时钟及截止时间回调的离线夹具，供 LLM 和上层服务复用，不创建真实线程池。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public final class InteractionRuntime implements Executor {
     public final ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
     final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2026-10-28T00:00:00Z"));
-    private final Queue<Runnable> work = new ArrayDeque<>();
+    private final Queue<Runnable> work = new ConcurrentLinkedQueue<>();
     private final List<Entry> timers = new ArrayList<>();
     public final Clock clock = new Clock() {
         /**
@@ -74,12 +77,10 @@ public final class InteractionRuntime implements Executor {
     @Override public void execute(@NonNull Runnable command) { work.add(command); }
 
     /**
-     * 按排队顺序执行所有当前可运行工作，期间产生的新工作也继续推进。
+     * 按排队顺序执行所有当前可运行工作，允许外部异步完成线程同时入队。
      */
     public void runAll() {
-        while (!work.isEmpty()) {
-            work.remove().run();
-        }
+        Runnable action; while ((action = work.poll()) != null) { action.run(); }
     }
 
     /**

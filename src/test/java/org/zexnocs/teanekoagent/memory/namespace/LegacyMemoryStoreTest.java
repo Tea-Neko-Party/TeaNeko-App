@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.memory.namespace;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.zexnocs.teanekoagent.adapter.memory.EasyDataLegacyMemoryStore;
 import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.memory.fact.*;

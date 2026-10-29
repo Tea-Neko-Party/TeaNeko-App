@@ -74,7 +74,7 @@ public record AgentRequestJournal(List<Completed> entries) {
      * 不含可执行对象的请求身份，防止同 ID 不同操作者或参数取得原结果。
      * @param actor 完整可信身份与来源
      * @param activity 原始活动
-     * @param messagesSha256 原始输入的规范化协议指纹
+     * @param messagesSha256 原消息协议及可选原始用户文本凭据的完整输入指纹
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.0.0

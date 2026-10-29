@@ -2,6 +2,8 @@ package org.zexnocs.teanekoagent.memory.namespace;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
+import org.zexnocs.teanekoagent._app_config.MemoryNamespaceConfig;
+import org.zexnocs.teanekoagent._app_config.SpringMemoryNamespaceDefaults;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.mock;

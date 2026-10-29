@@ -3,10 +3,18 @@ package org.zexnocs.teanekoagent.agent;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot;
+import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
@@ -22,7 +30,7 @@ import java.util.concurrent.Executor;
 import java.util.function.Function;
 
 /**
- * 预编译准入、交互和交付三个步骤；业务检查统一切入借用执行器，不阻塞模型完成线程。
+ * 预编译准入、临时输入、交互和交付步骤；业务检查及投影校验统一切入借用执行器。
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
  *
  * @author zExNocs
@@ -39,6 +47,9 @@ final class AgentTurnPipeline {
     private final ObjectMapper mapper;
     private final Executor executor;
     private final @Nullable IAgentMemoryReferences references;
+    private final IAgentPromptSource prompts;
+    private final @Nullable IAgentPersonalitySource personalities;
+    private final LLMMessageCodec codec;
 
     /**
      * 装配并校验稳定顺序，不在每条请求中重新编译或扫描 System。
@@ -49,19 +60,24 @@ final class AgentTurnPipeline {
      * @param mapper JSON 校验器
      * @param executor 借用业务执行器
      * @param references 可选持久化空间端口；为空时使用显式无记忆模式
+     * @param prompts 可等待的本轮临时参考资料端口
+     * @param personalities 可选独立人格端口
      */
     AgentTurnPipeline(Function<EntityId, AgentTurn> turns, AgentAccessGate gate,
             ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            @Nullable IAgentMemoryReferences references) {
+            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities) {
         this.turns = turns; this.gate = gate; this.interactions = interactions;
         this.tools = tools; this.mapper = mapper; this.executor = executor;
         this.references = references;
+        this.prompts = prompts; this.personalities = personalities; codec = new LLMMessageCodec(mapper);
         pipeline = SystemPipeline.compile(List.of(
                 new Step(new SystemDescriptor("agent.admit", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.SCOPE_POLICY), Set.of(), Set.of()), this::admit),
+                new Step(new SystemDescriptor("agent.prompt", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
+                        Set.of(AgentComponents.PROMPT_INPUT), Set.of("agent.admit")), this::preparePrompt),
                 new Step(new SystemDescriptor("agent.interact", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
-                        AgentComponents.ACTOR, AgentComponents.ACTIVITY, AgentComponents.INSTANCE, AgentComponents.DEFINITION),
-                        Set.of(AgentComponents.INTERACTION), Set.of("agent.admit")), this::interact),
+                        AgentComponents.ACTOR, AgentComponents.ACTIVITY, AgentComponents.INSTANCE, AgentComponents.DEFINITION, AgentComponents.PROMPT_INPUT),
+                        Set.of(AgentComponents.INTERACTION, AgentComponents.PROMPT_TRANSCRIPT), Set.of("agent.prompt")), this::interact),
                 new Step(new SystemDescriptor("agent.complete", Set.of(AgentComponents.INTERACTION),
                         Set.of(AgentComponents.OUTCOME), Set.of("agent.interact")), this::complete)));
     }
@@ -79,6 +95,53 @@ final class AgentTurnPipeline {
             if (!turn.check(gate, turn.request.activity())) { return CompletableFuture.completedStage(SystemResult.stop(ComponentPatch.empty())); }
             return turn.verifyMemory(references).thenApply(ignored -> SystemResult.continueWith(ComponentPatch.empty()));
         }, executor).thenCompose(Function.identity());
+    }
+
+    /**
+     * 在原总控制内等待临时资料，切回业务域度量完整输入并复核来源，不创建额外模型预算。
+     * @param context 可信组件与借用控制
+     * @return 只包含不可变输入布局的补丁
+     */
+    private CompletionStage<SystemResult> preparePrompt(SystemContext context) {
+        var turn = turns.apply(context.snapshot().id());
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                turn.guard(gate, false);
+                return personalities == null ? CompletableFuture.<AgentPersonalitySnapshot>completedStage(null)
+                        : context.control().guard(personalities.resolve(turn.request.actor().scope(), context.control()));
+            }, executor).thenCompose(Function.identity()).thenComposeAsync(personality -> {
+                context.control().checkActive(); turn.guard(gate, false); var request = fixedRequest(context.snapshot());
+                var expected = request.personalityIdentity();
+                if (expected != null && (personality == null || !expected.equals(personality.identity()))) {
+                    throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
+                }
+                return context.control().guard(Objects.requireNonNull(prompts.resolve(turn.handle.definition(), request,
+                        context.snapshot().require(AgentComponents.RUNTIME), context.control()), "Prompt 资料端口不能返回空阶段。")
+                        .thenApply(values -> {
+                            if (values == null || values.size() > 32) { throw new IllegalArgumentException("Prompt 资料列表范围无效。"); }
+                            return List.copyOf(values);
+                        })).thenComposeAsync(fragments -> {
+                context.control().checkActive(); turn.guard(gate, false);
+                var input = AgentPromptInput.bounded(request.messages(), fragments, request.inputMaxBytes(), codec, personality);
+                return verifyPrompt(turn, request, input).thenApplyAsync(ignored -> {
+                    turn.guard(gate, false);
+                    return SystemResult.continueWith(ComponentPatch.builder().put(AgentComponents.PROMPT_INPUT, input).build());
+                }, executor);
+                }, executor);
+            }, executor).exceptionallyCompose(turn::rejectContext);
+        } catch (RuntimeException failure) { return turn.rejectContext(failure); }
+    }
+
+    /**
+     * 使用真实已解析引用和原固定字节预算向能力端口交接请求，不保留无记忆模式的外部引用提示。
+     * @param snapshot 本轮组件快照
+     * @return 原身份和原文保持不变的固定请求
+     */
+    private static AgentRunRequest fixedRequest(EntitySnapshot snapshot) {
+        var request = snapshot.require(AgentComponents.REQUEST);
+        var reference = snapshot.find(AgentComponents.MEMORY_REFERENCE).orElse(null);
+        return Objects.equals(reference, request.memoryReference()) ? request : new AgentRunRequest(request.requestId(), request.actor(), request.activity(),
+                request.messages(), request.conversation(), reference, request.userText(), request.inputMaxBytes(), request.personalityIdentity());
     }
 
     /**
@@ -103,24 +166,33 @@ final class AgentTurnPipeline {
         var request = context.snapshot().require(AgentComponents.REQUEST);
         var definition = context.snapshot().require(AgentComponents.DEFINITION);
         var runtime = context.snapshot().require(AgentComponents.RUNTIME);
+        var input = context.snapshot().require(AgentComponents.PROMPT_INPUT);
+        var toolRequest = fixedRequest(context.snapshot());
         List<LLMToolBinding> selected = definition.activities().contains(AgentActivity.TOOL)
-                ? List.copyOf(tools.select(definition, request, runtime)) : List.of();
-        var bound = selected.stream().map(binding -> references == null
+                ? List.copyOf(tools.select(definition, toolRequest, runtime)) : List.of();
+        boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null;
+        var bound = selected.stream().map(binding -> !guarded
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))
                 : binding.guardedAsync((call, trusted) -> guard(turn, true), executor)).toList();
         var toolSet = new LLMToolSet(mapper, bound);
         turn.guard(gate, false);
-        var prompt = new LLMPrompt(request.messages(), runtime.modelOptions().toOptions(), LLMOptionsPolicy.RESOLVED);
+        var prompt = new LLMPrompt(input.messages(), runtime.modelOptions().toOptions(), LLMOptionsPolicy.RESOLVED);
         var trusted = new ToolInvocationContext(request.requestId(), context.snapshot(), context.control());
         turn.enteringInteraction();
         try {
             return Objects.requireNonNull(interactions.interact(prompt, toolSet, trusted, runtime.interaction(),
-                    references == null ? modelContext -> turn.guard(gate, false)
+                    !guarded ? modelContext -> turn.guard(gate, false)
                             : ILLMInteractionGuard.asynchronous(modelContext -> guard(turn, false))), "交互端口返回的阶段不能为空。")
                     .thenApply(result -> {
-                        turn.observe(result);
-                        return SystemResult.continueWith(ComponentPatch.builder().put(AgentComponents.INTERACTION, result).build());
-                    });
+                        turn.observe(result, null); return result;
+                    }).thenApplyAsync(result -> {
+                        var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
+                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null)) {
+                            var projection = AgentPromptTranscript.create(input, result, codec); turn.observe(result, projection);
+                            patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
+                        }
+                        return SystemResult.continueWith(patch.build());
+                    }, executor);
         } finally {
             turn.attachedInteraction();
         }
@@ -150,9 +222,29 @@ final class AgentTurnPipeline {
     private CompletionStage<Void> guard(AgentTurn turn, boolean tool) {
         try {
             turn.guard(gate, tool);
-            if (references == null) { return CompletableFuture.completedStage(null); }
-            return turn.verifyMemory(references).thenRunAsync(() -> turn.guard(gate, tool), executor);
+            var input = turn.entity.snapshot().find(AgentComponents.PROMPT_INPUT).orElse(null);
+            return turn.verifyMemory(references).thenComposeAsync(ignored -> input == null ? CompletableFuture.completedStage(null)
+                    : verifyPrompt(turn, fixedRequest(turn.entity.snapshot()), input), executor)
+                    .thenRunAsync(() -> turn.guard(gate, tool), executor);
         } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
+    }
+
+    /**
+     * 只复核实际保留的临时资料，全部省略或没有资料时不额外限制普通对话；仅借用轮次控制。
+     * @param turn 本轮资源拥有者
+     * @param request 本轮固定请求
+     * @param input 已固定输入布局
+     * @return 来源仍有效的信号，失败不替换成新的资料
+     */
+    private CompletionStage<Void> verifyPrompt(AgentTurn turn, AgentRunRequest request, AgentPromptInput input) {
+        try {
+            var personality = input.personality();
+            CompletionStage<Void> checked = personality == null ? CompletableFuture.completedStage(null)
+                    : Objects.requireNonNull(personalities, "实际人格源不能为空。").verify(request.actor().scope(), personality, turn.control());
+            return turn.control().guard(checked.thenComposeAsync(ignored -> input.fragments().isEmpty() ? CompletableFuture.completedStage(null)
+                    : Objects.requireNonNull(prompts.verify(request, input, turn.control()), "Prompt 来源复核不能返回空阶段。"), executor))
+                .exceptionallyCompose(turn::rejectContext); }
+        catch (RuntimeException failure) { return turn.rejectContext(failure); }
     }
 
     /**

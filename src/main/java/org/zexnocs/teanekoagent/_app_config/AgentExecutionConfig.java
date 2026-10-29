@@ -8,6 +8,8 @@ import org.zexnocs.teanekoagent.agent.AgentService;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
@@ -46,11 +48,33 @@ public class AgentExecutionConfig {
      * @param references 当前持久化空间引用端口
      * @return 拥有本服务轮次、借用共享资源的异步执行服务
      */
-    @Bean(destroyMethod = "close")
     public AgentService agentTurnService(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
             @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references) {
         return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper,
                 executor, scheduler, Clock.systemUTC(), logger, references);
+    }
+
+    /**
+     * Spring 组合可选资料端口，缺失时明确使用空策略，构造不读取资料或创建默认实例。
+     * @param gate 统一准入入口
+     * @param interactions 完整交互端口
+     * @param tools 显式工具源提供者
+     * @param mapper 协议转换器
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param logger 项目日志
+     * @param references 固定空间端口
+     * @param prompts 可选本轮资料端口提供者
+     * @param personalities 可选人格源，与默认邮箱共用同一实例
+     * @return 拥有本轮资源、借用共享执行器的服务
+     */
+    @Bean(name = "agentTurnService", destroyMethod = "close")
+    public AgentService agentTurnServiceWithPrompt(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
+            ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references,
+            ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities) {
+        return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper, executor, scheduler,
+                Clock.systemUTC(), logger, references, prompts.getIfAvailable(IAgentPromptSource::empty), personalities.getIfAvailable());
     }
 }

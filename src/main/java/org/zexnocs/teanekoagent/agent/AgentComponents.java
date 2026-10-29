@@ -3,6 +3,8 @@ package org.zexnocs.teanekoagent.agent;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.agent.conversation.AgentConversationStamp;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.framework.composition.ComponentKey;
@@ -17,6 +19,8 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
  * @version 4.5.0-l
  */
 public final class AgentComponents {
+    /** 当前会话已固定的人格身份，不承载人格正文或授权。 */
+    public static final ComponentKey<String> PERSONALITY_IDENTITY = ComponentKey.of("agent.personality-identity", String.class);
     public static final ComponentKey<AgentDefinition> DEFINITION = ComponentKey.of("agent.definition", AgentDefinition.class);
     public static final ComponentKey<Boolean> CLOSED = ComponentKey.of("agent.closed", Boolean.class);
     public static final ComponentKey<AgentActorContext> ACTOR = ComponentKey.of("agent.actor", AgentActorContext.class);
@@ -28,6 +32,8 @@ public final class AgentComponents {
     public static final ComponentKey<AgentConversationStamp> CONVERSATION = ComponentKey.of("agent.conversation", AgentConversationStamp.class);
     public static final ComponentKey<MemoryNamespaceReference> MEMORY_REFERENCE = ComponentKey.of("agent.memory-reference", MemoryNamespaceReference.class);
     public static final ComponentKey<LLMInteractionResult> INTERACTION = ComponentKey.of("agent.interaction", LLMInteractionResult.class);
+    public static final ComponentKey<AgentPromptInput> PROMPT_INPUT = ComponentKey.of("agent.prompt-input", AgentPromptInput.class);
+    public static final ComponentKey<AgentPromptTranscript> PROMPT_TRANSCRIPT = ComponentKey.of("agent.prompt-transcript", AgentPromptTranscript.class);
     public static final ComponentKey<AgentRunResult> OUTCOME = ComponentKey.of("agent.outcome", AgentRunResult.class);
 
     /** 禁止实例化组件键集合。 */

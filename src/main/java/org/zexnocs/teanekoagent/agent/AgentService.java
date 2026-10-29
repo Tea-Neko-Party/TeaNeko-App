@@ -4,6 +4,8 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -16,7 +18,6 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.concurrent.*;
 import java.util.function.Function;
 
@@ -36,6 +37,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private final Clock clock;
     private final ILogger logger;
     private final @Nullable IAgentMemoryReferences references;
+    private final IAgentPromptSource prompts;
+    private final @Nullable IAgentPersonalitySource personalities;
     private final ConcurrentMap<EntityId, AgentTurn> turns = new ConcurrentHashMap<>();
     private final Object lifecycleLock = new Object();
     private final SystemPipeline pipeline;
@@ -55,7 +58,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger) {
-        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, null, true);
+        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, null, true, IAgentPromptSource.empty(), null);
     }
 
     /**
@@ -76,7 +79,48 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
             IAgentMemoryReferences references) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger,
-                Objects.requireNonNull(references, "持久化空间引用端口不能为空。"), false);
+                Objects.requireNonNull(references, "持久化空间引用端口不能为空。"), false, IAgentPromptSource.empty(), null);
+    }
+
+    /**
+     * 显式组合本轮临时资料端口；空引用表示独立无持久化模式，不授予资料来源任何业务权限。
+     * @param gate 统一准入门控
+     * @param interactions 完整交互端口
+     * @param tools 本轮工具策略
+     * @param mapper 协议转换器
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param clock 宿主时钟
+     * @param logger 项目日志
+     * @param references 可选持久化引用端口
+     * @param prompts 可等待资料及有效性检查端口
+     * @throws NullPointerException 当必需依赖为空时
+     */
+    public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
+            ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
+            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts) {
+        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null,
+                Objects.requireNonNull(prompts, "Prompt 资料端口不能为空。"), null);
+    }
+
+    /**
+     * 显式组合实际人格与记忆资料，原构造保留无人格源的独立使用方式。
+     * @param gate 准入门控
+     * @param interactions LLM 交互
+     * @param tools 显式工具
+     * @param mapper 协议转换器
+     * @param executor 借用执行器
+     * @param scheduler 借用计时器
+     * @param clock 时钟
+     * @param logger 日志
+     * @param references 可选记忆引用
+     * @param prompts 资料源
+     * @param personalities 可选实际人格源
+     */
+    public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentMemoryReferences references,
+            IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities) {
+        this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null, prompts, personalities);
     }
 
     /**
@@ -91,20 +135,24 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @param logger 日志
      * @param references 可选空间端口
      * @param detachedMemory 是否使用既有显式无持久化记忆入口
+     * @param prompts 本轮临时资料端口
+     * @param personalities 可选实际人格源
      * @throws NullPointerException 当必需依赖为空时
      */
     private AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
-            @Nullable IAgentMemoryReferences references, boolean detachedMemory) {
+            @Nullable IAgentMemoryReferences references, boolean detachedMemory, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities) {
         this.gate = Objects.requireNonNull(gate, "Agent 门控不能为空。");
         this.executor = Objects.requireNonNull(executor, "业务执行器不能为空。");
         this.scheduler = Objects.requireNonNull(scheduler, "计时器不能为空。");
         this.clock = Objects.requireNonNull(clock, "轮次时钟不能为空。");
         this.logger = Objects.requireNonNull(logger, "日志端口不能为空。");
         this.references = detachedMemory ? null : Objects.requireNonNull(references, "空间引用端口不能为空。");
+        this.prompts = Objects.requireNonNull(prompts, "Prompt 资料端口不能为空。");
+        this.personalities = personalities;
         pipeline = new AgentTurnPipeline(this::requireTurn, gate,
                 Objects.requireNonNull(interactions, "交互端口不能为空。"), Objects.requireNonNull(tools, "工具源不能为空。"),
-                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor, this.references).pipeline;
+                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor, this.references, prompts, personalities).pipeline;
     }
 
     /**
@@ -124,6 +172,39 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                 }
                 return gate.evaluate(handle, request.actor(), request.activity());
             }, executor);
+        } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
+    }
+
+    /**
+     * 使用本服务固定资料源复核原布局，外部引用提示不能替换原交互的实际引用。
+     * 当前准入、epoch 和观察期限由邮箱前后复核；本方法不读取新资料或建立模型预算。
+     * @param handle 原实例
+     * @param request 原可信请求及原始文本凭据
+     * @param result 原结果
+     * @param control 本次观察拥有者借出的控制
+     * @return 资料源明确支持且当前有效时为 true
+     * @throws NullPointerException 当必需输入为空时
+     */
+    @Override public CompletionStage<Boolean> verifyPromptReplay(AgentHandle handle, AgentRunRequest request, AgentRunResult result, ExecutionControl control) {
+        Objects.requireNonNull(control, "重放观察控制不能为空。");
+        try {
+            return CompletableFuture.supplyAsync(() -> {
+                control.checkActive();
+                synchronized (lifecycleLock) { if (closed) { throw new ExecutionStoppedException(ExecutionControl.StopReason.CLOSED); } }
+                if (!handle.id().equals(result.agentId()) || !request.requestId().equals(result.requestId())) {
+                    return CompletableFuture.completedStage(false);
+                }
+                var projection = result.promptTranscript();
+                if (projection == null) { return CompletableFuture.completedStage(true); }
+                var fixed = new AgentRunRequest(request.requestId(), request.actor(), request.activity(), projection.input().original(),
+                        result.conversation(), result.memoryReference(), request.userText(), Long.MAX_VALUE);
+                var personality = projection.input().personality();
+                if (personality != null && personalities == null) { return CompletableFuture.completedStage(false); }
+                CompletionStage<Void> checked = personality == null ? CompletableFuture.completedStage(null)
+                        : Objects.requireNonNull(personalities).verify(request.actor().scope(), personality, control);
+                return control.guard(checked).thenComposeAsync(ignored -> projection.input().fragments().isEmpty() ? CompletableFuture.completedStage(true)
+                        : control.guard(Objects.requireNonNull(prompts.verifyReplay(fixed, projection.input(), control), "资料重放复核阶段不能为空。")), executor);
+            }, executor).thenCompose(Function.identity());
         } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
     }
 
@@ -187,7 +268,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         Objects.requireNonNull(handle, "Agent 实例不能为空。"); Objects.requireNonNull(request, "固定引用请求不能为空。");
         if (request.conversation() == null || request.memoryReference() == null) {
             return completed(new AgentRunResult(handle.id(), request.requestId(), AgentRunResult.Status.CONFIGURATION_ERROR,
-                    Optional.empty(), Optional.empty(), Map.of()));
+                    null, null, Map.of()));
         }
         return prepareInternal(handle, request, parent);
     }
@@ -206,12 +287,12 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         if (request.activity() == AgentActivity.COLLECT || request.activity() == AgentActivity.TOOL
                 || request.conversation() != null && !request.conversation().key().agentId().equals(handle.id())) {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
-                    AgentRunResult.Status.INVALID_INPUT, Optional.empty(), Optional.empty(), Map.of()));
+                    AgentRunResult.Status.INVALID_INPUT, null, null, Map.of()));
         }
         if (references != null && request.conversation() != null && request.memoryReference() == null
                 || references == null && request.memoryReference() != null) {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
-                    AgentRunResult.Status.CONFIGURATION_ERROR, Optional.empty(), Optional.empty(), Map.of()));
+                    AgentRunResult.Status.CONFIGURATION_ERROR, null, null, Map.of()));
         }
         final AgentTurn turn;
         try {
@@ -219,7 +300,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             turn = new AgentTurn(handle, request, parent == null ? ExecutionControl.create() : parent.child(), parent == null, acceptedAt);
         } catch (RuntimeException failure) {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
-                    AgentTurn.failureStatus(failure), Optional.empty(), Optional.empty(),
+                    AgentTurn.failureStatus(failure), null, null,
                     parent == null ? Map.of() : parent.budget().snapshot()));
         }
         final boolean accepted;

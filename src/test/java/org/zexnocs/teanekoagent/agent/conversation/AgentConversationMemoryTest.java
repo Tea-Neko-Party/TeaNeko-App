@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
@@ -333,7 +335,7 @@ class AgentConversationMemoryTest {
         // 为下一轮单独提供旧六参数成功结果，保留真实协议快照以检测引用合同。
         var raw = call.result.join(); var second = request(); var secondResult = service.run(handle, second).toCompletableFuture(); runtime.runAll();
         var secondCall = backend.calls.get(second.requestId());
-        secondCall.result.complete(new AgentRunResult(handle.id(), second.requestId(), raw.status(), raw.access(), raw.interaction(), raw.budgetUsage()));
+        secondCall.result.complete(new AgentRunResult(handle.id(), second.requestId(), raw.status(), raw.access().orElse(null), raw.interaction().orElse(null), raw.budgetUsage()));
         runtime.runAll(); assertEquals(AgentRunResult.Status.SUCCESS, result.join().status());
         assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, secondResult.join().status()); assertTrue(secondResult.join().answer().isEmpty());
         assertEquals(1, service.snapshot(handle, scope).orElseThrow().require(AgentConversationWindow.COMPONENT).turns().size());

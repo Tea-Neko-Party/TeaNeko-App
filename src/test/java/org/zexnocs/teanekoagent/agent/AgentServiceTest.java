@@ -684,6 +684,31 @@ class AgentServiceTest {
         verify(executor, never()).shutdown();
     }
 
+    /** 验证可选 Prompt 端口通过真实 Spring Bean 选择，构造无 I/O 且默认 Bean 名称和共享资源所有权保持稳定。 */
+    @Test void springAssemblySelectsExplicitPromptSourceWithoutEagerReads() {
+        var executor = mock(ExecutorService.class);
+        doAnswer(invocation -> { runtime.execute(invocation.getArgument(0)); return null; }).when(executor).execute(any(Runnable.class));
+        var source = mock(org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource.class);
+        when(source.resolve(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(List.of()));
+        var references = mock(IAgentMemoryReferences.class);
+        var fixed = new org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
+                org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
+        when(references.resolve(any())).thenReturn(CompletableFuture.completedStage(fixed));
+        when(references.verify(any())).thenReturn(CompletableFuture.completedStage(null));
+        try (var context = new AnnotationConfigApplicationContext()) {
+            var beans = context.getBeanFactory(); beans.registerSingleton("agentAccessGate", gate);
+            beans.registerSingleton("llmInteractionService", interactions); beans.registerSingleton("objectMapper", new ObjectMapper());
+            beans.registerSingleton("virtualExecutor", executor); beans.registerSingleton("taskExecutor", runtime.scheduler);
+            beans.registerSingleton("projectLogger", logger); beans.registerSingleton("memoryReferences", references); beans.registerSingleton("promptSource", source);
+            context.register(AgentExecutionConfig.class); context.refresh();
+            verifyNoInteractions(source, executor, scopes, readiness);
+            var assembled = context.getBean(IAgentTurnService.class); assertSame(assembled, context.getBean("agentTurnService"));
+            var result = context.getBean(AgentService.class).run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture(); runtime.runAll(); reply(response());
+            assertEquals(SUCCESS, result.join().status()); verify(source).resolve(any(), any(), any(), any());
+        }
+        verify(executor, never()).shutdown(); verify(runtime.scheduler, never()).shutdown();
+    }
+
     /** 验证最小 Spring 装配支持接口注入和实际关闭方法，销毁时结束冷轮次并保留借用执行器。 */
     @Test void springBeanDestructionCompletesOwnedColdExecution() {
         var executor = mock(ExecutorService.class);

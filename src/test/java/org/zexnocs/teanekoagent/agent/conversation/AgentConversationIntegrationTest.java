@@ -7,6 +7,8 @@ import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;

@@ -6,6 +6,7 @@ import org.springframework.mock.env.MockEnvironment;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeFieldChecker;
+import org.zexnocs.teanekoagent.adapter.config.ConfigDataAgentConversationPolicy;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;

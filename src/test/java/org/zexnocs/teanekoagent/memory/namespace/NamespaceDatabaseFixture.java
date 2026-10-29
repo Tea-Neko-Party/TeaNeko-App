@@ -4,7 +4,8 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.zexnocs.teanekoagent.adapter.memory.EasyDataMemoryNamespaceStore;
+import org.zexnocs.teanekoagent.adapter.memory.*;
+import org.zexnocs.teanekoagent.adapter.personality.PersonalityLockRepository;
 import org.zexnocs.teanekoagent.memory.fact.legacy.LegacyMemoryLocation;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -46,6 +47,7 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
     final EasyDataMemoryNamespaceStore store = new EasyDataMemoryNamespaceStore(repository, database, mapper);
     final MemoryFactRepository factRepository = mock(MemoryFactRepository.class);
     final MemoryNamespaceWriteRepository namespaceLocks = mock(MemoryNamespaceWriteRepository.class);
+    final PersonalityLockRepository personalityLocks = mock(PersonalityLockRepository.class);
     final EasyDataMemoryFactStore facts = new EasyDataMemoryFactStore(store, namespaceLocks, factRepository, mapper);
     final EasyDataLegacyMemoryStore legacy = new EasyDataLegacyMemoryStore(store, facts, factRepository, mapper);
     final EasyDataMemoryRecallStore recall = new EasyDataMemoryRecallStore(store, namespaceLocks, facts);
@@ -82,11 +84,13 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
             afterFactPage.get().run(); return rows;
         });
         when(namespaceLocks.lockNamespace(anyString())).thenAnswer(call -> lockNamespace(call.getArgument(0)));
+        when(personalityLocks.lock(anyString(), anyString())).thenAnswer(call ->
+                lockRow(key("agent.personality.v1", call.getArgument(0), call.getArgument(1))));
         // 用更严格的独占锁模拟共享快照与写入互斥，不据此声称验证了并发读性能。
         when(namespaceLocks.lockSnapshot(anyString())).thenAnswer(call -> snapshotNamespace(call.getArgument(0)));
         when(factRepository.lockLegacyProfile(anyString(), anyString())).thenAnswer(call -> {
             beforeLegacyLock.get().run();
-            return (MemoryFactDataObject) lockRow(key("memory", call.getArgument(0), call.getArgument(1)));
+            return lockRow(key("memory", call.getArgument(0), call.getArgument(1)));
         });
         when(database.__pushTask(any())).thenAnswer(call -> {
             IDatabaseTaskConfig task = call.getArgument(0);

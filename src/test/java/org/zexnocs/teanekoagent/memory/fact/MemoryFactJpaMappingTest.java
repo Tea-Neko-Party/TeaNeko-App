@@ -10,6 +10,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.parser.PartTree;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.zexnocs.teanekoagent.adapter.memory.MemoryFactDataObject;
+import org.zexnocs.teanekoagent.adapter.memory.MemoryFactRepository;
+import org.zexnocs.teanekoagent.adapter.memory.MemoryNamespaceWriteRepository;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
 
 import java.util.Objects;
@@ -53,6 +56,10 @@ class MemoryFactJpaMappingTest {
                 assertEquals(LockModeType.PESSIMISTIC_WRITE, Objects.requireNonNull(legacyLock.getAnnotation(Lock.class)).value());
                 assertEquals(Propagation.MANDATORY, Objects.requireNonNull(legacyLock.getAnnotation(Transactional.class)).propagation());
                 assertNotNull(session.createQuery(Objects.requireNonNull(legacyLock.getAnnotation(Query.class)).value(), MemoryFactDataObject.class));
+                var personalityLock = org.zexnocs.teanekoagent.adapter.personality.PersonalityLockRepository.class.getMethod("lock", String.class, String.class);
+                assertEquals(LockModeType.PESSIMISTIC_WRITE, Objects.requireNonNull(personalityLock.getAnnotation(Lock.class)).value());
+                assertEquals(Propagation.MANDATORY, Objects.requireNonNull(personalityLock.getAnnotation(Transactional.class)).propagation());
+                assertNotNull(session.createQuery(Objects.requireNonNull(personalityLock.getAnnotation(Query.class)).value(), GeneralEasyDataObject.class));
                 var page = MemoryFactRepository.class.getMethod("findByNamespaceAndTargetAndKeyGreaterThanOrderByKeyAsc",
                         String.class, String.class, String.class, Pageable.class);
                 assertDoesNotThrow(() -> new PartTree(page.getName(), MemoryFactDataObject.class));

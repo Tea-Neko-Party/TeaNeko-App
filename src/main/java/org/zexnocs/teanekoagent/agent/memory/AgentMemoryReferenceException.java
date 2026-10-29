@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.agent.memory;
 
+import java.io.Serial;
 import java.util.Objects;
 
 /**
@@ -10,6 +11,7 @@ import java.util.Objects;
  * @version 4.5.0-l
  */
 public final class AgentMemoryReferenceException extends RuntimeException {
+    @Serial
     private static final long serialVersionUID = 1L;
     private final Reason reason;
 

@@ -5,6 +5,8 @@ import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -46,6 +48,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private final Clock clock;
     private final ILogger logger;
     private final @Nullable AgentMemoryBoundary memory;
+    private final AgentMemoryBoundary observations;
+    private final @Nullable IAgentPersonalitySource personalities;
     private final Object lock = new Object();
     private final Map<AgentConversationKey, Mailbox> mailboxes = new LinkedHashMap<>();
     private final ConcurrentLinkedQueue<Mailbox> retired = new ConcurrentLinkedQueue<>();
@@ -119,6 +123,27 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
             IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references) {
+        this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, null);
+    }
+
+    /**
+     * 组合人格生命周期，在历史装配前协调人格身份；旧构造保留显式无人格模式。
+     * @param turns 独立轮次端口
+     * @param defaults 排队策略
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param clock 可信时钟
+     * @param logger 日志
+     * @param conversations 会话保留策略
+     * @param policy 窗口策略
+     * @param mapper 协议转换器
+     * @param references 可选记忆引用
+     * @param personalities 可选实际人格源，完整装配与独立轮次使用同一源
+     */
+    public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
+            @Nullable IAgentPersonalitySource personalities) {
         this.turns = Objects.requireNonNull(turns, "独立轮次端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "排队策略端口不能为空。");
         this.conversations = Objects.requireNonNull(conversations, "会话保留策略端口不能为空。");
@@ -128,7 +153,9 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         this.scheduler = Objects.requireNonNull(scheduler, "排队计时器不能为空。");
         this.clock = Objects.requireNonNull(clock, "排队时钟不能为空。");
         this.logger = Objects.requireNonNull(logger, "邮箱日志端口不能为空。");
-        this.memory = references == null ? null : new AgentMemoryBoundary(references, turns, executor, scheduler, clock);
+        observations = new AgentMemoryBoundary(references, turns, executor, scheduler, clock);
+        this.memory = references == null ? null : observations;
+        this.personalities = personalities;
     }
 
     /**
@@ -226,7 +253,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                             else if (recursive) { rejection = AgentRunResult.Status.REENTRANT; }
                             else { source = pending.result.minimalCompletionStage(); }
                         } else {
-                            var saved = completed == null ? null : completed.result();
+                            var saved = completed.result();
                             if (saved == null) { rejection = AgentRunResult.Status.REPLAY_UNAVAILABLE; }
                             else { source = CompletableFuture.completedStage(saved); }
                         }
@@ -241,7 +268,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     }
 
     /**
-     * 重放前复核实际准入和代次；派生观察不更改原结果、控制或预算。
+     * 以独立有界观察复核实际准入、代次和资料来源，未实现资料重放协议时明确不可重放。
+     * 派生观察不更改原结果、控制或预算，也不以不可重放为由补执行模型或工具。
      * @param handle 原目标实例
      * @param request 原始请求
      * @param source 原完成信号
@@ -251,64 +279,51 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private CompletionStage<AgentRunResult> replay(AgentHandle handle, AgentRunRequest request, CompletionStage<AgentRunResult> source,
             AgentConversationStamp stamp, @Nullable ExecutionControl parent) {
-        if (memory != null) { return replayMemory(handle, request, source, stamp, parent); }
-        var checked = source.thenCompose(raw -> {
-            try {
-                if (parent != null) { parent.checkActive(); }
-                var before = replayStatus(handle, stamp);
-                if (before != null) { return CompletableFuture.completedStage(restate(raw, before)); }
-                return Objects.requireNonNull(turns.checkAccess(handle, request), "重放准入端口返回的阶段不能为空。")
-                        .handle((decision, failure) -> {
-                            if (failure != null || decision == null) {
-                                var status = failure == null ? AgentRunResult.Status.FAILED : failureStatus(failure);
-                                return restate(raw, status == AgentRunResult.Status.FAILED ? AgentRunResult.Status.CONFIGURATION_ERROR : status);
-                            }
-                            var after = replayStatus(handle, stamp);
-                            if (after != null) { return restate(raw, after); }
-                            if (decision.allowed()) { return raw; }
-                            var status = switch (decision.reason()) {
-                                case INSTANCE_CLOSED -> AgentRunResult.Status.CANCELLED;
-                                case READINESS_UNAVAILABLE, SCOPE_CONFIG_UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
-                                default -> AgentRunResult.Status.SKIPPED;
-                            };
-                            return new AgentRunResult(raw.agentId(), raw.requestId(), status, Optional.of(decision), raw.interaction(), raw.budgetUsage(), raw.conversation(), raw.memoryReference());
-                        });
-            } catch (RuntimeException failure) {
-                var status = failureStatus(failure);
-                return CompletableFuture.completedStage(restate(raw, status == AgentRunResult.Status.FAILED
-                        ? AgentRunResult.Status.CONFIGURATION_ERROR : status));
-            }
-        });
-        return (parent == null ? checked : parent.guard(checked)).handle((result, failure) -> failure == null ? result
-                : rejectedResult(handle, request, failureStatus(failure), parent)).toCompletableFuture().minimalCompletionStage();
-    }
-
-    /**
-     * 有界等待原完成信号并只读复核固定引用；重试不创建新轮次，也不使用历史绑定回执。
-     * @param handle 原实例
-     * @param request 原请求
-     * @param source 原完成信号
-     * @param stamp 查找时的代次
-     * @param parent 可选观察父控制
-     * @return 当前边界仍成立时的原结果，否则只保留诊断
-     */
-    private CompletionStage<AgentRunResult> replayMemory(AgentHandle handle, AgentRunRequest request,
-            CompletionStage<AgentRunResult> source, AgentConversationStamp stamp, @Nullable ExecutionControl parent) {
-        var boundary = Objects.requireNonNull(memory);
         try {
             var deadline = clock.instant().plus(defaults.resolve().waitTimeout());
-            return boundary.await(parent, handle, deadline, () -> source.thenComposeAsync(raw -> {
+            return observations.awaitControlled(parent, handle, deadline, control -> control.guard(source).thenComposeAsync(raw -> {
+                control.checkActive();
                 var before = replayStatus(handle, stamp);
                 if (before != null) { return CompletableFuture.completedStage(restate(raw, before)); }
-                var expected = raw.memoryReference();
-                if (expected == null) { return CompletableFuture.completedStage(restate(raw, AgentRunResult.Status.CONFIGURATION_ERROR)); }
-                return boundary.verify(handle, request, expected).handle((ignored, failure) -> {
-                    var after = replayStatus(handle, stamp);
-                    return after != null ? restate(raw, after) : failure == null ? raw : restate(raw, AgentMemoryBoundary.status(failure));
-                });
+                return replayAccess(handle, request, raw).thenComposeAsync(checked -> {
+                    control.checkActive();
+                    if (checked.status() != AgentRunResult.Status.SUCCESS || checked.promptTranscript() == null
+                            || checked.promptTranscript().input().fragments().isEmpty() && checked.promptTranscript().input().personality() == null) {
+                        return CompletableFuture.completedStage(checked);
+                    }
+                    return control.guard(Objects.requireNonNull(turns.verifyPromptReplay(handle, request, checked, control), "资料重放阶段不能为空。"))
+                            .thenComposeAsync(allowed -> {
+                                control.checkActive();
+                                if (!Boolean.TRUE.equals(allowed)) { return CompletableFuture.completedStage(restate(checked, AgentRunResult.Status.REPLAY_UNAVAILABLE)); }
+                                return replayAccess(handle, request, checked);
+                            }, executor);
+                }, executor).thenApplyAsync(checked -> {
+                    control.checkActive(); var after = replayStatus(handle, stamp); return after == null ? checked : restate(checked, after);
+                }, executor).exceptionally(failure -> restate(raw, AgentMemoryBoundary.status(failure)));
             }, executor)).handle((result, failure) -> failure == null ? result
                     : rejectedResult(handle, request, AgentMemoryBoundary.status(failure), parent));
         } catch (RuntimeException failure) { return immediate(handle, request, AgentMemoryBoundary.status(failure), parent); }
+    }
+
+    /**
+     * 在资料观察前后复核当前准入及实际引用，不把已结束的原运行控制作为当前授权。
+     * @param handle 原实例
+     * @param request 原可信请求
+     * @param raw 保留诊断的原结果
+     * @return 当前仍允许时保留原对象，否则隐藏回答
+     */
+    private CompletionStage<AgentRunResult> replayAccess(AgentHandle handle, AgentRunRequest request, AgentRunResult raw) {
+        var boundary = memory;
+        if (boundary != null) {
+            var reference = raw.memoryReference();
+            if (reference == null) { return CompletableFuture.completedStage(restate(raw, AgentRunResult.Status.CONFIGURATION_ERROR)); }
+            return boundary.verify(handle, request, reference).thenApply(ignored -> raw);
+        }
+        return Objects.requireNonNull(turns.checkAccess(handle, request), "重放准入阶段不能为空。").thenApply(decision -> {
+            Objects.requireNonNull(decision, "重放准入结果不能为空。");
+            return decision.allowed() ? raw : new AgentRunResult(raw.agentId(), raw.requestId(), AgentMemoryBoundary.accessStatus(decision),
+                    Optional.of(decision), raw.interaction(), raw.budgetUsage(), raw.conversation(), raw.memoryReference(), raw.promptTranscript());
+        });
     }
 
     /**
@@ -325,7 +340,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         if (boundary == null) { throw new UnsupportedOperationException("当前邮箱未装配持久化记忆引用。"); }
         try {
             var deadline = clock.instant().plus(defaults.resolve().waitTimeout());
-            return boundary.awaitControlled(parent, null, deadline, control -> boundary.references.resolve(scope)
+            return boundary.awaitControlled(parent, null, deadline, control -> boundary.references().resolve(scope)
                     .thenApplyAsync(reference -> {
                         control.checkActive();
                         parent.checkActive();
@@ -353,8 +368,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             if (head != null && (head.phase != Phase.PREPARING || head.stopped != null)) { return 0; }
             var related = mailboxes.values().stream().filter(box -> !box.retired && box.key.scope().equals(reference.scope())).toList();
             for (var box : related) {
-                var previous = box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).orElse(null);
-                if (previous != null) { validateMemoryAdvance(reference, previous); }
+                box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).ifPresent(previous -> validateMemoryAdvance(reference, previous));
             }
             for (var box : related) {
                 var previous = box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).orElse(null);
@@ -421,7 +435,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @return 不会把拒绝或失效诊断作为回答交付的结果
      */
     private static AgentRunResult restate(AgentRunResult result, AgentRunResult.Status status) {
-        return new AgentRunResult(result.agentId(), result.requestId(), status, result.access(), result.interaction(), result.budgetUsage(), result.conversation(), result.memoryReference());
+        return new AgentRunResult(result.agentId(), result.requestId(), status, result.access(), result.interaction(), result.budgetUsage(), result.conversation(), result.memoryReference(), result.promptTranscript());
     }
 
     /**
@@ -802,14 +816,14 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 entry.phase = Phase.PREPARING;
             }
             var boundary = memory;
-            if (boundary == null) { startPrepared(entry, null); return; }
+            if (boundary == null) { preparePersonality(entry, null); return; }
             boundary.await(entry.lifetime, entry.handle, entry.waitDeadline, () -> boundary.resolve(entry.handle, entry.request))
                     .thenAcceptAsync(reference -> {
                         entry.lifetime.checkActive();
                         if (!clock.instant().isBefore(entry.waitDeadline)) { stop(entry, AgentRunResult.Status.QUEUE_TIMED_OUT, true); return; }
                         if (!reference.scope().equals(entry.key.scope())) { throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE); }
                         alignMemory(reference, entry);
-                        startPrepared(entry, reference);
+                        preparePersonality(entry, reference);
                     }, executor).exceptionally(failure -> { stop(entry, AgentMemoryBoundary.status(failure), false); return null; });
         } catch (ExecutionStoppedException stopped) {
             stop(entry, stopStatus(stopped.reason()), false);
@@ -821,7 +835,54 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     }
 
     /**
-     * 引用协调完成后才取得当前窗口，冷句柄公布与实际启动保留原拥有关系。
+     * 在固定记忆引用之后、读取历史之前解析人格，未准入的实例不触发人格初始化。
+     * @param entry 当前队首
+     * @param reference 可选固定记忆引用
+     */
+    private void preparePersonality(Entry entry, @Nullable MemoryNamespaceReference reference) {
+        var source = personalities;
+        if (source == null) { startPrepared(entry, reference); return; }
+        observations.awaitControlled(entry.lifetime, entry.handle, entry.waitDeadline, control -> turns.checkAccess(entry.handle, entry.request)
+                .thenComposeAsync(decision -> {
+                    control.checkActive();
+                    if (!decision.allowed()) { throw new AgentPromptException(decision.reason() == AgentAccessDecision.Reason.READINESS_UNAVAILABLE
+                            || decision.reason() == AgentAccessDecision.Reason.SCOPE_CONFIG_UNAVAILABLE ? AgentPromptException.Reason.UNAVAILABLE : AgentPromptException.Reason.DISABLED); }
+                    return source.resolve(entry.key.scope(), control);
+                }, executor)).thenAcceptAsync(snapshot -> {
+                    entry.lifetime.checkActive(); entry.reservedPersonalityBytes = engine.personalityBytes(snapshot);
+                    alignPersonality(entry, snapshot.identity()); startPrepared(entry, reference);
+                }, executor).exceptionally(failure -> { stop(entry, AgentMemoryBoundary.status(failure), false); return null; });
+    }
+
+    /**
+     * 仅在邮箱锁内协调纯数据，当前队首保留，旧等待项和窗口/缓存一起失效。
+     * @param head 已固定新人格的队首
+     * @param identity 实际人格身份
+     */
+    private void alignPersonality(Entry head, String identity) {
+        var cancelled = new ArrayList<Entry>(); var now = clock.instant();
+        synchronized (lock) {
+            if (head.phase != Phase.PREPARING || head.stopped != null) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+            var box = Objects.requireNonNull(head.mailbox); var current = box.entity.snapshot();
+            var previous = current.find(AgentComponents.PERSONALITY_IDENTITY).orElse(null);
+            if (!Objects.equals(head.stamp, state(box).stamp())) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+            var patch = ComponentPatch.builder().put(AgentComponents.PERSONALITY_IDENTITY, identity);
+            if (previous != null && !previous.equals(identity)) {
+                var stamp = new AgentConversationStamp(box.key, UUID.randomUUID()); head.stamp = stamp;
+                patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))
+                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
+                for (var entry : List.copyOf(box.requests.values())) {
+                    if (entry == head || entry.phase == Phase.FINISHED) { continue; }
+                    entry.stopped = AgentRunResult.Status.STALE_CONVERSATION; detach(entry, now); cancelled.add(entry);
+                }
+            }
+            box.entity.commit(current.revision(), patch.build()); head.personalityIdentity = identity;
+        }
+        cancelled.forEach(entry -> deliver(entry, result(entry, null, null), null));
+    }
+
+    /**
+     * 引用协调完成后才取得当前窗口，继续保留原文凭据；冷句柄公布与实际启动保留原拥有关系。
      * @param entry 当前队首
      * @param reference 本轮固定引用，无记忆模式为空
      */
@@ -832,7 +893,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 if (entry.phase != Phase.PREPARING) { return; }
                 var box = Objects.requireNonNull(entry.mailbox);
                 if (!Objects.equals(entry.stamp, state(box).stamp())
-                        || reference != null && !box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).filter(reference::equals).isPresent()) {
+                        || reference != null && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).filter(reference::equals).isEmpty()) {
                     throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
                 }
                 entry.memoryReference = reference;
@@ -842,10 +903,15 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             catch (RuntimeException failure) { report(); stop(entry, AgentRunResult.Status.CONFIGURATION_ERROR, false); return; }
             entry.lifetime.checkActive();
             final AgentConversationEngine.Prepared prepared;
-            try { prepared = engine.prepare(entry.request, Objects.requireNonNull(entry.stamp), window, entry.options); entry.prepared = prepared; }
+            try {
+                var original = entry.request;
+                var fixed = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), original.messages(), original.conversation(),
+                        original.memoryReference(), original.userText(), original.inputMaxBytes(), entry.personalityIdentity);
+                prepared = engine.prepare(fixed, Objects.requireNonNull(entry.stamp), window, entry.options, entry.reservedPersonalityBytes); entry.prepared = prepared;
+            }
             catch (AgentConversationEngine.InputTooLargeException failure) { stop(entry, AgentRunResult.Status.INPUT_TOO_LARGE, false); return; }
             var base = prepared.request();
-            var request = reference == null ? base : new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), base.conversation(), reference);
+            var request = reference == null ? base : new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), base.conversation(), reference, base.userText(), base.inputMaxBytes(), base.personalityIdentity());
             entry.startedAt = clock.instant();
             var execution = Objects.requireNonNull(reference != null ? turns.prepareReferenced(entry.handle, request, entry.independent ? null : entry.lifetime)
                     : entry.independent ? turns.prepare(entry.handle, request) : turns.prepare(entry.handle, request, entry.lifetime), "独立轮次端口返回的句柄不能为空。");
@@ -1057,7 +1123,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         return new AgentRunResult(entry.handle.id(), entry.request.requestId(), status,
                 raw == null ? Optional.empty() : raw.access(), raw == null ? Optional.empty() : raw.interaction(),
                 raw == null ? entry.lifetime.budget().snapshot() : raw.budgetUsage(), entry.stamp,
-                raw == null ? entry.memoryReference : raw.memoryReference());
+                raw == null ? entry.memoryReference : raw.memoryReference(), raw == null ? null : raw.promptTranscript());
     }
 
     /**
@@ -1105,7 +1171,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private static AgentRunResult rejectedResult(AgentHandle handle, AgentRunRequest request, AgentRunResult.Status status,
             @Nullable ExecutionControl parent) {
-        return new AgentRunResult(handle.id(), request.requestId(), status, Optional.empty(), Optional.empty(),
+        return new AgentRunResult(handle.id(), request.requestId(), status, null, null,
                 parent == null ? Map.of() : parent.budget().snapshot());
     }
 
@@ -1160,7 +1226,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             }
         }
         drainRetired();
-        if (memory != null) { memory.close(); }
+        observations.close();
         owned.forEach(Mailbox::dispose);
         active.forEach(entry -> entry.lifetime.cancel());
     }
@@ -1256,6 +1322,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         @Nullable AgentConversationStamp stamp;
         volatile AgentConversationOptions options = AgentConversationOptions.defaults();
         volatile AgentConversationEngine.@Nullable Prepared prepared;
+        volatile @Nullable String personalityIdentity;
+        volatile long reservedPersonalityBytes;
         volatile @Nullable MemoryNamespaceReference memoryReference;
         volatile @Nullable Instant startedAt;
 

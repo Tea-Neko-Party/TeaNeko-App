@@ -21,7 +21,14 @@ public final class AgentScopeFieldChecker implements IConfigFieldChecker {
      * @return 合法时为 null，否则为固定中文原因
      */
     @Override public String isValid(String field, String value) {
-        if ("enabled".equals(field)) { return "true".equals(value) || "false".equals(value) ? null : "Agent 开关只能为 true 或 false。"; }
+        if ("enabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
+                || "customPersonalityEnabled".equals(field) || "personalityCorrectionsEnabled".equals(field) || "personalityLearningEnabled".equals(field)) {
+            return "true".equals(value) || "false".equals(value) ? null : "Agent 开关只能为 true 或 false。";
+        }
+        if ("personalityId".equals(field)) { return value != null && value.length() <= 128 ? null : "人格 ID 不能超过 128 字符。"; }
+        if ("customPersonality".equals(field) || "customSpeakingStyle".equals(field)) {
+            return value != null && value.length() <= 4096 ? null : "自定义人格文本不能超过 4096 字符。";
+        }
         if ("mode".equals(field)) {
             return Arrays.stream(AgentScopePolicy.Mode.values()).anyMatch(mode -> mode.name().equals(value))
                     ? null : "Agent 模式只能为 PASSIVE_BASIC、PASSIVE_CONTEXTUAL 或 ACTIVE。";

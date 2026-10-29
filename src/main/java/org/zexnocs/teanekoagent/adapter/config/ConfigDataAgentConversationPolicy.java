@@ -4,6 +4,8 @@ import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.AgentHandle;
 import org.zexnocs.teanekoagent.agent.AgentRunRequest;
+import org.zexnocs.teanekoagent.agent.conversation.AgentConversationOptions;
+import org.zexnocs.teanekoagent.agent.conversation.IAgentConversationPolicy;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 
 import java.util.Objects;

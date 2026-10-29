@@ -6,11 +6,15 @@ import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.AgentRunResult;
 import org.zexnocs.teanekoagent.agent.IAgentTurnService;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 
+import java.io.Serial;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
@@ -22,14 +26,14 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * 管理邮箱引用操作的执行域、截止时间与关闭，不拥有会话窗口或持久化事务。
+ * 管理邮箱引用及资料观察的执行域、截止时间与关闭，不拥有会话窗口或持久化事务。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
  * @version 4.5.0-l
  */
 final class AgentMemoryBoundary implements AutoCloseable {
-    final IAgentMemoryReferences references;
+    private final @Nullable IAgentMemoryReferences references;
     private final IAgentTurnService turns;
     private final Executor executor;
     private final ScheduledExecutorService scheduler;
@@ -39,17 +43,26 @@ final class AgentMemoryBoundary implements AutoCloseable {
 
     /**
      * 保存借用资源，构造不读取配置或数据库。
-     * @param references 当前引用端口
+     * @param references 当前引用端口；为空时仅提供有界观察，不支持持久化引用操作
      * @param turns 只读准入端口
      * @param executor 业务执行器
      * @param scheduler 计时器
      * @param clock 可信时钟
-     * @throws NullPointerException 当引用端口为空时
      */
-    AgentMemoryBoundary(IAgentMemoryReferences references, IAgentTurnService turns, Executor executor,
+    AgentMemoryBoundary(@Nullable IAgentMemoryReferences references, IAgentTurnService turns, Executor executor,
             ScheduledExecutorService scheduler, Clock clock) {
-        this.references = Objects.requireNonNull(references, "会话记忆引用端口不能为空。");
+        this.references = references;
         this.turns = turns; this.executor = executor; this.scheduler = scheduler; this.clock = clock;
+    }
+
+    /**
+     * 仅为已经显式装配持久化能力的路径取得原端口，不临时创建默认引用。
+     * @return 当前引用端口
+     * @throws IllegalStateException 当显式无持久化模式误调用引用路径时
+     */
+    IAgentMemoryReferences references() {
+        if (references == null) { throw new IllegalStateException("当前观察边界未装配持久化引用。"); }
+        return references;
     }
 
     /**
@@ -59,7 +72,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @return 当前权威引用
      */
     CompletionStage<MemoryNamespaceReference> resolve(AgentHandle handle, AgentRunRequest request) {
-        return access(handle, request).thenComposeAsync(ignored -> references.resolve(request.actor().scope()), executor);
+        return access(handle, request).thenComposeAsync(ignored -> references().resolve(request.actor().scope()), executor);
     }
 
     /**
@@ -70,7 +83,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @return 当前边界均成立时完成
      */
     CompletionStage<Void> verify(AgentHandle handle, AgentRunRequest request, MemoryNamespaceReference expected) {
-        return access(handle, request).thenComposeAsync(ignored -> references.verify(expected), executor)
+        return access(handle, request).thenComposeAsync(ignored -> references().verify(expected), executor)
                 .thenComposeAsync(ignored -> access(handle, request), executor);
     }
 
@@ -111,7 +124,6 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @param <T> 结果类型
      * @return 自有控制回收后的只读完成阶段
      */
-    @SuppressWarnings("resource")
     <T> CompletionStage<T> awaitControlled(@Nullable ExecutionControl parent, @Nullable AgentHandle handle, Instant deadline,
             Function<ExecutionControl, CompletionStage<T>> action) {
         final ExecutionControl control;
@@ -152,6 +164,14 @@ final class AgentMemoryBoundary implements AutoCloseable {
     static AgentRunResult.Status status(Throwable failure) {
         while ((failure instanceof CompletionException || failure instanceof ExecutionException) && failure.getCause() != null) { failure = failure.getCause(); }
         if (failure instanceof Rejected denied) { return denied.status; }
+        if (failure instanceof AgentPromptException prompt) {
+            return switch (prompt.reason()) {
+                case DISABLED -> AgentRunResult.Status.SKIPPED;
+                case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
+                case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
+                case INPUT_TOO_LARGE -> AgentRunResult.Status.INPUT_TOO_LARGE;
+            };
+        }
         if (failure instanceof ExecutionStoppedException stopped) {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED ? AgentRunResult.Status.TIMED_OUT : AgentRunResult.Status.CANCELLED;
         }
@@ -189,6 +209,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @version 4.5.0-l
      */
     private static final class Rejected extends RuntimeException {
+        @Serial
         private static final long serialVersionUID = 1L;
         final AgentRunResult.Status status;
         /**

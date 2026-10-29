@@ -82,6 +82,22 @@ class AgentConversationReplayTest {
     }
 
     /**
+     * 推进观察的业务回调后有界等待，不再假定已缓存结果必定同步完成。
+     * @param stage 只读重放阶段
+     * @return 已完成结果
+     * @throws AssertionError 当回调未在测试时限内完成时
+     */
+    private AgentRunResult await(CompletionStage<AgentRunResult> stage) {
+        var future = stage.toCompletableFuture(); long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3);
+        while (!future.isDone()) {
+            runtime.runAll();
+            if (System.nanoTime() >= deadline) { throw new AssertionError("重放观察未在测试时限内完成。"); }
+            Thread.onSpinWait();
+        }
+        return future.join();
+    }
+
+    /**
      * 读取当前完成记录。
      * @param request 同作用域请求
      * @return 当前代次记录
@@ -95,8 +111,8 @@ class AgentConversationReplayTest {
         var a = request("原始输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll();
         var observer = service.retry(handle, a).toCompletableFuture(); assertFalse(observer.isDone());
         complete(a, AgentRunResult.Status.SUCCESS);
-        assertEquals(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationState.COMPONENT).stamp(), original.join().conversation());
-        assertSame(original.join(), observer.join()); assertSame(original.join(), service.retry(handle, a).toCompletableFuture().join());
+        assertEquals(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationState.COMPONENT).stamp(), await(original).conversation());
+        assertSame(await(original), await(observer)); assertSame(await(original), await(service.retry(handle, a)));
         assertEquals(List.of(a.requestId()), backend.started); verify(port, times(1)).prepare(any(), any());
     }
 
@@ -106,23 +122,23 @@ class AgentConversationReplayTest {
         service.run(handle, a); var original = service.run(handle, b).toCompletableFuture(); runtime.runAll();
         var observer = service.retry(handle, b).toCompletableFuture(); assertFalse(observer.isDone()); assertEquals(1, backend.calls.size());
         complete(a, AgentRunResult.Status.SUCCESS); assertFalse(observer.isDone());
-        complete(b, AgentRunResult.Status.SUCCESS); assertSame(original.join(), observer.join());
+        complete(b, AgentRunResult.Status.SUCCESS); assertSame(await(original), await(observer));
         assertEquals(List.of(a.requestId(), b.requestId()), backend.started);
     }
 
     /** 验证缺失、过期和失效后的原 ID 都不会因重试再次执行。 */
     @Test void missingExpiredAndInvalidatedRecordsNeverStartNewWork() {
         var a = request("输入");
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, a)).status());
         var original = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
-        var oldStamp = original.join().conversation(); assertNotNull(oldStamp);
+        var oldStamp = await(original).conversation(); assertNotNull(oldStamp);
         service.invalidate(handle, a.actor().scope());
-        assertEquals(oldStamp, original.join().conversation()); assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+        assertEquals(oldStamp, await(original).conversation()); assertEquals(AgentRunResult.Status.SUCCESS, await(original).status());
         assertNotEquals(oldStamp, service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationState.COMPONENT).stamp());
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, a)).status());
         var b = request("新代次"); service.run(handle, b); runtime.runAll(); complete(b, AgentRunResult.Status.SUCCESS);
         runtime.advance(Duration.ofMinutes(30));
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, b).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, b)).status());
         assertEquals(2, backend.started.size());
     }
 
@@ -130,11 +146,11 @@ class AgentConversationReplayTest {
     @Test void replayDoesNotCrossInstanceClientOrScope() {
         var a = request("输入"); service.run(handle, a); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
         var another = new AgentFactory(registry).create(handle.definition());
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(another, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(another, a)).status());
         for (var scope : List.of(new AgentScope("另一客户端", "群"), new AgentScope("客户端", "另一群"))) {
             var actor = new AgentActorContext(scope, a.actor().origin(), a.actor().userId(), a.actor().platformUserId(), a.actor().sourceId(), a.actor().targetId());
             var foreign = new AgentRunRequest(a.requestId(), actor, a.activity(), a.messages());
-            assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, foreign).toCompletableFuture().join().status());
+            assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, foreign)).status());
         }
         assertEquals(1, backend.started.size());
     }
@@ -147,7 +163,7 @@ class AgentConversationReplayTest {
         var changedInput = new AgentRunRequest(a.requestId(), a.actor(), a.activity(), request("不同正文").messages());
         var changedActivity = new AgentRunRequest(a.requestId(), a.actor(), AgentActivity.COMMAND, a.messages());
         for (var conflict : List.of(changedActor, changedInput, changedActivity)) {
-            var result = service.retry(handle, conflict).toCompletableFuture().join();
+            var result = await(service.retry(handle, conflict));
             assertEquals(AgentRunResult.Status.REQUEST_CONFLICT, result.status()); assertTrue(result.answer().isEmpty());
             assertEquals(AgentRunResult.Status.REQUEST_CONFLICT, service.run(handle, conflict).toCompletableFuture().join().status());
         }
@@ -158,9 +174,9 @@ class AgentConversationReplayTest {
     @Test void zeroReplayBudgetKeepsStatusWithoutReexecutingKnownId() {
         options.set(new AgentConversationOptions(40, 262144, 32, 0));
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
-        assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+        assertEquals(AgentRunResult.Status.SUCCESS, await(original).status());
         var record = journal(a).find(a.requestId()).orElseThrow(); assertNull(record.result()); assertEquals(AgentRunResult.Status.SUCCESS, record.status());
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, a)).status());
         assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.run(handle, a).toCompletableFuture().join().status());
         assertEquals(1, backend.started.size());
     }
@@ -172,8 +188,8 @@ class AgentConversationReplayTest {
         service.run(handle, a); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
         var latest = service.run(handle, b).toCompletableFuture(); runtime.runAll(); complete(b, AgentRunResult.Status.SUCCESS);
         assertEquals(1, journal(b).entries().size());
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, a).toCompletableFuture().join().status());
-        assertSame(latest.join(), service.retry(handle, b).toCompletableFuture().join()); assertEquals(2, backend.started.size());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, a)).status());
+        assertSame(await(latest), await(service.retry(handle, b))); assertEquals(2, backend.started.size());
     }
 
     /** 验证非零字节预算优先保留最新结果正文，旧状态继续保留。 */
@@ -187,13 +203,13 @@ class AgentConversationReplayTest {
         assertEquals(3, journal(c).entries().size());
         assertNotNull(journal(c).find(c.requestId()).orElseThrow().result());
         assertNull(journal(c).find(b.requestId()).orElseThrow().result()); assertNull(journal(c).find(a.requestId()).orElseThrow().result());
-        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, service.retry(handle, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, await(service.retry(handle, a)).status());
     }
 
     /** 验证失败或取消可作为诊断重放，仍不会进入正常历史。 */
     @Test void cancelledResultIsReplayedAsDiagnosticWithoutHistory() {
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.CANCELLED);
-        assertSame(original.join(), service.retry(handle, a).toCompletableFuture().join());
+        assertSame(await(original), await(service.retry(handle, a)));
         assertEquals(AgentRunResult.Status.CANCELLED, journal(a).find(a.requestId()).orElseThrow().status());
         assertTrue(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationWindow.COMPONENT).turns().isEmpty());
     }
@@ -203,9 +219,9 @@ class AgentConversationReplayTest {
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll();
         try (var parent = runtime.parent(LLMCallLimits.defaults())) {
             var observer = service.retry(handle, a, parent).toCompletableFuture(); parent.cancel();
-            assertEquals(AgentRunResult.Status.CANCELLED, observer.join().status()); assertFalse(original.isDone());
+            assertEquals(AgentRunResult.Status.CANCELLED, await(observer).status()); assertFalse(original.isDone());
             assertDoesNotThrow(backend.calls.get(a.requestId()).control::checkActive);
-            complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+            complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, await(original).status());
         }
     }
 
@@ -214,8 +230,8 @@ class AgentConversationReplayTest {
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll();
         try (var parent = ExecutionControl.withDeadline(LLMCallLimits.defaults().newBudget(), runtime.clock.instant().plusSeconds(2), runtime.clock, runtime.scheduler)) {
             var observer = service.retry(handle, a, parent).toCompletableFuture(); runtime.advance(Duration.ofSeconds(3));
-            assertEquals(AgentRunResult.Status.TIMED_OUT, observer.join().status()); assertFalse(original.isDone());
-            complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+            assertEquals(AgentRunResult.Status.TIMED_OUT, await(observer).status()); assertFalse(original.isDone());
+            complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, await(original).status());
         }
     }
 
@@ -223,7 +239,7 @@ class AgentConversationReplayTest {
     @Test void recursiveObservationIsRejected() {
         var a = request("输入"); service.run(handle, a); runtime.runAll();
         try (var child = backend.calls.get(a.requestId()).control.child()) {
-            assertEquals(AgentRunResult.Status.REENTRANT, service.retry(handle, a, child).toCompletableFuture().join().status());
+            assertEquals(AgentRunResult.Status.REENTRANT, await(service.retry(handle, a, child)).status());
         }
         complete(a, AgentRunResult.Status.SUCCESS);
     }
@@ -237,8 +253,8 @@ class AgentConversationReplayTest {
         }).when(port).prepare(any(), any());
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll();
         try (var parent = ExecutionControl.create()) {
-            assertEquals(AgentRunResult.Status.FAILED, service.retry(handle, a, parent).toCompletableFuture().join().status());
-            assertFalse(original.isDone()); complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+            assertEquals(AgentRunResult.Status.FAILED, await(service.retry(handle, a, parent)).status());
+            assertFalse(original.isDone()); complete(a, AgentRunResult.Status.SUCCESS); assertEquals(AgentRunResult.Status.SUCCESS, await(original).status());
         }
     }
 
@@ -249,12 +265,12 @@ class AgentConversationReplayTest {
             var changed = original.result().thenApply(raw -> {
                 var candidate = raw.interaction().orElseThrow().finalCandidate().orElseThrow();
                 var invalid = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(candidate), candidate, List.of(), List.of(), Map.of());
-                return new AgentRunResult(raw.agentId(), raw.requestId(), raw.status(), raw.access(), Optional.of(invalid), raw.budgetUsage());
+                return new AgentRunResult(raw.agentId(), raw.requestId(), raw.status(), raw.access().orElse(null), invalid, raw.budgetUsage());
             });
             return new AgentRunExecution(changed, original::start, original::cancel, original::contains);
         }).when(port).prepare(any(), any());
         var a = request("输入"); var result = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
-        assertEquals(AgentRunResult.Status.INVALID_RESPONSE, result.join().status()); assertTrue(result.join().answer().isEmpty());
+        assertEquals(AgentRunResult.Status.INVALID_RESPONSE, await(result).status()); assertTrue(await(result).answer().isEmpty());
         assertTrue(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationWindow.COMPONENT).turns().isEmpty());
         assertEquals(AgentRunResult.Status.INVALID_RESPONSE, journal(a).find(a.requestId()).orElseThrow().status());
     }
@@ -266,33 +282,33 @@ class AgentConversationReplayTest {
             var original = backend.prepare(call.getArgument(0), prepared);
             var foreign = new AgentConversationStamp(new AgentConversationKey(handle.id(), prepared.actor().scope()), UUID.randomUUID());
             var changed = original.result().thenApply(raw -> new AgentRunResult(raw.agentId(), raw.requestId(), raw.status(),
-                    raw.access(), raw.interaction(), raw.budgetUsage(), foreign));
+                    raw.access().orElse(null), raw.interaction().orElse(null), raw.budgetUsage(), foreign));
             return new AgentRunExecution(changed, original::start, original::cancel, original::contains);
         }).when(port).prepare(any(), any());
         var a = request("输入"); var result = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
-        assertEquals(AgentRunResult.Status.FAILED, result.join().status()); assertTrue(result.join().answer().isEmpty());
-        assertEquals(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationState.COMPONENT).stamp(), result.join().conversation());
+        assertEquals(AgentRunResult.Status.FAILED, await(result).status()); assertTrue(await(result).answer().isEmpty());
+        assertEquals(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationState.COMPONENT).stamp(), await(result).conversation());
         assertTrue(service.snapshot(handle, a.actor().scope()).orElseThrow().require(AgentConversationWindow.COMPONENT).turns().isEmpty());
-        assertSame(result.join(), service.retry(handle, a).toCompletableFuture().join());
+        assertSame(await(result), await(service.retry(handle, a)));
     }
 
     /** 验证缓存回答仍复核当前准入，拒绝与端口故障都不公开原回答。 */
     @Test void replayRechecksCurrentGateAndFailsClosed() {
         var a = request("输入"); var original = service.run(handle, a).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
         gate.set(() -> CompletableFuture.completedStage(new AgentAccessDecision(AgentAccessDecision.Reason.SCOPE_DISABLED, Optional.empty(), Optional.empty())));
-        var denied = service.retry(handle, a).toCompletableFuture().join();
+        var denied = await(service.retry(handle, a));
         assertEquals(AgentRunResult.Status.SKIPPED, denied.status()); assertTrue(denied.answer().isEmpty()); assertTrue(denied.interaction().isPresent());
         gate.set(() -> CompletableFuture.failedStage(new IllegalStateException("敏感内部原因")));
-        assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, service.retry(handle, a).toCompletableFuture().join().status());
+        assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, await(service.retry(handle, a)).status());
         gate.set(() -> CompletableFuture.completedStage(AgentConversationTestCall.allowedAccess()));
-        assertSame(original.join(), service.retry(handle, a).toCompletableFuture().join()); assertEquals(1, backend.started.size());
+        assertSame(await(original), await(service.retry(handle, a))); assertEquals(1, backend.started.size());
     }
 
     /** 验证旧轮次端口不支持重放准入时明确拒绝，不回退为重新执行。 */
     @Test void unsupportedReplayGateNeverFallsBackToAnotherExecution() {
         var a = request("输入"); service.run(handle, a); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
         when(port.checkAccess(any(), any())).thenThrow(new UnsupportedOperationException("旧端口未适配"));
-        var rejected = service.retry(handle, a).toCompletableFuture().join();
+        var rejected = await(service.retry(handle, a));
         assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, rejected.status()); assertTrue(rejected.answer().isEmpty()); assertEquals(1, backend.started.size());
     }
 
@@ -302,7 +318,7 @@ class AgentConversationReplayTest {
         var pending = new CompletableFuture<AgentAccessDecision>(); gate.set(() -> pending);
         var replay = service.retry(handle, a).toCompletableFuture(); assertFalse(replay.isDone());
         service.invalidate(handle, a.actor().scope()); pending.complete(AgentConversationTestCall.allowedAccess());
-        assertEquals(AgentRunResult.Status.STALE_CONVERSATION, replay.join().status()); assertTrue(replay.join().answer().isEmpty());
+        assertEquals(AgentRunResult.Status.STALE_CONVERSATION, await(replay).status()); assertTrue(await(replay).answer().isEmpty());
         assertEquals(1, backend.started.size());
     }
 
@@ -311,21 +327,20 @@ class AgentConversationReplayTest {
         backend.charge.set(true);
         try (var parent = runtime.parent(new LLMCallLimits(1, 0, 0))) {
             var a = request("输入"); var original = service.run(handle, a, parent).toCompletableFuture(); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
-            assertSame(original.join(), service.retry(handle, a, parent).toCompletableFuture().join());
+            assertSame(await(original), await(service.retry(handle, a, parent)));
             assertEquals(1, parent.budget().used(LLMCallLimits.MODEL_REQUESTS)); assertEquals(1, backend.started.size());
         }
     }
 
     /**
      * 验证重放门控在邮箱锁外，可从另一线程读取当前快照。
-     * @throws Exception 当锁外读取未在测试时限内完成时
      */
-    @Test void replayGateRunsOutsideMailboxLock() throws Exception {
+    @Test void replayGateRunsOutsideMailboxLock() {
         var a = request("输入"); service.run(handle, a); runtime.runAll(); complete(a, AgentRunResult.Status.SUCCESS);
         gate.set(() -> CompletableFuture.supplyAsync(() -> {
             assertTrue(service.snapshot(handle, a.actor().scope()).isPresent()); return AgentConversationTestCall.allowedAccess();
         }));
-        assertEquals(AgentRunResult.Status.SUCCESS, service.retry(handle, a).toCompletableFuture().get(3, TimeUnit.SECONDS).status());
+        assertEquals(AgentRunResult.Status.SUCCESS, await(service.retry(handle, a)).status());
     }
 
     /**

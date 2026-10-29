@@ -5,7 +5,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.memory.fact.IMemoryFactStore;
 import org.zexnocs.teanekoagent.memory.fact.MemoryFacts;
+import org.zexnocs.teanekoagent.memory.profile.UserProfileService;
 import org.zexnocs.teanekoagent.memory.recall.IMemoryRecallDefaults;
+import org.zexnocs.teanekoagent.memory.recall.IMemoryRecallService;
 import org.zexnocs.teanekoagent.memory.recall.IMemoryRecallStore;
 import org.zexnocs.teanekoagent.memory.recall.MemoryRecallService;
 import tools.jackson.databind.ObjectMapper;
@@ -15,7 +17,7 @@ import java.time.Clock;
 import java.util.concurrent.ExecutorService;
 
 /**
- * 装配事实追加与独立检索服务，不注册管理工具、执行学习或在启动时访问数据库。
+ * 装配事实追加、独立检索及证据画像，不注册管理工具、执行学习或在启动时访问数据库。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
@@ -42,5 +44,15 @@ public class MemoryFactConfig {
             @Qualifier("virtualExecutor") ExecutorService executor) {
         var writer = mapper.writer().without(SerializationFeature.INDENT_OUTPUT, SerializationFeature.WRAP_ROOT_VALUE);
         return new MemoryRecallService(store, defaults, Clock.systemUTC(), executor, evidence -> writer.writeValueAsString(evidence).length());
+    }
+
+    /**
+     * 通过独立 Recall 组合画像读取，不创建画像缓存、事实或后台学习任务。
+     * @param recall 事实检索端口
+     * @param executor Core 业务执行器
+     * @return 可信宿主显式使用的画像服务
+     */
+    @Bean public UserProfileService userProfileService(IMemoryRecallService recall, @Qualifier("virtualExecutor") ExecutorService executor) {
+        return new UserProfileService(recall, executor);
     }
 }

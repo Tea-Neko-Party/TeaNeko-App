@@ -651,7 +651,7 @@ class AgentConversationServiceTest {
         var port = mock(IAgentTurnService.class);
         when(port.prepare(any(), any())).thenReturn(new AgentRunExecution(CompletableFuture.completedStage(
                 new AgentRunResult(handle.id(), UUID.randomUUID(), AgentRunResult.Status.CANCELLED,
-                        Optional.empty(), Optional.empty(), Map.of())), () -> fail("已完成句柄不能再启动业务。"), () -> false, ignored -> false));
+                        null, null, Map.of())), () -> fail("已完成句柄不能再启动业务。"), () -> false, ignored -> false));
         try (var queued = new AgentConversationService(port, settings::get, runtime, runtime.scheduler, runtime.clock, logger)) {
             var request = request(); var result = queued.run(handle, request).toCompletableFuture(); runtime.runAll();
             assertEquals(request.requestId(), result.join().requestId()); assertEquals(AgentRunResult.Status.FAILED, result.join().status());
