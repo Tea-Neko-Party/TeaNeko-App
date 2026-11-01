@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  * 在独立人格业务域保存绑定、补正及不可变备份，切换和版本写入同事务提交。
  * 不接触画像或 memory namespace，不沿用旧无保护 JSON 整列表写回。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -109,20 +109,33 @@ public final class EasyDataPersonalityStore implements IPersonalityStore {
      * @return 提交后是否新增
      */
     @Override public CompletionStage<Boolean> append(PersonalityBinding expected, PersonalityCorrection correction) {
-        return submit(() -> {
-            requireBinding(expected); var key = expected.correctionKey(); var row = locks.lock("state", physical(key));
-            if (row == null) { throw changed(); }
-            var current = read(row, PersonalityState.class); checkKey(current, key);
-            var duplicate = current.corrections().stream().filter(item -> item.requestId().equals(correction.requestId())).findFirst();
+        return submit(() -> appendInTransaction(expected, List.of(correction)) > 0);
+    }
+    /**
+     * 在已有数据库事务内一次锁定状态并追加完整批次，供显式旧人格导入共用。
+     * 不公开为模型工具；原绑定、重复内容、容量与锁定规则和普通候选一致。
+     * @param expected 固定原绑定
+     * @param corrections 已校验的完整批次
+     * @return 实际新增数量
+     */
+    int appendInTransaction(PersonalityBinding expected, List<PersonalityCorrection> corrections) {
+        requireBinding(expected); var key = expected.correctionKey(); var row = locks.lock("state", physical(key));
+        if (row == null) { throw changed(); }
+        var current = read(row, PersonalityState.class); checkKey(current, key);
+        var items = new ArrayList<>(current.corrections());
+        for (var correction : corrections) {
+            var duplicate = items.stream().filter(item -> item.requestId().equals(correction.requestId())).findFirst();
             if (duplicate.isPresent()) {
                 if (!duplicate.orElseThrow().equals(correction)) { throw new IllegalArgumentException("同一人格候选标识对应不同内容。"); }
-                return false;
+                continue;
             }
-            if (current.backup() || current.corrections().size() >= 64 || current.corrections().stream()
+            if (current.backup() || items.size() >= 64 || items.stream()
                     .anyMatch(item -> item.locked() && item.field().equals(correction.field()))) { throw new IllegalStateException("人格补正空间已满、只读或字段已锁定。"); }
-            var items = new ArrayList<>(current.corrections()); items.add(correction);
-            write(row, "state", physical(key), new PersonalityState(key, Math.addExact(current.revision(), 1), items, false)); return true;
-        });
+            items.add(correction);
+        }
+        int added = items.size() - current.corrections().size();
+        if (added > 0) { write(row, "state", physical(key), new PersonalityState(key, Math.addExact(current.revision(), 1), items, false)); }
+        return added;
     }
 
     /**
@@ -230,7 +243,7 @@ public final class EasyDataPersonalityStore implements IPersonalityStore {
      * @param <T> 非空业务结果
      * @return 提交后完成的只读阶段
      */
-    private <T> CompletionStage<T> submit(Supplier<T> action) {
+    <T> CompletionStage<T> submit(Supplier<T> action) {
         try {
             var result = new AtomicReference<T>(); var task = new DatabaseTaskConfig(database, "人格与补正事务");
             task.addTransactionTask(() -> { result.set(null); result.set(action.get()); });

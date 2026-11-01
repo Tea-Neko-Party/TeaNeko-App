@@ -9,7 +9,7 @@ import java.util.Arrays;
  * 校验作用域开关、活动模式及窗口覆盖，拒绝未知字段，不承担调用者权限校验。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -21,7 +21,7 @@ public final class AgentScopeFieldChecker implements IConfigFieldChecker {
      * @return 合法时为 null，否则为固定中文原因
      */
     @Override public String isValid(String field, String value) {
-        if ("enabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
+        if ("enabled".equals(field) || "commandToolsEnabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
                 || "customPersonalityEnabled".equals(field) || "personalityCorrectionsEnabled".equals(field) || "personalityLearningEnabled".equals(field)
                 || "historyCaptureEnabled".equals(field) || "historyReadEnabled".equals(field) || "autoSummaryEnabled".equals(field)) {
             return "true".equals(value) || "false".equals(value) ? null : "Agent 开关只能为 true 或 false。";

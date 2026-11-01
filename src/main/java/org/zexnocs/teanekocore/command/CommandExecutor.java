@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.command;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
@@ -15,7 +17,7 @@ import java.util.concurrent.CompletionStage;
  * 在原任务阶段中调用命令，再非阻塞地等待命令返回的 Stage。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -55,11 +57,24 @@ public class CommandExecutor implements ICommandExecutor {
      */
     @Override
     public CompletionStage<Object> execute(Object object, Method method, Object[] args, String taskNamespace) {
+        return execute(object, method, args, taskNamespace, null);
+    }
+    /**
+     * 真正启动方法前检查借用父控制，避免事件结束后排队期间已取消的命令仍产生副作用。
+     * @param object 原命令对象
+     * @param method 原处理方法
+     * @param args 已授权并绑定的原参数
+     * @param taskNamespace 原任务执行域
+     * @param parent 可选派生父控制，不由执行器关闭
+     * @return 方法和真实后续业务完成阶段
+     */
+    @Override public CompletionStage<Object> execute(Object object, Method method, Object[] args, String taskNamespace, @Nullable ExecutionControl parent) {
         try {
             CommandMethodContract.requireAsync(method);
             var namespace = taskNamespace == null || taskNamespace.isBlank()
                     ? DEFAULT_TASK_NAMESPACE : taskNamespace;
             var task = taskService.subscribeWithFuture("指令执行", namespace, () -> {
+                if (parent != null) { parent.checkActive(); }
                 final Object returned;
                 try {
                     returned = method.invoke(object, args);

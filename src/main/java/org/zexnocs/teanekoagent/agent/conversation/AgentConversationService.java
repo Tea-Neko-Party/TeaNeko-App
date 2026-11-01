@@ -5,6 +5,7 @@ import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalityLearning;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.agent.summary.AgentSummarySnapshot;
@@ -35,7 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 空闲会话按 TTL 和容量惰性淘汰；切换代次不移除仍占运行槽的旧邮箱。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -53,6 +54,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private final AgentMemoryBoundary observations;
     private final @Nullable IAgentPersonalitySource personalities;
     private final @Nullable IAgentConversationSummaries summaries;
+    private final @Nullable IAgentPersonalityLearning learning;
     private final Object lock = new Object();
     private final Map<AgentConversationKey, Mailbox> mailboxes = new LinkedHashMap<>();
     private final ConcurrentLinkedQueue<Mailbox> retired = new ConcurrentLinkedQueue<>();
@@ -168,6 +170,28 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
             IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
             @Nullable IAgentPersonalitySource personalities, @Nullable IAgentConversationSummaries summaries) {
+        this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, personalities, summaries, null);
+    }
+    /**
+     * 交接已提交互动给可替换后台学习策略，邮箱不读取补正存储或等待模型。
+     * @param turns 独立轮次端口
+     * @param defaults 排队策略
+     * @param executor 借用业务执行器
+     * @param scheduler 借用调度器
+     * @param clock 时间来源
+     * @param logger 日志
+     * @param conversations 会话保留策略
+     * @param policy 窗口策略
+     * @param mapper 协议转换器
+     * @param references 可选空间复核
+     * @param personalities 可选人格源
+     * @param summaries 可选摘要服务
+     * @param learning 可选后台补正策略
+     */
+    public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
+            @Nullable IAgentPersonalitySource personalities, @Nullable IAgentConversationSummaries summaries, @Nullable IAgentPersonalityLearning learning) {
         this.turns = Objects.requireNonNull(turns, "独立轮次端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "排队策略端口不能为空。");
         this.conversations = Objects.requireNonNull(conversations, "会话保留策略端口不能为空。");
@@ -181,6 +205,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         this.memory = references == null ? null : observations;
         this.personalities = personalities;
         this.summaries = summaries;
+        this.learning = learning;
     }
 
     /**
@@ -1029,7 +1054,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     }
 
     /**
-     * 在引用复核完成后仲裁 epoch 与窗口提交，迟到的旧结果仍保留原诊断。
+     * 在引用复核完成后仲裁 epoch 与窗口提交，锁外交接成功互动；迟到旧结果保留原诊断。
      * @param entry 请求拥有者
      * @param raw 实际结果或安全改写的失败结果
      * @param failure 可选端口失败
@@ -1074,6 +1099,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         drainRetired();
         if (summaries != null && accepted.status() == AgentRunResult.Status.SUCCESS && summaryCandidate != null) {
             try { summaries.offer(entry.handle, accepted, summaryCandidate, entry.summary); } catch (RuntimeException ignored) { report(); }
+        }
+        var learningStamp = accepted.conversation();
+        if (learning != null && accepted.status() == AgentRunResult.Status.SUCCESS && learningStamp != null) {
+            try { learning.offer(entry.handle, entry.request, accepted, () -> replayStatus(entry.handle, learningStamp) == null); }
+            catch (RuntimeException ignored) { report(); }
         }
         deliver(entry, accepted, next);
     }

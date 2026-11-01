@@ -17,7 +17,7 @@ import java.util.concurrent.CompletionStage;
  * <br>如果取消该事件，则不会执行该命令
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.3.1
  * @version 4.5.0-l
  */
@@ -66,15 +66,15 @@ public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
     }
 
     /**
-     * 通知完监听器后，执行该方法。
+     * 通知完监听器后复核派生执行仍有效，再启动处理方法；已开始的业务不假装回滚。
+     * @throws org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException 当派生父控制已停止时
      */
     @Override
     public void _afterNotify() {
+        var parent = getData().getParentExecution();
+        if (parent != null) { parent.checkActive(); }
         var commandAnnotation = mapData.getCommandAnnotation();
-        completion = executor.execute(
-                mapData.getCommand(),
-                method,
-                args,
-                commandAnnotation.taskNamespace());
+        completion = parent == null ? executor.execute(mapData.getCommand(), method, args, commandAnnotation.taskNamespace())
+                : executor.execute(mapData.getCommand(), method, args, commandAnnotation.taskNamespace(), parent);
     }
 }

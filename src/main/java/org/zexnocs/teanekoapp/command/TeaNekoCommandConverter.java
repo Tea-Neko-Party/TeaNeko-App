@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.command;
 
 import lombok.RequiredArgsConstructor;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
@@ -8,7 +9,9 @@ import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
+import org.zexnocs.teanekoapp.message.content.TextTeaNekoContentPart;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.interfaces.ICommandConverter;
@@ -21,8 +24,9 @@ import java.util.List;
  * TeaNekoApp 的指令转换器。将 ITeaNekoMessageData 转化成 CommandData。
  *
  * @author zExNocs
- * @date 2026/02/25
+ * @date 2026/11/01
  * @since 4.0.9
+ * @version 4.5.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -38,19 +42,40 @@ public class TeaNekoCommandConverter implements ICommandConverter<ITeaNekoMessag
      */
     @Override
     public CommandData<ITeaNekoMessageData> __parse(ITeaNekoMessageData data) {
-        var senderData = data.getUserData();
         // 预处理消息列表
         var messageList = _preProcessMessageList(data.getMessages());
 
         // 根据消息列表获取解析后的字符串列表
         var parsedList = _getParsedList(messageList);
 
-        // 如果为空则返回 null，表示没有指令
+        return build(data, parsedList, null);
+    }
+
+    /**
+     * 复用原文本分词和身份转换，命令正文由可信桥接提供，原始消息对象保持实际类型。
+     * @param data 真实来源消息，不能用内部客户端冒充
+     * @param commandText 待分发的命令文本
+     * @param parent 借用父控制，供处理链检查取消及防重入
+     * @return 原身份下的命令数据；空文本时为空
+     */
+    public @Nullable CommandData<ITeaNekoMessageData> parseCommand(ITeaNekoMessageData data, String commandText, ExecutionControl parent) {
+        return build(data, Arrays.asList(new TextTeaNekoContentPart(commandText).toCommandArgs()), parent);
+    }
+
+    /**
+     * 共用原生/桥接的身份和客户端转换，不从命令正文读取权限。
+     * @param data 原始来源
+     * @param parsedList 经过同一分词规则的参数
+     * @param parent 可选派生父控制
+     * @return 本次命令或空输入
+     */
+    private @Nullable CommandData<ITeaNekoMessageData> build(ITeaNekoMessageData data, List<String> parsedList, @Nullable ExecutionControl parent) {
         if(parsedList.isEmpty()) {
             return null;
         }
-
+        var senderData = data.getUserData();
         return CommandData.<ITeaNekoMessageData>builder()
+                .parentExecution(parent)
                 .body(parsedList.getFirst())
                 .args(parsedList.subList(1, parsedList.size()).toArray(new String[0]))
                 .scope(getScope(data))

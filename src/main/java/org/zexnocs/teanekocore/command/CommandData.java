@@ -1,8 +1,11 @@
 package org.zexnocs.teanekocore.command;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
@@ -12,12 +15,16 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
  *
  * @param <T> 指令被解析前的数据类型
  * @author zExNocs
- * @date 2026/02/18
+ * @date 2026/11/01
  * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Getter
 @Builder
 public class CommandData<T> {
+    /// 宿主借用的父控制，用于派生执行的取消与防重入；不参与序列化或权限判断。
+    @JsonIgnore
+    private final @Nullable ExecutionControl parentExecution;
     /// 指令体
     private final String body;
 
@@ -48,7 +55,7 @@ public class CommandData<T> {
     /**
      * 获取指令被解析前的数据的类型
      *
-     * @return {@link Class }<{@link T }>
+     * @return 原始数据对象的实际类型
      */
     @SuppressWarnings("unchecked")
     public Class<T> getRawDataType() {

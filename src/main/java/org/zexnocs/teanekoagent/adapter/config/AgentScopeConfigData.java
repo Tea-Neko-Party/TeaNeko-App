@@ -12,7 +12,7 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 不提供认证、连接或补正 key 的普通 cfg 写入入口。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -20,6 +20,9 @@ import org.zexnocs.teanekocore.framework.description.Description;
 public class AgentScopeConfigData implements IConfigData {
     @Description("是否启用当前作用域的 Agent 功能。")
     private boolean enabled = true;
+
+    @Description("是否向真实原生用户请求开放命令工具；仍执行原命令权限，默认关闭。")
+    private boolean commandToolsEnabled = false;
 
     @Description("是否保存当前作用域的文本历史；采集不启动模型。")
     private boolean historyCaptureEnabled = true;
@@ -48,7 +51,7 @@ public class AgentScopeConfigData implements IConfigData {
     private String customSpeakingStyle = "";
     @Description("是否应用已接受的人格补正，独立于用户画像和记忆。")
     private boolean personalityCorrectionsEnabled = true;
-    @Description("是否接受人格表达补正候选；当前不自动发起学习模型调用。")
+    @Description("是否允许后台生成及接受人格表达补正，独立于补正应用和用户画像。")
     private boolean personalityLearningEnabled = true;
 
     @Description("活动模式：PASSIVE_BASIC、PASSIVE_CONTEXTUAL 或 ACTIVE。")

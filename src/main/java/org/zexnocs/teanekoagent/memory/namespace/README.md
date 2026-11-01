@@ -67,8 +67,8 @@ tea-neko.agent.memory.max-created-namespaces=5
 
 默认邮箱已提供 `synchronizeMemory(scope, parent)`，绑定提交后读取当前引用，协调同 scope 的全部实例。只有引用变化才原子换 epoch、清窗口和完成记录；旧运行槽保留到结束确认。通知失败可在下一队首惰性恢复，旧通知不能回退已观察版本，完成重放不补执行。本批没有向 ConfigData DTO 添加可直接写回的 memoryNamespace 字段；未来 `/cfg` 必须调用同一权威绑定路径，不能维护第二份独立值。
 
-[事实/偏好存储](../fact/README.md) 已在追加事务中锁定本 namespace 元数据并校验 generation，记录、去重索引及操作回执一起提交。画像写入后续也须在提交时检查 generation，DEBUG clear 再接入分批物理清理；绑定已有空间沿用用户确认的共享规则。聊天管理授权、持久化工具/发送幂等、旧数据转换、Recall、画像、人格补正与摘要仍待相应阶段完成。
+[事实/偏好存储](../fact/README.md) 已在追加事务中锁定本 namespace 元数据并校验 generation，记录、去重索引及操作回执一起提交。Recall、UUID 画像、实际记忆工具、人格和摘要已接入。现在可通过 [显式管理入口](../../adapter/command/README.md) 的 reset/namespaces/setnamespace 使用原有配额、绑定和会话协调；reset/setnamespace 经过真实 OWNER 权限，列举只使用本人 UUID，绑定已有空间保留用户确认的共享规则。DEBUG clear/clone/export、分批物理清理及 `/cfg` namespace 字段桥接仍待后续 S6。
 
-本批不读取、迁移或删除旧 `llm_related` 表及 memory/profile/personality 键；这些数据的显式兼容映射留在后续事实/人格适配，不将旧 scope/agent 定位悄悄变成新 namespace 隔离规则。
+namespace 底座不删除旧 `llm_related` 表及 memory/profile/personality 键；事实和人格适配已提供各自显式预览/导入，不将旧 scope/agent 定位悄悄变成新 namespace 隔离规则。
 
 离线测试用事务替身模拟唯一键、Version、提交失败与回滚，覆盖真实适配器及并发竞争；它们不代替 MySQL/JPA、数据库排序规则与实际部署事务代理的实机验收。

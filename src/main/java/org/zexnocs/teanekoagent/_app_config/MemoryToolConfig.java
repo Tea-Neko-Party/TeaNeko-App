@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.zexnocs.teanekoagent.adapter.command.AgentCommandToolSource;
 import org.zexnocs.teanekoagent.adapter.history.AgentHistoryToolSource;
 import org.zexnocs.teanekoagent.adapter.memory.AgentMemoryToolSource;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
@@ -18,7 +19,7 @@ import java.util.concurrent.ExecutorService;
 /**
  * 提供明确的默认记忆工具源，用户自定义工具策略可完整替换，不合并全局工具目录。
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -32,13 +33,20 @@ public class MemoryToolConfig {
      * @param mapper 项目 JSON 转换器
      * @param executor Core 借用业务执行器
      * @param history 可选历史工具源
+     * @param commands 可选命令工具源
      * @return 可由宿主替换的明确工具源
      */
     @Bean @ConditionalOnMissingBean(IAgentToolSource.class)
     public IAgentToolSource agentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults,
-            ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor, ObjectProvider<AgentHistoryToolSource> history) {
-        var memory = new AgentMemoryToolSource(access, policies, defaults, mapper, executor); var historyTools = history.getIfAvailable();
-        if (historyTools == null) { return memory; }
-        return (definition, request, runtime) -> java.util.stream.Stream.concat(memory.select(definition, request, runtime).stream(), historyTools.select(definition, request).stream()).toList();
+            ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor, ObjectProvider<AgentHistoryToolSource> history,
+            ObjectProvider<AgentCommandToolSource> commands) {
+        var memory = new AgentMemoryToolSource(access, policies, defaults, mapper, executor); var historyTools = history.getIfAvailable(); var commandTools = commands.getIfAvailable();
+        if (historyTools == null && commandTools == null) { return memory; }
+        return (definition, request, runtime) -> {
+            var selected = new java.util.ArrayList<>(memory.select(definition, request, runtime));
+            if (historyTools != null) { selected.addAll(historyTools.select(definition, request)); }
+            if (commandTools != null) { selected.addAll(commandTools.select(definition, request)); }
+            return java.util.List.copyOf(selected);
+        };
     }
 }

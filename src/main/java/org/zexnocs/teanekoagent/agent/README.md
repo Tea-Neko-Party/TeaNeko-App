@@ -2,7 +2,7 @@
 
 本目录是 Agent 的平台无关业务底座，依赖本层、LLM、Core 及记忆模块的不可变引用数据。App、数据库和配置系统的连接放在 `adapter` 或 `_app_config`，不在组件中保存 Spring Bean、凭据、Repository 或平台客户端。
 
-当前完成 S4 的实例、独立轮次和默认会话底座：`IAgentService.run` 按同会话顺序调用真实 LLM 管线，保留可信工具上下文及动态门控。邮箱具备 TTL、容量、epoch、完整成功轮次窗口和有界结果重放。本模块尚不自动接收平台消息、持久化历史或发送回复。旧 Agent 的平台入口仍待后续迁移，不能认为已由新门控统一接管。
+当前已完成实例、独立轮次和默认会话底座，并接入持久化文本历史、记忆/人格、后台摘要和自动人格补正。`IAgentService.run` 按同会话顺序调用真实 LLM 管线，保留可信工具上下文及动态门控。邮箱具备 TTL、容量、epoch、完整成功轮次窗口和有界结果重放。[显式 /agent 入口及命令工具](../adapter/command/README.md) 已接入原发送器；核心轮次不直接发送消息。自动平台触发、旧内部 Client/Sender 和完整发送计划仍待后续迁移。
 
 S5A2b2 已将持久化记忆引用接入默认邮箱及 Spring 装配：队首固定引用后读取窗口，最终提交和缓存重放再次只读复核；显式同步入口协调同一 client/scope 下的全部 Agent 实例。
 
@@ -51,6 +51,8 @@ var second = agentFactory.create(definition);
 ```
 
 登记默认启用且使用最低被动模式。缺失记录始终返回 unregistered，读取适配器不自动注册，也不回退到旧 `agent-personality` 默认值。除 enabled、mode、historyMaxMessages 和 inputMaxBytes，现已开放独立记忆、人格及文本历史开关/描述字段；认证/连接字段、correctionKey 均不能从这里写入。模式只是门控数据，自动触发和主动任务尚未实现。
+
+commandToolsEnabled 默认 false，显式开启后也只向具有真实原生来源租约的请求开放 command_dispatch。普通服务和后台任务不因配置开启取得用户命令权限；显式入口的配置、命令和边界见 [命令说明](../adapter/command/README.md)。
 
 主文件 `config/agent/main-config.yml` 新增 `enabled: true` 作为新 Agent 总开关；交互次数、时限和可选 token 预算继续由 `tea-neko.llm.interaction` 提供。全局关闭后不继续读取模型或凭据。注册、注销和诊断管理入口不经过 Agent 执行门控，避免未开启时无法开通。
 
@@ -112,6 +114,8 @@ Spring 默认邮箱与独立轮次共用必需的 `IAgentMemoryReferences`。队
 ## 会话顺序、等待与请求级取消
 
 默认键为 Agent 实例 ID + 原始 client/scope，不含用户 UUID；同群不同用户进入一个邮箱，不同客户端、scope 或实例可以并行。入队顺序在轻量锁中确定，后续按该顺序获得运行槽，不合并不同消息。锁内只维护拥有关系和状态，不读取配置、不调用业务、不取消资源或完成用户 Future。
+
+成功轮次在锁外交接 `IAgentPersonalityLearning`，固定实际原文、来源及结果依据；前台不等待后台生成。默认自动补正及旧 delta/conflict 显式迁移见 [人格说明](../personality/README.md)。LEARNING 活动直接复用独立 LLM 交互，不作为普通轮次入口，避免后台递归学习和权限继承。
 
 默认最多等待 5 条，不包含当前已占运行槽的请求；零表示忙碌时不排队。等待上限默认 30 秒，也覆盖已选中但仍在执行器等待启动的阶段。实际开始后关闭排队计时，改由轮次时限管理；出队会重新检查截止时间，迟到排队计时回调不能结束已运行的轮次。
 
@@ -220,4 +224,4 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 只有最终 SUCCESS 提供 `answer()` 和 `committableTranscript()`。scope 在交付前失效时，即使已有成功模型候选，也只保留在诊断中。取消会等待控制终止通知及诊断观察器登记，不等待不响应取消的远端异步结果；迟到结果不能提交组件或改写已交付结果。
 
-`answer()` 当前仍是统一模型候选；受控决策、结构化发送计划及实际平台出站尚未接入，不能将内部结构化 JSON 直接作为平台回复。S4 已提供完整窗口、输入限制与内存请求重放；S5 已实现 [namespace 注册与绑定事务基础](../memory/namespace/README.md)、独立轮次及默认会话的引用保护、[事实/偏好事务存储和显式旧资料导入](../memory/fact/README.md)、[独立 Recall 的筛选和证据预算](../memory/recall/README.md)、[按 UUID 的可追溯画像](../memory/profile/README.md) 及 [可信记忆访问和实际模型工具](../memory/access/README.md)，已默认接入自动记忆 Prompt、授权重放及 [人格与补正生命周期](../personality/README.md)。持久化文本历史、实际检索及 [自动上下文摘要](summary/README.md) 也已接入；自动补正生成及管理命令继续推进。内存 epoch 不代表分布式原子授权，也不代表其他业务或平台发送的持久化幂等。
+`answer()` 当前仍是统一模型候选；受控决策、结构化发送计划及实际平台出站尚未接入，不能将内部结构化 JSON 直接作为平台回复。S4 已提供完整窗口、输入限制与内存请求重放；S5 已实现 [namespace 注册与绑定事务基础](../memory/namespace/README.md)、独立轮次及默认会话的引用保护、[事实/偏好事务存储和显式旧资料导入](../memory/fact/README.md)、[独立 Recall 的筛选和证据预算](../memory/recall/README.md)、[按 UUID 的可追溯画像](../memory/profile/README.md) 及 [可信记忆访问和实际模型工具](../memory/access/README.md)，已默认接入自动记忆 Prompt、授权重放及 [人格与补正生命周期](../personality/README.md)。持久化文本历史、实际检索、[自动上下文摘要](summary/README.md)、自动补正生成及旧人格显式导入也已接入；管理命令继续推进。内存 epoch 不代表分布式原子授权，也不代表其他业务或平台发送的持久化幂等。

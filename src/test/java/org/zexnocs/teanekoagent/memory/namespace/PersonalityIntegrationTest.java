@@ -6,6 +6,7 @@ import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeFieldChecker;
 import org.zexnocs.teanekoagent.adapter.personality.ConfiguredPersonalities;
+import org.zexnocs.teanekoagent.adapter.personality.EasyDataLegacyPersonalityStore;
 import org.zexnocs.teanekoagent.adapter.personality.EasyDataPersonalityStore;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
@@ -13,6 +14,8 @@ import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.agent.conversation.*;
+import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.file_config.personality.AgentPersonalityDefinition;
 import org.zexnocs.teanekoagent.file_config.personality.AgentPersonalityFileConfig;
@@ -30,8 +33,8 @@ import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
-import org.zexnocs.teanekoagent.personality.PersonalityCorrection;
-import org.zexnocs.teanekoagent.personality.PersonalityService;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.personality.*;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -40,10 +43,12 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,7 +57,7 @@ import static org.mockito.Mockito.*;
 /**
  * 复用既有事务夹具验证人格实际生效、共享补正、切换回滚和旧轮失效，不增加数据结构镜像测试。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -69,7 +74,7 @@ class PersonalityIntegrationTest {
     private AgentRunRequest request(AgentScope target) {
         var actor = new AgentActorContext(target, AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "用户", UUID.randomUUID().toString(), "目标");
         return new AgentRunRequest(UUID.randomUUID(), actor, AgentActivity.SERVICE,
-                List.of(LLMUserMessage.builder().contents(new LLMContentListBuilder().addText("你好").build()).build()));
+                List.of(LLMUserMessage.builder().contents(new LLMContentListBuilder().addText("你好").build()).build()), null, null, new AgentUserText(actor.sourceId(), "你好"));
     }
     /**
      * 以当前真实消息构造有来源的表达候选。
@@ -84,7 +89,7 @@ class PersonalityIntegrationTest {
     /**
      * 组合实际配置适配、事务存储、人格源与 Agent/LLM；仅替换文件/模型传输。
      * @author zExNocs
-     * @date 2026/10/29
+     * @date 2026/11/01
      * @since 4.0.0
      * @version 4.5.0-l
      */
@@ -100,20 +105,33 @@ class PersonalityIntegrationTest {
         final EasyDataPersonalityStore store = new EasyDataPersonalityStore(db.repository, db.personalityLocks, db.database, db.mapper);
         final List<ILLMPrompt> prompts = new CopyOnWriteArrayList<>();
         final AtomicReference<AgentConversationOptions> options = new AtomicReference<>(AgentConversationOptions.defaults());
+        final AtomicLong bindingRevision = new AtomicLong(1);
+        final AtomicReference<PersonalityLearningSettings> learningPolicy = new AtomicReference<>(new PersonalityLearningSettings(true,
+                Duration.ofMinutes(5), Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+        final BlockingQueue<CompletableFuture<ILLMResult>> pending = new LinkedBlockingQueue<>();
+        final BlockingQueue<PersonalityLearningService.Report> reports = new LinkedBlockingQueue<>();
+        final PersonalityLearningService learner;
         volatile Runnable beforeReply = () -> {};
         final PersonalityService personality;
+        final ConfiguredPersonalities configuration;
         final AgentService turns;
         final AgentConversationService mailbox;
 
         /** 装配纯离线配置与真实执行，构造时不启动模型。 */
-        Harness() {
+        Harness() { this(false); }
+        /**
+         * 复用事务、模型和邮箱夹具，仅按需要启用实际后台候选交接。
+         * @param automatic 是否启用自动学习
+         */
+        Harness(boolean automatic) {
             var character = new AgentPersonalityDefinition(); character.setId("teaneko"); character.setDisplayName("TeaNeko");
             character.getIdentity().setName("TeaNeko"); character.getCoreTraits().add("文件人格：认真解释，轻松交流。");
             character.getLearningPolicy().getMutableFields().add("speaking detail"); file.setCharacters(List.of(character));
             var files = mock(IFileConfigService.class); when(files.get(AgentPersonalityFileConfig.class)).thenReturn(file);
             var configs = mock(IConfigDataService.class);
             when(configs.getConfigData(any(), eq(AgentScopeConfigData.class), anyString())).thenAnswer(call -> Optional.ofNullable(settings.get(call.<String>getArgument(2))));
-            personality = new PersonalityService(new ConfiguredPersonalities(configs, new AgentScopeConfigManager(), files), store, workers, clock, db.mapper);
+            configuration = new ConfiguredPersonalities(configs, new AgentScopeConfigManager(), files);
+            personality = new PersonalityService(configuration, store, workers, clock, db.mapper);
             var logger = mock(ILogger.class);
             var runtime = new AgentRuntimeSnapshot(new LLMModelOptionsSnapshot(LLMModelOptions.builder().provider("test").model("离线模型").maxTokens(30).build()),
                     ModelCapabilities.textOnly(), LLMInteractionSettings.defaults());
@@ -121,20 +139,52 @@ class PersonalityIntegrationTest {
                     settings.containsKey(target.scopeId()) && settings.get(target.scopeId()).isEnabled(), AgentScopePolicy.Mode.ACTIVE),
                     ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime)), logger);
             var models = mock(ILLMModelService.class);
+            when(models.resolveOptions(any(ILLMPrompt.class))).thenAnswer(call -> call.<ILLMPrompt>getArgument(0).getOptions());
             when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
+                ILLMPrompt prompt = call.getArgument(0);
+                if (db.mapper.writeValueAsString(prompt.getMessages().getFirst()).contains("只输出 {}")) {
+                    var response = new CompletableFuture<ILLMResult>(); pending.add(response); return new TaskFuture<>(logger, "后台人格模型", response);
+                }
                 prompts.add(call.getArgument(0)); beforeReply.run();
                 var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText("离线回答").build()).build();
                 return new TaskFuture<>(logger, "人格离线模型", CompletableFuture.completedFuture(LLMResult.builder()
                         .usage(LLMUsage.builder().totalTokens(2).build()).choices(List.of(LLMChoice.builder().index(0).finishReason("stop").message(answer).build())).build()));
             });
-            turns = new AgentService(gate, new LLMInteractionService(models, LLMInteractionSettings::defaults, workers, timers),
-                    (definition, input, config) -> List.of(), db.mapper, workers, timers, clock, logger, null, IAgentPromptSource.empty(), personality);
+            var references = mock(IAgentMemoryReferences.class);
+            when(references.resolve(any())).thenAnswer(call -> CompletableFuture.completedStage(reference(call.getArgument(0))));
+            when(references.verify(any())).thenAnswer(call -> {
+                MemoryNamespaceReference expected = call.getArgument(0);
+                return expected.equals(reference(expected.scope())) ? CompletableFuture.completedStage(null)
+                        : CompletableFuture.failedStage(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED));
+            });
+            var interactions = new LLMInteractionService(models, LLMInteractionSettings::defaults, workers, timers);
+            learner = new PersonalityLearningService(gate, personality, references, interactions, learningPolicy::get, db.mapper, workers, timers, Clock.systemUTC(), reports::add);
+            turns = new AgentService(gate, interactions,
+                    (definition, input, config) -> List.of(), db.mapper, workers, timers, clock, logger, automatic ? references : null, IAgentPromptSource.empty(), personality);
             mailbox = new AgentConversationService(turns, AgentQueueSettings::defaults, workers, timers, clock, logger,
-                    AgentConversationSettings::defaults, (definition, input) -> options.get(), db.mapper, null, personality);
+                    AgentConversationSettings::defaults, (definition, input) -> options.get(), db.mapper, automatic ? references : null, personality, null, automatic ? learner : null);
             settings.put(scope.scopeId(), new AgentScopeConfigData());
         }
+        /**
+         * 固定当前持久化引用，版本推进模拟 reset 或换空间。
+         * @param target 当前作用域
+         * @return 完整当前引用
+         */
+        MemoryNamespaceReference reference(AgentScope target) { return new MemoryNamespaceReference(target, MemoryNamespaceId.SHARED, bindingRevision.get(), 0); }
+        /**
+         * 有界等待实际后台模型进入，不轮询、不任意睡眠。
+         * @return 可控制的真实模型传输结果
+         * @throws InterruptedException 当等待中断时
+         */
+        CompletableFuture<ILLMResult> awaitLearning() throws InterruptedException { return Objects.requireNonNull(pending.poll(5, TimeUnit.SECONDS), "后台人格模型未按时进入，报告=" + learner.reports()); }
+        /**
+         * 观察后台结束及资源释放后的用量报告。
+         * @return 已完成的观察回执
+         * @throws InterruptedException 当等待中断时
+         */
+        PersonalityLearningService.Report awaitReport() throws InterruptedException { return Objects.requireNonNull(reports.poll(5, TimeUnit.SECONDS), "后台人格学习未按时结束。"); }
         /** 关闭自身拥有者，业务服务不关闭借用资源。 */
-        @Override public void close() { mailbox.close(); turns.close(); registry.close(); timers.shutdownNow(); workers.close(); db.close(); }
+        @Override public void close() { mailbox.close(); turns.close(); learner.close(); registry.close(); timers.shutdownNow(); workers.close(); db.close(); }
     }
 
     /** 验证默认人格、候选提交、下一轮生效、数据角色、历史投影、配置切换和授权重放形成完整闭环。 */
@@ -227,6 +277,117 @@ class PersonalityIntegrationTest {
             assertThrows(CompletionException.class, () -> h.personality.propose(scope, basis, correction(request(scope), "不允许的新候选"), control).toCompletableFuture().join());
             h.settings.get(scope.scopeId()).setPersonalityCorrectionsEnabled(true);
             assertTrue(h.personality.resolve(scope, control).toCompletableFuture().join().adjustmentsJson().contains("保留的表达补正"));
+        }
+    }
+
+    /**
+     * 复用真实模型传输响应，候选正文只用于独立后台生成。
+     * @param text 模型候选 JSON
+     * @return 含供应商用量的完整响应
+     */
+    private ILLMResult learningResponse(String text) {
+        return LLMResult.builder().usage(LLMUsage.builder().totalTokens(2).build()).choices(List.of(LLMChoice.builder().index(0).finishReason("stop")
+                .message(LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()).build())).build();
+    }
+    /**
+     * 验证真实互动后台生成、提交确认及下一轮应用，等待期间前台正常回答，重放不重复学习。
+     * @throws Exception 当后台等待中断或未按时完成时
+     */
+    @Test void automaticLearningCommitsAndAppliesOnlyOnNextTurn() throws Exception {
+        try (var h = new Harness(true)) {
+            var input = request(scope); var first = h.mailbox.run(h.handle, input).toCompletableFuture().join();
+            assertEquals(AgentRunResult.Status.SUCCESS, first.status()); var pending = h.awaitLearning();
+            assertEquals(AgentRunResult.Status.SUCCESS, h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join().status());
+            pending.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"表达更简洁，保持温和\",\"confidence\":0.9}"));
+            var report = h.awaitReport(); assertEquals(PersonalityLearningService.Outcome.APPLIED, report.outcome());
+            assertEquals(input.requestId(), report.requestId()); assertEquals(1, report.tokenUsage().size());
+            var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
+            var saved = h.store.state(key).toCompletableFuture().join().orElseThrow().corrections().getFirst();
+            assertEquals(input.actor(), saved.source()); assertEquals(input.requestId(), saved.requestId());
+            assertEquals(AgentRunResult.Status.SUCCESS, h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join().status());
+            assertTrue(h.db.mapper.writeValueAsString(h.prompts.getLast().getMessages()).contains(saved.text()));
+            assertFalse(h.db.mapper.writeValueAsString(h.mailbox.snapshot(h.handle, scope).orElseThrow().require(AgentConversationWindow.COMPONENT).messages()).contains(saved.text()));
+            assertSame(first, h.mailbox.retry(h.handle, input).toCompletableFuture().join()); assertTrue(h.pending.isEmpty());
+        }
+    }
+    /**
+     * 验证学习关闭拒绝在途候选，应用关闭仍可独立学习，模型不能提交额外身份/锁定字段。
+     * @throws Exception 当后台等待中断或未按时完成时
+     */
+    @Test void learningAndApplicationSwitchesAndCandidateBoundaryStayIndependent() throws Exception {
+        try (var h = new Harness(true); var control = ExecutionControl.create()) {
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var disabled = h.awaitLearning();
+            h.settings.get(scope.scopeId()).setPersonalityLearningEnabled(false);
+            disabled.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"迟到表达\",\"confidence\":1}"));
+            assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
+            assertTrue(h.personality.resolve(scope, control).toCompletableFuture().join().adjustmentsJson().isEmpty());
+            h.settings.get(scope.scopeId()).setPersonalityLearningEnabled(true); h.settings.get(scope.scopeId()).setPersonalityCorrectionsEnabled(false);
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
+            h.awaitLearning().complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"保持轻松表达\",\"confidence\":0.8}"));
+            assertEquals(PersonalityLearningService.Outcome.APPLIED, h.awaitReport().outcome());
+            assertTrue(h.personality.resolve(scope, control).toCompletableFuture().join().adjustmentsJson().isEmpty());
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
+            h.awaitLearning().complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"伪造候选\",\"confidence\":1,\"locked\":true}"));
+            assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
+            var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
+            assertEquals(1, h.store.state(key).toCompletableFuture().join().orElseThrow().corrections().size());
+        }
+    }
+    /**
+     * 验证独立时限、空间换代及实例关闭均阻止迟到学习，后台槽位可在结束后再次使用。
+     * @throws Exception 当后台等待中断或未按时完成时
+     */
+    @Test void timeoutChangedNamespaceAndOwnerCloseRejectBackgroundWork() throws Exception {
+        try (var h = new Harness(true)) {
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofMillis(300), 1, 16384, 131072, Duration.ofDays(30)));
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); h.awaitLearning();
+            assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var stale = h.awaitLearning();
+            h.bindingRevision.incrementAndGet(); h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
+            stale.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"旧空间候选\",\"confidence\":1}"));
+            assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); h.awaitLearning(); h.handle.close();
+            assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
+            var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
+            assertTrue(h.store.state(key).toCompletableFuture().join().orElseThrow().corrections().isEmpty());
+        }
+    }
+    /** 验证显式旧行来源映射、原子回滚、锁定/冲突保留及全局幂等，旧表原文始终不改写。 */
+    @Test void legacyPersonalityImportPreservesEvidenceAndCommitsAtomically() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            var basis = h.personality.resolve(scope, control).toCompletableFuture().join(); var input = request(scope);
+            var binding = h.store.binding(scope).toCompletableFuture().join().orElseThrow();
+            var base = h.configuration.base(h.configuration.settings(scope));
+            var legacy = new EasyDataLegacyPersonalityStore(h.store, h.db.factRepository, h.db.repository, h.db.mapper, h.clock);
+            var location = new ILegacyPersonalityStore.Location(scope.scopeId(), "teaneko", false);
+            var json = h.db.mapper.writeValueAsString(List.of(Map.of("id", "原记录", "field", "speaking detail", "content", "温和自然", "source", "旧消息",
+                    "createdAt", now.toString(), "locked", true), Map.of("id", "身份项", "field", "identity", "content", "不兼容身份")));
+            h.db.seedFactRow("memory", location.target(), location.key(), json);
+            var preview = legacy.preview(location, now).toCompletableFuture().join().orElseThrow();
+            assertThrows(CompletionException.class, () -> legacy.importSnapshot(new ILegacyPersonalityStore.Import(preview, binding, base, Map.of(), input.actor())).toCompletableFuture().join());
+            var command = new ILegacyPersonalityStore.Import(preview, binding, base, Map.of("旧消息", input.actor()), input.actor());
+            h.db.failingWritePrefix.set("legacy");
+            assertThrows(CompletionException.class, () -> legacy.importSnapshot(command).toCompletableFuture().join());
+            assertTrue(h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections().isEmpty());
+            h.db.failingWritePrefix.set(null); var result = legacy.importSnapshot(command).toCompletableFuture().join();
+            assertEquals(1, result.imported().size()); assertTrue(result.skipped().containsKey("身份项"));
+            assertEquals(result, legacy.importSnapshot(command).toCompletableFuture().join());
+            var saved = h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections().getFirst();
+            assertTrue(saved.locked()); assertEquals(input.actor(), saved.source()); assertEquals(now, saved.occurredAt());
+            assertEquals(json, h.db.storedValue("memory", location.target(), location.key()));
+            assertTrue(Objects.requireNonNull(h.db.storedValue("agent.personality.v1", "legacy", result.auditKey())).contains("旧消息"));
+            assertThrows(CompletionException.class, () -> h.personality.propose(scope, basis, correction(request(scope), "自动覆盖锁定"), control).toCompletableFuture().join());
+            var conflict = new ILegacyPersonalityStore.Location(scope.scopeId(), "teaneko", true);
+            h.db.seedFactRow("memory", conflict.target(), conflict.key(), "[{\"id\":\"冲突项\",\"field\":\"speaking detail\",\"content\":\"不能应用\",\"reason\":\"原边界拒绝\"}]");
+            var rejected = legacy.preview(conflict, now).toCompletableFuture().join().orElseThrow();
+            assertTrue(legacy.importSnapshot(new ILegacyPersonalityStore.Import(rejected, binding, base, Map.of(), input.actor())).toCompletableFuture().join().imported().isEmpty());
+            h.db.seedFactRow("memory", location.target(), location.key(), "[]");
+            assertThrows(CompletionException.class, () -> legacy.importSnapshot(command).toCompletableFuture().join());
+            h.db.seedFactRow("memory", location.target(), location.key(), json);
+            var changed = h.store.bind(binding, "新的补正").toCompletableFuture().join();
+            assertThrows(CompletionException.class, () -> legacy.importSnapshot(new ILegacyPersonalityStore.Import(preview, changed, base, command.sources(), input.actor())).toCompletableFuture().join());
         }
     }
 }

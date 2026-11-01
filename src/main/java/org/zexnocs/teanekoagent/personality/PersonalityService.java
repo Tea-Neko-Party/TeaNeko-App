@@ -14,17 +14,18 @@ import java.time.Clock;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 /**
  * 组合人格选择、独立补正和持久化引用；不生成用户画像、不调用模型或自动提升学习文本。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
-public final class PersonalityService implements IAgentPersonalitySource {
+public final class PersonalityService implements IAgentPersonalitySource, IPersonalityLearningTarget {
     private final IPersonalityConfiguration configuration;
     private final IPersonalityStore store;
     private final Executor executor;
@@ -85,15 +86,28 @@ public final class PersonalityService implements IAgentPersonalitySource {
         });
     }
     /**
+     * 取得原人格共同白名单；学习关闭不影响已有补正的独立应用。
+     * @param scope 原作用域
+     * @param basis 原互动依据
+     * @param control 借用执行控制
+     * @return 仍允许学习的字段，关闭时为空
+     */
+    @Override public CompletionStage<Set<String>> learningFields(AgentScope scope, AgentPersonalitySnapshot basis, ExecutionControl control) {
+        return controlled(control, () -> verify(scope, basis, control).thenApplyAsync(ignored -> {
+            control.checkActive(); var settings = configuration.settings(scope);
+            return settings.learningEnabled() ? configuration.base(settings).mutableFields() : Set.of();
+        }, executor));
+    }
+    /**
      * 可信互动入口提交表达候选，学习开关、来源、版本及字段均在实际写入前检查。
-     * 当前不自动调用模型产生候选；锁定或其他管理操作留给独立 DEBUG 入口。
+     * 模型生成由独立后台策略负责；锁定或其他管理操作留给独立 DEBUG 入口。
      * @param scope 真实互动作用域
      * @param basis 产生候选时实际使用的人格快照，旧绑定不得刷新成新引用
      * @param candidate 宿主固定来源候选
      * @param control 本阶段借用控制
      * @return 真实提交后是否新增；原候选重复返回 false
      */
-    public CompletionStage<Boolean> propose(AgentScope scope, AgentPersonalitySnapshot basis, PersonalityCorrection candidate, ExecutionControl control) {
+    @Override public CompletionStage<Boolean> propose(AgentScope scope, AgentPersonalitySnapshot basis, PersonalityCorrection candidate, ExecutionControl control) {
         return controlled(control, () -> {
             var settings = configuration.settings(scope); var base = configuration.base(settings);
             if (!settings.learningEnabled()) { throw new AgentPromptException(AgentPromptException.Reason.DISABLED); }

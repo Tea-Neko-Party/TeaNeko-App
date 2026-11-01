@@ -17,7 +17,8 @@ extra.set("springAiVersion", "2.0.0-M3")
 val springAiVersion = extra["springAiVersion"] as String
 
 // ========= 版本信息 =========
-val vm = VersionManager(project)
+val versionProject = project
+val vm = VersionManager(versionProject)
 version = vm.currentVersion.toString()
 
 // ========= 组织信息 =========
@@ -100,7 +101,7 @@ tasks.withType<Test> {
 }
 
 // ========== 注册任务 ==========
-// -------- versioning and changelog --------
+// -------- 版本、Git 提交与更新日志 --------
 tasks.register<BumpVersionTask>("bumpMajor") {
     description = "增加主版本号 (major)"
     group = "versioning"
@@ -125,81 +126,83 @@ tasks.register<BumpVersionTask>("bumpPatch") {
     patchInc = true
 }
 
-tasks.register("createGitTag") {
-    group = "versioning"
-    description = "自动根据当前 version 属性打 Git Tag"
-
-    doLast {
-        val currentVersion = project.version.toString()
-        val tagName = "v$currentVersion"
-
-        try {
-            // 使用原生 ProcessBuilder 检查 tag 是否存在
-            val checkProcess = ProcessBuilder("git", "rev-parse", "-q", "--verify", "refs/tags/$tagName")
-                .directory(project.projectDir)
-                .start()
-            checkProcess.waitFor()
-
-            if (checkProcess.exitValue() == 0) {
-                println("⚠️ Tag $tagName 已经存在，跳过创建。")
-            } else {
-                println("📦 正在为当前版本创建 Git Tag: $tagName")
-                // 使用原生 ProcessBuilder 创建 tag
-                val tagProcess = ProcessBuilder("git", "tag", "-a", tagName, "-m", "Release version $tagName")
-                    .directory(project.projectDir)
-                    .start()
-                tagProcess.waitFor()
-
-                if (tagProcess.exitValue() == 0) {
-                    println("✅ Tag $tagName 创建成功！记得 push 代码时带上 tag。")
-                } else {
-                    val errorMsg = tagProcess.errorStream.bufferedReader().readText()
-                    println("❌ 创建 Tag 失败: $errorMsg")
-                }
-            }
-        } catch (e: Exception) {
-            println("❌ 执行 Git 命令失败，请确认环境: ${e.message}")
-        }
+listOf("Major", "Minor", "Patch").forEach { level ->
+    tasks.register<BumpVersionTask>("bumpAgent$level") {
+        group = "versioning"
+        description = "升级 Agent ${level.lowercase()} 版本并添加 -l 后缀"
+        majorInc = level == "Major"
+        minorInc = level == "Minor"
+        patchInc = level == "Patch"
+        agentVersion = true
     }
+}
+
+tasks.register<CreateVersionGitTagTask>("createGitTag") {
+    group = "versioning"
+    description = "为已提交的当前完整版本创建 Git 标签"
+}
+
+tasks.register<CreateVersionGitTagTask>("createAgentGitTag") {
+    group = "versioning"
+    description = "为已提交的 -l 版本创建 Agent Git 标签"
+    agentOnly = true
+}
+
+listOf("agentGitPreview", "agentGitUpdate").forEach { entry ->
+    tasks.register<AgentGitUpdateTask>(entry) {
+        group = "versioning"
+        description = if (entry == "agentGitPreview") "只读预览 Agent 版本及暂存区" else "更新 Agent 版本、提交暂存区并创建标签"
+        preview = entry == "agentGitPreview"
+        bump = providers.gradleProperty("agentBump").getOrElse("none")
+        commitMessage = providers.gradleProperty("agentCommitMessage").getOrElse("")
+    }
+}
+
+// 在任何任务写入前拒绝互相冲突的升级入口，避免连续递增或普通/Agent 后缀互相覆盖。
+gradle.taskGraph.whenReady {
+    val bumps = allTasks.filterIsInstance<BumpVersionTask>()
+    val agentUpdate = allTasks.any { it.path == ":agentGitUpdate" }
+    require(bumps.size <= 1) { "一次构建只能选择一个普通或 Agent 版本升级入口。" }
+    require(!agentUpdate || bumps.isEmpty()) { "agentGitUpdate 已负责版本更新，不能同时调用 bump 任务。" }
+    require(!agentUpdate || allTasks.none { it.path == ":generateGitChangelog" }) {
+        "请先生成并审阅更新日志，再暂存并调用 agentGitUpdate，避免提交遗漏本次日志。"
+    }
+    val tags = allTasks.filterIsInstance<CreateVersionGitTagTask>()
+    require(tags.size <= 1 && (!agentUpdate || tags.isEmpty())) { "一次构建只能选择一个 Git 标签或 Agent 更新入口。" }
+}
+
+tasks.withType<CreateVersionGitTagTask>().configureEach {
+    mustRunAfter(tasks.withType<BumpVersionTask>())
+}
+
+tasks.withType<AbstractArchiveTask>().configureEach {
+    archiveVersion.set(provider { versionProject.version.toString() })
+    mustRunAfter(tasks.withType<BumpVersionTask>(), tasks.named("agentGitUpdate"))
 }
 
 tasks.register<GitChangelogTask>("generateGitChangelog") {
     group = "versioning"
-    description = "Generate changelog for the current version only"
+    description = "根据执行时的当前版本生成更新日志"
 
-    file.set(File(project.projectDir, "docs/changelog/${project.version}.md"))
+    mustRunAfter(tasks.withType<BumpVersionTask>())
+    file.set(provider { File(versionProject.projectDir, "docs/changelog/${versionProject.version}.md") })
 
-    // 动态获取上一个 Git Tag 作为起点
-    fromRevision.set(project.provider {
-        try {
-            // 使用原生 ProcessBuilder 获取上一个 tag
-            val process = ProcessBuilder("git", "describe", "--tags", "--abbrev=0")
-                .directory(project.projectDir)
-                .start()
-
-            // 读取标准输出
-            val output = process.inputStream.bufferedReader().readText().trim()
-            process.waitFor()
-
-            if (process.exitValue() == 0) output else ""
-        } catch (_: Exception) {
-            "" // 如果报错（比如没有任何 tag），就返回空，让插件从头开始抓取
-        }
-    })
+    // 当前版本与文件名均延迟读取；当前标签已经存在时仍从上一版本开始。
+    fromRevision.set(provider { VersionGitRepository(versionProject.projectDir).previousTag(versionProject.version.toString()) })
 
     toRevision.set("HEAD")
 
     // 过滤掉没意义的提交（基于约定式提交规范）
     ignoreCommitsIfMessageMatches.set("^chore:.*|^test:.*|^style:.*|^build:.*|^Merge.*")
 
-    templateContent.set("""
-        # [${project.version}] - ${LocalDate.now()}
+    templateContent.set(provider { """
+        # [${versionProject.version}] - ${LocalDate.now()}
         
         ### 更新内容
         {{#commits}}
         * [{{authorName}}] - {{messageTitle}} - `{{hash}}`
         {{/commits}}
-    """.trimIndent())
+    """.trimIndent() })
 }
 
 // --------- file config 模板任务 ---------
@@ -222,7 +225,9 @@ tasks {
     // ========= bootRun 配置 =========
     withType<BootRun> {
         // 注入版本号
-        systemProperty("version", project.version.toString())
+        doFirst {
+            systemProperty("version", versionProject.version.toString())
+        }
 
         // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
         systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
@@ -263,9 +268,11 @@ tasks {
         manifest {
             attributes(
                 "Implementation-Title" to project.name,
-                "Implementation-Version" to project.version,
                 "Spring-Profile" to "prod"
             )
+        }
+        doFirst {
+            manifest.attributes("Implementation-Version" to versionProject.version.toString())
         }
     }
 }

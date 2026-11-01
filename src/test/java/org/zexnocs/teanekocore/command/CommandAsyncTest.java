@@ -3,6 +3,8 @@ package org.zexnocs.teanekocore.command;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
@@ -36,11 +38,24 @@ import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
  * 使用真实参数处理、扫描、分发、执行和事件服务；仅替换任务调度与外部权限存储。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public class CommandAsyncTest {
+    /**
+     * 验证事件之后任务尚未开始时取消父控制，不执行原业务方法。
+     * @throws Exception 当反射定位或任务夹具建立失败时
+     */
+    @Test void cancelledParentPreventsQueuedCommandFromStarting() throws Exception {
+        var fixture = new Fixture();
+        try (var parent = ExecutionControl.create()) {
+            var stage = fixture.executor.execute(fixture.handler, Handler.class.getMethod("sub", CommandData.class),
+                    new Object[]{data("/async", new DerivedInput())}, "派生取消验证", parent);
+            parent.cancel(); fixture.tasks.runAll();
+            assertInstanceOf(ExecutionStoppedException.class, failure(stage)); assertEquals(0, fixture.handler.calls);
+        }
+    }
     /**
      * 命令声明允许使用的客户端标记，用于原客户端校验。
      *

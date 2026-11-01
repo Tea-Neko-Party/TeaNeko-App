@@ -75,5 +75,13 @@
 - 独立查询尽量合并，机械统计和格式核对在工具内完成，只回传结论、数量与异常位置。大段源码或文档确需完整阅读时分段读取，出现输出截断后缩小范围，不重复请求整份内容。
 - 构建与测试的完整日志保存到工作区临时目录，默认回传结果摘要；失败时定点读取相关用例、完整首条根因及最深层 `Caused by`。避免反复输出完整日志、无关文件列表和生成文档正文。
 - 先进行与改动风险相称的定向验证，交付前集中执行所需回归、强制编译和产物检查。通过后，只有新增改动、失败或未解决疑点才重复相关验证；用户明确要求的测试与 JavaDoc 检查继续执行。
-- 计划主文件集中保留原始需求、当前规格、进度和下一步；较早的详细实施报告可原文归档并保留链接，按需追溯。归档时核对内容与相对链接，不改写用户答复，不维护多份相互冲突的当前规格。
+- 计划主文件作为精简入口，只保留当前状态、必要边界、下一步和按需阅读索引；原始需求、完整规格、操作说明及历史报告可分别存放，通过链接定位，各类信息只维护一份当前权威内容。拆分或归档时核对原文与相对链接，不改写用户答复。
+- 开始任务或上下文压缩后，先读最新 AGENTS.md 和对应计划入口，再按本次修改读取必要的规格章节、模块文档及代码；不默认重读所有需求、源码和历史报告。出现歧义、并发修改或上下文缺失时扩大阅读，用户明确要求完整重读时仍完整执行。
+- 交付报告只说明本次新增功能、必要验证、剩余限制及下一步；不重复粘贴既有实现经过或完整测试列表。详细证据留在日志或按需查阅的归档中。
 - 节约 token 不降低必要的代码阅读、风险测试、中文 JavaDoc 和验收要求；用户明确要求的完整重读仍完整执行。
+-Prioritize critical functionality: Test core business logic, authentication, important API endpoints, database operations, and essential user workflows.
+-Focus on high-risk areas: Prioritize functionality where failures would have the greatest impact.
+-Keep testing minimal: Write only meaningful tests that catch realistic bugs. Avoid excessive coverage, redundant tests, and trivial assertions.
+-Choose the appropriate test level: Prefer fast unit and integration tests. Add E2E tests only for essential user journeys.
+-Avoid overengineering: Use existing testing tools and project conventions. Do not introduce unnecessary frameworks, mocks, or complex test infrastructure.
+-Verify and report: Run relevant tests, fix discovered issues, and summarize what was tested, what passed, and any remaining risks.

@@ -14,7 +14,7 @@
 
 </p>
 
-TeaNeko-App 是专注于多平台聊天机器人的高性能架构，允许快速扩展多平台适配器和插件，提供稳定的核心功能和丰富的开发工具。此外，TeaNeko-App 未来将会扩展 LLM-Agent 相关功能。
+TeaNeko App 是专注于多平台聊天机器人的高性能架构，允许扩展平台适配器和插件。当前 Agent 已提供显式文本对话、记忆与人格、后台摘要/补正，以及遵守原权限的命令工具；启用和使用方式见 [Agent 命令说明](src/main/java/org/zexnocs/teanekoagent/adapter/command/README.md)。自动聊天触发及完整平台接入仍在开发中。
 
 ---
 
@@ -30,6 +30,8 @@ TeaNeko-App 是专注于多平台聊天机器人的高性能架构，允许快�
 | 7  | 启动项目                                    | `./gradlew bootRun`                                           |
 
 ---
+
+版本升级、更新日志及独立 Agent Git 提交入口见 [版本操作说明](docs/development/versioning.md)。
 
 ## ⚙️ 平台客户端部署
 该项目的应用端口位于 `src/main/resources/application.properties` 中 `server.port` 配置，默认为 `6691`。
