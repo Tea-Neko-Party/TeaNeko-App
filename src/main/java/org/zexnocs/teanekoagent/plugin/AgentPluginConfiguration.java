@@ -1,7 +1,10 @@
 package org.zexnocs.teanekoagent.plugin;
 
-import org.springframework.context.annotation.*;
-import org.zexnocs.teanekocore.plugin.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginModule;
+
 import java.util.Set;
 
 /**

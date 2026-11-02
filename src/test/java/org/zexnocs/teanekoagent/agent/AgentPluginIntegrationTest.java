@@ -3,36 +3,62 @@ package org.zexnocs.teanekoagent.agent;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.zexnocs.teanekoagent.agent.access.*;
-import org.zexnocs.teanekoagent.agent.prompt.*;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm.framework.interaction.*;
-import org.zexnocs.teanekoagent.llm.framework.message.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenEstimate;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.llm.framework.model.*;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.llm.framework.response.*;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.plugin.*;
-import org.zexnocs.teanekoagent.plugin.event.*;
-import org.zexnocs.teanekocore.actuator.execution.*;
-import org.zexnocs.teanekocore.actuator.task.*;
-import org.zexnocs.teanekocore.event.interfaces.IEventService;
-import org.zexnocs.teanekocore.event.interfaces.IEvent;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.plugin.AgentFeature;
+import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
+import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
+import org.zexnocs.teanekoagent.plugin.event.AgentEventContext;
+import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
+import org.zexnocs.teanekoagent.plugin.event.AgentToolsSelectingEvent;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.event.EventService;
-import org.zexnocs.teanekocore.event.core.*;
-import org.zexnocs.teanekocore.actuator.task.interfaces.*;
+import org.zexnocs.teanekocore.event.core.EventHandler;
+import org.zexnocs.teanekocore.event.core.EventHandlerScanner;
+import org.zexnocs.teanekocore.event.interfaces.IEvent;
+import org.zexnocs.teanekocore.event.interfaces.IEventService;
+import org.zexnocs.teanekocore.framework.composition.*;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.composition.*;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.*;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.plugin.*;
-import org.zexnocs.teanekoplugin.agent_example.*;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
+import org.zexnocs.teanekoplugin.agent_example.ExampleClockFeature;
+import org.zexnocs.teanekoplugin.agent_example.ExampleClockListener;
 import tools.jackson.databind.ObjectMapper;
-import java.time.*;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -145,14 +171,13 @@ class AgentPluginIntegrationTest {
          * 装配实际事件扫描与总线，任务执行器仅省略线程调度。
          * @param listener 本轮安装的实际监听器
          */
-        @SuppressWarnings({"unchecked", "rawtypes"})
         Harness(Object listener) { this(listener, null); }
         /**
          * 可选增加一个校验能力，复用相同完整业务夹具。
          * @param listener 实际监听器
          * @param additional 可选能力
          */
-        @SuppressWarnings({"unchecked", "rawtypes"})
+        @SuppressWarnings({"unchecked"})
         Harness(Object listener, AgentFeature additional) {
             var logger = mock(ILogger.class); var models = mock(ILLMModelService.class);
             var feature = new ExampleClockFeature(Clock.fixed(Instant.parse("2026-11-02T00:00:00Z"), ZoneOffset.UTC));
@@ -177,7 +202,7 @@ class AgentPluginIntegrationTest {
                 return CompletableFuture.completedStage(null);
             });
             var other = new SourceAgentFeature("example.clock", "strict", true, (definition, request, settings) -> List.of(), strict, Set.of("strict_source"));
-            var installed = new ArrayList<AgentFeature>(List.of(feature, other)); if (additional != null) { installed.add(additional); }
+            var installed = new ArrayList<>(List.of(feature, other)); if (additional != null) { installed.add(additional); }
             var extensions = new AgentPluginRuntime(plugins, installed, loader.getBeanProvider(IEventService.class));
             handle = new AgentFactory(registry, extensions).create(new AgentDefinition("插件测试", new LLMModelOptionsSnapshot(null),
                     Set.of(AgentActivity.SERVICE, AgentActivity.TOOL), Set.of(ExampleClockFeature.KEY)));

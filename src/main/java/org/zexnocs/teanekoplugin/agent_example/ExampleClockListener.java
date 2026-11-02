@@ -1,10 +1,11 @@
 package org.zexnocs.teanekoplugin.agent_example;
 
-import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
-import org.zexnocs.teanekocore.event.core.*;
-import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
+import org.zexnocs.teanekocore.event.core.EventHandler;
+import org.zexnocs.teanekocore.event.core.EventListener;
+import org.zexnocs.teanekocore.plugin.PluginOwned;
 
 /**
  * 展示可修改事件的有序同步监听，仅对安装示例能力的实例生效。

@@ -22,6 +22,8 @@ import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.api_response.exception.APIRequestTimeoutException;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
+import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.*;
 import java.util.concurrent.*;
@@ -31,11 +33,12 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
 /**
  * 以独立请求状态编排有限模型/工具往返，复用阶段执行、共享预算和固定工具绑定。
  * 不创建线程池，不处理 Agent 人格、记忆、平台发送或业务历史提交。
+ * <br>2026/11/02：在失败转为状态前记录请求关联、阶段及脱敏异常结构。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  * @see LLMInteractionExecution
  */
 public final class LLMInteractionService implements ILLMInteractionService {
@@ -44,6 +47,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
     private final Executor executor;
     private final ScheduledExecutorService scheduler;
     private final ILLMTokenEstimator tokenEstimator;
+    // 2026/11/02：独立使用方可不安装日志，宿主装配时提供诊断端口。
+    private final @Nullable ILogger logger;
 
     /**
      * 注入可替换端口与借用执行资源，构造期间不读取本地交互配置。
@@ -68,11 +73,39 @@ public final class LLMInteractionService implements ILLMInteractionService {
      */
     public LLMInteractionService(ILLMModelService models, ILLMInteractionDefaults defaults,
                                  Executor executor, ScheduledExecutorService scheduler, ILLMTokenEstimator tokenEstimator) {
+        // 2026/11/02：保留既有构造的无日志副作用方式。
+        this(models, defaults, executor, scheduler, tokenEstimator, null);
+    }
+
+    /**
+     * 组合可选诊断日志，失败只记录结构，不导出原始请求和 Throwable。
+     * @param models 单次模型端口
+     * @param defaults 默认设置
+     * @param executor 借用业务执行器
+     * @param scheduler 借用计时器
+     * @param tokenEstimator 输入估算器
+     * @param logger 可选项目日志
+     */
+    public LLMInteractionService(ILLMModelService models, ILLMInteractionDefaults defaults, Executor executor,
+            ScheduledExecutorService scheduler, ILLMTokenEstimator tokenEstimator, @Nullable ILogger logger) {
         this.models = Objects.requireNonNull(models, "模型端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "默认设置端口不能为空。");
         this.executor = Objects.requireNonNull(executor, "业务执行器不能为空。");
         this.scheduler = Objects.requireNonNull(scheduler, "计时调度器不能为空。");
         this.tokenEstimator = Objects.requireNonNull(tokenEstimator, "token 估算器不能为空。");
+        this.logger = logger;
+    }
+
+    /**
+     * 安全记录实际失败阶段，日志端口故障不改变业务终态。
+     * @param requestId 可信请求标识
+     * @param phase 宿主固定的阶段标签，不使用用户正文
+     * @param failure 原始失败，仅提取类型、位置与 HTTP 状态
+     */
+    private void reportFailure(UUID requestId, String phase, Throwable failure) {
+        if (logger == null) { return; }
+        try { logger.error(LLMInteractionService.class.getName(), "LLM 交互失败。请求=" + requestId + "，阶段=" + phase + "，" + FailureDiagnostic.from(failure)); }
+        catch (RuntimeException ignored) { /* 诊断失败不能改变业务结果。 */ }
     }
 
     /**
@@ -134,13 +167,15 @@ public final class LLMInteractionService implements ILLMInteractionService {
         final Run run;
         try {
             run = new Run(new LLMInteractionExecution(models, tools, context, selected, executor, scheduler, tokenEstimator, guard),
-                    messages, options, optionsPolicy, ids);
+                    // 2026/11/02：请求关联留在私有编排中，不进入模型消息或结果。
+                    messages, options, optionsPolicy, ids, (phase, failure) -> reportFailure(context.requestId(), phase, failure));
         } catch (RuntimeException failure) {
+            reportFailure(context.requestId(), "交互初始化", failure);
             return CompletableFuture.completedStage(empty(classify(failure)));
         }
         return run.next().handle((status, failure) -> {
             try {
-                return run.finish(failure == null ? status : run.stopped(failure));
+                return run.finish(failure == null ? status : run.stopped("交互编排", failure));
             } finally {
                 run.execution.close();
             }
@@ -215,11 +250,12 @@ public final class LLMInteractionService implements ILLMInteractionService {
 
     /**
      * 一次交互私有的串行编排状态；只有当前阶段的完成链可以推进它。
+     * <br>2026/11/02：保留阶段化失败观察器，不在可交付结果中保存原异常。
      *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.0.0
-     * @version 4.5.0-l
+     * @version 4.6.0-l
      */
     private static final class Run {
         private final LLMInteractionExecution execution;
@@ -227,6 +263,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
         private final LLMModelOptions options;
         private final LLMOptionsPolicy optionsPolicy;
         private final Set<String> ids;
+        private final java.util.function.BiConsumer<String, Throwable> diagnostics;
         private final List<LLMInteractionResult.ModelAttempt> attempts = new ArrayList<>();
         private ILLMAssistantMessage candidate;
         private int appendedTools;
@@ -239,14 +276,18 @@ public final class LLMInteractionService implements ILLMInteractionService {
          * @param options 本轮私有模型选项
          * @param optionsPolicy 本轮固定的默认值解析规则
          * @param ids 初始历史已用的调用 ID
+         * @param diagnostics 只提取脱敏结构的失败观察器
          */
         private Run(LLMInteractionExecution execution, List<ILLMMessage> messages,
-                    LLMModelOptions options, LLMOptionsPolicy optionsPolicy, Set<String> ids) {
+                    LLMModelOptions options, LLMOptionsPolicy optionsPolicy, Set<String> ids,
+                    java.util.function.BiConsumer<String, Throwable> diagnostics) {
             this.execution = execution;
             this.transcript = new ArrayList<>(messages);
             this.options = options;
             this.optionsPolicy = optionsPolicy;
             this.ids = ids;
+            // 2026/11/02：观察器只属于本轮，不在返回数据中保留。
+            this.diagnostics = diagnostics;
         }
 
         /**
@@ -267,7 +308,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
                             });
                         });
                     }
-                    return CompletableFuture.completedStage(stopped(failure));
+                    // 2026/11/02：模型失败在收束为枚举前保留可关联诊断。
+                    return CompletableFuture.completedStage(stopped("模型请求", failure));
                 }
                 attempts.add(execution.modelAttempt(after).orElseThrow(() -> new IllegalStateException("实际模型尝试缺少完成记录。")));
                 return accept(raw);
@@ -299,6 +341,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
                 return CompletableFuture.completedStage(REFUSED);
             }
             if ("failed".equals(reason) || "error".equals(reason) || "insufficient_system_resource".equals(reason)) {
+                // 2026/11/02：仅记录上方白名单中的终止标记，不记录供应商正文。
+                diagnostics.accept("供应商终止/" + reason, new IllegalStateException());
                 return CompletableFuture.completedStage(FAILED);
             }
             if ("cancelled".equals(reason)) { return CompletableFuture.completedStage(CANCELLED); }
@@ -317,7 +361,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
             return execution.executeTools(calls).handle((results, failure) -> {
                 appendTools();
                 if (failure != null) {
-                    return CompletableFuture.completedStage(stopped(failure));
+                    // 2026/11/02：区分工具阶段失败，不把错误来源统一记为模型。
+                    return CompletableFuture.completedStage(stopped("工具执行", failure));
                 }
                 return next();
             }).thenCompose(stage -> stage);
@@ -336,12 +381,16 @@ public final class LLMInteractionService implements ILLMInteractionService {
         /**
          * 保存导致终止的预算维度，再进行统一异常分类，避免调用方解析异常字符串。
          * @param failure 当前阶段失败
+         * @param phase 固定失败阶段
          * @return 可观察终止状态
          */
-        private LLMInteractionResult.Status stopped(Throwable failure) {
+        private LLMInteractionResult.Status stopped(String phase, Throwable failure) {
             var cause = unwrap(failure);
             if (cause instanceof BudgetExceededException exceeded) { rejectedBudget = exceeded.key(); }
-            return classify(cause);
+            // 2026/11/02：正常取消/预算终止不当成未知错误；原异常文本始终不进入日志。
+            var status = classify(cause);
+            if (status == FAILED || status == INVALID_RESPONSE || status == CONFIGURATION_ERROR) { diagnostics.accept(phase, failure); }
+            return status;
         }
 
         /**

@@ -42,7 +42,7 @@ models:
 |---|---|
 | `model` | `model` |
 | `thinking` | `thinking.type = enabled/disabled` |
-| `DeepSeekModelOptions.reasoningEffort` | `thinking.reasoning_effort` |
+| `DeepSeekModelOptions.reasoningEffort` | 顶层 `reasoning_effort` |
 | `maxTokens` | `max_tokens` |
 | `frequencyPenalty` | `frequency_penalty` |
 | `temperature` | `temperature` |
@@ -57,6 +57,8 @@ models:
 | `DeepSeekModelOptions.topLogprobs` | `top_logprobs` |
 | `DeepSeekModelOptions.streamIncludeUsage` | `stream_options.include_usage` |
 | `DeepSeekModelOptions.userId` | `user_id` |
+
+`deepseek.reasoningEffort` 保留现有配置名，映射到请求顶层；`thinking` 仅在显式指定开关时生成，并包含 `type`。只配置思考强度不会生成缺少 `type` 的对象。参数位置以 [DeepSeek 官方协议](https://api-docs.deepseek.com/api/create-chat-completion/)为准，供应商兼容值 `medium` 无需为本次修复改名。
 
 # 四. 响应映射
 

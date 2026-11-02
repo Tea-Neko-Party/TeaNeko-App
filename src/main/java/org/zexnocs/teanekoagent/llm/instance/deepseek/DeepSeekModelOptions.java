@@ -15,10 +15,12 @@ import java.util.Optional;
 /**
  * DeepSeek 对话补全模型的默认调用参数。
  * <br>该类在通用 {@link LLMModelOptions} 基础上补充 DeepSeek create chat completion API 的专用参数。
+ * <br>2026/11/02：修正推理强度说明，统一映射顶层 reasoning_effort。
  *
  * @author zExNocs
  * @date 2026/06/09
  * @since 4.4.1
+ * @version 4.6.0-l
  */
 @Getter
 @Setter
@@ -61,7 +63,7 @@ public class DeepSeekModelOptions extends LLMModelOptions {
     public static final String BASE_URL_METADATA = "baseUrl";
 
     /**
-     * metadata 中记录 thinking.reasoning_effort 的 key。
+     * 2026/11/02：metadata 中记录顶层 reasoning_effort 的键，不改变既有配置名称。
      */
     public static final String REASONING_EFFORT_METADATA = "deepseek.reasoningEffort";
 
@@ -88,7 +90,7 @@ public class DeepSeekModelOptions extends LLMModelOptions {
 
     /**
      * DeepSeek reasoning effort 配置。
-     * <br>该值会写入请求体中的 {@code thinking.reasoning_effort}。
+     * <br>2026/11/02：该值写入请求体顶层 {@code reasoning_effort}，不要求同时配置 thinking。
      */
     @Nullable
     private String reasoningEffort;
@@ -162,6 +164,11 @@ public class DeepSeekModelOptions extends LLMModelOptions {
         return result;
     }
 
+    /**
+     * 2026/11/02：补充通用选项覆盖步骤的参数与职责说明，不改变合并行为。
+     * @param overrides 提供已设置覆盖值的选项
+     * @param result 接收覆盖值的轮次私有选项
+     */
     private static void _findSomething(ILLMModelOptions overrides, DeepSeekModelOptions result) {
         overrides.findProvider().ifPresent(result::setProvider);
         overrides.findModel().ifPresent(result::setModel);

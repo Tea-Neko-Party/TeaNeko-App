@@ -1,5 +1,6 @@
 package org.zexnocs.teanekocore.plugin.management;
 
+import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import java.util.Objects;
 import java.util.UUID;
@@ -29,5 +30,6 @@ public record ManagementContext(String subject, String scopeRef, UUID requestId,
         Objects.requireNonNull(requestId); Objects.requireNonNull(control);
     }
     /** @return 只含请求标识的安全诊断，不导出主体、作用域或控制 */
-    @Override public String toString() { return "ManagementContext[请求=" + requestId + "，身份及控制已隐藏]"; }
+    @Override @NonNull
+    public String toString() { return "ManagementContext[请求=" + requestId + "，身份及控制已隐藏]"; }
 }

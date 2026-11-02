@@ -1,10 +1,17 @@
 package org.zexnocs.teanekoagent.plugin;
 
-import org.zexnocs.teanekoagent.agent.*;
-import org.zexnocs.teanekoagent.agent.prompt.*;
-import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.IAgentToolSource;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
+import org.zexnocs.teanekocore.framework.composition.ComponentKey;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.IEntitySystem;
 import org.zexnocs.teanekocore.plugin.operation.OperationPipeline;
-import java.util.*;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * Agent 的可组合能力包；按需提供数据、System、工具、资料及异步准备拦截。

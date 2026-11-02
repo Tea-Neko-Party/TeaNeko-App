@@ -1,15 +1,22 @@
 package org.zexnocs.teanekoplugin.agent_example;
 
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
 import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
-import org.zexnocs.teanekoagent.plugin.*;
+import org.zexnocs.teanekoagent.plugin.AgentFeature;
+import org.zexnocs.teanekoagent.plugin.AgentPluginContext;
 import org.zexnocs.teanekocore.framework.composition.*;
 import org.zexnocs.teanekocore.plugin.operation.OperationPipeline;
-import java.time.*;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 完整示例能力：实例时区组件、轮次时间组件、System、工具及异步资料环绕。

@@ -1,6 +1,6 @@
 # Agent 部署与最终验收
 
-代码与离线契约已交付；以下实机步骤尚未在本次工作区执行，不能由编译或 FakeClient 推断已通过。运行基线为 JDK 25、Gradle Wrapper 9.8.2、Spring Boot 4.1.2。计划版本为 4.5.0-l；版本文件仍为 4.4.1，构建产物名以版本文件为准，本次不自动提交、打标签、推送或发布。
+代码与离线契约已交付；以下实机步骤尚未在交付记录中完成验收，不能由编译或 FakeClient 推断已通过。运行基线为 JDK 25、Gradle Wrapper 9.8.2、Spring Boot 4.1.2；构建版本及产物名以根目录 version.properties 为准。功能与升级变化见 [版本日志](../changelog/README.md)，Git 提交、标签和远程发布按版本流程显式执行。
 
 ## 首次安装
 
@@ -10,6 +10,14 @@
 4. 核对活动 Profile。当前 application 默认通过 springProfile 取 dev；生产启动须显式选择 prod 或实际部署 Profile，配置数据库及网络边界。启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
 5. 执行 `./gradlew bootJar`，以 `java -jar build/libs/TeaNeko-App-<实际版本>.jar --spring.profiles.active=prod` 启动。普通 plain.jar 不是可执行部署包。Spring 及客户端启动日志不得泄漏凭据。
 6. 在真实作用域执行 `/cfg reg agent`，再用 `/agent status` 检查登记；默认最低被动模式。先验证 `/agent chat 你好`，再按[平台说明](../../src/main/java/org/zexnocs/teanekoagent/adapter/platform/README.md)启用自动图文或 ACTIVE 候选。命令工具保持默认关闭，确需启用时由 OWNER 操作。
+
+## 原生访问与轮次失败诊断
+
+JDK 25 默认允许未授权的原生访问并发出警告。Netty 的 `System.loadLibrary` 警告本身不表示 Agent 请求失败，须结合实际异常判断。项目的 `bootRun` 已添加 `--enable-native-access=ALL-UNNAMED`，新构建的可执行 JAR 通过 Manifest 声明同一权限；直接在 IntelliJ 运行主类时，在运行配置的 **VM options** 中添加该参数，不放入程序参数或 Gradle 守护进程参数。详见 [JDK 原生访问说明](https://docs.oracle.com/en/java/javase/25/core/restricted-methods.html)。
+
+Agent 轮次失败日志包含请求标识、活动和模型尝试次数；同一请求的 LLM 日志记录失败阶段、异常类型链、代码位置和可取得的 HTTP 状态码。优先按请求标识关联两层日志，再区分模型 HTTP 错误、工具错误与本地管线异常；不输出原异常消息、请求头、凭据、对话或响应正文。没有 HTTP 状态码也可能是请求发出前失败、连接失败或解析失败，不能据此假定供应商已拒绝请求。
+
+DeepSeek 的 `reasoning_effort` 位于请求顶层，不能放进 `thinking`；只配置强度时不发送缺少 `type` 的 `thinking` 对象。升级后重新构建并重启，再验证 `/agent chat 你好` 和 `@机器人 你好`。代码与构建验证不能代替真实请求成功的确认。
 
 ## 数据与旧配置
 
@@ -28,11 +36,11 @@ PowerShell 示例：
 ```powershell
 $env:JAVA_HOME = '<本地 Java 25 目录>'
 $env:TEANEKO_LIVE_LLM_TESTS = 'false'
-.\gradlew.bat --no-daemon --rerun-tasks test --tests 'org.zexnocs.teanekoagent.*' --tests 'org.zexnocs.teanekocore.command.*' --tests 'org.zexnocs.teanekoapp.sender.MessageSenderAsyncTest' jar bootJar
+.\gradlew.bat --no-daemon --rerun-tasks test --tests 'org.zexnocs.teanekoagent.*' --tests 'org.zexnocs.teanekocore.command.*' --tests 'org.zexnocs.teanekocore.plugin.*' --tests 'org.zexnocs.teanekoapp.sender.MessageSenderAsyncTest' jar bootJar
 git diff --check
 ```
 
-离线机器有完整依赖缓存时可追加 --offline。默认不要执行依赖真实数据库的全应用 SpringBootTest，也不要设置 TEANEKO_LIVE_LLM_TESTS=true 作为普通回归。最终核对实际 JAR 中新版 Client/服务、资源和类字节，确认没有 teanekoagent_old 或退役存储类；文档与中文 JavaDoc 一并检查。最近精确回归清单和日志位置见[计划](../plan/4.5.0-agent.md)。
+离线机器有完整依赖缓存时可追加 --offline。默认不要执行依赖真实数据库的全应用 SpringBootTest，也不要设置 TEANEKO_LIVE_LLM_TESTS=true 作为普通回归。最终核对实际 JAR 中新版 Client/服务、资源和类字节，确认没有 teanekoagent_old 或退役存储类；文档与中文 JavaDoc 一并检查。各版本精确回归清单和日志位置通过 [计划索引](../plan/README.md) 查阅归档记录。
 
 ## 实机验收清单
 

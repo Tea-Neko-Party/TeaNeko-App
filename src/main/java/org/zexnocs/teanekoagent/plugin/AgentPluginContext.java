@@ -1,6 +1,8 @@
 package org.zexnocs.teanekoagent.plugin;
 
-import org.zexnocs.teanekoagent.agent.*;
+import lombok.NonNull;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
@@ -21,5 +23,6 @@ import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 public record AgentPluginContext(AgentDefinition definition, AgentRunRequest request, AgentRuntimeSnapshot runtime,
                                  EntitySnapshot snapshot, ExecutionControl control) {
     /** @return 只含关联 ID 的诊断，不记录原文、模型参数或执行资源 */
-    @Override public String toString() { return "AgentPluginContext[请求=" + request.requestId() + "，上下文已隐藏]"; }
+    @Override @NonNull
+    public String toString() { return "AgentPluginContext[请求=" + request.requestId() + "，上下文已隐藏]"; }
 }

@@ -2,7 +2,8 @@ package org.zexnocs.teanekoagent.plugin.event;
 
 import org.zexnocs.teanekocore.event.AbstractEvent;
 import org.zexnocs.teanekocore.plugin.PluginScopedEvent;
-import java.util.*;
+
+import java.util.List;
 
 /**
  * 同步有序的 Agent 决策草稿；宿主冻结后不可再修改，拒绝决定不可撤销。

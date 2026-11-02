@@ -2,7 +2,9 @@ package org.zexnocs.teanekoagent.plugin.event;
 
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
-import java.util.*;
+
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * 决策事件的只读定位信息，不携带凭据、实体写权限或根控制。

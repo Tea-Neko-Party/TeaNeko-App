@@ -51,11 +51,12 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
 
 /**
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
+ * <br>2026/11/02：验证管线失败记录可关联的安全诊断，日志失败仍不改变终态。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 class AgentServiceTest {
     /** 验证冷句柄准备不读取配置，启动前取消会释放资源并阻止迟到启动。 */
@@ -453,13 +454,18 @@ class AgentServiceTest {
         verifyNoInteractions(scopes, readiness, tools, models);
     }
 
-    /** 验证工具源异常被脱敏且释放全部轮次计时，不因诊断错误丢失结果。 */
+    /** 2026/11/02：验证工具源失败的类型诊断及正文脱敏，日志故障不丢失结果或资源。 */
     @Test void selectionFailureIsRedactedAndReleasesResources() {
         when(tools.select(any(), any(), any())).thenThrow(new IllegalStateException("不可导出的敏感异常"));
         doThrow(new IllegalStateException("日志失败")).when(logger).error(anyString(), anyString());
         var result = service.run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture(); runtime.runAll();
         assertEquals(FAILED, result.join().status()); assertFalse(result.join().toString().contains("不可导出的敏感异常"));
         assertEquals(0, runtime.pendingTimers()); verifyNoInteractions(models);
+        var diagnostic = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(logger).error(eq(AgentService.class.getName()), diagnostic.capture());
+        assertTrue(diagnostic.getValue().contains("异常类型="));
+        assertTrue(diagnostic.getValue().contains("IllegalStateException"));
+        assertFalse(diagnostic.getValue().contains("不可导出的敏感异常"));
     }
 
     /** 验证业务执行器拒绝排队时 Stage 仍以业务失败结束。 */

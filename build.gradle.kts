@@ -224,6 +224,8 @@ dependencyManagement {
 tasks {
     // ========= bootRun 配置 =========
     withType<BootRun> {
+        // 2026/11/02：允许类路径中的 Netty 等依赖加载本地库，匹配 JDK 25 的原生访问要求。
+        jvmArgs("--enable-native-access=ALL-UNNAMED")
         // 注入版本号
         doFirst {
             systemProperty("version", versionProject.version.toString())
@@ -268,6 +270,8 @@ tasks {
         manifest {
             attributes(
                 "Implementation-Title" to project.name,
+                // 2026/11/02：java -jar 启动也显式声明类路径依赖所需的原生访问。
+                "Enable-Native-Access" to "ALL-UNNAMED",
                 "Spring-Profile" to "prod"
             )
         }

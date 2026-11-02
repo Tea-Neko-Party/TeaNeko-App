@@ -1,9 +1,12 @@
 package org.zexnocs.teanekoplugin.agent_example;
 
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.*;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.plugin.AgentFeature;
-import org.zexnocs.teanekocore.plugin.*;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginModule;
+
 import java.time.Clock;
 import java.util.Set;
 

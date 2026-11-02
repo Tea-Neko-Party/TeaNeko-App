@@ -2,19 +2,32 @@ package org.zexnocs.teanekoagent.plugin;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentComponents;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
+import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.agent.prompt.*;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.plugin.event.*;
+import org.zexnocs.teanekoagent.plugin.event.AgentDecisionEvent;
+import org.zexnocs.teanekoagent.plugin.event.AgentEventContext;
+import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
+import org.zexnocs.teanekoagent.plugin.event.AgentToolsSelectingEvent;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.framework.composition.*;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
-import org.zexnocs.teanekocore.plugin.operation.*;
+import org.zexnocs.teanekocore.plugin.operation.OperationPipeline;
+
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**

@@ -10,6 +10,7 @@ import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
@@ -29,6 +30,7 @@ import java.util.function.Function;
  * 独立轮次的异步入口及资源拥有者，复用预编译管线与既有 LLM 交互服务。
  * 同实例可执行不同轮次；默认会话服务在本端口外组合队列与窗口，本类只拥有独立轮次。
  * <br>2026/11/02：支持启动前安装插件管线，运行轮次仍复用原拥有和关闭路径。
+ * <br>2026/11/02：为未知失败增加请求关联、模型尝试次数及脱敏异常结构。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -405,7 +407,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         var work = new CompletableFuture<>();
         var completion = turn.lifetime.guard(work).handle((ignored, failure) -> turn.settled().thenApply(done -> {
             var result = turn.result(failure);
-            if (result.status() == AgentRunResult.Status.FAILED) { reportFailure(); }
+            // 2026/11/02：与 LLM 日志共享请求标识，管线错误也保留安全的原因链。
+            if (result.status() == AgentRunResult.Status.FAILED) { reportFailure(turn, result, failure); }
             try { observer.accept(AgentTurnReport.from(request, result, java.time.Duration.between(acceptedAt, clock.instant()).toMillis())); }
             catch (RuntimeException ignoredReportFailure) { /* 监控不能改写业务结果。 */ }
             return result;
@@ -461,9 +464,19 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         return turn;
     }
 
-    /** 记录固定中文原因，诊断故障不改变业务完成结果。 */
-    private void reportFailure() {
-        try { logger.error(AgentService.class.getName(), "Agent 轮次执行失败，请检查端口装配和运行状态。"); }
+    /**
+     * 2026/11/02：只记录可信关联和脱敏结构，LLM 已收束的失败通过相同请求查其阶段日志。
+     * @param turn 当前轮次拥有者
+     * @param result 已确定的业务终态
+     * @param failure 可选的管线异常，不导出原异常文本
+     */
+    private void reportFailure(AgentTurn turn, AgentRunResult result, @Nullable Throwable failure) {
+        try {
+            var attempts = result.interaction().map(LLMInteractionResult::modelAttempts).orElse(0L);
+            var detail = failure == null ? "请查看相同请求的 LLM 交互失败日志。" : org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).toString();
+            logger.error(AgentService.class.getName(), "Agent 轮次执行失败。请求=" + turn.request.requestId() + "，活动=" + turn.request.activity()
+                    + "，模型尝试=" + attempts + "，" + detail);
+        }
         catch (RuntimeException ignored) { /* 不能因诊断失败而丢失轮次结果。 */ }
     }
 

@@ -29,11 +29,12 @@ import java.util.Map;
 
 /**
  * DeepSeek 对话补全 API 与 LLM framework 之间的转换器。
+ * <br>2026/11/02：修正推理强度的请求层级，避免生成没有 type 的 thinking 对象。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DeepSeekChatCompletionMapper {
@@ -65,6 +66,8 @@ public final class DeepSeekChatCompletionMapper {
                 .model(deepSeekOptions.findModel().orElse(DeepSeekChatModel.DEFAULT_MODEL))
                 .messages(toMessages(prompt.getMessages()))
                 .thinking(toThinking(deepSeekOptions))
+                // 2026/11/02：官方协议将 reasoning_effort 放在请求顶层。
+                .reasoningEffort(deepSeekOptions.findReasoningEffort().orElse(null))
                 .maxTokens(deepSeekOptions.findMaxTokens().orElse(null))
                 .frequencyPenalty(deepSeekOptions.findFrequencyPenalty().orElse(null))
                 .temperature(deepSeekOptions.findTemperature().orElse(null))
@@ -131,7 +134,7 @@ public final class DeepSeekChatCompletionMapper {
     }
 
     /**
-     * 转换 thinking 参数。
+     * 2026/11/02：只转换明确的思考开关，推理强度由顶层字段独立承载。
      *
      * @param options LLM 调用参数
      * @return DeepSeek thinking 请求对象
@@ -139,7 +142,6 @@ public final class DeepSeekChatCompletionMapper {
     private static Map<String, Object> toThinking(DeepSeekModelOptions options) {
         var result = new LinkedHashMap<String, Object>();
         options.findThinking().ifPresent(thinking -> result.put("type", thinking ? "enabled" : "disabled"));
-        options.findReasoningEffort().ifPresent(reasoningEffort -> result.put("reasoning_effort", reasoningEffort));
         return result.isEmpty() ? null : Map.copyOf(result);
     }
 

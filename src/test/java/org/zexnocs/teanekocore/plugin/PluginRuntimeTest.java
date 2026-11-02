@@ -1,18 +1,25 @@
 package org.zexnocs.teanekocore.plugin;
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.plugin.operation.*;
-import java.util.*;
-import java.util.concurrent.*;
-import static org.junit.jupiter.api.Assertions.*;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.zexnocs.teanekocore.plugin.management.*;
-import org.zexnocs.teanekocore.command.CommandExecutor;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
+import org.zexnocs.teanekocore.command.CommandExecutor;
 import org.zexnocs.teanekocore.framework.function.MethodCallable;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.management.ManagementAuthority;
+import org.zexnocs.teanekocore.plugin.management.ManagementContext;
+import org.zexnocs.teanekocore.plugin.management.ManagementGateway;
+import org.zexnocs.teanekocore.plugin.management.PluginCatalogResource;
+import org.zexnocs.teanekocore.plugin.operation.OperationPipeline;
+
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -91,7 +98,7 @@ class PluginRuntimeTest {
      * 验证命令在原任务链启动，插件换代后完整业务阶段拒绝迟到成功。
      * @throws NoSuchMethodException 当测试命令缺少公开入口时
      */
-    @Test @SuppressWarnings({"unchecked", "rawtypes"}) void checksOwnershipUntilCommandCompletion() throws NoSuchMethodException {
+    @Test @SuppressWarnings({"unchecked"}) void checksOwnershipUntilCommandCompletion() throws NoSuchMethodException {
         var plugins = new PluginRegistry(List.of(module("a", Set.of()))); var tasks = mock(ITaskService.class); var logger = mock(ILogger.class);
         when(tasks.subscribeWithFuture(anyString(), anyString(), any(MethodCallable.class), any(Class.class))).thenAnswer(call -> {
             try { return TaskFuture.fromStage(logger, "插件命令", CompletableFuture.completedStage(call.<MethodCallable<?>>getArgument(2).call())); }

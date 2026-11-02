@@ -3,8 +3,8 @@ package org.zexnocs.teanekocore.plugin;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
-import java.util.concurrent.CompletionStage;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 
 /**

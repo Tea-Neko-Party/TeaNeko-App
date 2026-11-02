@@ -44,20 +44,23 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
 
 /**
  * 用真实阶段执行器验证自动往返、协议配对、深层快照和所有主要终止路径。
+ * <br>2026/11/02：验证 HTTP 失败保留结构化诊断且不泄漏响应正文和原异常文本。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 class LLMInteractionServiceTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
     private final ILLMModelService models = mock(ILLMModelService.class);
+    // 2026/11/02：复用原失败用例验证真实诊断入口。
+    private final ILogger logger = mock(ILogger.class);
     private final List<ILLMPrompt> prompts = new ArrayList<>();
     private final List<CompletableFuture<ILLMResult>> replies = new ArrayList<>();
     private final LLMInteractionSettings settings = LLMInteractionSettings.defaults();
     private final LLMInteractionService service = new LLMInteractionService(models,
-            LLMInteractionSettings::defaults, runtime, runtime.scheduler);
+            LLMInteractionSettings::defaults, runtime, runtime.scheduler, new JsonLLMTokenEstimator(new ObjectMapper()), logger);
 
     /** 登记每次真实模型尝试，由用例手动完成供应商响应。 */
     LLMInteractionServiceTest() {
@@ -393,12 +396,15 @@ class LLMInteractionServiceTest {
         }
     }
 
-    /** 验证已开始的模型失败计入尝试且不自动重试，不输出原始异常文本。 */
+    /** 2026/11/02：模型 HTTP 失败只记录状态、类型和关联，不重试或导出敏感正文。 */
     @Test void recordsFailedAttemptWithoutRetryOrRawException() {
         try (var parent = runtime.parent(settings.limits())) {
-            var pending = service.interact(prompt(), new LLMToolSet(new ObjectMapper(), List.of()), context(parent));
+            var trusted = context(parent);
+            var pending = service.interact(prompt(), new LLMToolSet(new ObjectMapper(), List.of()), trusted);
             runtime.runAll();
-            replies.getLast().completeExceptionally(new IllegalStateException("测试敏感异常"));
+            var http = org.springframework.web.reactive.function.client.WebClientResponseException.create(400, "测试敏感异常",
+                    new org.springframework.http.HttpHeaders(), "测试敏感异常".getBytes(java.nio.charset.StandardCharsets.UTF_8), java.nio.charset.StandardCharsets.UTF_8);
+            replies.getLast().completeExceptionally(new IllegalStateException("测试敏感异常", http));
             runtime.runAll();
             var result = pending.toCompletableFuture().join();
             assertEquals(FAILED, result.status());
@@ -406,6 +412,13 @@ class LLMInteractionServiceTest {
             assertTrue(result.attempts().getFirst().response().isEmpty());
             assertFalse(result.toString().contains("测试敏感异常"));
             assertEquals(1, prompts.size());
+            var diagnostic = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(logger).error(eq(LLMInteractionService.class.getName()), diagnostic.capture());
+            assertTrue(diagnostic.getValue().contains("请求=" + trusted.requestId()));
+            assertTrue(diagnostic.getValue().contains("阶段=模型请求"));
+            assertTrue(diagnostic.getValue().contains("HTTP状态=400"));
+            assertTrue(diagnostic.getValue().contains("WebClientResponseException"));
+            assertFalse(diagnostic.getValue().contains("测试敏感异常"));
         }
     }
 

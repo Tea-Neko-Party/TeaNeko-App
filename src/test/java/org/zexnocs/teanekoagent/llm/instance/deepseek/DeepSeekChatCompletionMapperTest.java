@@ -19,12 +19,32 @@ import java.util.Map;
 /**
  * DeepSeek Chat Completion 请求与响应映射测试。
  * <br>验证参与者名称、可选请求字段和供应商推理内容的映射边界。
+ * <br>2026/11/02：验证推理强度使用顶层字段，独立配置时不生成缺失 type 的 thinking 对象。
  *
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
+ * @version 4.6.0-l
  */
 class DeepSeekChatCompletionMapperTest {
+    /** 2026/11/02：复现只有推理强度配置时的真实请求格式，并核对显式思考开关的独立语义。 */
+    @Test
+    void reasoningEffortUsesTopLevelFieldWithoutIncompleteThinking() {
+        var options = LLMModelOptions.builder().provider("deepseek").model("deepseek-flash").maxTokens(16384)
+                .metadata(Map.of(DeepSeekModelOptions.REASONING_EFFORT_METADATA, "medium")).build();
+        var prompt = new LLMPrompt(List.of(LLMUserMessage.builder().contents(text("你好")).build()), options);
+        var mapper = new ObjectMapper();
+        var request = DeepSeekChatCompletionMapper.toRequest(prompt, options, "https://api.deepseek.com", "/chat/completions", "测试凭据");
+        var json = mapper.readTree(mapper.writeValueAsString(request));
+        Assertions.assertEquals("medium", json.path("reasoning_effort").stringValue());
+        Assertions.assertFalse(json.has("thinking"));
+        options.setThinking(true);
+        var enabled = DeepSeekChatCompletionMapper.toRequest(prompt, options, "https://api.deepseek.com", "/chat/completions", "测试凭据");
+        var enabledJson = mapper.readTree(mapper.writeValueAsString(enabled));
+        Assertions.assertEquals("enabled", enabledJson.path("thinking").path("type").stringValue());
+        Assertions.assertEquals("medium", enabledJson.path("reasoning_effort").stringValue());
+        Assertions.assertFalse(enabledJson.path("thinking").has("reasoning_effort"));
+    }
     /**
      * 验证非空参与者名称会写入 system、user 和 assistant 请求消息。
      */

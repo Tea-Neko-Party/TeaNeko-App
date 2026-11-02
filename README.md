@@ -35,6 +35,8 @@ TeaNeko App 是专注于多平台聊天机器人的架构，允许扩展平台�
 
 v4.6.0-l 的插件开发见 [插件指南](docs/development/plugins/README.md)，按 Core、Agent 和管理扩展划分，包含已编译的工具、组件、System、事件与异步环绕示例。
 
+版本功能与升级说明见 [发布日志](docs/changelog/README.md)，当前计划及已完成记录见 [计划索引](docs/plan/README.md)。
+
 ## ⚙️ 平台客户端部署
 该项目的应用端口位于 `src/main/resources/application.properties` 中 `server.port` 配置，默认为 `6691`。
 

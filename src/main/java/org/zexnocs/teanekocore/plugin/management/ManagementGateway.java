@@ -3,8 +3,10 @@ package org.zexnocs.teanekocore.plugin.management;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
+
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 传输无关的插件管理路由；没有显式授权适配器时拒绝所有管理访问。

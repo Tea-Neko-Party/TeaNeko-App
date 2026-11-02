@@ -1,11 +1,17 @@
 package org.zexnocs.teanekoagent.plugin;
 
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentComponents;
+import org.zexnocs.teanekoagent.agent.IAgentRegistry;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
-import org.zexnocs.teanekocore.plugin.management.*;
-import java.util.*;
-import java.util.concurrent.*;
+import org.zexnocs.teanekocore.plugin.management.ManagementContext;
+import org.zexnocs.teanekocore.plugin.management.ManagementResource;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 提供已注册实例及能力的脱敏全局管理视图，不反射导出组件值、记忆或运行控制。
@@ -41,8 +47,8 @@ public final class AgentManagementResource implements ManagementResource<AgentMa
      */
     @Override public CompletionStage<List<View>> execute(ManagementContext context, Query query) {
         context.control().checkActive();
-        return CompletableFuture.completedStage(registry.snapshots().stream().sorted(Comparator.comparing(value -> value.id().value().toString()))
-                .filter(value -> query.after() == null || value.id().value().toString().compareTo(query.after()) > 0).limit(query.limit())
+        return CompletableFuture.completedStage(registry.snapshots().stream().sorted(Comparator.comparing(value -> value.id().value()))
+                .filter(value -> query.after() == null || value.id().value().compareTo(query.after()) > 0).limit(query.limit())
                 .map(value -> {
                     var definition = value.require(AgentComponents.DEFINITION);
                     return new View(value.id(), definition.id(), definition.features(), plugins.featureIds(), value.require(AgentComponents.CLOSED));

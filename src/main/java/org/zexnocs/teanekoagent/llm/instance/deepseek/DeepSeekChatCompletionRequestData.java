@@ -15,10 +15,12 @@ import java.util.Map;
  * DeepSeek 对话补全 API 请求数据。
  * <br>该类通过 {@link org.zexnocs.teanekocore.api_response.APIResponseService} 发送请求。
  * <br>base URL、API path 与 API key 来自运行时配置，不参与 JSON 请求体序列化。
+ * <br>2026/11/02：推理强度使用顶层 reasoning_effort，与 thinking.type 独立映射。
  *
  * @author zExNocs
  * @date 2026/06/08
  * @since 4.4.0
+ * @version 4.6.0-l
  */
 @Getter
 @Setter
@@ -69,6 +71,10 @@ public class DeepSeekChatCompletionRequestData implements IAPIRequestData {
      * <br>DeepSeek 文档中该字段为对象结构，例如 {@code {"type":"enabled"}}。
      */
     private Map<String, Object> thinking;
+
+    /** 2026/11/02：思考强度是顶层请求字段，不能嵌入 thinking 对象。 */
+    @JsonProperty("reasoning_effort")
+    private String reasoningEffort;
 
     /**
      * 最大输出 token 数量。
