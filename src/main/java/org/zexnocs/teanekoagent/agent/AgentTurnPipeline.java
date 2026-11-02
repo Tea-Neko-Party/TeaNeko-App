@@ -34,14 +34,17 @@ import java.util.function.Function;
 /**
  * 预编译准入、临时输入、交互和交付步骤；业务检查及投影校验统一切入借用执行器。
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
+ * <br>2026/11/02：在准入之后及交互之后运行受控插件 System，等待决策与异步环绕。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 final class AgentTurnPipeline {
-    final SystemPipeline pipeline;
+    SystemPipeline pipeline;
+    // 2026/11/02：插件仅在服务开始接受轮次前安装，运行期目录及步骤不再变化。
+    private org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins;
     private final Function<EntityId, AgentTurn> turns;
     private final AgentAccessGate gate;
     private final ILLMInteractionService interactions;
@@ -77,16 +80,57 @@ final class AgentTurnPipeline {
         this.tools = tools; this.mapper = mapper; this.executor = executor;
         this.references = references;
         this.prompts = prompts; this.personalities = personalities; this.history = history; this.summaries = summaries; codec = new LLMMessageCodec(mapper);
-        pipeline = SystemPipeline.compile(List.of(
+        // 2026/11/02：独立构造默认仍编译原四步，宿主安装插件后重新编译一次。
+        pipeline = compile();
+    }
+
+    /**
+     * 安装能力目录并编译明确的扩展位置，不替换核心步骤。
+     * @param plugins 插件组合器
+     */
+    void installPlugins(org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins) {
+        this.plugins = Objects.requireNonNull(plugins); pipeline = compile();
+    }
+
+    /**
+     * 编译稳定宿主步骤及插件数据写入范围。
+     * @return 已校验顺序的管线
+     */
+    private SystemPipeline compile() {
+        var steps = new java.util.ArrayList<IEntitySystem>();
+        if (plugins != null) {
+            var writes = new java.util.HashSet<>(plugins.componentKeys()); writes.add(org.zexnocs.teanekoagent.plugin.AgentPluginRuntime.SELECTION);
+            steps.add(new Step(new SystemDescriptor("agent.plugins.prepare", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
+                    writes, Set.of("agent.admit")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_PROMPT)));
+            steps.add(new Step(new SystemDescriptor("agent.plugins.review", Set.of(AgentComponents.INTERACTION),
+                    writes, Set.of("agent.interact")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.AFTER_INTERACTION)));
+        }
+        steps.addAll(List.of(
                 new Step(new SystemDescriptor("agent.admit", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.SCOPE_POLICY), Set.of(), Set.of()), this::admit),
                 new Step(new SystemDescriptor("agent.prompt", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
-                        Set.of(AgentComponents.PROMPT_INPUT), Set.of("agent.admit")), this::preparePrompt),
+                        Set.of(AgentComponents.PROMPT_INPUT), Set.of(plugins == null ? "agent.admit" : "agent.plugins.prepare")), this::preparePrompt),
                 new Step(new SystemDescriptor("agent.interact", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.ACTOR, AgentComponents.ACTIVITY, AgentComponents.INSTANCE, AgentComponents.DEFINITION, AgentComponents.PROMPT_INPUT),
                         Set.of(AgentComponents.INTERACTION, AgentComponents.PROMPT_TRANSCRIPT), Set.of("agent.prompt")), this::interact),
                 new Step(new SystemDescriptor("agent.complete", Set.of(AgentComponents.INTERACTION),
-                        Set.of(AgentComponents.OUTCOME), Set.of("agent.interact")), this::complete)));
+                        Set.of(AgentComponents.OUTCOME), Set.of(plugins == null ? "agent.interact" : "agent.plugins.review")), this::complete)));
+        return SystemPipeline.compile(steps);
+    }
+
+    /**
+     * 2026/11/02：插件步骤前后复核宿主准入，停止决定不能绕过最终提交后仍形成成功。
+     * @param context 本轮组件和控制
+     * @param phase 明确插件阶段
+     * @return 允许继续的组件补丁，拒绝通过原上下文终止路径传播
+     */
+    private CompletionStage<SystemResult> pluginStep(SystemContext context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase phase) {
+        var turn = turns.apply(context.snapshot().id());
+        return guard(turn, false).thenComposeAsync(ignored -> phase == org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_PROMPT
+                ? plugins.prepare(context) : plugins.runSystems(phase, context), executor).thenComposeAsync(result -> {
+            if (result.outcome() == SystemResult.Outcome.STOP) { return turn.rejectContext(new AgentPromptException(AgentPromptException.Reason.DISABLED)); }
+            return guard(turn, false).thenApply(ignored -> result);
+        }, executor).exceptionallyCompose(turn::rejectContext);
     }
 
     /**
@@ -122,14 +166,18 @@ final class AgentTurnPipeline {
                 if (expected != null && (personality == null || !expected.equals(personality.identity()))) {
                     throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
                 }
-                return context.control().guard(Objects.requireNonNull(prompts.resolve(turn.handle.definition(), request,
-                        context.snapshot().require(AgentComponents.RUNTIME), context.control()), "Prompt 资料端口不能返回空阶段。")
+                // 2026/11/02：异步环绕与事件完成后才预算裁剪，继续使用原人格及来源复核。
+                java.util.function.Supplier<CompletionStage<List<org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment>>> source = () ->
+                        Objects.requireNonNull(prompts.resolve(turn.handle.definition(), request,
+                                context.snapshot().require(AgentComponents.RUNTIME), context.control()), "Prompt 资料端口不能返回空阶段。");
+                return context.control().guard((plugins == null ? source.get() : plugins.prepareFragments(context, source))
                         .thenApply(values -> {
                             if (values == null || values.size() > 32) { throw new IllegalArgumentException("Prompt 资料列表范围无效。"); }
                             return List.copyOf(values);
                         })).thenComposeAsync(fragments -> {
                 context.control().checkActive(); turn.guard(gate, false);
-                var input = AgentPromptInput.bounded(request.messages(), fragments, request.inputMaxBytes(), codec, personality, request.summary());
+                var layout = AgentPromptInput.bounded(request.messages(), fragments, request.inputMaxBytes(), codec, personality, request.summary());
+                var input = plugins == null ? layout : plugins.stamp(layout, context.snapshot());
                 return verifyPrompt(turn, request, input).thenApplyAsync(ignored -> {
                     turn.guard(gate, false);
                     return SystemResult.continueWith(ComponentPatch.builder().put(AgentComponents.PROMPT_INPUT, input).build());
@@ -147,8 +195,8 @@ final class AgentTurnPipeline {
     private static AgentRunRequest fixedRequest(EntitySnapshot snapshot) {
         var request = snapshot.require(AgentComponents.REQUEST);
         var reference = snapshot.find(AgentComponents.MEMORY_REFERENCE).orElse(null);
-        return Objects.equals(reference, request.memoryReference()) ? request : new AgentRunRequest(request.requestId(), request.actor(), request.activity(),
-                request.messages(), request.conversation(), reference, request.userText(), request.inputMaxBytes(), request.personalityIdentity(), request.summary());
+        // 2026/11/02：与插件上下文复用同一固定引用派生逻辑。
+        return request.withMemoryReference(reference);
     }
 
     /**
@@ -184,7 +232,23 @@ final class AgentTurnPipeline {
             selected = definition.activities().contains(AgentActivity.TOOL)
                     ? List.copyOf(tools.select(definition, toolRequest, runtime, input)) : List.of();
         } catch (AgentPromptException rejected) { return turn.rejectContext(rejected); }
-        boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null || input.summary() != null;
+        // 2026/11/02：筛选决策必须完成且仍有效后才能启动交互。
+        return (plugins == null ? CompletableFuture.completedStage(selected) : plugins.selectTools(context, selected))
+                .exceptionallyCompose(turn::rejectContext).thenComposeAsync(values -> beginInteraction(context, values), executor);
+    }
+
+    /**
+     * 使用已经冻结的工具启动原交互，插件结果仍通过逐次准入及来源检查。
+     * @param context 可信组件与借用控制
+     * @param selected 已冻结工具
+     * @return 原交互完成阶段
+     */
+    private CompletionStage<SystemResult> beginInteraction(SystemContext context, List<LLMToolBinding> selected) {
+        var turn = turns.apply(context.snapshot().id());
+        var request = context.snapshot().require(AgentComponents.REQUEST);
+        var runtime = context.snapshot().require(AgentComponents.RUNTIME);
+        var input = context.snapshot().require(AgentComponents.PROMPT_INPUT);
+        boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null || input.summary() != null || !input.plugins().isEmpty();
         var bound = selected.stream().map(binding -> !guarded
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))
                 : binding.guardedAsync((call, trusted) -> guard(turn, true), executor)).toList();
@@ -201,7 +265,7 @@ final class AgentTurnPipeline {
                         turn.observe(result, null); return result;
                     }).thenApplyAsync(result -> {
                         var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
-                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null)) {
+                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null || !input.plugins().isEmpty())) {
                             var projection = AgentPromptTranscript.create(input, result, codec); turn.observe(result, projection);
                             patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
                         }
@@ -264,7 +328,8 @@ final class AgentTurnPipeline {
                 checked = checked.thenComposeAsync(ignored -> Objects.requireNonNull(summaries, "实际摘要端口不能为空。")
                         .verify(request, input.summary(), turn.control()), executor);
             }
-            return turn.control().guard(checked.thenComposeAsync(ignored -> input.fragments().isEmpty() ? CompletableFuture.completedStage(null)
+            // 2026/11/02：没有资料的工具或组件插件也必须复核调用版本。
+            return turn.control().guard(checked.thenComposeAsync(ignored -> input.fragments().isEmpty() && input.plugins().isEmpty() ? CompletableFuture.completedStage(null)
                     : Objects.requireNonNull(prompts.verify(request, input, turn.control()), "Prompt 来源复核不能返回空阶段。"), executor))
                 .exceptionallyCompose(turn::rejectContext); }
         catch (RuntimeException failure) { return turn.rejectContext(failure); }

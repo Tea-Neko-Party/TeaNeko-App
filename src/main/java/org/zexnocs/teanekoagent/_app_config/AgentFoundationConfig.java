@@ -14,11 +14,12 @@ import org.zexnocs.teanekocore.logger.ILogger;
 
 /**
  * 装配 Agent 实例底座和检查端口，不创建默认 Agent、注册 scope 或启动后台工作。
+ * <br>2026/11/02：默认实例工厂接入插件能力装配。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentFoundationConfig {
@@ -29,11 +30,21 @@ public class AgentFoundationConfig {
     @Bean(destroyMethod = "close") public IAgentRegistry agentRegistry() { return new AgentRegistry(); }
 
     /**
-     * 注入实例工厂，不触发任何配置检查或模型调用。
+     * 2026/11/02：保留显式无插件的独立构造，Spring 默认使用下方插件工厂。
      * @param registry 实例拥有者
      * @return 独立实例工厂
      */
-    @Bean public IAgentFactory agentFactory(IAgentRegistry registry) { return new AgentFactory(registry); }
+    public IAgentFactory agentFactory(IAgentRegistry registry) { return new AgentFactory(registry); }
+
+    /**
+     * 2026/11/02：为 Spring 应用提供带能力装配的工厂，独立旧入口保持可用。
+     * @param registry 实例拥有者
+     * @param plugins 插件能力目录
+     * @return 插件化实例工厂
+     */
+    @Bean(name = "agentFactory") public IAgentFactory agentPluginFactory(IAgentRegistry registry, org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins) {
+        return new AgentFactory(registry, plugins);
+    }
 
     /**
      * 装配懒执行的就绪检查，不在构造阶段读取配置。

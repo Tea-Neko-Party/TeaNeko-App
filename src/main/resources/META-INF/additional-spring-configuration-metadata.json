@@ -11,6 +11,17 @@
   ],
   "properties": [
     {
+      "name": "tea-neko.plugins.disabled",
+      "type": "java.util.List<java.lang.String>",
+      "description": "启动时逻辑禁用的插件ID列表；运行期开关不自动写回，宿主基础模块不可关闭。"
+    },
+    {
+      "name": "tea-neko.plugins.example.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": false,
+      "description": "是否装配时钟插件示例；启用后仍需 AgentDefinition 显式选择 example.clock:clock 能力。"
+    },
+    {
       "name": "tea-neko.agent.memory.recall.injection-limit",
       "type": "java.lang.Integer",
       "defaultValue": 12,

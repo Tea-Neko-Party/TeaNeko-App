@@ -1,12 +1,12 @@
 # Agent 部署与最终验收
 
-代码与离线契约已交付；以下实机步骤尚未在本次工作区执行，不能由编译或 FakeClient 推断已通过。运行基线为 JDK 25、Gradle Wrapper 9.8.0、Spring Boot 4.1.2。计划版本为 4.5.0-l；版本文件仍为 4.4.1，构建产物名以版本文件为准，本次不自动提交、打标签、推送或发布。
+代码与离线契约已交付；以下实机步骤尚未在本次工作区执行，不能由编译或 FakeClient 推断已通过。运行基线为 JDK 25、Gradle Wrapper 9.8.2、Spring Boot 4.1.2。计划版本为 4.5.0-l；版本文件仍为 4.4.1，构建产物名以版本文件为准，本次不自动提交、打标签、推送或发布。
 
 ## 首次安装
 
 1. 准备 MySQL 与 Java 25。按实际环境配置 Spring datasource、账号及连接地址；默认驱动为 MySQL Connector/J，不把 JDBC URL 类型与其他数据库混用。
 2. 首次安装执行 `./gradlew copyTemplatesToConfig`，根据模板创建本地 config。已有部署先备份配置，核对复制任务的覆盖范围，不用模板覆盖真实凭据。
-3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md)在 config/agent/main-config.yml 选择已注册适配器，在 model.yml 填写实际模型。凭据只放 Spring application/环境变量，禁止写入聊天或模型 metadata；本文不指定生产模型。
+3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、api-key、连接与 metadata，可使用 `${环境变量:默认值}`。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
 4. 核对活动 Profile。当前 application 默认通过 springProfile 取 dev；生产启动须显式选择 prod 或实际部署 Profile，配置数据库及网络边界。启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
 5. 执行 `./gradlew bootJar`，以 `java -jar build/libs/TeaNeko-App-<实际版本>.jar --spring.profiles.active=prod` 启动。普通 plain.jar 不是可执行部署包。Spring 及客户端启动日志不得泄漏凭据。
 6. 在真实作用域执行 `/cfg reg agent`，再用 `/agent status` 检查登记；默认最低被动模式。先验证 `/agent chat 你好`，再按[平台说明](../../src/main/java/org/zexnocs/teanekoagent/adapter/platform/README.md)启用自动图文或 ACTIVE 候选。命令工具保持默认关闭，确需启用时由 OWNER 操作。
@@ -17,7 +17,7 @@
 
 用户已明确 Agent 尚未上线，新版直接使用新表，不迁移、读取或删除旧 general_data/llm_related/历史表中的 Agent 数据；需要登记的 scope 在新版重新注册。不要为本次升级清理共用业务表。旧 Java 包及其专属测试已删除，内部 Client ID 保留，外部 Java 调用改用[新版三类 Sender/直接服务](../../src/main/java/org/zexnocs/teanekoagent/client/README.md)。
 
-新版主配置只使用 enabled 与 default-model-id，旧 thinking-enabled/max-thinking-steps/max-thought-summary-length/include-thoughts-in-output 不再代表实际执行能力；次数、工具轮数、token 预算和时限统一使用 tea-neko.llm.interaction，见[交互配置](../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/README.md)。旧 token-monitor.yml 模板已退役，新监控使用 application 的 tea-neko.agent.monitor；不再保存旧原始 Prompt 快照，脱敏窗口、阈值及冷却见[监控说明](../../src/main/java/org/zexnocs/teanekoagent/agent/monitor/README.md)。
+主配置只使用 enabled；default-model-id 已统一移入 model.yml。旧 thinking-enabled/max-thinking-steps/max-thought-summary-length/include-thoughts-in-output 不再代表实际执行能力；轮次、工具预算和时限仍是独立运行策略，使用 tea-neko.llm.interaction，见[交互配置](../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/README.md)。旧 application 供应商 api-key/base-url/api-path 应移到同一 model.yml 条目；敏感加载错误脱敏，读取不写回，显式保存会写入当前已解析值。旧 token-monitor.yml 模板已退役，监控使用 tea-neko.agent.monitor，见[监控说明](../../src/main/java/org/zexnocs/teanekoagent/agent/monitor/README.md)。
 
 人格、记忆、历史、摘要、Skill、任务各自的当前配置只在[模块索引](../../src/main/java/org/zexnocs/teanekoagent/README.md)指向的文档维护。密钥错误或路由缺失应只让 Agent 不可执行，不阻止其他机器人功能；固定配置后按现有文件重载流程恢复。
 

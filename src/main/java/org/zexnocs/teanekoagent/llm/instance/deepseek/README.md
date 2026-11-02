@@ -34,7 +34,7 @@ models:
       deepseek.streamIncludeUsage: true
 ```
 
-密钥由 Spring 凭据端口在请求边界取得；可选连接覆盖同样只取 Spring。详见 [配置与迁移说明](../../file_config/README.md)。`body.*` 仍用于非敏感请求字段，认证字段会被拒绝。
+密钥与连接从统一 model.yml 的可信凭据端口取得，Core YAML 支持环境占位符。详见[配置说明](../../file_config/README.md)。`body.*` 只用于非敏感请求字段，认证字段会被拒绝。
 
 # 三. 参数映射
 

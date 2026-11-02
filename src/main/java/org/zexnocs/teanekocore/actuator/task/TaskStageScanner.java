@@ -18,11 +18,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 扫描任务阶段和其命名空间，并注册到 scanner 的容器中。
+ * <br>2026/11/02：同优先级阶段按 Bean 名稳定排序。
  *
- * @see TaskStage
- * @see ITaskStage
  * @author zExNocs
  * @date 2026/02/12
+ * @since 4.0.2
+ * @version 4.6.0-l
+ * @see TaskStage
+ * @see ITaskStage
  */
 @Service
 public class TaskStageScanner extends AbstractScanner {
@@ -32,6 +35,11 @@ public class TaskStageScanner extends AbstractScanner {
     private final IBeanScanner iBeanScanner;
     private final ILogger iLogger;
 
+    /**
+     * 2026/11/02：补充扫描及诊断依赖合同。
+     * @param iBeanScanner 原 Bean 扫描器
+     * @param iLogger 项目日志
+     */
     public TaskStageScanner(IBeanScanner iBeanScanner, ILogger iLogger) {
         this.iBeanScanner = iBeanScanner;
         this.iLogger = iLogger;
@@ -58,6 +66,7 @@ public class TaskStageScanner extends AbstractScanner {
                 .toList();
     }
 
+    /** 2026/11/02：扫描阶段归属并生成稳定顺序，不执行阶段业务。 */
     @Override
     protected synchronized void _scan() {
         // 获取所有带有TaskStage注解的Bean
@@ -70,7 +79,7 @@ public class TaskStageScanner extends AbstractScanner {
             return;
         }
         // 将所有扫描出来的任务阶段类加入到命名空间对应的列表中
-        taskStageBeans.values().forEach(pair -> {
+        taskStageBeans.forEach((beanName, pair) -> {
             var annotation = pair.first();
             var taskStage = pair.second();
             // 获取命名空间
@@ -80,7 +89,7 @@ public class TaskStageScanner extends AbstractScanner {
             for (var namespace: namespaces) {
                 var taskStageList = taskStages.computeIfAbsent(namespace,
                         k -> new CopyOnWriteArrayList<>());
-                taskStageList.add(new TaskStageWrapper(taskStage, priority));
+                taskStageList.add(new TaskStageWrapper(taskStage, priority, beanName));
             }
         });
 
@@ -99,12 +108,26 @@ public class TaskStageScanner extends AbstractScanner {
 
     /**
      * 包装类，用于比较任务阶段的优先级。
+     * <br>2026/11/02：相同优先级比较稳定注册名。
+     * @param taskStage 阶段实现
+     * @param priority 优先级
+     * @param beanName 注册名
+     * @author zExNocs
+     * @date 2026/02/12
+     * @since 4.0.2
+     * @version 4.6.0-l
      */
-    private record TaskStageWrapper(ITaskStage taskStage, int priority) implements Comparable<TaskStageWrapper> {
+    private record TaskStageWrapper(ITaskStage taskStage, int priority, String beanName) implements Comparable<TaskStageWrapper> {
+        /**
+         * 按优先级降序、注册名升序排序。
+         * @param o 另一阶段
+         * @return 排序结果
+         */
         @Override
         public int compareTo(TaskStageWrapper o) {
-            // 优先级大的排在前面
-            return Integer.compare(o.priority(), priority());
+            // 2026/11/02：不依赖容器 Map 的迭代顺序。
+            int result = Integer.compare(o.priority(), priority());
+            return result != 0 ? result : beanName.compareTo(o.beanName);
         }
     }
 }

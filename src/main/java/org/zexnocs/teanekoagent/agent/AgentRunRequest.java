@@ -13,6 +13,7 @@ import java.util.UUID;
 
 /**
  * 宿主规范化的一次请求，不接受模型提供的身份、执行器或配置绑定。
+ * <br>2026/11/02：统一派生实际空间引用，插件与核心步骤使用同一固定请求语义。
  * @param requestId 宿主生成的请求标识，不自动提供跨请求幂等
  * @param actor 可信发起者、来源和目标
  * @param activity 本次业务活动类别
@@ -26,12 +27,21 @@ import java.util.UUID;
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity,
                               List<ILLMMessage> messages, @Nullable AgentConversationStamp conversation,
                               @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes,
                               @Nullable String personalityIdentity, @Nullable AgentSummarySnapshot summary) {
+    /**
+     * 2026/11/02：仅替换宿主已经解析的空间引用，完整保留身份和其余输入；此方法不授予空间访问权。
+     * @param reference 实际固定引用，独立无记忆模式为空
+     * @return 引用相同时返回原对象，否则返回重新冻结的请求
+     */
+    public AgentRunRequest withMemoryReference(@Nullable MemoryNamespaceReference reference) {
+        return Objects.equals(memoryReference, reference) ? this : new AgentRunRequest(requestId, actor, activity, messages,
+                conversation, reference, userText, inputMaxBytes, personalityIdentity, summary);
+    }
     /**
      * 保留尚未采用会话摘要的完整构造。
      * @param requestId 原请求

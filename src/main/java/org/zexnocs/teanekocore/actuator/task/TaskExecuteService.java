@@ -22,13 +22,42 @@ import java.util.concurrent.TimeUnit;
 /**
  * 任务执行服务。
  * v4.0.8: 新增 AOP 处理 TaskStage namespace
+ * <br>2026/11/02：同步任务阶段接入插件启停检查，原调用栈保持单线程。
  *
  * @author zExNocs
  * @date 2026/02/11
  * @since 4.0.0
+ * @version 4.6.0-l
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {
+    // 2026/11/02：插件只包装阶段调用，不在异步回调中推进同步游标。
+    private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
+
+    /**
+     * 安装任务阶段归属守卫。
+     * @param access 插件入口
+     */
+    @Autowired
+    public void installPluginAccess(org.zexnocs.teanekocore.plugin.PluginAccess access) { this.pluginAccess = access; }
+
+    /**
+     * 包装插件阶段，禁用时继续下一阶段，宿主阶段沿用原对象。
+     * @param stage 原同步阶段
+     * @return 当前任务独立的调用适配
+     */
+    private org.zexnocs.teanekocore.actuator.task.api.ITaskStage guardedStage(org.zexnocs.teanekocore.actuator.task.api.ITaskStage stage) {
+        if (pluginAccess == null) { return stage; }
+        return chain -> {
+            try {
+                var method = stage.getClass().getMethod("process", TaskStageChain.class);
+                if (!pluginAccess.enabled(stage, method)) { return chain.next(); }
+                var token = pluginAccess.capture(stage, method);
+                var result = stage.process(chain); pluginAccess.check(token); return result;
+            } catch (RuntimeException failure) { throw failure; }
+            catch (Exception failure) { throw new IllegalStateException("插件任务阶段执行失败。", failure); }
+        };
+    }
     /// 虚拟线程池
     private final ExecutorService virtualExecutor;
 
@@ -41,6 +70,13 @@ public class TaskExecuteService implements ITaskExecuteService {
     /// task service
     private final ITaskService iTaskService;
 
+    /**
+     * 2026/11/02：说明原任务依赖，不创建第二套线程或阶段目录。
+     * @param virtualExecutor 原执行器
+     * @param logger 项目日志
+     * @param taskStageScanner 阶段目录
+     * @param iTaskService 原完成服务
+     */
     @Autowired
     public TaskExecuteService(ExecutorService virtualExecutor,
                               ILogger logger,
@@ -118,7 +154,11 @@ public class TaskExecuteService implements ITaskExecuteService {
         task.setExecutingFuture(future);
     }
 
-    /// 构造任务的 stage chain。
+    /**
+     * 2026/11/02：构造本次任务的单线程阶段链并安装插件守卫。
+     * @param task 当前任务
+     * @return 本次独立阶段链
+     */
     private TaskStageChain _getTaskStageChain(ITask<?> task) {
         // 获取任务的阶段列表
         var config = task.getConfig();
@@ -132,10 +172,15 @@ public class TaskExecuteService implements ITaskExecuteService {
             taskStages = taskStageScanner.getTaskStages(namespace);
             config.setTaskStages(taskStages);
         }
-        return new TaskStageChain(task, taskStages);
+        // 2026/11/02：每次任务使用独立包装，不把启停快照写回共享配置。
+        return new TaskStageChain(task, taskStages.stream().map(this::guardedStage).toList());
     }
 
-    /// 执行一个任务阶段链，并报错告未处理的异常。
+    /**
+     * 在当前调用栈执行任务并提交同步结果，空结果保留外部异步完成方式。
+     * @param task 当前任务
+     * @param taskStageChain 本次独立链
+     */
     private void _executeTask(ITask<?> task, TaskStageChain taskStageChain) {
         try {
             // 执行任务。

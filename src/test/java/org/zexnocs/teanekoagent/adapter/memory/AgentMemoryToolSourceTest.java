@@ -40,10 +40,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 通过真实固定工具集校验记忆工具 schema、原始授权、逐动作身份、完整信封及默认装配。
+ * <br>2026/11/02：默认装配验收改为内置能力与宿主工具源共存。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Timeout(10)
 class AgentMemoryToolSourceTest {
@@ -247,18 +248,19 @@ class AgentMemoryToolSourceTest {
         assertFalse(mapper.readTree(valid).path("data").path("definitivelyEmpty").booleanValue());
     }
 
-    /** 验证默认装配真实注册一个工具源，自定义策略可替换，构造不访问配置或记忆。 */
-    @Test void defaultSpringSourceIsLazyAndCanBeReplaced() {
+    /** 2026/11/02：验证内置能力与宿主工具源共存，装配不读取配置或记忆。 */
+    @Test void defaultSpringFeatureIsLazyAndCoexistsWithHostSource() {
         var policies = mock(IMemoryAccessPolicy.class); var budgets = mock(IMemoryRecallDefaults.class);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor(); var context = new AnnotationConfigApplicationContext()) {
             context.getBeanFactory().registerSingleton("memoryAccess", access); context.getBeanFactory().registerSingleton("memoryPolicy", policies);
             context.getBeanFactory().registerSingleton("memoryDefaults", budgets); context.getBeanFactory().registerSingleton("jsonMapper", mapper);
+            // 2026/11/02：新增总来源不能令内置能力退让。
+            IAgentToolSource custom = (definition, request, runtime) -> List.of(); context.getBeanFactory().registerSingleton("customTools", custom);
             context.getBeanFactory().registerSingleton("virtualExecutor", executor); context.register(MemoryToolConfig.class); context.refresh();
-            assertInstanceOf(AgentMemoryToolSource.class, context.getBean(IAgentToolSource.class)); verifyNoInteractions(access, policies, budgets); assertFalse(executor.isShutdown());
-        }
-        try (var context = new AnnotationConfigApplicationContext()) {
-            IAgentToolSource custom = (definition, request, runtime) -> List.of(); context.registerBean("customTools", IAgentToolSource.class, () -> custom);
-            context.register(MemoryToolConfig.class); context.refresh(); assertSame(custom, context.getBean(IAgentToolSource.class)); assertEquals(1, context.getBeansOfType(IAgentToolSource.class).size());
+            var feature = context.getBean(org.zexnocs.teanekoagent.plugin.AgentFeature.class);
+            assertEquals("teaneko.agent:builtin-tools", feature.key());
+            assertSame(custom, context.getBean(IAgentToolSource.class));
+            verifyNoInteractions(access, policies, budgets); assertFalse(executor.isShutdown());
         }
     }
 }

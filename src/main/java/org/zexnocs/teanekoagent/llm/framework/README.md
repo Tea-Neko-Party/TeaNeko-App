@@ -117,7 +117,7 @@ Prompt 本身保留既有容器语义；参数解析策略不等于数据冻结�
 
 调用方没有指定 options 时，会使用文件配置中的 default options；调用方只指定部分 options 时，未指定字段继续沿用文件 default options 或模型 base options。
 
-`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `config/agent/main-config.yml` 中的 `default-model-id`：
+`LLMModelService.call(prompt)` 会优先读取 prompt options 中的 `provider` 作为模型适配器 ID。`model` 只表示本次调用的具体模型名称，不参与适配器路由。如果 prompt 未指定 provider，则使用 `config/agent/model.yml` 中的 `default-model-id`：
 
 ```java
 var result = llmModelService.call(new LLMPrompt(messages))
@@ -125,7 +125,7 @@ var result = llmModelService.call(new LLMPrompt(messages))
         .join();
 ```
 
-Agent 主配置示例：
+统一模型文件的默认路由示例：
 
 ```yaml
 default-model-id: "deepseek"
@@ -158,9 +158,9 @@ models:
 
 `model` 是供应商侧具体模型名称，用于覆盖模型适配器代码里的默认值。例如 DeepSeek 适配器可以在代码中默认使用 `deepseek-v4-flash`，也可以在文件配置中把该默认模型名改为其他兼容模型。
 
-密钥只由 `ICredentialResolver` 在 HTTP 请求边界从 Spring application/环境变量解析，不进入 Options、Prompt 或组件。连接覆盖也只取 Spring 配置；Prompt 中的 endpoint 不会改变实际请求地址。旧 model.yml 中的 api-key/api/base-url 必须迁移，见 [配置与迁移说明](../file_config/README.md)。
+默认路由、调用参数、密钥、连接和 metadata 统一放在 model.yml，Core YAML 负责环境变量展开。密钥只由 `ICredentialResolver` 在 HTTP 请求边界取得，不进入 Options、Prompt 或组件；Prompt 中的 endpoint 不会改变实际请求地址。配置示例及旧 application 项的迁移见[配置说明](../file_config/README.md)。
 
-`IDefaultModelResolver` 属于 LLM 层，当前装配适配器读取 main-config.yml。文件配置不可用、模型条目缺失或模型名为空时明确失败，不静默回退。`call` 保持单次请求语义；工具返回后的再调用由上层交互服务负责。
+`IDefaultModelResolver` 属于 LLM 层，默认装配只读当前 model.yml。文件配置不可用、模型条目缺失或模型名为空时明确失败，不静默回退。`call` 保持单次请求语义；工具返回后的再调用由上层交互服务负责。
 
 扩展新供应商时，必须在 README 中补充该供应商的模型适配器 ID 映射，例如：
 

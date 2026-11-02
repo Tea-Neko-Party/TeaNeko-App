@@ -9,11 +9,12 @@ import java.util.stream.Collectors;
 /**
  * 一次不可变组件变更。相同类型的键重复写入时以后一次为准。
  * null 不作为组件值；删除必须显式调用 remove。
+ * <br>2026/11/02：增加组合补丁和复制只读组件的构建入口。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class ComponentPatch {
     private static final ComponentPatch EMPTY = new ComponentPatch(Map.of());
@@ -88,11 +89,12 @@ public final class ComponentPatch {
 
     /**
      * 在提交前收集类型安全变更，构建出的补丁与后续修改独立。
+     * <br>2026/11/02：支持组合补丁和按类型从快照复制组件。
      *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.0.0
-     * @version 4.5.0-l
+     * @version 4.6.0-l
      */
     public static final class Builder {
         private final Map<String, Change> changes = new LinkedHashMap<>();
@@ -101,6 +103,26 @@ public final class ComponentPatch {
          * 创建尚未提交的组件变更缓冲，不共享其他构建器的状态。
          */
         private Builder() {}
+
+        /**
+         * 2026/11/02：合并已经验证归属的补丁，保留键类型检查及显式删除。
+         * @param patch 不可变补丁
+         * @return 当前构建器
+         */
+        public Builder merge(ComponentPatch patch) {
+            Objects.requireNonNull(patch, "组件补丁不能为空。").changes.values().forEach(this::change); return this;
+        }
+
+        /**
+         * 2026/11/02：复制快照中的指定组件，不导出实体写权限。
+         * @param view 来源快照
+         * @param key 需要复制的键
+         * @param <T> 组件值类型
+         * @return 当前构建器
+         */
+        public <T> Builder copy(ComponentView view, ComponentKey<T> key) {
+            view.find(key).ifPresent(value -> put(key, value)); return this;
+        }
 
         /**
          * 校验组件类型并记录非空值；相同类型的键重复写入时保留最后一次变更。

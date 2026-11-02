@@ -11,7 +11,7 @@ import java.net.URI;
  * 日志和 JSON 只显示脱敏标记；认证值只交给 HTTP 请求对象。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -24,7 +24,7 @@ public final class LLMProviderAccess {
     private final @Nullable String apiPath;
 
     /**
-     * 校验可信 Spring 凭据及连接参数；拒绝非法认证值和可改变请求目标边界的地址。
+     * 校验可信配置端口已解析的凭据及连接参数，拒绝非法认证值和越界地址。
      *
      * @param apiKey 仅供认证边界使用的本地凭据，禁止进入日志或普通消息
      * @param baseUrl 可信配置指定的服务地址
@@ -34,7 +34,7 @@ public final class LLMProviderAccess {
     public LLMProviderAccess(String apiKey, @Nullable String baseUrl, @Nullable String apiPath) {
         if (apiKey == null || apiKey.isBlank() || apiKey.contains("${")
                 || apiKey.codePoints().anyMatch(c -> Character.isWhitespace(c) || Character.isISOControl(c))) {
-            throw new LLMConfigurationException("LLM API credential is missing or invalid in Spring configuration.");
+            throw new LLMConfigurationException("LLM API 凭据缺失或不合法。");
         }
         this.apiKey = apiKey;
         this.baseUrl = validateBaseUrl(baseUrl);
@@ -79,7 +79,7 @@ public final class LLMProviderAccess {
     @Override
     @JsonValue
     public String toString() {
-        return "LLMProviderAccess[redacted]";
+        return "LLMProviderAccess[已隐藏凭据]";
     }
 
     /**
@@ -103,7 +103,7 @@ public final class LLMProviderAccess {
             }
             return value.replaceFirst("/+$", "");
         } catch (IllegalArgumentException ignored) {
-            throw new LLMConfigurationException("Invalid LLM base-url in Spring configuration.");
+            throw new LLMConfigurationException("LLM 本地配置的 base-url 不合法。");
         }
     }
 
@@ -129,7 +129,7 @@ public final class LLMProviderAccess {
             }
             return value;
         } catch (IllegalArgumentException ignored) {
-            throw new LLMConfigurationException("Invalid LLM api-path in Spring configuration.");
+            throw new LLMConfigurationException("LLM 本地配置的 api-path 不合法。");
         }
     }
 }

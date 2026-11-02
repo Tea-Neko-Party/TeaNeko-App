@@ -60,7 +60,7 @@ commandToolsEnabled 默认 false，显式开启后也只向具有真实原生来
 
 ## 就绪状态与后续接入
 
-`IAgentReadiness.inspect` 依次检查本地开关/交互设置、模型路由/参数/能力和 Spring 凭据。只使用模型有效参数预检，不发起 HTTP；认证结果不会放进快照。状态区分 READY、LOCAL_DISABLED、LOCAL_CONFIG_UNAVAILABLE、MODEL_UNAVAILABLE 和 CREDENTIALS_UNAVAILABLE。日志仅记录固定中文阶段原因，不传递原始配置值和异常链。失败不缓存成永久全局关闭，配置源显式重载修正后可以重新检查；一个定义失败不影响其他有效定义。
+`IAgentReadiness.inspect` 依次检查本地开关/交互设置、模型路由/参数/能力和统一 model.yml 凭据。只使用模型有效参数预检，不发起 HTTP；认证结果不会放进快照。状态区分 READY、LOCAL_DISABLED、LOCAL_CONFIG_UNAVAILABLE、MODEL_UNAVAILABLE 和 CREDENTIALS_UNAVAILABLE。日志仅记录固定中文阶段原因，不传递原始配置值和异常链。失败不缓存成永久全局关闭，配置源显式重载修正后可以重新检查；一个定义失败不影响其他有效定义。
 
 Spring 组合根仅装配空注册表、工厂和检查端口，构造期间不访问配置/数据库，也不创建默认 Agent。配置和 scope 读取可能接触缓存或文件服务，调用方应在异步业务执行器中检查，不放在 Core `whileActive` 临界区。
 
@@ -184,7 +184,7 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 默认完整装配已接入 [基础人格与独立补正](../personality/README.md)。邮箱在历史装配前解析人格、协调身份并预留输入字节；独立轮次使用实际人格源复核提示。基础人格位于原前导 SYSTEM 规则之后，补正仅作为 USER 数据，均从正常历史投影中移除。基础内容或补正 key 切换会重建短期会话，其他 scope 的共享补正与长期记忆保留；补正 revision 的普通更新从下一轮生效。
 
-`IAgentPromptSource` 是可替换的异步资料端口，完整 Spring 装配默认使用 `AgentMemoryPromptSource` 自动读取真实记忆；自定义源可完整替换，显式不装配资料源时保持空策略。解析在业务执行域、初始门控及实际空间引用固定之后开始，等待属于原整轮时限，不另开模型预算或线程池。端口借用控制和执行器，不拥有它们。
+`IAgentPromptSource` 是异步资料端口。v4.6.0-l 完整 Spring 装配通过 builtin-memory 能力接入 `AgentMemoryPromptSource`，插件通过 AgentFeature 追加，旧总来源作为宿主额外资料，不再令内置源退让；直接构造的独立服务仍可显式使用空策略。解析在业务执行域、初始门控及实际空间引用固定之后开始，等待属于原整轮时限，不另开模型预算或线程池。各来源仅复核自己拥有的片段，原布局保留插件版本。端口借用控制和执行器，不拥有它们。
 
 默认源先通过 `MemoryAccessService` 按当前真实用户 UUID 读取本人画像，再使用剩余预算检索共享空间中其他主体的相关事实。相关性目前为当前独立原文（去首尾空白后 1–128 字符）的完整字面匹配，不做分词或语义检索；没有该短原文时只提供本人画像，不从历史猜问题。系统任务、无实际引用及初始关闭读取时不自动读用户资料；模型仍可在原授权下显式查询工具。
 
@@ -202,7 +202,7 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 ## 工具与动态门控
 
-`IAgentToolSource` 为本轮选择冻结绑定，不回退到全局全部工具；没有 TOOL 活动的定义不读取工具源。默认装配组合[记忆工具](../memory/access/README.md)、[原权限命令](../adapter/command/README.md)、[任务](../schedule/README.md)、[Skill](../skill/README.md)与显式启用的扩展；各能力保留独立开关、来源与预算。自定义工具源替换默认策略时须显式组合所需绑定，不扩大权限。
+`IAgentToolSource` 为本轮选择冻结绑定，不回退到全局全部工具；没有 TOOL 活动的定义不读取工具源。默认装配组合[记忆工具](../memory/access/README.md)、[原权限命令](../adapter/command/README.md)、[任务](../schedule/README.md)、[Skill](../skill/README.md)与显式启用的扩展；各能力保留独立开关、来源与预算。v4.6.0-l 的旧总工具源作为额外来源，插件由 AgentFeature 按实例选择追加；组合不能扩大权限，同名绑定明确拒绝。详见 [插件指南](../../../../../../../docs/development/plugins/agent.md)。
 
 `AgentRunRequest` 的可选 `AgentUserText` 独立承载当前真实用户消息原文，sourceId 必须与 actor 一致，不能用于系统任务。邮箱装配、引用交接与工具选择保留它，原文指纹参与 run/retry 冲突判断；缺失时不能从历史或模型消息中的“记住”前缀补授权。memory_query、memory_profile 和 memory_add 的参数、预算、明确格式及回执说明见 [记忆工具](../memory/access/README.md)。模型只能为新增选择事实/偏好类别，正文、主体、空间和原调用 ID 均由可信流程固定。
 

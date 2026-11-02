@@ -6,11 +6,12 @@ import java.lang.annotation.*;
  * 用于指定一个 {@link IFileConfigData} 的保存名字和路径。
  * <br>需要加在一个实现了 {@link IFileConfigData} 的类上。
  *
+ * @author zExNocs
+ * @date 2026/11/02
+ * @since 4.2.0
+ * @version 4.5.0-l
  * @see FileConfigType
  * @see IFileConfigData
- * @author zExNocs
- * @date 2026/03/12
- * @since 4.2.0
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
@@ -45,4 +46,11 @@ public @interface FileConfig {
      * @return {@link FileConfigType } 文件保存类型。
      */
     FileConfigType type() default FileConfigType.JSON;
+
+    /**
+     * 标记含敏感字段的本地配置；加载失败不记录原始异常，显式 YAML 写回保留当前只写字段。
+     * 普通 JSON 序列化仍遵守字段的只写声明，本地写回不作为通用导出通道。
+     * @return 是否启用敏感配置的文件处理边界
+     */
+    boolean sensitive() default false;
 }

@@ -33,7 +33,7 @@ models:
 
 模型路由只使用 `id: kimi`。`model` 可以覆盖为 `kimi-k2.7-code`、`kimi-k2.6` 或其他兼容模型名称。
 
-密钥及可选连接覆盖只取 Spring application/环境变量，详见 [配置与迁移说明](../../file_config/README.md)。
+密钥及可选连接覆盖统一读取 model.yml，可使用 Core YAML 环境占位符，详见[配置说明](../../file_config/README.md)。
 
 # 三. 调用流程
 

@@ -4,10 +4,7 @@
 # 新 Agent 的本地总开关；作用域仍须另行通过 /cfg 注册。
 enabled: true
 
-# 默认模型适配器 ID
-# 该 ID 用于 Agent 在本次 Prompt 没有指定 provider 时选择模型适配器
-# 为空字符串表示不设置默认模型，独立宿主须在 Prompt options 中明确指定；聊天不写入路由或凭据
-default-model-id: ""
+# 默认路由及全部模型配置统一放在 config/agent/model.yml。
 
 # 次数与时限使用 application 的 tea-neko.llm.interaction 配置，默认3次模型、2轮工具、6次工具执行。
 # 新版不生成或输出供应商内部思考内容；正式答案及运行状态由独立响应与监控接口提供。

@@ -44,6 +44,8 @@ FileConfigService.TEMPLATE_PATH // templates/config
 | `IFileConfigData` | 文件配置数据标记接口，继承 `Serializable`。实现类需要无参构造器。 |
 | `FileConfigType.JSON` | `.json` 文件，内置解析器支持带 `#` 注释的 JSON。 |
 | `FileConfigType.YAML` | `.yml` 文件。 |
+| YAML 环境占位符 | Core 在解析节点后统一展开 `${NAME}` / `${NAME:默认值}`；支持字符串、嵌套列表/Map，字段名不展开，缺失必需变量拒绝本次加载。 |
+| `@FileConfig(sensitive = true)` | 加载失败不记录原始异常；普通序列化受只写字段约束，显式本地 YAML 写回保留当前只写字段。 |
 | `IFileConfigService.get(Class<T>)` | 获取最后一次成功加载的配置实例。 |
 | `IFileConfigService.requireCurrent(Class<T>)` | 读取最近一次加载成功的数据，最新加载失败时明确拒绝。 |
 | `IFileConfigService.write(IFileConfigData)` | 写回配置文件并刷新缓存。 |
@@ -86,6 +88,7 @@ classpath:templates/config/teaneko/bot.json
 | 构造器中读取配置 | 如果在 Bean 构造器里读取配置，可能早于 reload 完成。建议依赖 `IReloadService` 或在 `ApplicationReadyEvent` 后读取。 |
 | 自定义解析器 | 同一个 `FileConfigType` 只应有一个解析器；重复注册时保留先扫描到的解析器并记录 warn。 |
 | 写入 | `write` 会创建父目录、写文件并更新缓存。 |
+| 占位符与写回 | 加载不自动改写文件；显式 write 写入当前对象，可能已展开环境变量。需要保留占位符时直接编辑原 YAML，不保存已解析对象覆盖模板。 |
 | 初始化顺序 | `FileTypeScanner` 的优先级高于 `FileConfigService`，保证解析器先注册。 |
 
 # 六. 兼容读取与严格读取
@@ -94,6 +97,8 @@ classpath:templates/config/teaneko/bot.json
 
 `requireCurrent(type)` 仅接受最近一次已完成加载成功的数据。解析失败、解析器缺失、空解析结果或根目录不可用时明确失败，不沿用残留旧值冒充当前成功。数据与该类型的加载状态作为同一缓存记录原子发布；不提供跨多个配置类型的事务快照。
 
-成功重载或写入会发布新的有效记录。失败记录保留最后有效值供 get 使用，只保存状态，不缓存原始异常或文件内容。严格读取的错误消息不包含配置值或原始解析异常链。根目录读取失败需要通过后续成功重载恢复；原始加载诊断仍由既有文件服务日志负责。
+成功重载或写入会发布新的有效记录。失败记录保留最后有效值供 get 使用，只保存状态，不缓存原始异常或文件内容。严格读取的错误消息不包含配置值或原始解析异常链。根目录读取失败需要通过后续成功重载恢复；敏感文件的原始解析异常不写入日志，其他文件继续保留原诊断。
+
+Spring 注入的 YAMLFileTypeParser 借用当前 Environment；直接调用无参构造时使用 StandardEnvironment。字符串替换发生在 YAML 结构解析之后，不把环境值解释为新属性、表达式或额外文档；声明为数字/布尔的字段由目标类型转换，未声明类型的 Map 值保持字符串。程序显式写回不重新解析占位符，也不会触发网络请求。
 
 自定义 IFileConfigService 实现若未提供严格状态支持，requireCurrent 明确拒绝，不能静默退回 get。新 Agent 使用严格读取主配置及模型配置，避免重载失败后继续执行；其他现有调用的读取语义保持兼容。

@@ -28,11 +28,12 @@ import java.util.function.Function;
 /**
  * 独立轮次的异步入口及资源拥有者，复用预编译管线与既有 LLM 交互服务。
  * 同实例可执行不同轮次；默认会话服务在本端口外组合队列与窗口，本类只拥有独立轮次。
+ * <br>2026/11/02：支持启动前安装插件管线，运行轮次仍复用原拥有和关闭路径。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -54,7 +55,22 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private final @Nullable IAgentConversationSummaries summaries;
     private final ConcurrentMap<EntityId, AgentTurn> turns = new ConcurrentHashMap<>();
     private final Object lifecycleLock = new Object();
-    private final SystemPipeline pipeline;
+    // 2026/11/02：仅在首次请求之前允许宿主完成插件装配。
+    private SystemPipeline pipeline;
+    private final AgentTurnPipeline executionPipeline;
+    private boolean started;
+
+    /**
+     * 在服务接受请求前安装插件，运行期间禁止替换步骤。
+     * @param plugins 能力组合器
+     * @throws IllegalStateException 当服务已经开始接收请求或关闭时
+     */
+    public void installPlugins(org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins) {
+        synchronized (lifecycleLock) {
+            if (started || closed) { throw new IllegalStateException("Agent 服务运行后不可替换插件管线。"); }
+            executionPipeline.installPlugins(plugins); pipeline = executionPipeline.pipeline;
+        }
+    }
     private boolean closed;
 
     /**
@@ -211,9 +227,11 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         this.prompts = Objects.requireNonNull(prompts, "Prompt 资料端口不能为空。");
         this.personalities = personalities;
         this.summaries = summaries;
-        pipeline = new AgentTurnPipeline(this::requireTurn, gate,
+        // 2026/11/02：保留步骤组合器，宿主只能在首次运行前安装插件并重新编译。
+        executionPipeline = new AgentTurnPipeline(this::requireTurn, gate,
                 Objects.requireNonNull(interactions, "交互端口不能为空。"), Objects.requireNonNull(tools, "工具源不能为空。"),
-                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor, this.references, prompts, personalities, history, summaries).pipeline;
+                Objects.requireNonNull(mapper, "JSON 校验器不能为空。"), executor, this.references, prompts, personalities, history, summaries);
+        pipeline = executionPipeline.pipeline;
     }
 
     /**
@@ -372,6 +390,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         }
         final boolean accepted;
         synchronized (lifecycleLock) {
+            // 2026/11/02：即使首个轮次立即结束，也不能在之后更换运行管线。
+            started = true;
             accepted = !closed;
             if (accepted) { turns.put(turn.entity.snapshot().id(), turn); }
         }

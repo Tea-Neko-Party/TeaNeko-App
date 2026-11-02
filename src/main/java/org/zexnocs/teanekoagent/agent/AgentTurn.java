@@ -29,11 +29,12 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 单轮的资源拥有者和诊断观察点，服务、控制和监听均不进入组件。
  * 组件写入由准备阶段或有序管线完成；取消后的诊断只观察，不提交迟到数据。
+ * <br>2026/11/02：轮次复制实例的不可变插件组件，后续写入互相隔离。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 final class AgentTurn implements AutoCloseable {
     final AgentHandle handle;
@@ -72,6 +73,9 @@ final class AgentTurn implements AutoCloseable {
                 .put(AgentComponents.INSTANCE, handle.id()).put(AgentComponents.DEFINITION, handle.definition())
                 .put(AgentComponents.REQUEST, request).put(AgentComponents.ACTOR, request.actor())
                 .put(AgentComponents.ACTIVITY, request.activity());
+        // 2026/11/02：只复制插件命名空间的数据，绝不复制实例关闭状态或执行资源。
+        var instance = handle.snapshot();
+        instance.keys().stream().filter(key -> key.id().startsWith("plugin.")).forEach(key -> initial.copy(instance, key));
         if (request.conversation() != null) {
             initial.put(AgentComponents.CONVERSATION, request.conversation());
         }

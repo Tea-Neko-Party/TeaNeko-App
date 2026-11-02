@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
  * 用临时文件和受控解析器验证最新加载状态，保留兼容读法并覆盖失败后恢复。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -33,6 +33,7 @@ class FileConfigCurrentReadTest {
     private final IClassScanner scanner = mock(IClassScanner.class);
     private final ILogger logger = mock(ILogger.class);
     private final IFileTypeParser parser = mock(IFileTypeParser.class);
+    private final FileConfig annotation = mock(FileConfig.class);
 
     /**
      * 只为当前临时文件装配真实服务，不扫描项目配置或连接数据库。
@@ -41,7 +42,6 @@ class FileConfigCurrentReadTest {
      */
     private FileConfigService service() throws Exception {
         Files.writeString(directory.resolve("current.yml"), "受控解析输入");
-        var annotation = mock(FileConfig.class);
         when(annotation.path()).thenReturn(directory.toString());
         when(annotation.value()).thenReturn("current");
         when(annotation.type()).thenReturn(FileConfigType.YAML);
@@ -94,6 +94,19 @@ class FileConfigCurrentReadTest {
         when(parser.fromFileToData(any(InputStream.class), eq(Value.class))).thenThrow(new IllegalStateException("测试解析失败。"));
         service.reload();
         assertThrows(FileConfigDataNotFoundException.class, () -> service.get(Value.class));
+        assertThrows(FileConfigDataNotFoundException.class, () -> service.requireCurrent(Value.class));
+    }
+
+    /**
+     * 敏感配置失败不得把解析器的原始值或异常链写入日志，严格状态仍标记不可用。
+     * @throws Exception 当临时配置无法创建时
+     */
+    @Test void sensitiveFailureDoesNotLogParserValues() throws Exception {
+        var service = service(); when(annotation.sensitive()).thenReturn(true);
+        when(parser.fromFileToData(any(InputStream.class), eq(Value.class))).thenThrow(new IllegalArgumentException("仅测试的秘密原值"));
+        service.reload();
+        verify(logger).error(anyString(), argThat(message -> !message.contains("仅测试的秘密原值")));
+        verify(logger, never()).error(anyString(), anyString(), any(Throwable.class));
         assertThrows(FileConfigDataNotFoundException.class, () -> service.requireCurrent(Value.class));
     }
 

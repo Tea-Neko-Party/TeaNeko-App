@@ -19,12 +19,50 @@ import java.util.Optional;
 /**
  * 事件服务，负责处理事件的推送和分发。
  * 当前事件服务是一旦有任何监听器出现异常就会停止处理事件，并将异常抛出到命名空间或者 TaskFuture 中处理。
+ * <br>2026/11/02：按插件归属过滤监听器，决策事件拒绝异步监听并复核调用版本。
  *
  * @author zExNocs
  * @date 2026/02/17
+ * @since 4.0.8
+ * @version 4.6.0-l
  */
 @Service
 public class EventService implements IEventService {
+    // 2026/11/02：插件归属由宿主统一解析，保留直接构造的旧使用方式。
+    private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
+
+    /**
+     * 安装插件调用守卫。
+     * @param access 统一插件归属入口
+     */
+    @Autowired
+    public void installPluginAccess(org.zexnocs.teanekocore.plugin.PluginAccess access) { this.pluginAccess = access; }
+
+    /**
+     * 检查插件有效范围，宿主未声明归属的监听器保留原语义。
+     * @param event 当前事件
+     * @param patch 监听器
+     * @return 当前允许通知时为真
+     */
+    private boolean accepts(IEvent<?> event, EventHandlerScanner.EventHandlerPatch<?> patch) {
+        if (pluginAccess == null) { return true; }
+        if (!pluginAccess.enabled(patch.getTarget(), patch.getMethod())) { return false; }
+        var owner = pluginAccess.owner(patch.getTarget(), patch.getMethod());
+        return owner == null || !(event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped) || scoped.acceptsPlugin(owner);
+    }
+
+    /**
+     * 在实际运行线程捕获和复核归属版本。
+     * @param event 当前事件
+     * @param patch 监听器
+     * @throws Exception 当监听器或插件守卫失败时
+     */
+    private void invokeListener(IEvent<?> event, EventHandlerScanner.EventHandlerPatch<?> patch) throws Exception {
+        if (!accepts(event, patch)) { return; }
+        var token = pluginAccess == null ? null : pluginAccess.capture(patch.getTarget(), patch.getMethod());
+        patch.invoke(event);
+        if (pluginAccess != null) { pluginAccess.check(token); }
+    }
     /// 处理的最大迭代次数
     private static final int MAX_ITERATION = 10;
     /// 事件处理服务的基本命名空间
@@ -41,6 +79,12 @@ public class EventService implements IEventService {
     /// 事件处理器扫描器
     private final EventHandlerScanner eventHandlerScanner;
 
+    /**
+     * 2026/11/02：补充依赖合同，借用扫描、任务和日志设施，构造不分发事件。
+     * @param logger 项目日志
+     * @param eventHandlerScanner 监听器目录
+     * @param iTaskService 原任务服务
+     */
     @Lazy
     @Autowired
     public EventService(ILogger logger,
@@ -77,6 +121,7 @@ public class EventService implements IEventService {
      * 一旦有任何监听器出现异常就会停止处理事件，并将异常抛出到阶段链或者 TaskFuture 中处理。
      *
      * @param event 事件
+     * @throws RuntimeException 当监听、决策异步约束或生命周期回调失败时
      */
     private void _processEvent(IEvent<?> event) throws RuntimeException {
         int iteration = 0;
@@ -109,6 +154,8 @@ public class EventService implements IEventService {
                 var eventListenerPatchList = eventHandlerScanner.getEventHandlerList(event.getClass());
                 // 遍历事件的监听器
                 for (var patch: eventListenerPatchList) {
+                    // 2026/11/02：只向有效插件通知，决策链禁止不等待的异步修改。
+                    if (!accepts(event, patch)) { continue; }
                     // 获取注解来决定其运行的配置
                     var annotation = patch.getAnnotation();
                     // 如果事件被取消，且监听器不忽略取消事件，则跳过该监听器
@@ -117,10 +164,13 @@ public class EventService implements IEventService {
                     }
                     // 判断监听器是否异步
                     if (annotation.async()) {
+                        if (event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped && !scoped.allowsAsyncListeners()) {
+                            throw new IllegalArgumentException("可修改决策事件不允许异步监听器。");
+                        }
                         _asyncProcessListener(TAG, event, patch);
                     } else {
                         // 如果不异步执行，则在当前线程中运行
-                        patch.invoke(event);
+                        invokeListener(event, patch);
                     }
                 }
             } catch (Exception e) {
@@ -175,7 +225,8 @@ public class EventService implements IEventService {
                         .formatted(TAG, listener.getClass().getName(), patch.getMethod().getName()),
                 taskChainNamespace,
                 () -> {
-                    patch.invoke(event);
+                    // 2026/11/02：排队期间禁用的插件不再执行。
+                    invokeListener(event, patch);
                     return EmptyTaskResult.INSTANCE;
                 }, EmptyTaskResult.getResultType());
     }

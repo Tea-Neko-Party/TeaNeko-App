@@ -8,7 +8,7 @@ import java.util.*;
  * 通用选项中拒绝认证字段；不在错误消息中输出字段值。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -80,7 +80,7 @@ public final class LLMOptionBoundary {
                     var key = String.valueOf(entry.getKey()).toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
                     if (key.endsWith("apikey") || key.endsWith("authorization") || key.endsWith("accesstoken")
                             || key.endsWith("clientsecret") || key.endsWith("password") || key.endsWith("credentials")) {
-                        throw new LLMConfigurationException("Credentials are forbidden in LLM options; use Spring application configuration.");
+                        throw new LLMConfigurationException("凭据不能进入 LLM 选项，请使用本地 model.yml 凭据配置。");
                     }
                     inspect(entry.getValue(), visited);
                 }

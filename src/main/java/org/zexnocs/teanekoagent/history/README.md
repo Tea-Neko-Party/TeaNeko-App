@@ -24,7 +24,7 @@ tea-neko.agent.history.cleanup-interval-ms=60000
 
 ## 查询工具
 
-默认工具策略显式加入 history_query；自定义 IAgentToolSource 仍完整替换默认策略。模型只提交 keyword、before、limit、start、end，不接受 actor、scope、namespace 或授权字段。调用从实际组件取得固定引用和人格，执行前及结果交付前复核动态开关、原引用及人格。
+默认 builtin-tools 能力显式加入 history_query；v4.6.0-l 的自定义 IAgentToolSource 作为宿主额外来源组合，插件通过 AgentFeature 贡献，不再替换内置策略。模型只提交 keyword、before、limit、start、end，不接受 actor、scope、namespace 或授权字段。调用从实际组件取得固定引用和人格，执行前及结果交付前复核动态开关、原引用及人格。
 
 ```json
 {"keyword":"上次讨论","limit":8}

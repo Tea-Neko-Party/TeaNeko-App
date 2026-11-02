@@ -18,14 +18,34 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 大语言模型注册与调用服务。
  * <br>只扫描带有 {@link LLMModel} 注解且实现 {@link ILLMModel} 的 Bean，并通过注解声明的 {@link LLMModelId} 路由。
+ * <br>2026/11/02：模型插件调用接入归属及异步结果版本守卫。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
+    // 2026/11/02：保持直接构造使用方式，Spring 装配时启用归属守卫。
+    private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
+    /**
+     * 安装模型所属插件检查。
+     * @param access 插件归属入口
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void installPluginAccess(org.zexnocs.teanekocore.plugin.PluginAccess access) { this.pluginAccess = access; }
+
+    /**
+     * 捕获模型 Bean 的插件版本，未声明归属的旧适配器保持原语义。
+     * @param model 模型适配器
+     * @return 可选归属版本
+     */
+    private org.zexnocs.teanekocore.plugin.PluginRegistry.Token pluginToken(ILLMModel model) {
+        if (pluginAccess == null) { return null; }
+        try { return pluginAccess.capture(model, model.getClass().getMethod("call", ILLMPrompt.class)); }
+        catch (NoSuchMethodException failure) { throw new IllegalStateException("模型插件缺少调用入口。", failure); }
+    }
     /**
      * Spring Bean 扫描器，用于发现带有 {@link LLMModel} 注解的 {@link ILLMModel} 实例。
      */
@@ -110,7 +130,8 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         if (model == null) {
             throw new IllegalArgumentException("LLM model is not registered: " + modelId);
         }
-        return model;
+        // 2026/11/02：被禁用的适配器不能继续参与默认参数和调用路由。
+        pluginToken(model); return model;
     }
 
     /**
@@ -205,7 +226,14 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         var model = getModel(modelId);
         var options = validateOptions(modelId, model, prompt);
         var effective = new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED);
-        return execution == null ? model.call(effective) : model.call(effective, execution);
+        // 2026/11/02：等待供应商实际完成后再复核，不把禁用解释为已经撤销远端请求。
+        var token = pluginToken(model);
+        var result = execution == null ? model.call(effective) : model.call(effective, execution);
+        return result.thenApply(value -> {
+            if (pluginAccess != null) { pluginAccess.check(token); }
+            if (execution != null) { execution.checkActive(); }
+            return value;
+        });
     }
 
     /**

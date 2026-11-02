@@ -2,7 +2,6 @@ package org.zexnocs.teanekoagent._app_config;
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.adapter.command.AgentCommandToolSource;
@@ -17,11 +16,12 @@ import tools.jackson.databind.ObjectMapper;
 import java.util.concurrent.ExecutorService;
 
 /**
- * 提供明确的默认记忆工具源，用户自定义工具策略可完整替换，不合并全局工具目录。
+ * 提供内置记忆、历史和命令工具能力，与第三方贡献共同组合。
+ * <br>2026/11/02：内置工具改为普通能力贡献，不再因新增总来源 Bean 退让。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class MemoryToolConfig {
@@ -34,19 +34,21 @@ public class MemoryToolConfig {
      * @param executor Core 借用业务执行器
      * @param history 可选历史工具源
      * @param commands 可选命令工具源
-     * @return 可由宿主替换的明确工具源
+     * @return 默认安装的内置工具能力
      */
-    @Bean @ConditionalOnMissingBean(IAgentToolSource.class)
-    public IAgentToolSource agentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults,
+    @Bean
+    public org.zexnocs.teanekoagent.plugin.AgentFeature agentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor, ObjectProvider<AgentHistoryToolSource> history,
             ObjectProvider<AgentCommandToolSource> commands) {
         var memory = new AgentMemoryToolSource(access, policies, defaults, mapper, executor); var historyTools = history.getIfAvailable(); var commandTools = commands.getIfAvailable();
-        if (historyTools == null && commandTools == null) { return memory; }
-        return (definition, request, runtime) -> {
+        // 2026/11/02：原权限策略原样保留，仅改变装配身份。
+        IAgentToolSource source = (definition, request, runtime) -> {
             var selected = new java.util.ArrayList<>(memory.select(definition, request, runtime));
             if (historyTools != null) { selected.addAll(historyTools.select(definition, request)); }
             if (commandTools != null) { selected.addAll(commandTools.select(definition, request)); }
             return java.util.List.copyOf(selected);
         };
+        return new org.zexnocs.teanekoagent.plugin.SourceAgentFeature("teaneko.agent", "builtin-tools", true, source,
+                org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource.empty());
     }
 }

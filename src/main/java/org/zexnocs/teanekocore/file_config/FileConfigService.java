@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>4.2.1: 支持从模板中读取。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.2.0
  * @version 4.5.0-l
  */
@@ -103,6 +103,7 @@ public class FileConfigService implements IFileConfigService {
      *
      * @param data 需要写入的 config data
      * @throws FileConfigDataNotFoundException 因为异常原因未找到该 config data 的信息
+     * @throws IOException 当目录无法创建或配置文件无法写入时
      */
     @Override
     public void write(IFileConfigData data) throws FileConfigDataNotFoundException, IOException {
@@ -187,8 +188,11 @@ public class FileConfigService implements IFileConfigService {
                 configCache.put(clazz, new ConfigEntry(Objects.requireNonNull(data, "配置解析结果不能为空。"), true));
             } catch (Exception e) {
                 markUnavailable(clazz);
-                iLogger.error(getClass().getSimpleName(),
-                        "加载配置失败: " + file, e);
+                if (annotation.sensitive()) {
+                    iLogger.error(getClass().getSimpleName(), "敏感配置加载失败: " + file + "，请检查文件格式和字段类型；不记录可能含凭据的解析异常。");
+                } else {
+                    iLogger.error(getClass().getSimpleName(), "加载配置失败: " + file, e);
+                }
             }
         }
     }

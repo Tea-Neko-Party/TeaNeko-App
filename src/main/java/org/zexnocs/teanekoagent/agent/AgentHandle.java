@@ -14,11 +14,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 独立 Agent 实例的受控拥有者，只导出实体快照；关闭信号与业务数据分开保存。
  * 不创建线程池、父调用预算或后台任务，也不在组件中放置运行控制。
+ * <br>2026/11/02：接收工厂已校验的实例插件组件。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @JsonIgnoreType
 public final class AgentHandle implements AutoCloseable {
@@ -31,9 +32,19 @@ public final class AgentHandle implements AutoCloseable {
      * @param definition 已冻结定义
      */
     AgentHandle(AgentDefinition definition) {
+        // 2026/11/02：旧工厂仍创建不含插件数据的实例。
+        this(definition, ComponentPatch.empty());
+    }
+
+    /**
+     * 为插件装配创建独立组件，补丁只由宿主工厂提供。
+     * @param definition 固定定义
+     * @param plugins 已校验的自有组件
+     */
+    AgentHandle(AgentDefinition definition, ComponentPatch plugins) {
         entity = new Entity(EntityId.random(), ComponentPatch.builder()
                 .put(AgentComponents.DEFINITION, Objects.requireNonNull(definition, "Agent 定义不能为空。"))
-                .put(AgentComponents.CLOSED, false).build());
+                .put(AgentComponents.CLOSED, false).merge(plugins).build());
     }
 
     /**

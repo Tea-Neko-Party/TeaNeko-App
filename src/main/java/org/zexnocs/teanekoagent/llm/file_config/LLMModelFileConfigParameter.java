@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.file_config;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -29,7 +30,7 @@ import java.util.Optional;
  * }</pre>
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.4.0
  * @version 4.5.0-l
  */
@@ -61,22 +62,25 @@ public class LLMModelFileConfigParameter {
     private String model;
 
     /**
-     * 旧连接配置，仅用于识别并提示迁移到 Spring application 的 api-path。
+     * 请求接口路径，允许环境变量占位符；api 只作为旧 YAML 字段名的兼容别名。
      */
     @Nullable
-    private String api;
+    @JsonAlias("api")
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    private String apiPath;
 
     /**
-     * 旧密钥字段，仅用于报告迁移错误，不会写入 Options 或导出 JSON。
+     * 原始密钥或环境变量占位符，只由可信凭据端口解析，不写入 Options 或通用导出。
      */
     @Nullable
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String apiKey;
 
     /**
-     * 旧连接地址，仅用于识别并提示迁移到 Spring application 的 base-url。
+     * 原始服务地址或环境变量占位符，默认留空使用适配器内建值。
      */
     @Nullable
+    @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private String baseUrl;
 
     /**
@@ -177,16 +181,13 @@ public class LLMModelFileConfigParameter {
      * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
     public LLMModelOptions toOptions(ILLMModelOptions baseOptions) {
-        if (apiKey != null || api != null || baseUrl != null) {
-            throw new LLMConfigurationException("Move model.yml api-key/api/base-url to Spring application LLM provider configuration.");
-        }
         LLMOptionBoundary.validateMetadata(metadata);
         if (metadata != null && metadata.keySet().stream().anyMatch(key ->
                 key != null && switch (key.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "")) {
                     case "api", "apipath", "baseurl", "endpoint" -> true;
                     default -> false;
                 })) {
-            throw new LLMConfigurationException("Move model.yml connection metadata to Spring application LLM provider configuration.");
+            throw new LLMConfigurationException("连接配置须使用 model.yml 条目的 api-path/base-url，不能写入模型 metadata。");
         }
         var modelId = findModelId();
         var mergedMetadata = new LinkedHashMap<String, Object>();

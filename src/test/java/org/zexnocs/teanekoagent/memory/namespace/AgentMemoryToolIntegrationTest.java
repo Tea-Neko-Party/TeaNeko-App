@@ -64,10 +64,11 @@ import static org.mockito.Mockito.when;
 /**
  * 经过真实默认邮箱、Agent、有限 LLM 往返、工具集与事务适配验证记忆工具闭环。
  * 模型与数据库传输使用离线替身，不消费真实供应商或发送平台消息。
+ * <br>2026/11/02：验证内置资料能力不再被新增总来源替换。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Timeout(20)
 class AgentMemoryToolIntegrationTest {
@@ -258,8 +259,8 @@ class AgentMemoryToolIntegrationTest {
         }
     }
 
-    /** 验证真实 Spring 默认源和自定义替换均可装配，构造期间不读取任何记忆。 */
-    @Test void defaultPromptAssemblyIsLazyAndCanBeReplaced() {
+    /** 2026/11/02：验证内置资料能力与宿主额外来源共存，构造不读取任何记忆。 */
+    @Test void defaultPromptFeatureIsLazyAndCoexistsWithHostSource() {
         try (var h = new Harness(true)) {
             for (boolean custom : List.of(false, true)) {
                 try (var context = new AnnotationConfigApplicationContext()) {
@@ -270,7 +271,8 @@ class AgentMemoryToolIntegrationTest {
                     var selected = IAgentPromptSource.empty(); if (custom) { beans.registerSingleton("customPrompt", selected); }
                     context.register(MemoryPromptConfig.class); context.refresh();
                     if (custom) { assertSame(selected, context.getBean(IAgentPromptSource.class)); }
-                    else { assertInstanceOf(AgentMemoryPromptSource.class, context.getBean(IAgentPromptSource.class)); }
+                    var feature = context.getBean(org.zexnocs.teanekoagent.plugin.AgentFeature.class);
+                    assertInstanceOf(AgentMemoryPromptSource.class, feature.prompts());
                     assertEquals(0, h.memoryReads.get()); assertFalse(h.executor.isShutdown());
                 }
             }

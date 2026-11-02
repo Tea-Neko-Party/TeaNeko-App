@@ -1,45 +1,33 @@
 # LLM 本地配置与凭据边界
 
-`LLMFileConfigService` 将 `config/agent/model.yml` 转为模型默认 Options。默认路由通过 `IDefaultModelResolver` 注入；当前装配适配器读取 `config/agent/main-config.yml`。LLM framework 不导入 Agent 配置或旧包类型。
+`config/agent/model.yml` 统一保存默认路由、模型参数、api-key、base-url、api-path 和 metadata。Core YAML 解析器统一展开环境变量；LLMFileConfigService 只把非敏感字段转为 Options，FileLLMCredentialResolver 只在真实请求边界取得凭据与连接。LLM 不再为默认路由依赖 Agent 主配置，也不再读取 application 的第二份供应商配置。
 
 自动往返的次数和时限由 LLM 自己的 `tea-neko.llm.interaction` Spring 配置提供，字段、默认值和显式覆盖方式见 [交互说明](../framework/interaction/README.md)。这些限制不写入模型 metadata，也不依赖 Agent 文件配置；错误配置在调用时返回明确状态。
 
 ## 部署配置
 
-先在 `config/agent/main-config.yml` 选择一个已注册的适配器 ID：
+在同一份 `config/agent/model.yml` 中选择默认路由并配置模型。模型名是占位符，不是推荐值：
 
 ```yaml
-default-model-id: "deepseek"
-```
-
-在 `config/agent/model.yml` 为该 ID 明确填写实际部署的模型名。这里的模型名只是占位符，不是推荐值：
-
-```yaml
+default-model-id: "${LLM_DEFAULT_MODEL_ID:deepseek}"
 models:
   - id: "deepseek"
-    model: "YOUR_DEPLOYED_MODEL"
-    max-tokens: 2048
+    model: "${DEEPSEEK_MODEL:YOUR_DEPLOYED_MODEL}"
+    api-key: "${DEEPSEEK_API_KEY:}"
+    base-url: "${DEEPSEEK_BASE_URL:}"
+    api-path: "${DEEPSEEK_API_PATH:}"
+    max-tokens: "${DEEPSEEK_MAX_TOKENS:2048}"
     metadata:
-      deepseek.reasoningEffort: "medium"
+      deepseek.reasoningEffort: "${DEEPSEEK_REASONING_EFFORT:medium}"
 ```
 
-密钥及可选连接覆盖放在 **Spring Boot application 配置**中。例如 `application.yml`：
+OpenAI、Kimi 或自定义适配器使用同样的条目结构。default-model-id 为空时独立宿主须在 Options 指定供应商。main-config.yml 只保留 Agent 本地总开关。供应商 ID 使用小写字母、数字及连字符；api 为旧 YAML 的 api-path 别名。
 
-```yaml
-tea-neko:
-  llm:
-    providers:
-      deepseek:
-        api-key: "${DEEPSEEK_API_KEY:}"
-        # base-url: "https://your-trusted-gateway.example/v1"
-        # api-path: "/chat/completions"
-      openai:
-        api-key: "${OPENAI_API_KEY:}"
-      kimi:
-        api-key: "${KIMI_API_KEY:}"
-```
+所有 YAML FileConfig 的字符串值、嵌套对象/列表和 metadata 都支持 `${变量名}` 与 `${变量名:默认值}`，优先级由 Spring Environment 决定；无 Spring 直接实例化解析器时使用标准系统属性及环境变量。先解析 YAML 再替换字符串节点，因此环境值中的换行、冒号等不会注入新的 YAML 字段。字段名不展开；数字和布尔字段由目标类型转换，metadata 中无明确目标类型的值仍为字符串，不猜测数字或结构。
 
-这些占位符由 Spring 解析，`config/agent/model.yml` 不承担密钥占位符解析。供应商 ID 使用小写字母、数字及连字符。`base-url` / `api-path` 未配置时使用适配器内建地址和协议路径；Prompt 中同名连接字段不会改变实际调用地址。base URL 只允许 HTTP(S)，不允许用户信息、查询和片段；API path 必须是以 `/` 开头的路径，不允许外部 URL、查询、片段或目录跳转。
+缺失必需变量或循环引用使整份文件本次加载失败；需要先留空的供应商使用 `${KEY:}`，真正调用该路由时再检查密钥。加载不自动修改文件。显式 FileConfigService.write 保存当前对象值，包括已展开的环境值；需要保留原始占位符时直接编辑 YAML。敏感配置的普通序列化不导出密钥及连接字段，显式本地 YAML 写回会保留这些字段；加载错误不携带原始解析异常或凭据。
+
+`base-url` / `api-path` 留空使用适配器内建地址和协议路径；Prompt 中同名连接字段不会改变实际调用地址。base URL 只允许 HTTP(S)，不允许用户信息、查询和片段；API path 必须是以 `/` 开头的路径，不允许外部 URL、查询、片段或目录跳转。
 
 `openai` 使用 Responses；Chat Completions 通用类没有 `@LLMModel`，不能作为独立路由配置。手动构造未注册的 `OpenAIChatCompletionsModel` 时，凭据端口使用它自己的 `openai-completions` ID。兼容供应商应继承通用层并声明自己的注册 ID、默认地址和凭据配置。
 
@@ -50,6 +38,8 @@ tea-neko:
 | `models[].id` | 与 `@LLMModel.id` 对应；必需且不可重复。 |
 | `models[].provider` | 未填写 id 时的兼容路由字段。 |
 | `models[].model` | 模型服务要求显式填写的供应商模型名称。 |
+| `default-model-id` | 同文件的默认路由，不再从 main-config.yml 读取。 |
+| `models[].api-key/base-url/api-path` | 只供凭据端口读取，不合入普通 Options、Prompt 或业务组件。 |
 | 通用参数 | thinking、max-tokens、temperature 等只覆盖显式声明的值。 |
 | `metadata` | 非敏感供应商参数；认证字段会被拒绝，包含嵌套和 header/body 形式。 |
 
@@ -76,10 +66,11 @@ tea-neko:
 
 ## 旧配置迁移
 
-1. 保留 `config/agent` 的文件布局、路由 ID、模型名和非敏感模型参数。
-2. 把旧 `model.yml` 中 `api-key` 移到 `tea-neko.llm.providers.<id>.api-key`，建议使用环境变量占位符。
-3. 如需自定义连接，把旧 `base-url` 和 `api` 分别改为 Spring 中的 `base-url` 和 `api-path`；随后从 model.yml 删除旧字段及对应连接 metadata。
-4. 删除 Options metadata 中的认证字段。旧字段仍可反序列化以提供明确的迁移错误，但不能再转换为调用选项；不会自动把密钥复制到新配置或数据库。
+1. 保留模型 ID、具体模型和非敏感调用参数，将 main-config.yml 的 default-model-id 移到 model.yml 顶层。
+2. 将 `tea-neko.llm.providers.<id>` 的 api-key、base-url、api-path 放入对应 models 条目，推荐使用环境变量引用；删除旧 application 项，不维护两份生效来源。
+3. 已经位于 model.yml 的顶层条目密钥/连接字段现在可直接使用；api 作为 api-path 的兼容别名，后续编辑建议统一为 api-path。
+4. metadata 保留在同一条目，可以嵌套并使用环境占位符，但认证和连接字段应移到专用字段，不能借 metadata、Prompt 或工具内容替换认证边界。
+5. 修改后使用现有文件重载流程；若变更进程环境变量，需按运行环境重新启动进程。缺失或最近加载失败的文件不会以旧凭据继续请求。
 
 供应商模型 DTO 及纯 mapper 保留调用签名，新增有序图文映射；生产模型在 mapper 返回后，用可信配置重新设置连接地址。新供应商同样应在请求边界解析凭据，不能从 Options、消息、组件或工具参数取得密钥。内置请求 DTO 的认证字段不进入 JSON；`LLMProviderAccess` 的 JSON 与 toString 只返回脱敏标记。
 

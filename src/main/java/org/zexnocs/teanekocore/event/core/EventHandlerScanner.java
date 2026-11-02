@@ -16,12 +16,14 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 扫描事件处理器的类。
+ * <br>2026/11/02：相同优先级按 Bean 名及方法签名确定稳定监听顺序。
  *
- * @see EventHandler
- * @see EventListener
  * @author zExNocs
  * @date 2026/02/17
  * @since 4.0.0
+ * @version 4.6.0-l
+ * @see EventHandler
+ * @see EventListener
  */
 @Service("eventHandlerScanner")
 public class EventHandlerScanner extends AbstractScanner {
@@ -33,6 +35,12 @@ public class EventHandlerScanner extends AbstractScanner {
     private final ILogger iLogger;
     private final IClassScanner iClassScanner;
 
+    /**
+     * 2026/11/02：补充扫描依赖合同，初始化时生成监听目录。
+     * @param iBeanScanner Bean 扫描
+     * @param iLogger 项目日志
+     * @param iClassScanner 事件类型扫描
+     */
     public EventHandlerScanner(IBeanScanner iBeanScanner, ILogger iLogger, IClassScanner iClassScanner) {
         this.iBeanScanner = iBeanScanner;
         this.iLogger = iLogger;
@@ -50,7 +58,9 @@ public class EventHandlerScanner extends AbstractScanner {
 
         // 扫描所有的 IListener 接口
         var beanPairs = iBeanScanner.getBeansWithAnnotation(EventListener.class);
-        for(var pair: beanPairs.values()) {
+        // 2026/11/02：Bean 名进入稳定排序，避免 HashSet 顺序影响可修改事件。
+        for(var entry: beanPairs.entrySet()) {
+            var pair = entry.getValue();
             var bean = pair.second();
             // 获取接口内所有带有 EventHandler 注解的方法
             var methods = bean.getClass().getMethods();
@@ -61,7 +71,7 @@ public class EventHandlerScanner extends AbstractScanner {
                     continue;
                 }
                 // 注册事件处理器
-                _registerEventHandler(bean, method, methodAnnotation, eventHandlerSetByType);
+                _registerEventHandler(entry.getKey(), bean, method, methodAnnotation, eventHandlerSetByType);
             }
         }
         // 处理继承问题，子类获得所有父类的事件处理器
@@ -110,15 +120,16 @@ public class EventHandlerScanner extends AbstractScanner {
     }
 
     /**
-     * 注册事件处理器。
+     * 2026/11/02：注册事件处理器并保存稳定 Bean 身份。
      *
      * @param listener        监听器
+     * @param beanName        稳定 Bean 名
      * @param method          监听器的方法
      * @param annotation      事件处理器的注解
      * @param eventHandlerMap 事件处理器映射
      */
     @SuppressWarnings("rawtypes")
-    private void _registerEventHandler(Object listener,
+    private void _registerEventHandler(String beanName, Object listener,
                                        Method method,
                                        EventHandler annotation,
                                        Map<Class<? extends IEvent>, Set<EventHandlerPatch<? extends IEvent>>> eventHandlerMap) {
@@ -160,6 +171,8 @@ public class EventHandlerScanner extends AbstractScanner {
         var eventClass = parameterType.asSubclass(IEvent.class);
         // 构造EventHandlerPatch
         var eventHandlerPatch = new EventHandlerPatch<>(
+                // 2026/11/02：绑定注册名，代理或同类型多 Bean 不再造成相同优先级歧义。
+                beanName,
                 listener,
                 method,
                 eventClass,
@@ -171,10 +184,17 @@ public class EventHandlerScanner extends AbstractScanner {
     }
 
     /**
-     * 事件 Consumer 的 patch
+     * 事件 Consumer 的固定调用描述。
+     * <br>2026/11/02：保存 Bean 名作为同优先级稳定排序依据。
+     * @param <T> 事件类型
+     * @author zExNocs
+     * @date 2026/02/17
+     * @since 4.0.8
+     * @version 4.6.0-l
      */
     @SuppressWarnings("rawtypes")
     public static class EventHandlerPatch<T extends IEvent> implements Comparable<EventHandlerPatch<?>> {
+        private final String beanName;
         /// 事件处理器的目标对象
         @Getter
         private final Object target;
@@ -190,8 +210,16 @@ public class EventHandlerScanner extends AbstractScanner {
         @Getter
         private final EventHandler annotation;
 
-        /// 禁止私自实例化
-        private EventHandlerPatch(Object target, Method method, Class<T> eventType, EventHandler annotation) {
+        /**
+         * 2026/11/02：固定注册身份与调用描述，只由扫描器创建。
+         * @param beanName 注册名
+         * @param target 监听器
+         * @param method 方法
+         * @param eventType 事件类型
+         * @param annotation 处理配置
+         */
+        private EventHandlerPatch(String beanName, Object target, Method method, Class<T> eventType, EventHandler annotation) {
+            this.beanName = beanName;
             this.target = target;
             this.method = method;
             this.eventType = eventType;
@@ -219,7 +247,11 @@ public class EventHandlerScanner extends AbstractScanner {
          */
         @Override
         public int compareTo(EventHandlerPatch<?> other) {
-            return Integer.compare(other.annotation.priority(), this.annotation.priority());
+            // 2026/11/02：优先级相同也保持可重现的业务修改顺序。
+            int priority = Integer.compare(other.annotation.priority(), this.annotation.priority());
+            if (priority != 0) { return priority; }
+            int bean = beanName.compareTo(other.beanName);
+            return bean != 0 ? bean : method.toGenericString().compareTo(other.method.toGenericString());
         }
     }
 

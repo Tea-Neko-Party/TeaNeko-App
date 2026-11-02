@@ -30,10 +30,11 @@ import static org.zexnocs.teanekoagent.extension.AgentExtensionCapability.*;
 /**
  * 将显式后端接入原工具和资料生命周期，不自动注册文件、代码或知识能力。
  * 工具只在实际保留能力声明时加入；每次执行、模型使用及重放均复核可信策略。
+ * <br>2026/11/02：移除自有资料片段时保留插件固定版本，兼容多能力组合。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class AgentExtensionTools {
     private static final String FRAGMENT = "agent_extensions";
@@ -310,7 +311,8 @@ public final class AgentExtensionTools {
      */
     private AgentPromptInput base(AgentPromptInput input) {
         return new AgentPromptInput(input.original(), input.fragments().stream().filter(value -> !value.name().equals(FRAGMENT)).toList(),
-                input.omittedFragments(), input.personality(), input.summary());
+                // 2026/11/02：仅移除本源片段，继续保留插件版本复核信息。
+                input.omittedFragments(), input.personality(), input.summary(), input.plugins());
     }
     /**
      * 原工具策略的显式扩展，构造时不执行后端。

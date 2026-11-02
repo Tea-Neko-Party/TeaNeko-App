@@ -13,10 +13,11 @@ import java.util.Map;
 
 /**
  * 安装普通提醒及专用存储，构造期间不启动平台动作；调度由应用就绪生命周期启动。
+ * <br>2026/11/02：按插件归属组合任务动作并在实际副作用前复核版本。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentScheduleConfig {
@@ -36,7 +37,33 @@ public class AgentScheduleConfig {
      * @param adapter 当前权限及发送适配
      * @return 由 Spring 关闭的单实例调度服务
      */
-    @Bean(destroyMethod = "close") public AgentScheduleService agentScheduleService(EasyDataScheduleStore store, NativeScheduleAdapter adapter) {
+    public AgentScheduleService agentScheduleService(EasyDataScheduleStore store, NativeScheduleAdapter adapter) {
         return new AgentScheduleService(store, Clock.systemUTC(), adapter, Map.of("remind", adapter));
+    }
+
+    /**
+     * 2026/11/02：保留普通提醒并组合插件动作，拒绝重名，禁止另建 Timer。
+     * @param store 原存储
+     * @param adapter 原权限及发送适配
+     * @param contributions 动作贡献
+     * @param plugins 插件目录
+     * @return 实际调度服务
+     */
+    @Bean(name = "agentScheduleService", destroyMethod = "close")
+    public AgentScheduleService pluginScheduleService(EasyDataScheduleStore store, NativeScheduleAdapter adapter,
+            java.util.List<org.zexnocs.teanekoagent.plugin.AgentTaskAction> contributions, org.zexnocs.teanekocore.plugin.PluginRegistry plugins) {
+        var actions = new java.util.TreeMap<String, AgentScheduleService.Action>(); actions.put("remind", adapter);
+        for (var contribution : contributions) {
+            plugins.requireRegistered(contribution.pluginId());
+            AgentScheduleService.Action wrapped = (task, guard) -> plugins.invoke(contribution.pluginId(), () -> {
+                var token = plugins.capture(contribution.pluginId());
+                java.util.function.Supplier<java.util.concurrent.CompletionStage<Void>> checked = () -> {
+                    plugins.check(token); return guard.get().thenRun(() -> plugins.check(token));
+                };
+                return checked.get().thenCompose(ignored -> contribution.action().execute(task, checked));
+            });
+            if (actions.putIfAbsent(contribution.id(), wrapped) != null) { throw new IllegalArgumentException("插件任务动作名重复：" + contribution.id()); }
+        }
+        return new AgentScheduleService(store, Clock.systemUTC(), adapter, actions);
     }
 }

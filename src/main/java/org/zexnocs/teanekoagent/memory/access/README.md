@@ -60,7 +60,7 @@ var result = agentService.run(handle, request);
 
 ## 已接入的模型工具
 
-默认完整 Spring 装配通过 `MemoryToolConfig` 提供一个 `IAgentToolSource`。自定义同类策略可替换它；若需同时使用其他工具，应显式组合选定绑定，同名工具仍由原工具集拒绝，不回退全局目录。没有 TOOL 活动能力、没有已解析持久化引用或 scope 停用时不选择记忆工具。
+默认完整 Spring 装配通过 `MemoryToolConfig` 提供 `teaneko.agent:builtin-tools` 能力。v4.6.0-l 中，插件通过 AgentFeature 追加，宿主自定义 IAgentToolSource 作为额外来源，不再替换内置记忆；同名工具明确拒绝，不回退全局目录。没有 TOOL 活动能力、没有已解析持久化引用或 scope 停用时不选择记忆工具。
 
 | 工具 | 模型业务参数 | 行为 |
 | --- | --- | --- |

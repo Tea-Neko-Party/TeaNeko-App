@@ -29,10 +29,11 @@ import java.util.concurrent.Executor;
 /**
  * 将固定目录投影为低信任 Prompt，并经原工具循环按需加载正文；不创建模型循环或额外权限。
  * Prompt 和工具以内容指纹对齐，预算省略目录时不注册隐藏工具，重载和停用使旧快照失效。
+ * <br>2026/11/02：组合资料时保留插件版本，避免 Skill 过滤使重放守卫失效。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service
 public final class AgentSkills {
@@ -118,7 +119,8 @@ public final class AgentSkills {
      */
     private AgentPromptInput withoutSkills(AgentPromptInput input) {
         return new AgentPromptInput(input.original(), input.fragments().stream().filter(item -> !item.name().equals(FRAGMENT)).toList(),
-                input.omittedFragments(), input.personality(), input.summary());
+                // 2026/11/02：剥离 Skill 正文时保留插件固定版本，不能丢失重放守卫。
+                input.omittedFragments(), input.personality(), input.summary(), input.plugins());
     }
     /**
      * 已授权工具列表的名称依赖校验，不因 Skill 请求而自动加入全局工具。

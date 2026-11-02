@@ -17,18 +17,33 @@ import java.util.List;
 
 /**
  * 原始消息、本轮人格及临时资料的不可变布局；补正/资料只作为 USER 数据，不改写原系统规则。
+ * <br>2026/11/02：固定实际安装能力的调用版本，供执行及完成重放复核。
  * @param original 宿主冻结的原消息，包含邮箱已经认可的历史
  * @param fragments 按原优先级保留的完整资料
  * @param omittedFragments 因输入预算省略的完整片段数，不表示来源确定无资料
  * @param personality 可选已解析人格，基础设定与低信任补正分开呈现
  * @param summary 可选本轮固定摘要，仅作为 USER 资料，不沉积为原消息
+ * @param plugins 本轮能力及插件依赖版本，不进入模型消息
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragment> fragments, int omittedFragments,
-                               @Nullable AgentPersonalitySnapshot personality, @Nullable AgentSummarySnapshot summary) {
+                               @Nullable AgentPersonalitySnapshot personality, @Nullable AgentSummarySnapshot summary,
+                               java.util.Map<String, org.zexnocs.teanekocore.plugin.PluginRegistry.Token> plugins) {
+    /**
+     * 2026/11/02：保留无插件的完整布局构造。
+     * @param original 原输入
+     * @param fragments 临时资料
+     * @param omittedFragments 省略数
+     * @param personality 人格
+     * @param summary 摘要
+     */
+    public AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragment> fragments, int omittedFragments,
+            @Nullable AgentPersonalitySnapshot personality, @Nullable AgentSummarySnapshot summary) {
+        this(original, fragments, omittedFragments, personality, summary, java.util.Map.of());
+    }
     /**
      * 保留没有摘要的既有人格布局。
      * @param original 原输入
@@ -55,10 +70,13 @@ public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragm
      * @param omittedFragments 整项省略数
      * @param personality 可选已解析人格快照
      * @param summary 已固定的可选摘要
+     * @param plugins 实际采用能力版本
      * @throws NullPointerException 当列表或元素为空时
      * @throws IllegalArgumentException 当资料定位、数量或总正文大小非法时
      */
     public AgentPromptInput {
+        // 2026/11/02：插件版本只是宿主复核数据，不生成新的 Prompt 正文。
+        plugins = java.util.Map.copyOf(plugins);
         original = LLMProtocolSnapshots.messages(original); fragments = List.copyOf(fragments);
         if (omittedFragments < 0 || fragments.size() > 32 || omittedFragments > 32 - fragments.size()
                 || original.isEmpty() && (!fragments.isEmpty() || personality != null || summary != null)

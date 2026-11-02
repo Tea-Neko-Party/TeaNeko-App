@@ -1,8 +1,8 @@
 package org.zexnocs.teanekoagent.llm.file_config;
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent._app_config.FileDefaultModelResolver;
 import org.zexnocs.teanekoagent.file_config.AgentMainFileConfig;
+import org.zexnocs.teanekoagent.llm._app_config.FileDefaultModelResolver;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
@@ -95,13 +95,11 @@ class LLMFileConfigBoundaryTest {
     }
 
     /**
-     * 验证旧密钥和连接字段必须显式迁移，不能流入普通模型选项。
+     * 顶层凭据与连接可以同文件配置，但不能流入普通选项；metadata 中的认证或连接字段仍拒绝。
      */
     @Test
-    void legacySecretsAndConnectionFieldsRequireExplicitMigration() {
+    void fileCredentialsStayOutsideOptionsAndMetadata() {
         List<Consumer<LLMModelFileConfigParameter>> setters = List.of(
-                e -> e.setApiKey("legacy-test-secret"), e -> e.setApi("/responses"),
-                e -> e.setBaseUrl("https://legacy.test"),
                 e -> e.setMetadata(Map.of("apiKey", "legacy-test-secret")),
                 e -> e.setMetadata(Map.of("baseUrl", "https://legacy.test")));
         for (var setter : setters) {
@@ -113,26 +111,31 @@ class LLMFileConfigBoundaryTest {
         }
         var entry = entry("deepseek", "configured-model");
         entry.setApiKey("legacy-test-secret");
+        entry.setApiPath("/responses"); entry.setBaseUrl("https://gateway.test");
+        configure(entry);
+        assertEquals("configured-model", service.getDefaultOptions(route, null).getModel());
+        assertFalse(new ObjectMapper().writeValueAsString(service.getDefaultOptions(route, null).getMetadata()).contains("legacy-test-secret"));
         assertFalse(new ObjectMapper().writeValueAsString(entry).contains("legacy-test-secret"));
     }
 
     /**
-     * 验证默认路由使用新主配置且读取重载后的值。
+     * 验证默认路由来自统一模型文件，读取当前重载值且不再访问 Agent 主配置。
      */
     @Test
-    void defaultRouteUsesNewMainConfigAndReloadedValues() {
+    void defaultRouteUsesCurrentModelFileAndReloadedValues() {
         var resolver = new FileDefaultModelResolver(files);
-        var config = new AgentMainFileConfig();
-        when(files.get(AgentMainFileConfig.class)).thenReturn(config);
+        var config = new LLMModelFileConfig();
+        when(files.requireCurrent(LLMModelFileConfig.class)).thenReturn(config);
         assertTrue(resolver.findDefaultModelId().isEmpty());
         config.setDefaultModelId("deepseek");
         assertEquals(route, resolver.findDefaultModelId().orElseThrow());
         config.setDefaultModelId("kimi");
         assertEquals(LLMModelId.of("kimi"), resolver.findDefaultModelId().orElseThrow());
-        when(files.get(AgentMainFileConfig.class)).thenThrow(new FileConfigDataNotFoundException("private-source"));
+        when(files.requireCurrent(LLMModelFileConfig.class)).thenThrow(new FileConfigDataNotFoundException("private-source"));
         var error = assertThrows(LLMConfigurationException.class, resolver::findDefaultModelId);
         assertNull(error.getCause());
         assertFalse(error.toString().contains("private-source"));
+        verify(files, never()).get(AgentMainFileConfig.class);
     }
 
     /**

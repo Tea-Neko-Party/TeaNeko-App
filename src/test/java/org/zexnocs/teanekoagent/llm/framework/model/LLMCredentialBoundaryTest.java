@@ -1,63 +1,107 @@
 package org.zexnocs.teanekoagent.llm.framework.model;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.env.MockEnvironment;
-import org.zexnocs.teanekoagent.llm._app_config.SpringLLMCredentialResolver;
+import org.zexnocs.teanekoagent.llm._app_config.FileLLMCredentialResolver;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfigParameter;
+import org.zexnocs.teanekocore.file_config.exception.FileConfigDataNotFoundException;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
+import org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser;
 import tools.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayInputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 /**
- * 验证 Spring 凭据解析、连接校验及认证信息不外泄的边界。
+ * 验证 Core YAML 环境解析、统一文件凭据、连接校验与认证信息不外泄。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
 class LLMCredentialBoundaryTest {
     private static final String SECRET = "test-only-secret";
-    private static final String PREFIX = "tea-neko.llm.providers.deepseek.";
+    private final IFileConfigService files = mock(IFileConfigService.class);
 
     /**
-     * 验证凭据仅在使用指定供应商时懒加载，并读取更新后的 Spring 值。
+     * 验证凭据仅在使用指定供应商时懒读当前文件，重载失败不能取旧值或 application 回退。
      */
     @Test
-    void resolvesOnlyRequestedProviderLazilyAndReadsUpdatedSpringValues() {
-        var environment = new MockEnvironment();
-        var resolver = new SpringLLMCredentialResolver(environment);
+    void resolvesOnlyRequestedProviderLazilyAndReadsCurrentFile() {
+        var resolver = new FileLLMCredentialResolver(files);
+        verifyNoInteractions(files);
         assertThrows(LLMConfigurationException.class, () -> resolver.require("deepseek"));
-        environment.setProperty(PREFIX + "api-key", SECRET);
-        environment.setProperty(PREFIX + "base-url", "https://gateway.example.test/v1///");
-        environment.setProperty(PREFIX + "api-path", "/chat/custom");
+        var entry = configure(SECRET); entry.setBaseUrl("https://gateway.example.test/v1///"); entry.setApiPath("/chat/custom");
         var access = resolver.require("deepseek");
         assertEquals(SECRET, access.apiKey());
         assertEquals("https://gateway.example.test/v1", access.baseUrlOr("fallback"));
         assertEquals("/chat/custom", access.apiPathOr("fallback"));
         assertThrows(LLMConfigurationException.class, () -> resolver.require("kimi"));
-        environment.setProperty(PREFIX + "api-key", "rotated-test-key");
+        entry.setApiKey("rotated-test-key");
         assertEquals("rotated-test-key", resolver.require("deepseek").apiKey());
         assertEquals(SECRET, access.apiKey());
+        when(files.requireCurrent(LLMModelFileConfig.class)).thenThrow(new FileConfigDataNotFoundException(SECRET));
+        var failure = assertThrows(LLMConfigurationException.class, () -> resolver.require("deepseek"));
+        assertNull(failure.getCause()); assertFalse(failure.toString().contains(SECRET));
+        verify(files, never()).get(LLMModelFileConfig.class);
     }
 
     /**
-     * 验证环境变量占位符可以解析且凭据不被导出。
+     * 经实际 Core YAML 解析环境值、默认值、类型和嵌套 metadata，普通导出隐藏凭据而显式本地写回保留当前值。
+     * @param directory 独立临时文件目录
+     * @throws Exception 当临时文件或解析失败时
      */
     @Test
-    void supportsSpringEnvironmentPlaceholderWithoutExportingTheValue() {
-        var environment = new MockEnvironment()
-                .withProperty("TEST_LLM_KEY", SECRET)
-                .withProperty(PREFIX + "api-key", "${TEST_LLM_KEY}");
-        var access = new SpringLLMCredentialResolver(environment).require("deepseek");
+    void supportsYamlEnvironmentPlaceholdersWithoutExportingCredentials(@TempDir Path directory) throws Exception {
+        var environment = new MockEnvironment().withProperty("TEST_LLM_KEY", SECRET).withProperty("TEST_TEXT", "原文\nmodel: 不应注入结构");
+        var parser = new YAMLFileTypeParser(environment);
+        var yaml = """
+                default-model-id: "${TEST_ROUTE:deepseek}"
+                models:
+                  - id: deepseek
+                    model: "${TEST_MODEL:offline-model}"
+                    api-key: "${TEST_LLM_KEY}"
+                    base-url: "${TEST_BASE:https://default.test}"
+                    api: "${TEST_PATH:/default}"
+                    max-tokens: "${TEST_TOKENS:2048}"
+                    thinking: "${TEST_THINKING:true}"
+                    metadata:
+                      vendor:
+                        texts: ["${TEST_TEXT}", "${TEST_FALLBACK:默认文本}"]
+                """;
+        var config = parser.fromFileToData(new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), LLMModelFileConfig.class);
+        when(files.requireCurrent(LLMModelFileConfig.class)).thenReturn(config);
+        assertEquals(LLMModelId.of("deepseek"), new org.zexnocs.teanekoagent.llm._app_config.FileDefaultModelResolver(files).findDefaultModelId().orElseThrow());
+        var access = new FileLLMCredentialResolver(files).require("deepseek");
         assertEquals(SECRET, access.apiKey());
-        assertEquals("LLMProviderAccess[redacted]", access.toString());
-        assertEquals("\"LLMProviderAccess[redacted]\"", new ObjectMapper().writeValueAsString(access));
+        assertEquals("LLMProviderAccess[已隐藏凭据]", access.toString());
+        assertEquals("\"LLMProviderAccess[已隐藏凭据]\"", new ObjectMapper().writeValueAsString(access));
         assertEquals("https://default.test", access.baseUrlOr("https://default.test"));
         assertEquals("/default", access.apiPathOr("/default"));
+        var entry = config.getModels().getFirst(); var options = entry.toOptions(null);
+        assertEquals("offline-model", options.getModel()); assertEquals(2048, options.getMaxTokens()); assertEquals(Boolean.TRUE, options.getThinking());
+        assertEquals(Map.of("texts", List.of("原文\nmodel: 不应注入结构", "默认文本")), options.getMetadata().get("vendor"));
+        assertFalse(new ObjectMapper().writeValueAsString(config).contains(SECRET));
+        assertFalse(new ObjectMapper().writeValueAsString(options.getMetadata()).contains(SECRET));
+        var output = directory.resolve("model.yml"); parser.fromDataToWrite(output, config);
+        try (var stream = Files.newInputStream(output)) {
+            var restored = parser.fromFileToData(stream, LLMModelFileConfig.class);
+            assertEquals(SECRET, restored.getModels().getFirst().getApiKey());
+            assertEquals("/default", restored.getModels().getFirst().getApiPath());
+        }
+        assertThrows(IllegalArgumentException.class, () -> new YAMLFileTypeParser(new MockEnvironment()).fromFileToData(
+                new ByteArrayInputStream(yaml.getBytes(StandardCharsets.UTF_8)), LLMModelFileConfig.class));
     }
 
     /**
@@ -66,7 +110,7 @@ class LLMCredentialBoundaryTest {
     @Test
     void missingOrMalformedCredentialsHaveNoSensitiveCause() {
         for (var key : List.of("", " ", "${UNRESOLVED_TEST_KEY}", "unsafe\n" + SECRET)) {
-            var resolver = new SpringLLMCredentialResolver(new MockEnvironment().withProperty(PREFIX + "api-key", key));
+            configure(key); var resolver = new FileLLMCredentialResolver(files);
             var error = assertThrows(LLMConfigurationException.class, () -> resolver.require("deepseek"));
             assertFalse(error.toString().contains(SECRET));
             assertFalse(error.toString().contains("UNRESOLVED_TEST_KEY"));
@@ -98,10 +142,10 @@ class LLMCredentialBoundaryTest {
      */
     @Test
     void rejectsPropertyPathInjection() {
-        var resolver = new SpringLLMCredentialResolver(new MockEnvironment());
+        var resolver = new FileLLMCredentialResolver(files);
         for (var provider : List.of("", "deepseek.api-key", "${TEST_LLM_KEY}", "../deepseek")) {
             var error = assertThrows(LLMConfigurationException.class, () -> resolver.require(provider));
-            assertEquals("Invalid LLM credential provider identifier.", error.getMessage());
+            assertEquals("LLM 凭据供应商标识不合法。", error.getMessage());
         }
     }
 
@@ -120,5 +164,16 @@ class LLMCredentialBoundaryTest {
         cyclic.put("self", cyclic);
         cyclic.put("reasoning", Map.of("effort", "medium"));
         assertDoesNotThrow(() -> LLMOptionBoundary.validateMetadata(cyclic));
+    }
+
+    /**
+     * 安装只有测试路由与凭据的当前文件，不读取真实部署文件。
+     * @param key 本用例的原始认证值
+     * @return 可供本用例更新的路由条目
+     */
+    private LLMModelFileConfigParameter configure(String key) {
+        var entry = new LLMModelFileConfigParameter(); entry.setId("deepseek"); entry.setModel("offline-model"); entry.setApiKey(key);
+        var config = new LLMModelFileConfig(); config.setModels(List.of(entry));
+        when(files.requireCurrent(LLMModelFileConfig.class)).thenReturn(config); return entry;
     }
 }

@@ -12,10 +12,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 为单轮提供可等待的低信任参考资料；身份、引用和权限仍由宿主请求拥有。
  * 不负责历史提交、模型往返或发送；实现不得关闭借用控制和执行器。
+ * <br>2026/11/02：明确静态空来源不阻止其他贡献者独立验证重放。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @FunctionalInterface
 public interface IAgentPromptSource {
@@ -59,5 +60,29 @@ public interface IAgentPromptSource {
      * 保留没有资料适配器的明确组合方式，构造和调用不读取配置或存储。
      * @return 不注入资料的默认策略
      */
-    static IAgentPromptSource empty() { return (definition, request, runtime, control) -> CompletableFuture.completedStage(List.of()); }
+    static IAgentPromptSource empty() {
+        // 2026/11/02：只有这个确定不产生资料的来源显式允许重放，动态来源默认仍拒绝。
+        return new IAgentPromptSource() {
+            /**
+             * 不提供任何资料。
+             * @param definition 定义
+             * @param request 请求
+             * @param runtime 运行设置
+             * @param control 借用控制
+             * @return 空资料
+             */
+            @Override public CompletionStage<List<AgentPromptFragment>> resolve(AgentDefinition definition, AgentRunRequest request,
+                    AgentRuntimeSnapshot runtime, ExecutionControl control) { control.checkActive(); return CompletableFuture.completedStage(List.of()); }
+            /**
+             * 空来源没有需要重放的外部资料。
+             * @param request 原请求
+             * @param input 原布局
+             * @param control 观察控制
+             * @return 当前控制有效时为真
+             */
+            @Override public CompletionStage<Boolean> verifyReplay(AgentRunRequest request, AgentPromptInput input, ExecutionControl control) {
+                control.checkActive(); return CompletableFuture.completedStage(true);
+            }
+        };
+    }
 }

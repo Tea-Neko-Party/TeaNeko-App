@@ -1,23 +1,31 @@
 ---
-# 模型参数配置；默认路由在 config/agent/main-config.yml 的 default-model-id 中选择。
+# 默认路由、模型参数、凭据、连接与 metadata 统一在本文件配置。
 # 必须为选定路由填写实际模型名；空列表不会自动回退到代码中的模型名。
-# 密钥及连接覆盖只放在 Spring Boot application 配置中，不能写在本文件。
-# 详见 src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md 的迁移说明。
+# 调用参数、凭据、连接和 metadata 统一放在同一条模型配置中。
+# Core YAML 解析器支持 ${变量名} 和 ${变量名:默认值}；字符串占位符建议加引号。
+# 空默认值允许未使用的供应商先不配置密钥，实际调用时才检查所选供应商。
+default-model-id: "${LLM_DEFAULT_MODEL_ID:}"
 models: []
 
 # 示例（模型名是占位符，请替换）：
 # models:
 #   - id: "deepseek"
-#     model: "YOUR_DEPLOYED_MODEL"
-#     max-tokens: 2048
+#     model: "${DEEPSEEK_MODEL:YOUR_DEPLOYED_MODEL}"
+#     api-key: "${DEEPSEEK_API_KEY:}"
+#     base-url: "${DEEPSEEK_BASE_URL:}"
+#     api-path: "${DEEPSEEK_API_PATH:}"
+#     max-tokens: "${DEEPSEEK_MAX_TOKENS:2048}"
 #     metadata:
-#       deepseek.reasoningEffort: "medium"
-#
-# Spring application.yml 示例，与本文件分开：
-# tea-neko:
-#   llm:
-#     providers:
-#       deepseek:
-#         api-key: "${DEEPSEEK_API_KEY:}"
-#         # base-url: "https://your-trusted-gateway.example/v1"
-#         # api-path: "/chat/completions"
+#       deepseek.reasoningEffort: "${DEEPSEEK_REASONING_EFFORT:medium}"
+#   - id: "openai"
+#     model: "${OPENAI_MODEL:YOUR_DEPLOYED_MODEL}"
+#     api-key: "${OPENAI_API_KEY:}"
+#     base-url: "${OPENAI_BASE_URL:}"
+#     api-path: "${OPENAI_API_PATH:}"
+#     max-tokens: 2048
+#   - id: "kimi"
+#     model: "${KIMI_MODEL:YOUR_DEPLOYED_MODEL}"
+#     api-key: "${KIMI_API_KEY:}"
+#     base-url: "${KIMI_BASE_URL:}"
+#     api-path: "${KIMI_API_PATH:}"
+#     max-tokens: 2048

@@ -16,11 +16,12 @@ import java.util.function.BiFunction;
 
 /**
  * 固定一次交互的 schema 与执行目标；模型可见定义不携带执行器。
+ * <br>2026/11/02：增加保持原 schema 与可信调用对象的异步环绕入口。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class LLMToolBinding {
     private final ILLMTool definition;
@@ -60,6 +61,56 @@ public final class LLMToolBinding {
      */
     public ILLMTool definition() {
         return definition;
+    }
+
+    /**
+     * 2026/11/02：包围实际异步工具调用，禁止重复执行或更换已校验的调用及身份。
+     * @param interceptor 完整异步环绕
+     * @return 独立绑定，schema 保持冻结
+     */
+    public LLMToolBinding intercept(ToolInterceptor interceptor) {
+        Objects.requireNonNull(interceptor, "工具拦截器不能为空。");
+        return new LLMToolBinding(this, (call, context) -> {
+            context.control().checkActive();
+            var actualCompletion = new CompletableFuture<String>();
+            return context.control().guard(org.zexnocs.teanekocore.plugin.operation.OperationPipeline.around(call, false, (input, next) -> {
+                try {
+                    return interceptor.intercept(input, context, (actual, trusted) -> {
+                        if (actual != call || trusted != context) { return CompletableFuture.failedStage(new IllegalStateException("工具下一节点不可替换可信输入。")); }
+                        return next.execute(actual);
+                    });
+                } catch (Exception failure) { return CompletableFuture.failedStage(failure); }
+            }, actual -> {
+                try {
+                    context.control().checkActive();
+                    Objects.requireNonNull(executor.call(actual, context), "工具实际操作不能返回空阶段。").whenComplete((value, failure) -> {
+                        if (failure == null) { actualCompletion.complete(value); } else { actualCompletion.completeExceptionally(failure); }
+                    });
+                } catch (Exception failure) { actualCompletion.completeExceptionally(failure); }
+                return actualCompletion.minimalCompletionStage();
+            }).thenCompose(value -> actualCompletion.thenApply(ignored -> value)));
+        });
+    }
+
+    /**
+     * 工具的类型化异步环绕；宿主参数校验与预算在此边界之外执行。
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    @FunctionalInterface
+    public interface ToolInterceptor {
+        /**
+         * 组合原工具和结果处理，不提前返回或保留下一节点作后台调用。
+         * @param call 原模型调用
+         * @param context 原可信上下文
+         * @param next 原工具实际操作，至多调用一次
+         * @return 完整工具阶段
+         * @throws Exception 当实际执行失败时
+         */
+        CompletionStage<String> intercept(org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall call,
+                ToolInvocationContext context, IContextualToolExecutor next) throws Exception;
     }
 
     // 不对外导出执行器；只能通过固定工具集进行有校验的执行。

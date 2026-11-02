@@ -15,16 +15,26 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 在原任务阶段中调用命令，再非阻塞地等待命令返回的 Stage。
+ * <br>2026/11/02：插件命令在实际启动与异步完成时复核插件版本。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service("commandExecutor")
 public class CommandExecutor implements ICommandExecutor {
     public static final String DEFAULT_TASK_NAMESPACE = "command-executor-task-namespace";
     private final ITaskService taskService;
+    // 2026/11/02：可选装配守卫，不改变旧直接构造方式。
+    private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
+
+    /**
+     * 注入统一插件归属。
+     * @param access 插件入口
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void installPluginAccess(org.zexnocs.teanekocore.plugin.PluginAccess access) { this.pluginAccess = access; }
 
     /**
      * 注入既有任务服务，让反射调用沿原执行域启动并等待处理方法返回阶段。
@@ -75,6 +85,8 @@ public class CommandExecutor implements ICommandExecutor {
                     ? DEFAULT_TASK_NAMESPACE : taskNamespace;
             var task = taskService.subscribeWithFuture("指令执行", namespace, () -> {
                 if (parent != null) { parent.checkActive(); }
+                // 2026/11/02：捕获实际调用时的归属版本，异步结果也必须复核。
+                var token = pluginAccess == null ? null : pluginAccess.capture(object, method);
                 final Object returned;
                 try {
                     returned = method.invoke(object, args);
@@ -86,7 +98,12 @@ public class CommandExecutor implements ICommandExecutor {
                 if (!(returned instanceof CompletionStage<?> stage)) {
                     throw new IllegalStateException("Command returned no CompletionStage: " + method);
                 }
-                return new TaskResult<>(true, new Invocation(stage));
+                var guarded = stage.thenApply(value -> {
+                    if (parent != null) { parent.checkActive(); }
+                    if (pluginAccess != null) { pluginAccess.check(token); }
+                    return value;
+                });
+                return new TaskResult<>(true, new Invocation(guarded));
             }, Invocation.class);
             return TaskStages.successful(task, "指令调用")
                     .thenCompose(invocation -> invocation.stage().thenApply(value -> (Object) value));
