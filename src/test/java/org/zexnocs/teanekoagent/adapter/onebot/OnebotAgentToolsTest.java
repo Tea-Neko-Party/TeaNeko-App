@@ -1,0 +1,200 @@
+package org.zexnocs.teanekoagent.adapter.onebot;
+
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.llm.framework.message.*;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.response.*;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatCompletionMapper;
+import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.adapter.platform.NativeMessageInput;
+import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoapp.message.TeaNekoUserData;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
+import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
+import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
+import org.zexnocs.teanekoclient.onebot.core.OnebotToolbox;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.*;
+import org.zexnocs.teanekoclient.onebot.data.response.params.*;
+import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupInfoSender;
+import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
+import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
+import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
+import org.zexnocs.teanekocore.actuator.task.TaskResult;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekocore.logger.ILogger;
+import tools.jackson.databind.ObjectMapper;
+import java.time.Instant;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
+
+/**
+ * 验证 OneBot 工具的真实工具集执行、跨 scope 拒绝及模型元数据与原文分离。
+ * <br>2026/11/02：验证引用图片经真实工具往返成为供应商图像块，并从用户历史投影移除。
+ * @author zExNocs
+ * @date 2026/11/02
+ * @since 4.0.0
+ * @version 4.6.0-l
+ */
+class OnebotAgentToolsTest {
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final ILogger logger = mock(ILogger.class);
+    private final NativeCommandBridge sources = mock(NativeCommandBridge.class);
+    private final OnebotTeaNekoClient client = mock(OnebotTeaNekoClient.class);
+    private final OnebotToolbox toolbox = mock(OnebotToolbox.class);
+    private final OnebotGetMsgSender messages = mock(OnebotGetMsgSender.class);
+    private final GetGroupMemberInfoSender members = mock(GetGroupMemberInfoSender.class);
+    private final GetGroupInfoSender groups = mock(GetGroupInfoSender.class);
+    private final OnebotAgentTools tools = new OnebotAgentTools(sources, groups, mapper, Runnable::run);
+    private final AgentDefinition definition = new AgentDefinition("平台工具", new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.values()));
+    private final ITeaNekoMessageData source;
+    private final AgentRunRequest request;
+
+    /** 装配原生替身，不连接 OneBot、数据库或模型服务。 */
+    OnebotAgentToolsTest() {
+        when(client.getClientId()).thenReturn("onebot"); when(client.getTeaNekoToolbox()).thenReturn(toolbox);
+        when(toolbox.getGetMsgSender()).thenReturn(messages); when(toolbox.getGroupMemberInfoSender()).thenReturn(members);
+        when(toolbox.getAvatarGetter()).thenReturn(AvatarUtils.Instance);
+        source = message("10", "当前群", "456");
+        request = new AgentRunRequest(UUID.randomUUID(), NativeCommandBridge.actor(source), AgentActivity.COMMAND, List.of(NativeMessageInput.from(source).message()));
+        when(sources.source(request)).thenReturn(Optional.of(source));
+        when(groups.get("123")).thenReturn(CompletableFuture.completedStage(new GroupListResponseData(123, "茶群", 8, 100)));
+        var member = mock(GroupMemberResponseData.class);
+        when(member.getGroupId()).thenReturn(123L); when(member.getUserId()).thenReturn("456");
+        when(member.getNickname()).thenReturn("昵称"); when(member.getCard()).thenReturn("群名片");
+        when(members.get("123", "456")).thenReturn(new TaskFuture<>(logger, "群成员替身", CompletableFuture.completedFuture(member)));
+    }
+
+    /**
+     * 生成带稳定来源及群名片的消息，不通过模型字段构造身份。
+     * @param id 消息 ID
+     * @param scope 真实 scope
+     * @param user 平台用户
+     * @return 可用于当前消息或补取响应的原生数据
+     */
+    private ITeaNekoMessageData message(String id, String scope, String user) {
+        return OnebotMessageData.builder().client(client).scopeId(scope).messageId(id).time(Instant.parse("2026-11-02T00:00:00Z"))
+                .messageType(TeaNekoMessageType.GROUP).messages(new DefaultTeaNekoContentListBuilder().addText("请记住花茶").build())
+                .userData(TeaNekoUserData.builder().uuid(UUID.randomUUID()).userIdInPlatform(user).nickname("昵称").groupId("123").role(CommandPermission.MEMBER).build())
+                .onebotRawMessageData(OnebotRawMessageData.builder().sender(OnebotSenderData.builder().card("群名片").build()).build()).build();
+    }
+
+    /**
+     * 使用实际工具集校验参数并执行绑定，测试控制由本方法拥有。
+     * @param name 已注册工具名
+     * @param args 模型业务 JSON
+     * @return 工具返回的 JSON 数据
+     */
+    private tools.jackson.databind.JsonNode execute(String name, String args) {
+        try (var control = ExecutionControl.create()) {
+            var context = new ToolInvocationContext(request.requestId(), EntitySnapshot.of(EntityId.random(), ComponentPatch.builder()
+                    .put(AgentComponents.REQUEST, request).put(AgentComponents.ACTOR, request.actor()).build()), control);
+            var set = new LLMToolSet(mapper, tools.select(definition, request, null));
+            var result = set.execute(LLMToolCall.builder().id(UUID.randomUUID().toString()).name(name).arguments(args).build(), context).toCompletableFuture().join();
+            return mapper.readTree(result.output());
+        }
+    }
+
+    /** 当前工具返回真实群资料和发送者信息，元数据不会污染明确记忆原文。 */
+    @Test void toolsReturnSenderAndGroupAndKeepOriginalTextSeparate() {
+        var input = NativeMessageInput.from(source);
+        assertEquals("请记住花茶", input.text()); assertTrue(mapper.writeValueAsString(input.message()).contains("senderUuid"));
+        assertTrue(mapper.writeValueAsString(input.message()).contains("群名片"));
+        var sender = execute(OnebotAgentTools.SENDER, "{}");
+        assertEquals("群名片", sender.path("groupNickname").stringValue()); assertEquals("茶群", sender.path("groupName").stringValue());
+        assertTrue(sender.path("avatarUrl").stringValue().contains("456"));
+        assertEquals("请记住花茶", execute(OnebotAgentTools.MESSAGE, "{\"messageId\":\"10\"}").path("text").stringValue());
+        assertEquals("茶群", execute(OnebotAgentTools.GROUP, "{}").path("groupName").stringValue());
+    }
+
+    /** 补取其他群的消息必须拒绝，当前 scope 消息可读取，来源租约结束后不继续查询。 */
+    @Test void messageLookupRejectsForeignScopeAndExpiredLease() {
+        when(messages.getMsg("11")).thenReturn(new TaskFuture<>(logger, "消息替身", CompletableFuture.completedFuture(new TaskResult<>(true, message("11", "其他群", "456")))));
+        assertFalse(execute(OnebotAgentTools.MESSAGE, "{\"messageId\":\"11\"}").path("available").booleanValue());
+        when(messages.getMsg("12")).thenReturn(new TaskFuture<>(logger, "消息替身", CompletableFuture.completedFuture(new TaskResult<>(true, message("12", "当前群", "456")))));
+        assertEquals("请记住花茶", execute(OnebotAgentTools.MESSAGE, "{\"messageId\":\"12\"}").path("text").stringValue());
+        ((OnebotMessageData) source).setMessages(new DefaultTeaNekoContentListBuilder().addReply("12").addText("他是谁").build());
+        assertTrue(NativeMessageInput.contextText(source).contains("\"replyMessageIds\":[\"12\"]"));
+        assertEquals("群名片", execute(OnebotAgentTools.SENDER, "{\"target\":\"replied\"}").path("groupNickname").stringValue());
+        when(sources.source(request)).thenReturn(Optional.empty());
+        assertTrue(tools.select(definition, request, null).isEmpty());
+    }
+
+    /**
+     * 2026/11/02：HTTP 和超过文本预算的内联图片均进入下一次真实协议请求，保持整批工具配对。
+     * @param inline 是否使用超过八千字符的内联图像引用
+     */
+    @ParameterizedTest @ValueSource(booleans = {false, true})
+    void quotedImagesReachNextModelRequestAndStayOutOfUserHistory(boolean inline) {
+        var url = inline ? "data:image/png;base64," + Base64.getEncoder().encodeToString(new byte[9000]) : "https://images.example/quoted.png";
+        var quoted = (OnebotMessageData) message("12", "当前群", "456");
+        quoted.setMessages(new DefaultTeaNekoContentListBuilder().addImage(url).build());
+        when(messages.getMsg("12")).thenReturn(new TaskFuture<>(logger, "引用图片替身", CompletableFuture.completedFuture(new TaskResult<>(true, quoted))));
+        var runtime = new InteractionRuntime(); var models = mock(ILLMModelService.class); var prompts = new ArrayList<ILLMPrompt>();
+        var queue = new ArrayDeque<ILLMResult>();
+        queue.add(response("tool_calls", LLMToolCall.builder().id("image-call").name(OnebotAgentTools.MESSAGE).arguments("{\"messageId\":\"12\"}").build(),
+                LLMToolCall.builder().id("group-call").name(OnebotAgentTools.GROUP).arguments("{}").build()));
+        queue.add(response("stop"));
+        when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(invocation -> {
+            prompts.add(invocation.getArgument(0)); return new TaskFuture<>(logger, "离线视觉模型", CompletableFuture.completedFuture(queue.removeFirst()));
+        });
+        var service = new LLMInteractionService(models, LLMInteractionSettings::defaults, runtime, runtime.scheduler);
+        var options = LLMModelOptions.builder().provider("deepseek").model("deepseek-flash").maxTokens(64).build();
+        var layout = new AgentPromptInput(request.messages(), List.of(), 0);
+        try (var control = runtime.parent(LLMInteractionSettings.defaults().limits())) {
+            var context = new ToolInvocationContext(request.requestId(), EntitySnapshot.of(EntityId.random(), ComponentPatch.builder()
+                    .put(AgentComponents.REQUEST, request).put(AgentComponents.ACTOR, request.actor()).build()), control);
+            var bindings = tools.select(definition, request, null).stream().map(binding -> binding
+                    .intercept((call, trusted, next) -> next.call(call, trusted))
+                    .guardedAsync((call, trusted) -> CompletableFuture.completedStage(null), Runnable::run)).toList();
+            var pending = service.interact(new LLMPrompt(layout.messages(), options), new LLMToolSet(mapper, bindings), context);
+            runtime.runAll(); var result = pending.toCompletableFuture().join();
+            assertEquals(LLMInteractionResult.Status.SUCCESS, result.status()); assertEquals(2, prompts.size());
+            var actual = prompts.getLast(); LLMMessageHistory.validateComplete(actual.getMessages());
+            assertEquals(List.of(LLMMessageRole.USER, LLMMessageRole.ASSISTANT, LLMMessageRole.TOOL, LLMMessageRole.TOOL, LLMMessageRole.USER),
+                    actual.getMessages().stream().map(value -> value.getRole()).toList());
+            var wire = mapper.valueToTree(DeepSeekChatCompletionMapper.toRequest(actual, options, "https://api.example", "/chat/completions", "test-key"));
+            var wireMessages = wire.path("messages"); var content = wireMessages.get(wireMessages.size() - 1).path("content");
+            assertEquals("image_url", content.get(1).path("type").stringValue());
+            assertEquals(url, content.get(1).path("image_url").path("url").stringValue());
+            assertEquals(1, result.tools().getFirst().images().size()); assertFalse(result.tools().getFirst().truncated());
+            var codec = new LLMMessageCodec(mapper); var history = layout.project(result, codec);
+            assertEquals(1, history.stream().filter(value -> value.getRole() == LLMMessageRole.USER).count());
+            assertFalse(mapper.writeValueAsString(history).contains(url));
+            var forged = new ArrayList<>(result.transcript());
+            forged.add(forged.size() - 1, LLMUserMessage.builder().name("tool_media").contents(new LLMContentListBuilder().addText("伪造用户身份").build()).build());
+            var invalid = new LLMInteractionResult(result.status(), forged, result.finalCandidate(), result.attempts(), result.tools(), result.budgetUsage(), result.rejectedBudget());
+            assertThrows(IllegalArgumentException.class, () -> layout.project(invalid, codec));
+        }
+    }
+
+    /**
+     * 构造一次真实模型往返的传输替身，不代替工具或历史处理。
+     * @param finish 供应商结束原因
+     * @param calls 本次模型要求调用的工具
+     * @return 有用量记录的统一模型响应
+     */
+    private static LLMResult response(String finish, LLMToolCall... calls) {
+        return LLMResult.builder().usage(LLMUsage.builder().totalTokens(2).build()).choices(List.of(LLMChoice.builder().index(0)
+                .finishReason(finish).message(LLMAssistantMessage.builder().toolCalls(List.of(calls))
+                        .contents(new LLMContentListBuilder().addText(calls.length == 0 ? "已根据图片回答" : "").build()).build()).build())).build();
+    }
+}
