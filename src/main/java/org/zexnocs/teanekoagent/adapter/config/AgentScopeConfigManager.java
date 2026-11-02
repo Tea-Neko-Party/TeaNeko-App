@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.adapter.config;
 
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyDataObject;
 import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 
@@ -8,11 +9,12 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
  * 该管理器只声明配置，构造 Bean 不加载作用域数据。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 @ConfigManager(value = "agent", description = "Agent 作用域、人格与记忆开关、活动模式和历史窗口",
+        storage = TeaNekoAgentEasyDataObject.class,
         configType = AgentScopeConfigData.class, fieldChecker = AgentScopeFieldChecker.class,
         namespaces = {TeaNekoConfigNamespaces.GENERAL, TeaNekoConfigNamespaces.PRIVATE, TeaNekoConfigNamespaces.GROUP})
 public class AgentScopeConfigManager {}

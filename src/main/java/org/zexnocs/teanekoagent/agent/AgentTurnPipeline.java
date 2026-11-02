@@ -36,7 +36,7 @@ import java.util.function.Function;
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -179,8 +179,11 @@ final class AgentTurnPipeline {
         var runtime = context.snapshot().require(AgentComponents.RUNTIME);
         var input = context.snapshot().require(AgentComponents.PROMPT_INPUT);
         var toolRequest = fixedRequest(context.snapshot());
-        List<LLMToolBinding> selected = definition.activities().contains(AgentActivity.TOOL)
-                ? List.copyOf(tools.select(definition, toolRequest, runtime)) : List.of();
+        final List<LLMToolBinding> selected;
+        try {
+            selected = definition.activities().contains(AgentActivity.TOOL)
+                    ? List.copyOf(tools.select(definition, toolRequest, runtime, input)) : List.of();
+        } catch (AgentPromptException rejected) { return turn.rejectContext(rejected); }
         boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null || input.summary() != null;
         var bound = selected.stream().map(binding -> !guarded
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))

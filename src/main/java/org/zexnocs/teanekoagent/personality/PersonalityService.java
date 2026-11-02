@@ -62,7 +62,7 @@ public final class PersonalityService implements IAgentPersonalitySource, IPerso
                         && item.baseVersion() == base.version() && base.mutableFields().contains(item.field()) && item.confidence() >= 0.2
                         && item.activeAt(now)).toList() : List.<PersonalityCorrection>of();
                 var expiry = notes.stream().map(PersonalityCorrection::expiresAt).filter(Objects::nonNull).min(Comparator.naturalOrder()).orElse(null);
-                return new AgentPersonalitySnapshot(binding.identity(settings.correctionsEnabled()), base.id(), base.version(), state.key(), state.revision(),
+                return new AgentPersonalitySnapshot(binding.identity(settings.correctionsEnabled(), state.managementRevision()), base.id(), base.version(), state.key(), state.revision(),
                         base.instructions(), notes.isEmpty() ? "" : writer.writeValueAsString(notes), expiry);
             }, executor);
         });
@@ -77,11 +77,14 @@ public final class PersonalityService implements IAgentPersonalitySource, IPerso
     @Override public CompletionStage<Void> verify(AgentScope scope, AgentPersonalitySnapshot snapshot, ExecutionControl control) {
         return controlled(control, () -> {
             var settings = configuration.settings(scope); var base = configuration.base(settings);
-            return store.binding(scope).thenAcceptAsync(value -> {
+            return store.binding(scope).thenComposeAsync(value -> {
                 control.checkActive(); var expiry = snapshot.expiresAt();
                 var binding = value.orElseThrow(() -> new AgentPromptException(AgentPromptException.Reason.CHANGED));
-                if (!binding.baseFingerprint().equals(base.fingerprint()) || !binding.identity(settings.correctionsEnabled()).equals(snapshot.identity())
-                        || expiry != null && !expiry.isAfter(clock.instant())) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+                return store.state(binding.correctionKey()).thenAccept(state -> {
+                    control.checkActive(); var current = state.orElseThrow(() -> new AgentPromptException(AgentPromptException.Reason.CHANGED));
+                    if (!binding.baseFingerprint().equals(base.fingerprint()) || !binding.identity(settings.correctionsEnabled(), current.managementRevision()).equals(snapshot.identity())
+                            || expiry != null && !expiry.isAfter(clock.instant())) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+                });
             }, executor);
         });
     }
@@ -117,10 +120,17 @@ public final class PersonalityService implements IAgentPersonalitySource, IPerso
             }
             return store.binding(scope).thenComposeAsync(value -> {
                 control.checkActive(); var binding = value.orElseThrow(() -> new AgentPromptException(AgentPromptException.Reason.CHANGED));
-                if (!binding.baseFingerprint().equals(base.fingerprint()) || !binding.identity(settings.correctionsEnabled()).equals(basis.identity())) {
-                    throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
-                }
-                return store.append(binding, candidate);
+                return store.state(binding.correctionKey()).thenCompose(state -> {
+                    var current = state.orElseThrow(() -> new AgentPromptException(AgentPromptException.Reason.CHANGED));
+                    if (!binding.baseFingerprint().equals(base.fingerprint()) || !binding.identity(settings.correctionsEnabled(), current.managementRevision()).equals(basis.identity())) {
+                        throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
+                    }
+                    return store.append(binding, candidate, current.managementRevision(), () -> {
+                        control.checkActive(); var latest = configuration.settings(scope); var actual = configuration.base(latest);
+                        if (!latest.learningEnabled() || !actual.fingerprint().equals(base.fingerprint()) || !candidate.activeAt(clock.instant())
+                                || latest.correctionsEnabled() != settings.correctionsEnabled()) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+                    });
+                });
             }, executor).thenComposeAsync(stored -> {
                 control.checkActive();
                 if (!configuration.settings(scope).learningEnabled()) { throw new AgentPromptException(AgentPromptException.Reason.DISABLED); }

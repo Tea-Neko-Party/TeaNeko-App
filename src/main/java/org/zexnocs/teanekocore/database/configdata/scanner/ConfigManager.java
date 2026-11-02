@@ -5,6 +5,8 @@ import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigFieldChecker;
 import org.zexnocs.teanekocore.database.configdata.api.default_config.BooleanDefaultConfigData;
+import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
+import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -15,7 +17,9 @@ import java.lang.annotation.Target;
  * 配置管理器注解，用于标记一个类为配置管理器。
  *
  * @author zExNocs
- * @date 2026/02/16
+ * @date 2026/11/01
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 @Component
 @Target(ElementType.TYPE)
@@ -32,8 +36,12 @@ public @interface ConfigManager {
      */
     String description();
 
+    /** @return 配置所属的数据实体，默认保留既有通用配置表 */
+    Class<? extends BaseEasyDataObject> storage() default GeneralEasyDataObject.class;
+
     /**
      * config 所属的 namespace。
+     * @return 允许配置使用的作用域命名空间
      */
     String[] namespaces();
 
@@ -50,6 +58,7 @@ public @interface ConfigManager {
      * <br>要求该检测器是 bean 且能搜索出来。
      * <br>如果不是 bean 则应当能由无参构造器创建实例。
      * <br>如果默认 {@link IConfigFieldChecker} 接口则没有任何检测器。
+     * @return 字段检测器类型
      */
     Class<? extends IConfigFieldChecker> fieldChecker() default IConfigFieldChecker.class;
 

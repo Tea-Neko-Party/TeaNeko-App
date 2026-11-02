@@ -21,7 +21,7 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation.
 /**
  * 验证注册适配器的提交语义、并发配额、重放、代次仲裁和损坏数据隔离。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -82,7 +82,7 @@ class MemoryNamespaceStoreTest {
         assertEquals(CREATED, await(store.create(a, 2)).status()); assertEquals(CREATED, await(store.create(b, 2)).status());
         var shared = new MemoryNamespace(MemoryNamespaceId.SHARED, 0, 0, Instant.EPOCH, null, null);
         assertEquals(CREATED, await(store.create(shared, 1)).status());
-        var restored = new EasyDataMemoryNamespaceStore(database.repository, database.database, database.mapper);
+        var restored = new EasyDataMemoryNamespaceStore(database.data, database.mapper);
         assertEquals(a, await(restored.find(a.id())).orElseThrow());
         var page = await(restored.listCreated(creator, 0, 1)); assertEquals(List.of(a), page);
         assertThrows(UnsupportedOperationException.class, page::clear);
@@ -139,7 +139,7 @@ class MemoryNamespaceStoreTest {
         var first = store.create(candidate(UUID.randomUUID(), creator, "群"), 5);
         var second = store.create(candidate(UUID.randomUUID(), creator, "群"), 5);
         assertTrue(entered.await(3, TimeUnit.SECONDS)); release.countDown();
-        var stages = new ArrayList<CompletionStage<MemoryNamespaceMutation>>(List.of(first, second));
+        var stages = new ArrayList<>(List.of(first, second));
         for (int i = 2; i < 30; i++) { stages.add(store.create(candidate(UUID.randomUUID(), creator, "群"), 5)); }
         var results = new ArrayList<MemoryNamespaceMutation>(); for (var stage : stages) { results.add(await(stage)); }
         assertEquals(5, results.stream().filter(result -> result.status() == CREATED).count());
@@ -227,9 +227,8 @@ class MemoryNamespaceStoreTest {
 
     /**
      * 验证损坏或未来 schema 均明确失败，不当作空空间覆盖旧行。
-     * @throws Exception 当提交等待失败时
      */
-    @Test void corruptOrFutureSchemaNeverBecomesDefaultState() throws Exception {
+    @Test void corruptOrFutureSchemaNeverBecomesDefaultState() {
         var a = candidate(UUID.randomUUID(), creator, "群");
         for (var json : List.of("{敏感正文", "null", "{\"schemaVersion\":2,\"value\":" + database.mapper.writeValueAsString(a) + "}")) {
             database.seedNamespace(a.id(), json);
@@ -250,9 +249,8 @@ class MemoryNamespaceStoreTest {
 
     /**
      * 验证存储键与正文中的空间 ID 不一致时失败，不读取为其他空间。
-     * @throws Exception 当事务失败时
      */
-    @Test void mismatchedStorageIdentityIsRejected() throws Exception {
+    @Test void mismatchedStorageIdentityIsRejected() {
         var a = candidate(UUID.randomUUID(), creator, "群"); var b = candidate(UUID.randomUUID(), creator, "群");
         database.seedNamespace(a.id(), database.mapper.writeValueAsString(Map.of("schemaVersion", 1, "value", b)));
         assertThrows(ExecutionException.class, () -> await(store.find(a.id())));

@@ -4,18 +4,23 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Pageable;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
-import org.zexnocs.teanekoagent.adapter.memory.*;
-import org.zexnocs.teanekoagent.adapter.personality.PersonalityLockRepository;
-import org.zexnocs.teanekoagent.memory.fact.legacy.LegacyMemoryLocation;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.zexnocs.teanekoagent.adapter.memory.EasyDataMemoryFactStore;
+import org.zexnocs.teanekoagent.adapter.memory.EasyDataMemoryNamespaceStore;
+import org.zexnocs.teanekoagent.adapter.memory.EasyDataMemoryRecallStore;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyDataObject;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyDataRepository;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
-import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataRepositoryScanner;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
@@ -34,26 +39,23 @@ import static org.mockito.Mockito.when;
 
 /**
  * 模拟事务隔离、唯一键、Version 仲裁和提交回滚，用于离线验证真实适配器的事务合同。
- * 不替代 MySQL/JPA 实机测试；仓库访问仍由实际 EasyDataMemoryNamespaceStore 发起。
+ * 不替代 MySQL/JPA 实机测试；仓库访问由实际 EasyData 基础层发起。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 final class NamespaceDatabaseFixture implements AutoCloseable {
-    final GeneralEasyDataRepository repository = mock(GeneralEasyDataRepository.class);
+    final TeaNekoAgentEasyDataRepository repository = mock(TeaNekoAgentEasyDataRepository.class);
     final IDatabaseService database = mock(IDatabaseService.class);
     final ObjectMapper mapper = new ObjectMapper();
-    final EasyDataMemoryNamespaceStore store = new EasyDataMemoryNamespaceStore(repository, database, mapper);
-    final MemoryFactRepository factRepository = mock(MemoryFactRepository.class);
-    final MemoryNamespaceWriteRepository namespaceLocks = mock(MemoryNamespaceWriteRepository.class);
-    final PersonalityLockRepository personalityLocks = mock(PersonalityLockRepository.class);
-    final EasyDataMemoryFactStore facts = new EasyDataMemoryFactStore(store, namespaceLocks, factRepository, mapper);
-    final EasyDataLegacyMemoryStore legacy = new EasyDataLegacyMemoryStore(store, facts, factRepository, mapper);
-    final EasyDataMemoryRecallStore recall = new EasyDataMemoryRecallStore(store, namespaceLocks, facts);
+    final TeaNekoAgentEasyData data;
+    final EasyDataService easyDataService;
+    final EasyDataMemoryNamespaceStore store;
+    final EasyDataMemoryFactStore facts;
+    final EasyDataMemoryRecallStore recall;
     final AtomicReference<Runnable> beforeCommit = new AtomicReference<>(() -> {});
     final AtomicReference<Runnable> beforeNamespaceLock = new AtomicReference<>(() -> {});
-    final AtomicReference<Runnable> beforeLegacyLock = new AtomicReference<>(() -> {});
     final AtomicReference<Runnable> afterFactPage = new AtomicReference<>(() -> {});
     final AtomicInteger retries = new AtomicInteger();
     final AtomicReference<String> failingWritePrefix = new AtomicReference<>();
@@ -68,36 +70,81 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
     NamespaceDatabaseFixture() {
         when(repository.create(anyString(), anyString(), anyString(), anyString())).thenCallRealMethod();
         when(repository.findByNamespaceAndTargetAndKey(anyString(), anyString(), anyString())).thenAnswer(call ->
-                transaction.get().rows.get(key(call.getArgument(0), call.getArgument(1), call.getArgument(2))));
-        when(repository.saveAndFlush(any())).thenAnswer(call -> {
-            GeneralEasyDataObject row = call.getArgument(0); save(row); return row;
-        });
-        when(factRepository.create(anyString(), anyString(), anyString(), anyString())).thenCallRealMethod();
-        when(factRepository.findByNamespaceAndTargetAndKey(anyString(), anyString(), anyString())).thenAnswer(call ->
-                transaction.get().rows.get(key(call.getArgument(0), call.getArgument(1), call.getArgument(2))));
-        when(factRepository.saveAndFlush(any())).thenAnswer(call -> { MemoryFactDataObject row = call.getArgument(0); save(row); return row; });
-        when(factRepository.findByNamespaceAndTargetAndKeyGreaterThanOrderByKeyAsc(anyString(), anyString(), anyString(), any())).thenAnswer(call -> {
-            String domain = call.getArgument(0), target = call.getArgument(1), after = call.getArgument(2); Pageable page = call.getArgument(3);
-            var rows = transaction.get().rows.values().stream().filter(row -> row instanceof MemoryFactDataObject && row.getNamespace().equals(domain)
-                    && row.getTarget().equals(target) && row.getKey().compareTo(after) > 0).sorted(Comparator.comparing(BaseEasyDataObject::getKey))
-                    .limit(page.getPageSize()).map(row -> (MemoryFactDataObject) row).toList();
-            afterFactPage.get().run(); return rows;
-        });
-        when(namespaceLocks.lockNamespace(anyString())).thenAnswer(call -> lockNamespace(call.getArgument(0)));
-        when(personalityLocks.lock(anyString(), anyString())).thenAnswer(call ->
-                lockRow(key("agent.personality.v1", call.getArgument(0), call.getArgument(1))));
-        // 用更严格的独占锁模拟共享快照与写入互斥，不据此声称验证了并发读性能。
-        when(namespaceLocks.lockSnapshot(anyString())).thenAnswer(call -> snapshotNamespace(call.getArgument(0)));
-        when(factRepository.lockLegacyProfile(anyString(), anyString())).thenAnswer(call -> {
-            beforeLegacyLock.get().run();
-            return lockRow(key("memory", call.getArgument(0), call.getArgument(1)));
+                visible().get(key(call.getArgument(0), call.getArgument(1), call.getArgument(2))));
+        when(repository.findByNamespaceAndTarget(anyString(), anyString())).thenAnswer(call -> visible().values().stream()
+                .filter(row -> row.getNamespace().equals(call.getArgument(0)) && row.getTarget().equals(call.getArgument(1))).map(row -> (TeaNekoAgentEasyDataObject) copy(row)).toList());
+        when(repository.saveAndFlush(any())).thenAnswer(call -> { TeaNekoAgentEasyDataObject row = call.getArgument(0); save(row); return row; });
+        when(repository.save(any())).thenAnswer(call -> { TeaNekoAgentEasyDataObject row = call.getArgument(0); save(row); return row; });
+        org.mockito.Mockito.doCallRealMethod().when(repository).updateDataObjectData(anyString(), anyString(), anyString(), anyString());
+        org.mockito.Mockito.doAnswer(call -> {
+            var locator = key(call.getArgument(0), call.getArgument(1), call.getArgument(2)); var current = transaction.get();
+            if (current.rows.remove(locator) != null) { current.writes.add(locator); } return null;
+        }).when(repository).deleteByNamespaceAndTargetAndKey(anyString(), anyString(), anyString());
+        org.mockito.Mockito.doAnswer(call -> {
+            BaseEasyDataObject row = call.getArgument(0); var locator = key(row.getNamespace(), row.getTarget(), row.getKey());
+            var current = transaction.get(); if (current.rows.remove(locator) != null) { current.writes.add(locator); } return null;
+        }).when(repository).delete(any(TeaNekoAgentEasyDataObject.class));
+        when(repository.lockDataForWrite(anyString(), anyString(), anyString())).thenAnswer(call -> locked(call.getArgument(0), call.getArgument(1), call.getArgument(2), false));
+        when(repository.lockDataForRead(anyString(), anyString(), anyString())).thenAnswer(call -> locked(call.getArgument(0), call.getArgument(1), call.getArgument(2), true));
+        when(repository.scanData(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class), any())).thenAnswer(call ->
+                page(call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4), false));
+        when(repository.scanDataForRead(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class), any())).thenAnswer(call ->
+                page(call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4), true));
+        when(repository.scanDataForWrite(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class), any())).thenAnswer(call ->
+                page(call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4), true));
+        when(repository.findByNamespaceAndTargetAndIdLessThanOrderByIdDesc(anyString(), anyString(), org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
+            String domain = call.getArgument(0), target = call.getArgument(1); long before = call.getArgument(2); Pageable page = call.getArgument(3);
+            return transaction.get().rows.values().stream().filter(row -> row.getNamespace().equals(domain) && row.getTarget().equals(target) && row.getId() < before)
+                    .sorted(Comparator.comparingLong(BaseEasyDataObject::getId).reversed()).limit(page.getPageSize()).map(row -> (TeaNekoAgentEasyDataObject) row).toList();
         });
         when(database.__pushTask(any())).thenAnswer(call -> {
-            IDatabaseTaskConfig task = call.getArgument(0);
-            var result = new CompletableFuture<ITaskResult<Void>>();
-            executor.execute(() -> execute(task, result));
-            return new TaskFuture<>(logger, task.getName(), result);
+            IDatabaseTaskConfig task = call.getArgument(0); var result = new CompletableFuture<ITaskResult<Void>>();
+            executor.execute(() -> execute(task, result)); return new TaskFuture<>(logger, task.getName(), result);
         });
+        var scanner = mock(EasyDataRepositoryScanner.class);
+        org.mockito.Mockito.doReturn(repository).when(scanner).getRepository(TeaNekoAgentEasyDataObject.class);
+        easyDataService = new EasyDataService(mock(ICacheService.class), database, scanner, mapper);
+        data = new TeaNekoAgentEasyData(easyDataService);
+        store = new EasyDataMemoryNamespaceStore(data, mapper); facts = new EasyDataMemoryFactStore(store, data, mapper);
+        recall = new EasyDataMemoryRecallStore(store, facts);
+    }
+
+    /**
+     * 普通 DTO 只读取已提交副本，事务 DTO 使用当前尝试的隔离状态。
+     * @return 当前可见行映射
+     */
+    private synchronized Map<String, BaseEasyDataObject> visible() { return transaction.get() == null ? new HashMap<>(committed) : transaction.get().rows; }
+
+    /**
+     * 模拟通用当前读，空间读取保留原有并发协调钩子。
+     * @param domain 域
+     * @param target 目标
+     * @param id 键
+     * @param read 是否共享读取
+     * @return 当前实体或空
+     */
+    private BaseEasyDataObject locked(String domain, String target, String id, boolean read) {
+        if (domain.equals("agent.namespace.v1") && target.equals("namespace")) { return read ? snapshotNamespace(id) : lockNamespace(id); }
+        return lockRow(key(domain, target, id));
+    }
+
+    /**
+     * 复用原有界扫描模型，不为每个业务 Store 重建不同仓库夹具。
+     * @param domain 域
+     * @param target 目标
+     * @param after 排除下界
+     * @param through 可选上界
+     * @param page 有界页面
+     * @param current 是否当前读
+     * @return 固定目标页面
+     */
+    private List<TeaNekoAgentEasyDataObject> page(String domain, String target, String after, @Nullable String through, Pageable page, boolean current) {
+        var rows = current ? currentFactPage(domain, target, after, page) : transaction.get().rows.values().stream()
+                .filter(row -> row.getNamespace().equals(domain) && row.getTarget().equals(target) && row.getKey().compareTo(after) > 0)
+                .sorted(Comparator.comparing(BaseEasyDataObject::getKey)).map(row -> (TeaNekoAgentEasyDataObject) row).toList();
+        var result = rows.stream().filter(row -> through == null || row.getKey().compareTo(through) <= 0).limit(page.getPageSize()).toList();
+        if (domain.equals("agent.fact.v1") && target.startsWith("record:")) { afterFactPage.get().run(); }
+        return result;
     }
 
     /**
@@ -113,13 +160,35 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
     }
 
     /**
+     * 模拟管理锁定查询的当前读，保留本事务写入并刷新其他已提交行。
+     * @param domain 事实域
+     * @param target 固定目标
+     * @param after 游标
+     * @param page 有界分页
+     * @return 当前可见原始页面
+     */
+    private synchronized List<TeaNekoAgentEasyDataObject> currentFactPage(String domain, String target, String after, Pageable page) {
+        var current = transaction.get();
+        current.rows.entrySet().removeIf(entry -> entry.getValue().getNamespace().equals(domain) && entry.getValue().getTarget().equals(target)
+                && !current.writes.contains(entry.getKey()));
+        committed.forEach((locator, row) -> {
+            if (row.getNamespace().equals(domain) && row.getTarget().equals(target) && !current.writes.contains(locator)) {
+                current.rows.put(locator, copy(row)); current.versions.put(locator, row.getVersion());
+            }
+        });
+        return current.rows.values().stream().filter(row -> row instanceof TeaNekoAgentEasyDataObject && row.getNamespace().equals(domain)
+                && row.getTarget().equals(target) && row.getKey().compareTo(after) > 0).sorted(Comparator.comparing(BaseEasyDataObject::getKey))
+                .limit(page.getPageSize()).map(row -> (TeaNekoAgentEasyDataObject) row).toList();
+    }
+
+    /**
      * 模拟锁定查询读取最新已提交值，锁持有至当前事务结束，避免快照读掩盖换代。
      * @param id 业务空间
      * @return 锁定的当前行或空
      */
-    private GeneralEasyDataObject lockNamespace(String id) {
+    private TeaNekoAgentEasyDataObject lockNamespace(String id) {
         beforeNamespaceLock.get().run();
-        return (GeneralEasyDataObject) lockRow(key("agent.namespace.v1", "namespace", id));
+        return (TeaNekoAgentEasyDataObject) lockRow(key("agent.namespace.v1", "namespace", id));
     }
 
     /**
@@ -127,7 +196,7 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
      * @param id 业务空间
      * @return 当前锁定元数据或空
      */
-    private @Nullable GeneralEasyDataObject snapshotNamespace(String id) {
+    private @Nullable TeaNekoAgentEasyDataObject snapshotNamespace(String id) {
         var metadata = lockNamespace(id); var prefix = "record:" + id + ":g:";
         synchronized (this) {
             var current = transaction.get();
@@ -177,10 +246,12 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
         for (int attempt = 0; attempt <= 8; attempt++) {
             try {
                 var current = snapshot(); transaction.set(current);
+                TransactionSynchronizationManager.setActualTransactionActive(true); TransactionSynchronizationManager.initSynchronization();
                 for (var operation : task.__getTasksWithTransaction()) { operation.call(); }
                 beforeCommit.get().run();
                 current.writes.stream().sorted().forEach(locator -> acquire(current, locator));
                 commit(current);
+                TransactionSynchronizationManager.getSynchronizations().forEach(TransactionSynchronization::afterCommit);
                 for (var operation : task.__getTasksWithCache()) { operation.call(); }
                 result.complete(EmptyTaskResult.INSTANCE); return;
             } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException conflict) {
@@ -191,6 +262,8 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
                 var current = transaction.get();
                 if (current != null) { for (int i = current.locks.size() - 1; i >= 0; i--) { current.locks.get(i).unlock(); } }
                 transaction.remove();
+                if (TransactionSynchronizationManager.isSynchronizationActive()) { TransactionSynchronizationManager.clearSynchronization(); }
+                TransactionSynchronizationManager.setActualTransactionActive(false);
             }
         }
     }
@@ -217,10 +290,11 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
             var previous = committed.get(key); var expected = current.versions.get(key);
             if (expected == null && previous != null) { throw new DataIntegrityViolationException("测试唯一键冲突"); }
             if (expected != null && (previous == null || previous.getVersion() != expected)) {
-                throw new ObjectOptimisticLockingFailureException(GeneralEasyDataObject.class, key);
+                throw new ObjectOptimisticLockingFailureException(TeaNekoAgentEasyDataObject.class, key);
             }
         }
         for (var key : current.writes) {
+            if (!current.rows.containsKey(key)) { committed.remove(key); continue; }
             var row = copy(current.rows.get(key)); var previous = committed.get(key);
             row.setVersion(previous == null ? 0 : previous.getVersion() + 1); committed.put(key, row);
         }
@@ -232,8 +306,7 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
      * @return 独立可变行
      */
     private BaseEasyDataObject copy(BaseEasyDataObject source) {
-        var result = source instanceof MemoryFactDataObject ? factRepository.create(source.getNamespace(), source.getTarget(), source.getKey(), source.getValue())
-                : repository.create(source.getNamespace(), source.getTarget(), source.getKey(), source.getValue());
+        var result = repository.create(source.getNamespace(), source.getTarget(), source.getKey(), source.getValue());
         result.setId(source.getId()); result.setVersion(source.getVersion()); return result;
     }
 
@@ -294,7 +367,7 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
      * @param value 原正文
      */
     synchronized void seedFactRow(String domain, String target, String key, String value) {
-        var row = factRepository.create(domain, target, key, value); row.setId(sequence.incrementAndGet());
+        var row = repository.create(domain, target, key, value); row.setId(sequence.incrementAndGet());
         committed.put(key(domain, target, key), row);
     }
 
@@ -306,18 +379,6 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
      */
     synchronized void removeFactRow(String namespace, String target, String key) { committed.remove(key(namespace, target, key)); }
 
-    /**
-     * 模拟旧列表写入的事务更新，提交时同样受物理行锁和 Version 保护。
-     * @param location 原行定位
-     * @param json 新原文
-     * @return 事务完成信号
-     */
-    CompletionStage<Void> updateLegacy(LegacyMemoryLocation location, String json) {
-        return new DatabaseTaskConfig(database, "测试旧资料更新").addTransactionTask(() -> {
-            var row = Objects.requireNonNull(factRepository.findByNamespaceAndTargetAndKey("memory", location.target(), location.key()));
-            row.setValue(json); factRepository.saveAndFlush(row);
-        }).pushAsync();
-    }
 
     /**
      * 仅供离线断言观察已提交正文，不通过真实数据库或业务缓存读写。
@@ -332,6 +393,17 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
 
     /** 关闭测试拥有的执行器，等待在途事务完成，不关闭任何共享基础设施。 */
     @Override public void close() { executor.close(); }
+
+    /**
+     * 验收当前已提交业务目标，不向业务服务暴露仓库。
+     * @param domain 精确域
+     * @param targetPrefix 目标前缀
+     * @return 已提交正文快照
+     */
+    synchronized List<String> values(String domain, String targetPrefix) {
+        return committed.values().stream().filter(row -> row.getNamespace().equals(domain) && row.getTarget().startsWith(targetPrefix))
+                .map(BaseEasyDataObject::getValue).toList();
+    }
 
     /**
      * 一次尝试的数据副本及原始版本，不暴露给业务组件。

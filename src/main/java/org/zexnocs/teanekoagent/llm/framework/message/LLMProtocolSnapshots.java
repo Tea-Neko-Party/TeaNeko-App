@@ -22,7 +22,7 @@ import java.util.*;
  * 不通过序列化猜测消息角色，因而保留工具配对及供应商回放所需的接口类型。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -40,6 +40,20 @@ public final class LLMProtocolSnapshots {
     public static List<ILLMMessage> messages(List<ILLMMessage> source) {
         return Objects.requireNonNull(source, "消息列表不能为空。").stream()
                 .map(LLMProtocolSnapshots::message).toList();
+    }
+    /**
+     * 将输入显式交给独立实例时移除供应商会话状态，保留正文、角色及工具 ID 配对。
+     * 同实例的正常往返仍使用 messages，不丢弃其必要回放状态。
+     * @param source 宿主明确交接的统一消息
+     * @return 不含其他实例透明状态的不可变消息
+     */
+    public static List<ILLMMessage> independentMessages(List<ILLMMessage> source) {
+        return messages(source).stream().map(value -> (ILLMMessage) switch (value.getRole()) {
+            case SYSTEM -> new SystemMessage(value.getName(), value.getContents(), Map.of());
+            case USER -> new UserMessage(value.getName(), value.getContents(), Map.of());
+            case ASSISTANT -> new AssistantMessage(value.getName(), value.getContents(), Map.of(), ((ILLMAssistantMessage) value).getToolCalls());
+            case TOOL -> new ToolMessage(value.getName(), value.getContents(), Map.of(), ((ILLMToolMessage) value).getToolCallId());
+        }).toList();
     }
 
     /**

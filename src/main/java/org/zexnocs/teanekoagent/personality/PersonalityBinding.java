@@ -13,7 +13,7 @@ import java.util.Objects;
  * @param revision 绑定版本
  * @param backupKey 最近基础人格切换保存的不可变备份，首次初始化时为空
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -39,5 +39,16 @@ public record PersonalityBinding(AgentScope scope, String baseFingerprint, Strin
      */
     public String identity(boolean correctionsEnabled) {
         return PersonalityKeys.digest(baseFingerprint, correctionKey, Long.toString(revision), Boolean.toString(correctionsEnabled));
+    }
+    /**
+     * 管理修改使共享该 key 的旧轮次失效，普通新增不改变身份。
+     * @param correctionsEnabled 应用开关
+     * @param managementRevision 当前管理代次
+     * @return 可用于复核的稳定身份
+     */
+    public String identity(boolean correctionsEnabled, long managementRevision) {
+        if (managementRevision < 0) { throw new IllegalArgumentException("人格管理代次不能为负。"); }
+        return managementRevision == 0 ? identity(correctionsEnabled)
+                : PersonalityKeys.digest(identity(correctionsEnabled), "management", Long.toString(managementRevision));
     }
 }

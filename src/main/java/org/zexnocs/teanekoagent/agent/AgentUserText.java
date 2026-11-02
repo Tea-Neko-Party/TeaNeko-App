@@ -3,7 +3,9 @@ package org.zexnocs.teanekoagent.agent;
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import com.fasterxml.jackson.annotation.JsonValue;
 import lombok.NonNull;
+import org.jspecify.annotations.Nullable;
 
+import java.time.Instant;
 import java.util.Objects;
 
 /**
@@ -11,17 +13,25 @@ import java.util.Objects;
  * 只保存授权判定所需数据，不替代 App 原生消息；平台身份和原文真实性由可信入口保证。
  * @param sourceId 当前原消息标识，必须与请求 actor 一致
  * @param text 当前原消息的未改写文本，不含转发或引用正文
+ * @param occurredAt 平台原消息时刻，旧独立宿主未知时为空，不能由模型提供
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
 @JsonIgnoreType
-public record AgentUserText(String sourceId, String text) {
+public record AgentUserText(String sourceId, String text, @Nullable Instant occurredAt) {
+    /**
+     * 保留不知道真实平台时间的旧宿主入口，历史须明确标注为处理时间估算。
+     * @param sourceId 真实原消息 ID
+     * @param text 当前原文
+     */
+    public AgentUserText(String sourceId, String text) { this(sourceId, text, null); }
     /**
      * 保持原文不变并限制附加凭据大小，不从该数据自行推断用户已授权。
      * @param sourceId 原消息标识
      * @param text 真实原文，最多 65536 个 Java 字符
+     * @param occurredAt 真实平台时刻或未知
      * @throws NullPointerException 当来源或文本为空时
      * @throws IllegalArgumentException 当来源标识或文本长度非法时
      */

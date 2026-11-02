@@ -1,0 +1,62 @@
+{
+  "groups": [
+    {
+      "name": "tea-neko.agent.memory.recall",
+      "description": "记忆检索的返回数量、证据字符与候选扫描预算。"
+    },
+    {
+      "name": "tea-neko.agent.monitor",
+      "description": "脱敏用量告警开关、阈值与作用域及实例冷却。"
+    }
+  ],
+  "properties": [
+    {
+      "name": "tea-neko.agent.memory.recall.injection-limit",
+      "type": "java.lang.Integer",
+      "defaultValue": 12,
+      "description": "自动注入 Prompt 时默认返回的记忆证据条数，不超过 hard-limit。"
+    },
+    {
+      "name": "tea-neko.agent.memory.recall.tool-limit",
+      "type": "java.lang.Integer",
+      "defaultValue": 8,
+      "description": "模型调用记忆查询工具时默认返回的证据条数，不超过 hard-limit。"
+    },
+    {
+      "name": "tea-neko.agent.memory.recall.hard-limit",
+      "type": "java.lang.Integer",
+      "defaultValue": 20,
+      "description": "单次检索最多返回的证据条数，允许范围为1至100，默认注入与工具条数不能超过此值。"
+    },
+    {
+      "name": "tea-neko.agent.memory.recall.max-characters",
+      "type": "java.lang.Integer",
+      "defaultValue": 16000,
+      "description": "单次检索证据数组的紧凑 JSON 上限，按 Java UTF-16 字符计数，包含元数据与转义，不是 token 数；允许范围为2至1000000。"
+    },
+    {
+      "name": "tea-neko.agent.memory.recall.max-scanned",
+      "type": "java.lang.Integer",
+      "defaultValue": 1000,
+      "description": "单次检索最多检查的原始候选记录数，包含过期和未命中的记录，不等于返回条数；允许范围为1至10000。"
+    },
+    {
+      "name": "tea-neko.agent.monitor.alerts-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "是否启用单轮 token 用量阈值事件与日志告警；关闭后仍保留脱敏轮次统计，不自动发送聊天通知。"
+    },
+    {
+      "name": "tea-neko.agent.monitor.alert-tokens",
+      "type": "java.lang.Long",
+      "defaultValue": 16384,
+      "description": "单轮报告与估算 token 合计达到此正整数阈值时触发告警，不代表精确费用或模型上下文窗口。"
+    },
+    {
+      "name": "tea-neko.agent.monitor.alert-cooldown-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 300,
+      "description": "同一作用域和 Agent 实例的告警冷却秒数，期间只合并次数；允许范围为1至86400。"
+    }
+  ]
+}

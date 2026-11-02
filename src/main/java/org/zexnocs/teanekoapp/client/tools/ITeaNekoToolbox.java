@@ -11,10 +11,16 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * <p>提供了基础的消息发送器工具，以便于适配器实现类可以直接使用这些工具来发送消息给 Tea Neko 服务器，而不需要关心底层的通信细节。
  *
  * @author zExNocs
- * @date 2026/02/23
+ * @date 2026/11/02
  * @since 4.0.9
+ * @version 4.5.0-l
  */
 public interface ITeaNekoToolbox {
+    /**
+     * 返回可信连接中机器人自身的平台 ID；不支持时明确未知，自动 Agent 入口保持关闭。
+     * @return 自身平台 ID，不从用户文本或模型参数推导
+     */
+    default java.util.Optional<String> getSelfPlatformId() { return java.util.Optional.empty(); }
     /**
      * 获取消息发送器工具。
      *
@@ -63,6 +69,7 @@ public interface ITeaNekoToolbox {
     /**
      * 获取构造平台用户信息的发送器。
      * 该发射器可以根据平台 ID 构造出用户的信息列表。
+     * @return 平台用户信息构造器
      */
     default IPlatformUserInfoConstructor getPlatformUserInfoConstructorSender() {
         throw new UnsupportedOperationException("该 client 不支持获取构造平台用户信息的发送器。");

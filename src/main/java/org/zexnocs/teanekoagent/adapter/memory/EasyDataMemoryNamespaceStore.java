@@ -2,50 +2,46 @@ package org.zexnocs.teanekoagent.adapter.memory;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekoagent.memory.namespace.IMemoryNamespaceStore;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespace;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceId;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation;
-import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
-import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation.Status.*;
 
 /**
- * 复用 general_data 保存空间注册元数据，不读取或重写旧 llm_related 事实和人格数据。
+ * 通过 Agent 专用 EasyData DTO 保存空间元数据，不直接接触仓库或数据库实体。
  * 每次重试在 DatabaseTask 的新事务中重读行，以唯一键和已有 Version 仲裁创建及配额索引。
  * 不使用 EasyData DTO 缓存或无版本批量更新，提交成功后才公开业务结果。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 @Service
 public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore {
     private static final String STORAGE_NAMESPACE = "agent.namespace.v1";
-    private final GeneralEasyDataRepository repository;
-    private final IDatabaseService database;
+    private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
 
     /**
      * 保存现有基础设施，不在 Spring 构造期间查询或登记数据。
-     * @param repository 通用 EasyData 仓库
-     * @param database 既有事务及重试任务入口
+     * @param data Agent 专用数据入口
      * @param mapper 本地存储 JSON 转换器
      * @throws NullPointerException 当依赖为空时
      */
-    public EasyDataMemoryNamespaceStore(GeneralEasyDataRepository repository, IDatabaseService database, ObjectMapper mapper) {
-        this.repository = Objects.requireNonNull(repository, "记忆空间仓库不能为空。");
-        this.database = Objects.requireNonNull(database, "记忆空间数据库任务入口不能为空。");
+    public EasyDataMemoryNamespaceStore(TeaNekoAgentEasyData data, ObjectMapper mapper) {
+        this.data = Objects.requireNonNull(data, "记忆空间 EasyData 不能为空。").inNamespace(STORAGE_NAMESPACE);
         this.mapper = Objects.requireNonNull(mapper, "记忆空间 JSON 转换器不能为空。");
     }
 
@@ -92,7 +88,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
             return new MemoryNamespaceMutation(Objects.equals(current.creation(), candidate.creation()) ? UNCHANGED : CONFLICT, current);
         }
         var creation = candidate.creation();
-        GeneralEasyDataObject indexRow = null;
+        EasyDataRow indexRow = null;
         CreatorIndex index = null;
         if (creation != null) {
             var creator = creation.actor().userId().orElseThrow();
@@ -169,7 +165,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @param id 目标空间
      * @return 当前受 Version 管理的行或空
      */
-    @Nullable GeneralEasyDataObject namespaceRow(MemoryNamespaceId id) {
+    @Nullable EasyDataRow namespaceRow(MemoryNamespaceId id) {
         return row("namespace", id.value());
     }
 
@@ -179,17 +175,30 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @param key 物理键
      * @return 受 Version 管理的原始行或空
      */
-    @Nullable GeneralEasyDataObject row(String target, String key) {
-        return repository.findByNamespaceAndTargetAndKey(STORAGE_NAMESPACE, target, key);
+    @Nullable EasyDataRow row(String target, String key) {
+        return dto(target).find(key, EasyDataLock.NONE);
     }
+    /**
+     * 为本业务域取得无缓存事务 DTO，不向 Store 暴露仓库。
+     * @param target 固定目标
+     * @return 当前目标的事务视图
+     */
+    IEasyDataTransactionDto dto(String target) { return data.get(target).atomic(); }
+    /**
+     * 锁定当前空间元数据，事实和管理使用同一事务入口。
+     * @param id 空间
+     * @param lock 当前读方式
+     * @return 原版本 DTO 或空
+     */
+    @Nullable EasyDataRow lockNamespace(MemoryNamespaceId id, EasyDataLock lock) { return dto("namespace").find(id.value(), lock); }
 
     /**
      * 定位个人配额索引；缺失时首次插入仍由数据库唯一键仲裁。
      * @param creator 真实创建者
      * @return 有版本行或空
      */
-    private @Nullable GeneralEasyDataObject creatorRow(UUID creator) {
-        return repository.findByNamespaceAndTargetAndKey(STORAGE_NAMESPACE, "creator:" + creator, "owned");
+    private @Nullable EasyDataRow creatorRow(UUID creator) {
+        return row("creator:" + creator, "owned");
     }
 
     /**
@@ -199,7 +208,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @return 通过校验的业务元数据
      * @throws IllegalStateException 当 JSON 或定位无效时
      */
-    MemoryNamespace namespace(GeneralEasyDataObject row, MemoryNamespaceId id) {
+    MemoryNamespace namespace(EasyDataRow row, MemoryNamespaceId id) {
         var value = read(row, NamespaceData.class).value();
         if (!value.id().equals(id)) { throw new IllegalStateException("记忆空间存储键与元数据不一致。"); }
         return value;
@@ -212,7 +221,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @return 不可变索引
      * @throws IllegalStateException 当索引主体不一致时
      */
-    private CreatorIndex creatorIndex(GeneralEasyDataObject row, UUID creator) {
+    private CreatorIndex creatorIndex(EasyDataRow row, UUID creator) {
         var value = read(row, CreatorIndex.class);
         if (!value.creator().equals(creator)) { throw new IllegalStateException("记忆空间创建索引主体不一致。"); }
         return value;
@@ -226,7 +235,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @return 已构造并校验的数据
      * @throws IllegalStateException 当存储损坏或 schema 不受支持时
      */
-    <T> T read(GeneralEasyDataObject row, Class<T> type) {
+    <T> T read(EasyDataRow row, Class<T> type) {
         try { return Objects.requireNonNull(mapper.readValue(row.getValue(), type)); }
         catch (RuntimeException invalid) { throw new IllegalStateException("记忆空间存储数据损坏或版本不受支持。"); }
     }
@@ -239,13 +248,21 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @param value 显式存储数据
      * @throws IllegalStateException 当本地 JSON 编码失败时
      */
-    void write(@Nullable GeneralEasyDataObject existing, String target, String key, Object value) {
+    void write(@Nullable EasyDataRow existing, String target, String key, Object value) {
         final String encoded;
         try { encoded = mapper.writeValueAsString(value); }
         catch (RuntimeException invalid) { throw new IllegalStateException("记忆空间数据无法编码。"); }
-        var row = existing == null ? repository.create(STORAGE_NAMESPACE, target, key, encoded) : existing;
+        var row = existing == null ? dto(target).create(key, encoded) : existing;
         row.setValue(encoded);
-        repository.saveAndFlush(row);
+        dto(target).save(row);
+    }
+
+    /**
+     * 在管理事务已持有空间锁时保存元数据，复用唯一的持久化结构。
+     * @param value 已验证的新空间元数据
+     */
+    void saveNamespaceInTransaction(MemoryNamespace value) {
+        write(namespaceRow(value.id()), "namespace", value.id().value(), new NamespaceData(1, value));
     }
 
     /**
@@ -257,11 +274,7 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      */
     <T> CompletionStage<T> submit(String name, Supplier<T> operation) {
         try {
-            var result = new AtomicReference<T>();
-            var task = new DatabaseTaskConfig(database, name);
-            task.addTransactionTask(() -> { result.set(null); result.set(operation.get()); });
-            return task.pushAsync().thenApply(ignored -> Objects.requireNonNull(result.get(), "记忆空间事务未产生结果。"))
-                    .toCompletableFuture().minimalCompletionStage();
+            return data.transaction(name, operation);
         } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
     }
 

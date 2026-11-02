@@ -1,13 +1,16 @@
 package org.zexnocs.teanekocore.database.configdata;
 
-import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataRegisterService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
+import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Optional;
@@ -18,18 +21,29 @@ import java.util.concurrent.CompletionStage;
  * 配置数据注册服务实现类，负责将配置数据注册到数据库中。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 @Service
-@RequiredArgsConstructor
 public class ConfigDataRegisterService implements IConfigDataRegisterService {
     /// 数据库命名空间，所有配置数据都将存储在这个命名空间下。
     public final static String DATABASE_NAMESPACE = "config";
 
     /// 日志记录器，用于在注册过程中记录日志。
     private final ILogger logger;
+    private final @Nullable IEasyDataService easyData;
+    /**
+     * 保留原通用配置宿主的装配入口，不隐式将专用实体回退到通用表。
+     * @param logger 项目日志
+     */
+    public ConfigDataRegisterService(ILogger logger) { this.logger = logger; this.easyData = null; }
+    /**
+     * 为声明专用存储的管理器复用原 EasyData 服务。
+     * @param logger 项目日志
+     * @param easyData 统一 DTO 服务
+     */
+    @Autowired public ConfigDataRegisterService(ILogger logger, @Nullable IEasyDataService easyData) { this.logger = logger; this.easyData = easyData; }
 
     /**
      * 注册配置数据到数据库中。该方法会根据 ConfigManager 注解中的信息创建一个新的配置实例，并将其存储在数据库中。
@@ -76,6 +90,10 @@ public class ConfigDataRegisterService implements IConfigDataRegisterService {
      * @return 定位到当前配置管理器存储目标的数据对象
      */
     public IEasyDataDto getDto(ConfigManager configManager) {
+        if (configManager.storage() != GeneralEasyDataObject.class) {
+            if (easyData == null) { throw new IllegalStateException("专用配置存储尚未装配 EasyData 服务。"); }
+            return easyData.getEasyDataFor(configManager.storage(), DATABASE_NAMESPACE, configManager.value());
+        }
         return GeneralEasyData.of(ConfigDataRegisterService.DATABASE_NAMESPACE)
                 .get(configManager.value());
     }

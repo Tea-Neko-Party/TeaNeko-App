@@ -9,13 +9,11 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
 import org.zexnocs.teanekocore.database.easydata.core.exception.JsonSerializationFailedException;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDtoTaskConfig;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -24,9 +22,9 @@ import java.util.concurrent.locks.ReentrantLock;
  * <br> 4.4.0: 加锁
  *
  * @author zExNocs
- * @date 2026/02/15
+ * @date 2026/11/01
  * @since 4.0.0
- * @version 4.4.0
+ * @version 4.5.0-l
  */
 @Getter
 public class EasyDataDto implements IEasyDataDto {
@@ -34,6 +32,7 @@ public class EasyDataDto implements IEasyDataDto {
     private final IDatabaseService databaseService;
 
     /// 数据库类
+    @Getter(lombok.AccessLevel.NONE)
     private final BaseEasyDataRepository<?> repository;
 
     /// 任务链命名空间
@@ -58,9 +57,11 @@ public class EasyDataDto implements IEasyDataDto {
      * 构造函数。
      * 不能私自创建 EasyDataDto 对象。
      * @param databaseService 数据库服务。
+     * @param repository 由入口固定的底层仓库。
      * @param taskStageNamespace 任务阶段链命名空间。
      * @param namespace 命名空间。
      * @param target 目标。
+     * @param objectMapper JSON 转换器。
      */
     protected EasyDataDto(IDatabaseService databaseService,
                 BaseEasyDataRepository<?> repository,
@@ -74,6 +75,19 @@ public class EasyDataDto implements IEasyDataDto {
         this.namespace = namespace;
         this.target = target;
         this.objectMapper = objectMapper;
+    }
+
+    /**
+     * 取得当前目标的事务视图，不借助普通 DTO 缓存读取行锁或版本。
+     * @return 仅在外层数据库事务中有效的视图
+     */
+    @Override public IEasyDataTransactionDto atomic() {
+        return new EasyDataTransactionDto<>(repository, namespace, target, this::invalidate);
+    }
+    /** 在已提交写入后惰性失效缓存，不把事务候选值提前发布。 */
+    private void invalidate() {
+        lock.lock();
+        try { data = null; } finally { lock.unlock(); }
     }
 
     /**
@@ -113,6 +127,17 @@ public class EasyDataDto implements IEasyDataDto {
     }
 
     /**
+     * 在同一锁内取得已加载快照，避免提交失效发生在检查与读取之间。
+     * 返回的旧快照允许正在进行的读取完成，后续读取会重新加载。
+     * @return 当前完整缓存快照
+     */
+    private Map<String, String> snapshot() {
+        lock.lock();
+        try { refreshIfNecessary(); return Objects.requireNonNull(data); }
+        finally { lock.unlock(); }
+    }
+
+    /**
      * 判断是否存在键。
      *
      * @param key 键。
@@ -123,7 +148,7 @@ public class EasyDataDto implements IEasyDataDto {
         // 如果数据为null，刷新数据。
         refreshIfNecessary();
         // 判断是否存在键。
-        return data.containsKey(key);
+        return snapshot().containsKey(key);
     }
 
     /**
@@ -138,7 +163,7 @@ public class EasyDataDto implements IEasyDataDto {
     public String get(String key) {
         // 如果数据为null，刷新数据。
         refreshIfNecessary();
-        return data.get(key);
+        return snapshot().get(key);
     }
 
     /**
@@ -164,7 +189,7 @@ public class EasyDataDto implements IEasyDataDto {
             return null;
         }
         // 从缓存中获取值
-        String value = data.get(key);
+        String value = snapshot().get(key);
         // 如果不存在，返回默认值
         if (value == null) {
             return defaultValue;
@@ -191,13 +216,16 @@ public class EasyDataDto implements IEasyDataDto {
      *
      * @param key   键
      * @param clazz List 中元素的类型
+     * @param <T> 元素类型
+     * @return 反序列化列表，缺失时为空
+     * @throws JsonSerializationFailedException 当列表正文无法解析时
      */
     @Override
     public <T> List<T> getList(String key, @NonNull Class<T> clazz) throws JsonSerializationFailedException {
         // 如果数据为null，刷新数据。
         refreshIfNecessary();
         // 从缓存中获取值
-        String value = data.get(key);
+        String value = snapshot().get(key);
         // 如果不存在，返回空列表
         if (value == null) {
             return List.of();
@@ -227,7 +255,7 @@ public class EasyDataDto implements IEasyDataDto {
         refreshIfNecessary();
         // 遍历所有键值对，找到值为 value 的键
         List<String> keys = new ArrayList<>();
-        for (var entry : data.entrySet()) {
+        for (var entry : snapshot().entrySet()) {
             if (entry.getValue().equals(value)) {
                 keys.add(entry.getKey());
             }
@@ -245,7 +273,7 @@ public class EasyDataDto implements IEasyDataDto {
         // 如果数据为null，刷新数据。
         refreshIfNecessary();
         // 返回所有键。
-        return data.keySet();
+        return List.copyOf(snapshot().keySet());
     }
 
     /**
@@ -260,7 +288,11 @@ public class EasyDataDto implements IEasyDataDto {
     }
 
     /**
-     * EasyDataDto 任务配置类。
+     * 复用原数据库事务与缓存任务，提交成功后失效当前 DTO 的缓存。
+     * @author zExNocs
+     * @date 2026/11/01
+     * @since 4.0.0
+     * @version 4.5.0-l
      */
     public class EasyDataDtoTaskConfig extends DatabaseTaskConfig implements IEasyDataDtoTaskConfig {
         /**
@@ -279,6 +311,7 @@ public class EasyDataDto implements IEasyDataDto {
          * @param key 键。
          * @param value 值。
          * @param <T> 类型。
+         * @return 当前任务，供继续组合事务步骤
          */
         @Override
         public <T> IEasyDataDtoTaskConfig set(String key, @Nullable T value) {
@@ -293,7 +326,7 @@ public class EasyDataDto implements IEasyDataDto {
                 // 数据库写入
                 addTransactionTask(() -> repository.updateDataObjectData(namespace, target, key, str));
                 // 缓存写入
-                addCacheTask(() -> data.put(key, str));
+                addCacheTask(EasyDataDto.this::invalidate);
                 return this;
             }
             // 如果不是String，尝试用Json序列化
@@ -303,7 +336,7 @@ public class EasyDataDto implements IEasyDataDto {
                 // 数据库写入
                 addTransactionTask(() -> repository.updateDataObjectData(namespace, target, key, str));
                 // 缓存写入
-                addCacheTask(() -> data.put(key, str));
+                addCacheTask(EasyDataDto.this::invalidate);
             } catch (JacksonException e) {
                 throw new JsonSerializationFailedException("""
                         Json 序列化失败。
@@ -319,6 +352,7 @@ public class EasyDataDto implements IEasyDataDto {
          * 删除键。
          * 如果直接操作数据库则应该加上事务注解。
          * @param key 键。
+         * @return 当前任务，供继续组合事务步骤
          */
         @Override
         public IEasyDataDtoTaskConfig remove(String key) {
@@ -327,7 +361,7 @@ public class EasyDataDto implements IEasyDataDto {
             // 数据库写入
             addTransactionTask(() -> repository.deleteByNamespaceAndTargetAndKey(namespace, target, key));
             // 缓存写入
-            addCacheTask(() -> data.remove(key));
+            addCacheTask(EasyDataDto.this::invalidate);
             return this;
         }
     }

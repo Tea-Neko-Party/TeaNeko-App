@@ -5,8 +5,6 @@ import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.memory.fact.*;
-import org.zexnocs.teanekoagent.memory.fact.legacy.LegacyMemoryImport;
-import org.zexnocs.teanekoagent.memory.fact.legacy.LegacyMemoryLocation;
 import org.zexnocs.teanekoagent.memory.profile.UserProfileRequest;
 import org.zexnocs.teanekoagent.memory.profile.UserProfileService;
 import org.zexnocs.teanekoagent.memory.recall.*;
@@ -18,14 +16,13 @@ import java.util.*;
 import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
  * 经真实 namespace、事实、兼容导入和 Recall 适配验证画像重建，不连接真实数据库或模型。
  * 复用原事务替身的锁与回滚合同，仍需 MySQL/JPA 实机验收。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -111,11 +108,11 @@ class UserProfileIntegrationTest {
                     subject, value(MemoryFactValue.Kind.PREFERENCE, "明确喜欢茶"), shared), now).toCompletableFuture().join();
             fixture.facts.append(new MemoryFactAppend(UUID.randomUUID(), reference, otherSubject, value(MemoryFactValue.Kind.FACT, "别人的资料"), source), now).toCompletableFuture().join();
             var expired = new MemoryFactValue(MemoryFactValue.Kind.FACT, "已过期", List.of(), 1, MemoryFactValue.Importance.HIGH, MemoryEventTime.unknown(), now);
-            fixture.facts.append(new MemoryFactAppend(UUID.randomUUID(), reference, subject, expired, source), now).toCompletableFuture().join(); clearInvocations(fixture.factRepository);
+            fixture.facts.append(new MemoryFactAppend(UUID.randomUUID(), reference, subject, expired, source), now).toCompletableFuture().join(); clearInvocations(fixture.repository);
             var view = service(fixture, executor).read(request(reference, subject)).toCompletableFuture().join();
             assertTrue(view.isComplete()); assertEquals(2, view.matched()); assertEquals(4, view.scanned()); assertEquals(1, view.facts().size()); assertEquals(1, view.preferences().size());
             assertEquals(shared, view.preferences().getFirst().source()); assertTrue(view.evidence().stream().allMatch(item -> item.subjectId().equals(subject)));
-            assertEquals(MemoryRecallEvidence.TimeBasis.RECORDED_TIME_ESTIMATE, view.facts().getFirst().timeBasis()); verify(fixture.factRepository, never()).saveAndFlush(any());
+            assertEquals(MemoryRecallEvidence.TimeBasis.RECORDED_TIME_ESTIMATE, view.facts().getFirst().timeBasis()); verify(fixture.repository, never()).saveAndFlush(argThat(row -> row.getNamespace().equals("agent.fact.v1")));
         }
     }
 
@@ -162,23 +159,29 @@ class UserProfileIntegrationTest {
         try (var fixture = new NamespaceDatabaseFixture(); var executor = Executors.newVirtualThreadPerTaskExecutor()) {
             prepare(fixture); var service = service(fixture, executor); var empty = service.read(request(reference, subject)).toCompletableFuture().join(); assertTrue(empty.definitivelyEmpty());
             var stored = fixture.facts.append(new MemoryFactAppend(UUID.randomUUID(), reference, subject, value(MemoryFactValue.Kind.PREFERENCE, "用户明确偏好"), source), now).toCompletableFuture().join();
-            clearInvocations(fixture.factRepository); var view = service.read(request(reference, subject)).toCompletableFuture().join();
+            clearInvocations(fixture.repository); var view = service.read(request(reference, subject)).toCompletableFuture().join();
             assertEquals(Objects.requireNonNull(stored.record()).id(), view.preferences().getFirst().id()); assertTrue(empty.evidence().isEmpty());
-            verify(fixture.factRepository, never()).saveAndFlush(any()); assertEquals(empty.projectionVersion(), view.projectionVersion());
+            verify(fixture.repository, never()).saveAndFlush(argThat(row -> row.getNamespace().equals("agent.fact.v1"))); assertEquals(empty.projectionVersion(), view.projectionVersion());
         }
     }
 
-    /** 验证导入证据可追溯且保留时间和 locked，原始旧私有 JSON 不经画像泄露。 */
-    @Test void importedEvidenceKeepsTraceWithoutRawPrivatePayload() {
+    /** 验证快照证据的版本、锁定和来源可追溯，原始审计正文不经画像泄露。 */
+    @Test void snapshotEvidenceKeepsTraceWithoutRawPrivatePayload() {
         try (var fixture = new NamespaceDatabaseFixture(); var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            prepare(fixture); var location = new LegacyMemoryLocation("旧群", "旧角色", "旧平台用户");
-            var json = "[{\"id\":\"旧ID\",\"content\":\"明确称呼\",\"source\":\"旧来源秘密\",\"locked\":true,\"createdAt\":\"2020-01-01T00:00:00Z\",\"updatedAt\":\"2020-01-02T00:00:00Z\"}]";
-            fixture.seedFactRow("memory", location.target(), location.key(), json); var snapshot = fixture.legacy.read(location, now).toCompletableFuture().join().orElseThrow();
-            fixture.legacy.importSnapshot(new LegacyMemoryImport(UUID.randomUUID(), reference, location, snapshot.version(), snapshot.digest(), Map.of("旧平台用户", subject), source, now)).toCompletableFuture().join();
+            prepare(fixture); var id = UUID.randomUUID(); var json = "只供审计的原来源秘密";
+            var provenance = new org.zexnocs.teanekoagent.memory.fact.MemoryFactProvenance("snapshot-v1", "源空间", "源键", id.toString(),
+                    org.zexnocs.teanekocore.utils.StableDigest.sha256(json), json, java.util.Set.of());
+            var created = Instant.parse("2020-01-01T00:00:00Z");
+            var value = new org.zexnocs.teanekoagent.memory.fact.MemoryFactValue(org.zexnocs.teanekoagent.memory.fact.MemoryFactValue.Kind.FACT,
+                    "明确称呼", java.util.List.of(), 1, org.zexnocs.teanekoagent.memory.fact.MemoryFactValue.Importance.NORMAL,
+                    org.zexnocs.teanekoagent.memory.fact.MemoryEventTime.unknown(), null);
+            var record = new org.zexnocs.teanekoagent.memory.fact.MemoryFactRecord(id, reference.namespaceId(), reference.generation(), 0, subject, value,
+                    source, created, created, true, provenance);
+            fixture.seedFactRow("agent.fact.v1", "record:" + reference.namespaceId().value() + ":g:" + reference.generation(), id.toString(),
+                    fixture.mapper.writeValueAsString(java.util.Map.of("schemaVersion", 1, "record", record)));
             var view = service(fixture, executor).read(request(reference, subject)).toCompletableFuture().join(); var item = view.facts().getFirst();
-            assertEquals("旧ID", Objects.requireNonNull(item.externalOrigin()).externalId()); assertEquals(source, item.source()); assertTrue(item.locked());
-            assertEquals(Instant.parse("2020-01-01T00:00:00Z"), item.createdAt()); assertFalse(fixture.mapper.writeValueAsString(view).contains("旧来源秘密"));
-            assertEquals(json, fixture.storedValue("memory", location.target(), location.key()));
+            assertEquals(id.toString(), Objects.requireNonNull(item.externalOrigin()).externalId()); assertEquals(source, item.source()); assertTrue(item.locked());
+            assertEquals(created, item.createdAt()); assertFalse(fixture.mapper.writeValueAsString(view).contains(json));
         }
     }
 

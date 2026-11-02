@@ -4,11 +4,13 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.zexnocs.teanekoagent.adapter.skill.AgentSkills;
 import org.zexnocs.teanekoagent.agent.AgentService;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.history.IAgentHistoryRecorder;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.monitor.AgentRuntimeMonitor;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
@@ -25,7 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * 装配独立 Agent 轮次，借用 Core 执行资源，不创建默认实例或启动后台业务。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -71,6 +73,8 @@ public class AgentExecutionConfig {
      * @param personalities 可选人格源，与默认邮箱共用同一实例
      * @param history 可选历史记录端口
      * @param summaries 可选摘要使用复核
+     * @param skills 可选 Skill 组合能力，与原工具及资料共同装配
+     * @param monitor 可选脱敏监控，故障不改变业务结果
      * @return 拥有本轮资源、借用共享执行器的服务
      */
     @Bean(name = "agentTurnService", destroyMethod = "close")
@@ -78,8 +82,12 @@ public class AgentExecutionConfig {
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
             @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references,
             ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentHistoryRecorder> history,
-            ObjectProvider<IAgentConversationSummaries> summaries) {
-        return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper, executor, scheduler,
-                Clock.systemUTC(), logger, references, prompts.getIfAvailable(IAgentPromptSource::empty), personalities.getIfAvailable(), history.getIfAvailable(), summaries.getIfAvailable());
+            ObjectProvider<IAgentConversationSummaries> summaries, ObjectProvider<AgentSkills> skills, ObjectProvider<AgentRuntimeMonitor> monitor) {
+        var selectedTools = tools.getIfAvailable(this::defaultTools); var selectedPrompts = prompts.getIfAvailable(IAgentPromptSource::empty);
+        var capability = skills.getIfAvailable();
+        if (capability != null) { selectedTools = capability.tools(selectedTools); selectedPrompts = capability.prompts(selectedPrompts); }
+        var service = new AgentService(gate, interactions, selectedTools, mapper, executor, scheduler,
+                Clock.systemUTC(), logger, references, selectedPrompts, personalities.getIfAvailable(), history.getIfAvailable(), summaries.getIfAvailable());
+        var observer = monitor.getIfAvailable(); if (observer != null) { service.observe(observer::accept); } return service;
     }
 }

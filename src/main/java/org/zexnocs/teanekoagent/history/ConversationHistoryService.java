@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 /**
  * 在业务域组合历史授权、时间保留与存储，不自动恢复窗口或生成个人事实。
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -98,6 +98,8 @@ public final class ConversationHistoryService implements IConversationHistory, I
      * @return 已提交或明确无可采集内容的完成信号
      */
     @Override public CompletionStage<Void> record(AgentRunRequest request, AgentPromptInput input, @Nullable ILLMAssistantMessage answer, ExecutionControl control) {
+        // 自主控制信封不是发言，交付后的真实正文由自主发送边界单独记录。
+        if (request.activity() == org.zexnocs.teanekoagent.agent.AgentActivity.PROACTIVE) { return CompletableFuture.completedStage(null); }
         if (request.memoryReference() == null || input.personality() == null || answer == null && request.userText() == null) {
             return CompletableFuture.completedStage(null);
         }
@@ -107,7 +109,9 @@ public final class ConversationHistoryService implements IConversationHistory, I
         if (text.isBlank()) { return CompletableFuture.completedStage(null); }
         var role = answer == null ? HistoryMessage.Role.USER : HistoryMessage.Role.ASSISTANT;
         var id = answer == null ? Objects.requireNonNull(original).sourceId() : request.requestId().toString();
-        var message = new HistoryMessage(id, request.actor(), role, text.substring(0, Math.min(text.length(), 65536)), clock.instant(), true, text.length() > 65536);
+        var actualTime = answer == null ? original.occurredAt() : null;
+        var message = new HistoryMessage(id, request.actor(), role, text.substring(0, Math.min(text.length(), 65536)),
+                actualTime == null ? clock.instant() : actualTime, actualTime == null, text.length() > 65536);
         return append(new HistoryContext(request.memoryReference(), input.personality()), message, control).thenApply(ignored -> null);
     }
     /**

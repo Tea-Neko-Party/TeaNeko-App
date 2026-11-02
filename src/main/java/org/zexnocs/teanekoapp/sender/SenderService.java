@@ -21,8 +21,9 @@ import java.util.UUID;
  * 用于统一推送发送给客户端事件的服务。
  *
  * @author zExNocs
- * @date 2026/02/23
+ * @date 2026/11/02
  * @since 4.0.8
+ * @version 4.5.0-l
  */
 @Service
 public class SenderService implements ISenderService {
@@ -33,6 +34,12 @@ public class SenderService implements ISenderService {
     private final IEventService iEventService;
     private final ITaskService iTaskService;
 
+    /**
+     * 借用回执、事件与任务服务，不建立额外执行域。
+     * @param iResponseService 原 echo 目录
+     * @param iEventService 原事件服务
+     * @param iTaskService 原任务生命周期
+     */
     @Autowired
     public SenderService(IResponseService iResponseService,
                          IEventService iEventService,
@@ -51,7 +58,9 @@ public class SenderService implements ISenderService {
      * @param delay         发送延迟的时间，单位毫秒
      * @param maxRetryCount 最大重试次数
      * @param retryDelay    重试延迟的时间，单位毫秒
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link List }<{@link R }>>>}
+     * @param <R> 客户端响应类型
+     * @param <S> 结构化发送数据类型
+     * @return 等待客户端实际响应列表的任务；发送事件失败或取消时异常结束
      * @throws ResponseEchoDuplicateException 如果 echo 已经存在于注册表中，则抛出该异常
      */
     @Override
@@ -59,13 +68,14 @@ public class SenderService implements ISenderService {
         var sendData = event.getData();
         var echo = sendData.getEcho();
         // 尝试将 echo 转化为 UUID
-        UUID key;
+        UUID resolvedKey;
         try {
-            key = UUID.fromString(echo);
+            resolvedKey = UUID.fromString(echo);
         } catch (IllegalArgumentException e) {
             // 如果 echo 不是一个合法的 UUID，则生成一个新的 UUID 作为 key
-            key = UUID.randomUUID();
+            resolvedKey = UUID.randomUUID();
         }
+        final UUID key = resolvedKey;
         // 如果是 sent event，则设置 key
         if(event instanceof SentEvent<?> sentEvent) {
             sentEvent.setTaskKey(key);
@@ -78,7 +88,11 @@ public class SenderService implements ISenderService {
                 .name("注册 sendData 的响应 future: %s".formatted(sendData.toSendString()))
                 .callable(() -> {
                     // 推送事件
-                    iEventService.pushEvent(event);
+                    iEventService.pushEventWithFuture(event).asStage().whenComplete((sent, failure) -> {
+                        if (failure != null || sent == null || !sent.isSuccess() || event.isCancelled()) {
+                            iTaskService.forceCompleteExceptionally(key, new IllegalStateException("发送事件未完成或已取消，未确认客户端操作结果，不自动补发。"));
+                        }
+                    });
                     return null;
                 })
                 .delayDuration(delay)

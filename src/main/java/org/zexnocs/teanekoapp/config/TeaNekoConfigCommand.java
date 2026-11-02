@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoapp.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
@@ -14,6 +15,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -21,7 +23,7 @@ import java.util.concurrent.CompletionStage;
  * <br>4.1.0: 解决了配置 namespaces 固定的问题，将 namespace 与 client 绑定
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/01
  * @since 4.0.11
  * @version 4.5.0-l
  */
@@ -35,6 +37,7 @@ public class TeaNekoConfigCommand {
     private final ConfigManagerScanner configManagerScanner;
     private final IConfigDataService iConfigDataService;
     private final IConfigDataQueryService iConfigDataQueryService;
+    private final List<IConfigCommandFields> extensions;
 
     /**
      * 组合配置发现、查询和写端口，使确认反馈可以等待真实提交。
@@ -48,10 +51,33 @@ public class TeaNekoConfigCommand {
                                 ConfigManagerScanner configManagerScanner,
                                 IConfigDataService iConfigDataService,
                                 IConfigDataQueryService iConfigDataQueryService) {
+        this(logger, configManagerScanner, iConfigDataService, iConfigDataQueryService, List.of());
+    }
+
+    /**
+     * 组合普通 DTO 字段与独立业务字段；装配时拒绝同名扩展，不依赖扫描顺序。
+     * @param logger 项目日志
+     * @param configManagerScanner 配置发现
+     * @param iConfigDataService 普通配置服务
+     * @param iConfigDataQueryService 普通配置查询
+     * @param extensions 独立业务字段适配器
+     * @throws IllegalArgumentException 当扩展重复声明同一字段时
+     */
+    @Autowired
+    public TeaNekoConfigCommand(ILogger logger, ConfigManagerScanner configManagerScanner,
+            IConfigDataService iConfigDataService, IConfigDataQueryService iConfigDataQueryService,
+            List<IConfigCommandFields> extensions) {
         this.logger = logger;
         this.configManagerScanner = configManagerScanner;
         this.iConfigDataService = iConfigDataService;
         this.iConfigDataQueryService = iConfigDataQueryService;
+        this.extensions = List.copyOf(extensions);
+        var names = new HashSet<List<String>>();
+        for (var extension : extensions) {
+            for (var field : extension.fields().keySet()) {
+                if (!names.add(List.of(extension.managerName(), field))) { throw new IllegalArgumentException("配置业务字段重复声明。"); }
+            }
+        }
     }
 
     /**
@@ -78,10 +104,10 @@ public class TeaNekoConfigCommand {
                 if(textList.isEmpty()) {
                     return messageSender.sendReplyMessageAsync("您没有注册任何配置喵。");
                 }
-                return data.getClient().getTeaNekoToolbox().getMessageSenderTools()
+                return details(commandData, ruleName, true, textList).thenCompose(values -> data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                         .getForwardBuilder(data)
-                        .addBotAllText(textList)
-                        .sendByPartAsync(10);
+                        .addBotAllText(values)
+                        .sendByPartAsync(10));
             } catch (IllegalAccessException e) {
                 logger.errorWithReport(this.getClass().getName(), "出现配置字段无法访问的情况喵。", e);
             return messageSender.sendReplyMessageAsync("出现配置字段无法访问的情况喵。");
@@ -90,7 +116,8 @@ public class TeaNekoConfigCommand {
             try {
                 var configManager = configManagerScanner.getConfigManager(ruleName);
                 String text = iConfigDataQueryService.queryOneConfigManagerDetailInObject(configManager, scopeId);
-                return messageSender.sendTextMessageAsync(text);
+                return details(commandData, ruleName, true, List.of(text))
+                        .thenCompose(values -> messageSender.sendTextMessageAsync(String.join("\n", values)));
             } catch (ConfigDataNotFoundException | ConfigManagerNotFoundException e) {
                 return messageSender.sendReplyMessageAsync("未注册该配置，或者该配置不存在。");
             } catch (IllegalAccessException e) {
@@ -123,15 +150,16 @@ public class TeaNekoConfigCommand {
             if(textList.isEmpty()) {
                 return messageSender.sendReplyMessageAsync("当前没有任何可用的配置喵。");
             }
-            return data.getClient().getTeaNekoToolbox().getMessageSenderTools()
+            return details(commandData, ruleName, false, textList).thenCompose(values -> data.getClient().getTeaNekoToolbox().getMessageSenderTools()
                     .getForwardBuilder(data)
-                    .addBotAllText(textList)
-                    .sendAsync();
+                    .addBotAllText(values)
+                    .sendAsync());
         } else {
             try {
                 var rule = configManagerScanner.getConfigManager(ruleName);
                 var text = iConfigDataQueryService.queryOneConfigManagerDetail(rule);
-                return messageSender.sendTextMessageAsync(text);
+                return details(commandData, ruleName, false, List.of(text))
+                        .thenCompose(values -> messageSender.sendTextMessageAsync(String.join("\n", values)));
             } catch (ConfigManagerNotFoundException e) {
                 return messageSender.sendReplyMessageAsync("配置" + ruleName + "不存在喵。");
             }
@@ -217,6 +245,15 @@ public class TeaNekoConfigCommand {
         var configValue = String.join(" ", configValueList);
         try {
             var rule = configManagerScanner.getConfigManager(ruleName);
+            for (var extension : extensions) {
+                if (!extension.managerName().equals(ruleName) || !extension.fields().containsKey(configField)) { continue; }
+                if (hasDtoField(rule.configType(), configField)) {
+                    throw new IllegalArgumentException("业务扩展不得覆盖普通配置字段。");
+                }
+                return extension.set(commandData, configField, configValue)
+                        .handle((text, failure) -> failure == null ? text : "业务配置操作未能确认，请核对当前状态；已提交操作不会自动回退。")
+                        .thenCompose(messageSender::sendReplyMessageAsync);
+            }
             return iConfigDataService.setRuleConfigFieldAsync(rule, commandData.getScopeId(), configField, configValue)
                     .thenCompose(ignored -> messageSender.sendReplyMessageAsync("配置 " + ruleName + " 的配置字段 " + configField + " 设置成功喵"));
         } catch (ConfigManagerNotFoundException e) {
@@ -237,6 +274,48 @@ public class TeaNekoConfigCommand {
             logger.errorWithReport(this.getClass().getName(), "发生未知错误。", e);
             return messageSender.sendReplyMessageAsync("发生未知错误喵，请联系开发者。");
         }
+    }
+
+    /**
+     * 按顺序追加业务字段的说明或权威值，不要求同步阻塞等待数据库。
+     * @param command 原生配置命令
+     * @param manager 筛选管理器，空值表示所有
+     * @param current 是否查询当前值
+     * @param original 普通 DTO 查询结果
+     * @return 独立且不可变的完整展示列表
+     */
+    private CompletionStage<List<String>> details(CommandData<ITeaNekoMessageData> command, String manager,
+            boolean current, List<String> original) {
+        CompletionStage<List<String>> result = CompletableFuture.completedStage(new ArrayList<>(original));
+        for (var extension : extensions) {
+            if (!manager.isBlank() && !manager.equals(extension.managerName())) { continue; }
+            result = result.thenCompose(values -> {
+                CompletionStage<String> extra;
+                try {
+                    extra = current ? extension.read(command) : CompletableFuture.completedStage(extension.managerName() + " 业务字段：\n"
+                            + extension.fields().entrySet().stream().map(entry -> entry.getKey() + "：" + entry.getValue()).collect(java.util.stream.Collectors.joining("\n")));
+                } catch (RuntimeException failure) { extra = CompletableFuture.failedStage(failure); }
+                return extra.handle((text, failure) -> {
+                    if (failure != null) { values.add("业务配置读取失败，请核对注册状态与存储。"); }
+                    else if (!text.isBlank()) { values.add(text); }
+                    return values;
+                });
+            });
+        }
+        return result.thenApply(List::copyOf);
+    }
+
+    /**
+     * 沿继承关系检查真实 DTO 字段，防止扩展覆盖父类中的持久化属性。
+     * @param type 配置 DTO 类型
+     * @param name 待声明业务字段
+     * @return 任一父类实际声明该字段时为 true
+     */
+    private boolean hasDtoField(Class<?> type, String name) {
+        for (var current = type; current != null; current = current.getSuperclass()) {
+            if (Arrays.stream(current.getDeclaredFields()).anyMatch(field -> field.getName().equals(name))) { return true; }
+        }
+        return false;
     }
 
     /**

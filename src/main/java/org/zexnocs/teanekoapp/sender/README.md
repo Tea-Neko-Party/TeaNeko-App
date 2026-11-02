@@ -75,5 +75,6 @@
 |---|---|
 | `echo` 唯一性 | `ResponseService.register` 会拒绝重复 echo，并抛出 `ResponseEchoDuplicateException`。 |
 | 间接完成模式 | 发送 task 的 callable 返回 `null`，结果必须由后续 `ResponseEvent` 完成。 |
+| 发送事件失败/取消 | 原服务观察事件完成阶段；失败或取消会异常结束原响应任务并解除 echo，不等待过期，也不因此自动补发副作用。 |
 | 自定义事件 | 如果自定义事件不是 `SentEvent`，不会自动设置 `taskKey` 字段，但仍可通过 echo 完成响应。 |
 | `finish()` | 不处理 future 时应调用 `finish()`，否则异常不会进入统一日志处理。 |

@@ -4,6 +4,8 @@ import jakarta.annotation.PreDestroy;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.adapter.platform.AgentReplyPlan;
+import org.zexnocs.teanekoagent.adapter.platform.AgentReplySender;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.IAgentScopePolicyPort;
 import org.zexnocs.teanekoagent.agent.command.CommandInvocationReceipt;
@@ -12,21 +14,15 @@ import org.zexnocs.teanekoagent.agent.conversation.IAgentConversationControl;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.memory.namespace.IMemoryNamespaceDefaults;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceBindings;
-import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceId;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceRegistry;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
-import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.nio.charset.StandardCharsets;
-import java.time.Clock;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -38,7 +34,7 @@ import java.util.stream.Collectors;
  * 原生命令的应用边界，按需拥有一个共享定义实例，原生来源仅在请求生命周期内绑定。
  * 不自动监听平台消息，不接管旧 Client，不恢复未完成执行或任意跨 scope 原文。
  * @author zExNocs
- * @date 2026/11/01
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -47,15 +43,14 @@ public final class AgentCommandGateway implements AutoCloseable {
     private final IAgentFactory factory;
     private final IAgentRegistry registry;
     private final IAgentService agents;
-    private final IAgentConversationControl conversations;
     private final IAgentScopePolicyPort scopes;
     private final NativeCommandBridge nativeCommands;
     private final IAgentMemoryReferences references;
     private final MemoryNamespaceBindings bindings;
     private final MemoryNamespaceRegistry namespaces;
     private final IMemoryNamespaceDefaults defaults;
-    private final ScheduledExecutorService scheduler;
     private final ICommandAttemptStore attempts;
+    private final AgentNamespaceCommands namespaceCommands;
     private final Map<UUID, Chat> chats = new LinkedHashMap<>();
     private @Nullable AgentHandle handle;
     private boolean closed;
@@ -77,9 +72,10 @@ public final class AgentCommandGateway implements AutoCloseable {
     public AgentCommandGateway(IAgentFactory factory, IAgentRegistry registry, IAgentService agents, IAgentConversationControl conversations,
             IAgentScopePolicyPort scopes, NativeCommandBridge nativeCommands, IAgentMemoryReferences references, MemoryNamespaceBindings bindings,
             MemoryNamespaceRegistry namespaces, IMemoryNamespaceDefaults defaults, @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ICommandAttemptStore attempts) {
-        this.factory = factory; this.registry = registry; this.agents = agents; this.conversations = conversations; this.scopes = scopes;
+        this.factory = factory; this.registry = registry; this.agents = agents; this.scopes = scopes;
         this.nativeCommands = nativeCommands; this.references = references; this.bindings = bindings; this.namespaces = namespaces;
-        this.defaults = defaults; this.scheduler = scheduler; this.attempts = attempts;
+        this.defaults = defaults; this.attempts = attempts;
+        this.namespaceCommands = new AgentNamespaceCommands(scopes, references, bindings, conversations, scheduler);
     }
     /**
      * 显式文本聊天，等待真实回答及一次平台发送；相同消息的并发提交复用完整阶段。
@@ -94,9 +90,9 @@ public final class AgentCommandGateway implements AutoCloseable {
             var actor = NativeCommandBridge.actor(data); requireEnabled(actor.scope());
             if (text.isBlank() || text.length() > 65536) { return reply(data, "请输入一至65536字符的对话文本。"); }
             var id = operation(data, parent == null ? "chat" : "chat-child:" + parent.id()); var target = instance();
-            var request = new AgentRunRequest(id, actor, AgentActivity.COMMAND, List.of(LLMUserMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()),
-                    null, null, parent == null ? new AgentUserText(actor.sourceId(), text) : null);
-            if (parent != null) { return agents.run(target, request, parent).thenCompose(result -> deliver(data, result)); }
+            var request = new AgentRunRequest(id, actor, AgentActivity.COMMAND, List.of(AgentReplyPlan.instructions(), LLMUserMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()),
+                    null, null, parent == null ? new AgentUserText(actor.sourceId(), text, data.getTime()) : null);
+            if (parent != null) { return agents.run(target, request, parent).thenCompose(result -> deliver(data, target, request, result)); }
             final Chat chat;
             synchronized (chats) {
                 var original = chats.get(id);
@@ -140,7 +136,7 @@ public final class AgentCommandGateway implements AutoCloseable {
                     lease = nativeCommands.open(request, data); var owner = lease;
                     execution = agents.run(target, request).whenComplete((result, failure) -> owner.close())
                             .thenCompose(result -> result.status() == AgentRunResult.Status.SUCCESS ? agents.retry(target, request) : CompletableFuture.completedStage(result))
-                            .thenCompose(result -> deliver(data, result));
+                            .thenCompose(result -> deliver(data, target, request, result));
                 } catch (RuntimeException failure) {
                     if (lease != null) { lease.close(); } execution = CompletableFuture.failedStage(failure);
                 }
@@ -200,28 +196,11 @@ public final class AgentCommandGateway implements AutoCloseable {
      * @param data 已经原命令链授权的真实来源
      * @param target 已有空间，null 表示创建新的空空间
      * @param parent 可选工具父控制，保持借用
-     * @return 真实提交及同步观察结果，不声称删除旧数据
-     * @throws IllegalStateException 当作用域未启用时
+     * @return 真实提交、拒绝及同步观察结果，不声称删除旧数据
+     * 未启用或权限不足时返回明确拒绝，不初始化空间或修改绑定。
      */
     public CompletionStage<String> changeNamespace(ITeaNekoMessageData data, @Nullable String target, @Nullable ExecutionControl parent) {
-        var actor = NativeCommandBridge.actor(data); requireEnabled(actor.scope());
-        if (data.getUserData().getRole().getLevel() > CommandPermission.OWNER.getLevel()) { return CompletableFuture.completedStage("只有当前作用域 OWNER 或 DEBUG 可以切换空间。"); }
-        var control = parent == null ? ExecutionControl.withDeadline(new ResourceBudget(Map.of()), Clock.systemUTC().instant().plusSeconds(30), Clock.systemUTC(), scheduler) : parent;
-        try {
-            var id = operation(data, target == null ? "reset" : "setnamespace");
-            var work = control.guard(references.resolve(actor.scope())).thenCompose(reference -> {
-                control.checkActive(); requireEnabled(actor.scope());
-                return control.guard(target == null ? bindings.createAndBind(id, actor, reference.bindingRevision())
-                        : bindings.bindExisting(id, actor, new MemoryNamespaceId(target), reference.bindingRevision()));
-            }).thenCompose(outcome -> {
-                control.checkActive();
-                if (outcome.reference() == null) { return CompletableFuture.completedStage("空间操作未提交：" + outcome.status() + "；原数据保留。"); }
-                return conversations.synchronizeMemory(actor.scope(), control).handle((count, failure) -> failure == null
-                        ? "空间绑定已提交并同步会话；请使用 /agent status 查看当前空间。旧空间数据保留。"
-                        : "空间绑定已提交，同步观察未完成；请使用 /agent status 核对当前空间。旧空间数据保留。");
-            });
-            return control.guard(work).whenComplete((ignored, failure) -> { if (parent == null) { control.close(); } });
-        } catch (RuntimeException failure) { if (parent == null) { control.close(); } return CompletableFuture.failedStage(failure); }
+        return namespaceCommands.change(data, target, parent);
     }
     /**
      * 以完整客户端、scope、消息和操作定位派生稳定请求 ID，不从正文读取身份。
@@ -251,17 +230,29 @@ public final class AgentCommandGateway implements AutoCloseable {
      */
     private void requireEnabled(AgentScope scope) { if (!scopes.read(scope).enabled()) { throw new IllegalStateException("当前作用域 Agent 未登记或未启用。"); } }
     /**
-     * 只提取正式文本候选，供应商推理状态不会作为回复输出。
+     * 正式图文与模型选择的回复形式逐段等待，每段前观察原结果，拒绝迟到旧答案。
      * @param data 原发送目标
+     * @param target 原实例
+     * @param request 原请求
      * @param result 已完成的真实结果
      * @return 实际发送完成阶段
      */
-    private CompletionStage<Void> deliver(ITeaNekoMessageData data, AgentRunResult result) {
+    private CompletionStage<Void> deliver(ITeaNekoMessageData data, AgentHandle target, AgentRunRequest request, AgentRunResult result) {
         synchronized (chats) { if (closed) { return CompletableFuture.completedStage(null); } }
         requireEnabled(NativeCommandBridge.actor(data).scope());
-        var answer = result.answer().map(message -> message.getContents().stream().map(ILLMContent::getContentPart).filter(TextLLMContentPart.class::isInstance)
-                .map(TextLLMContentPart.class::cast).map(TextLLMContentPart::getText).collect(Collectors.joining("\n"))).orElse("Agent 请求结束：" + result.status());
-        return reply(data, answer);
+        if (result.status() != AgentRunResult.Status.SUCCESS) { return reply(data, "Agent 请求结束：" + result.status()); }
+        var plan = AgentReplyPlan.from(result); if (plan.isEmpty()) { return CompletableFuture.completedStage(null); }
+        CompletionStage<Void> chain = CompletableFuture.completedStage(null);
+        for (var part : plan.get().parts()) {
+            chain = chain.thenCompose(ignored -> agents.retry(target, request)).thenCompose(checked -> {
+                synchronized (chats) { if (closed) { throw new IllegalStateException("Agent 命令入口已关闭。"); } }
+                if (!NativeCommandBridge.actor(data).equals(request.actor()) || !AgentReplyPlan.from(checked).equals(plan)) {
+                    throw new IllegalStateException("显式回复的原结果或目标已失效。");
+                }
+                return AgentReplySender.send(data, part);
+            });
+        }
+        return chain;
     }
     /**
      * 通过原发送器和状态限制回复，不用内部客户端绕过平台开关。

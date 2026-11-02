@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent._app_config;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.agent.AgentFactory;
@@ -15,7 +16,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * 装配 Agent 实例底座和检查端口，不创建默认 Agent、注册 scope 或启动后台工作。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -55,8 +56,22 @@ public class AgentFoundationConfig {
      * @param logger 固定诊断日志
      * @return 统一检查入口
      */
-    @Bean public AgentAccessGate agentAccessGate(IAgentRegistry registry, IAgentScopePolicyPort scopes,
+    public AgentAccessGate agentAccessGate(IAgentRegistry registry, IAgentScopePolicyPort scopes,
                                                  IAgentReadiness readiness, ILogger logger) {
         return new AgentAccessGate(registry, scopes, readiness, logger);
+    }
+
+    /**
+     * 默认 Spring 门控组合宿主活动约束，所有管线步骤沿用同一检查点。
+     * @param registry 实例登记
+     * @param scopes 作用域开关
+     * @param readiness 就绪检查
+     * @param logger 日志
+     * @param activities 可选宿主活动策略
+     * @return 实际统一门控
+     */
+    @Bean(name = "agentAccessGate") public AgentAccessGate agentAccessGateWithActivities(IAgentRegistry registry, IAgentScopePolicyPort scopes,
+            IAgentReadiness readiness, ILogger logger, ObjectProvider<IAgentActivityPolicy> activities) {
+        return new AgentAccessGate(registry, scopes, readiness, logger, activities.getIfAvailable());
     }
 }

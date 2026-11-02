@@ -50,7 +50,7 @@ var second = agentFactory.create(definition);
 /cfg unreg agent
 ```
 
-登记默认启用且使用最低被动模式。缺失记录始终返回 unregistered，读取适配器不自动注册，也不回退到旧 `agent-personality` 默认值。除 enabled、mode、historyMaxMessages 和 inputMaxBytes，现已开放独立记忆、人格及文本历史开关/描述字段；认证/连接字段、correctionKey 均不能从这里写入。模式只是门控数据，自动触发和主动任务尚未实现。
+登记默认启用且使用最低被动模式。缺失记录返回 unregistered，读取不自动注册；记忆、人格、历史和自动行为各有独立开关。权限与配置用法见[显式入口](../adapter/command/README.md)和[平台入口](../adapter/platform/README.md)，认证与连接字段不经聊天写入。
 
 commandToolsEnabled 默认 false，显式开启后也只向具有真实原生来源租约的请求开放 command_dispatch。普通服务和后台任务不因配置开启取得用户命令权限；显式入口的配置、命令和边界见 [命令说明](../adapter/command/README.md)。
 
@@ -79,7 +79,7 @@ CompletionStage<AgentRunResult> completed = agentService.run(handle, request);
 
 需要显式独立执行的服务组合使用 `IAgentTurnService.prepare(...)`。返回的 `AgentRunExecution` 已登记取消和结果观察，调用 `start()` 才读取运行配置并开始实际业务，重复 start 不重复调用。启动前取消或拥有者关闭同样完成 result，不发起模型/工具。其 result 只读，cancel 只影响本轮，运行回调不进入组件或 JSON。具体 `AgentService.run` 便捷方法仍是显式独立执行，不用于默认会话注入。
 
-可执行的模型轮次活动为 SERVICE、COMMAND、AUTOMATIC_REPLY、SUMMARY、PROACTIVE、SCHEDULED。COLLECT 和 TOOL 是独立能力类别，用它们调用此入口返回 INVALID_INPUT，避免被动采集意外调用模型。真实入站采集、触发判定和任务服务后续通过各自端口接入。
+可执行的模型轮次活动为 SERVICE、COMMAND、AUTOMATIC_REPLY、SUMMARY、PROACTIVE、SCHEDULED。COLLECT 和 TOOL 是独立能力类别，用它们调用模型入口返回 INVALID_INPUT；真实采集、触发和定时通过各自端口接入，见[平台说明](../adapter/platform/README.md)。
 
 服务只编译一次 `agent.admit → agent.prompt → agent.interact → agent.complete` 管线。请求实体保存定义、实例 ID、可信身份、活动、请求、scope/runtime 快照、临时输入布局/已验证投影、交互诊断和最终结果；执行控制、工具绑定、监听及服务依赖保留在轮次拥有者。四个步骤声明各自数据依赖与写入范围，组件不保存可执行容器。
 
@@ -202,7 +202,7 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 ## 工具与动态门控
 
-`IAgentToolSource` 为本轮显式选择 `LLMToolBinding`，完整默认装配由 `AgentMemoryToolSource` 按当前开关、固定引用和原始意图选择记忆工具，禁止回退到全局全部工具。没有 TOOL 活动能力的定义连工具源都不会读取；显式无持久化引用模式不选记忆工具。自定义工具源 Bean 可替换默认策略，需组合其他能力时显式合并选定绑定；命令和任务工具仍在后续阶段接入。
+`IAgentToolSource` 为本轮选择冻结绑定，不回退到全局全部工具；没有 TOOL 活动的定义不读取工具源。默认装配组合[记忆工具](../memory/access/README.md)、[原权限命令](../adapter/command/README.md)、[任务](../schedule/README.md)、[Skill](../skill/README.md)与显式启用的扩展；各能力保留独立开关、来源与预算。自定义工具源替换默认策略时须显式组合所需绑定，不扩大权限。
 
 `AgentRunRequest` 的可选 `AgentUserText` 独立承载当前真实用户消息原文，sourceId 必须与 actor 一致，不能用于系统任务。邮箱装配、引用交接与工具选择保留它，原文指纹参与 run/retry 冲突判断；缺失时不能从历史或模型消息中的“记住”前缀补授权。memory_query、memory_profile 和 memory_add 的参数、预算、明确格式及回执说明见 [记忆工具](../memory/access/README.md)。模型只能为新增选择事实/偏好类别，正文、主体、空间和原调用 ID 均由可信流程固定。
 
@@ -216,7 +216,7 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 `AgentRunResult` 区分成功、跳过、配置不可用、取消、超时、预算不足、空/截断/拒绝/非法响应及失败。拒绝时仍可保留 `interaction` 诊断和已观察用量/动作；不推断尚未完成动作是否已产生外部副作用，也不声称回滚。总 `budgetUsage` 是交付时的宿主共享读数，具体轮次的模型/工具记录使用 interaction 的局部数据，不能跨轮重复汇总父总额。
 
-默认完整装配已接入 [持久化文本历史与 history_query](../history/README.md)。用户凭据和纯文本成功答案分别等待历史提交，不保存临时 Prompt 或工具诊断；查询限定当前 client/scope 与持久化空间/人格边界，重启后可查，切换后不回灌旧分区。平台旁观采集与已知消息 ID 补取按后续平台阶段接入。
+默认装配已接入[文本历史及 history_query](../history/README.md)、[原生旁观采集和图文输出](../adapter/platform/README.md)。历史只记录当前有效边界的原文与正式内容，不保存临时 Prompt 或工具诊断；系统自主候选的控制 JSON 不写入历史。
 
 默认完整装配已接入 [后台自动摘要](summary/README.md)，已登记 scope 默认开启 autoSummaryEnabled。后台只处理已验证成功的完整轮次，独立限额且不阻塞当前回答；下一队首核对完整覆盖指纹和当前边界后才压缩旧窗口，最近轮次保留。摘要以独立 USER 数据进入实际输入，在投影中移除，不生成个人事实。
 
@@ -224,4 +224,4 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 只有最终 SUCCESS 提供 `answer()` 和 `committableTranscript()`。scope 在交付前失效时，即使已有成功模型候选，也只保留在诊断中。取消会等待控制终止通知及诊断观察器登记，不等待不响应取消的远端异步结果；迟到结果不能提交组件或改写已交付结果。
 
-`answer()` 当前仍是统一模型候选；受控决策、结构化发送计划及实际平台出站尚未接入，不能将内部结构化 JSON 直接作为平台回复。S4 已提供完整窗口、输入限制与内存请求重放；S5 已实现 [namespace 注册与绑定事务基础](../memory/namespace/README.md)、独立轮次及默认会话的引用保护、[事实/偏好事务存储和显式旧资料导入](../memory/fact/README.md)、[独立 Recall 的筛选和证据预算](../memory/recall/README.md)、[按 UUID 的可追溯画像](../memory/profile/README.md) 及 [可信记忆访问和实际模型工具](../memory/access/README.md)，已默认接入自动记忆 Prompt、授权重放及 [人格与补正生命周期](../personality/README.md)。持久化文本历史、实际检索、[自动上下文摘要](summary/README.md)、自动补正生成及旧人格显式导入也已接入；管理命令继续推进。内存 epoch 不代表分布式原子授权，也不代表其他业务或平台发送的持久化幂等。
+`answer()` 是经原管线验证的正式模型候选，由[平台计划](../adapter/platform/README.md)或[内部响应](../client/README.md)消费，不能未经解析直接发送控制 JSON。当前已接入记忆、人格、历史、摘要、学习、Skill、命令、任务、协作和监控；各模块以根目录[索引](../README.md)为准。旧资料导入和旧运行包已按未上线、不迁移的要求移除。内存 epoch 不代表分布式原子授权，也不替代业务回执或平台幂等。

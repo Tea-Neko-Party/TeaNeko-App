@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.agent.prompt;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.zexnocs.teanekoagent.adapter.skill.AgentSkills;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
@@ -30,6 +31,10 @@ import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.skill.ISkillCatalog;
+import org.zexnocs.teanekoagent.skill.SkillCatalogSnapshot;
+import org.zexnocs.teanekoagent.skill.SkillDefinition;
+import org.zexnocs.teanekoagent.skill.SkillPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -51,7 +56,7 @@ import static org.mockito.Mockito.*;
 /**
  * 通过真实 Agent 邮箱和 LLM 管线验证异步资料、历史隔离、资源停止和重放边界。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -133,6 +138,73 @@ class AgentPromptIntegrationTest {
      * @return 完整序列化文本
      */
     private String text(List<ILLMMessage> messages) { return mapper.writeValueAsString(messages); }
+
+    /**
+     * 复用本类的真实 Agent/LLM 执行设施，只装饰显式工具及原资料源。
+     * @param skills 本轮 Skill 能力
+     * @return 由测试拥有的独立轮次服务
+     */
+    private AgentService skillService(AgentSkills skills) {
+        return new AgentService(gate, new LLMInteractionService(models, LLMInteractionSettings::defaults, runtime, runtime.scheduler),
+                skills.tools((definition, request, config) -> List.of(new LLMToolBinding(LLMTool.builder().name("work").build(),
+                        (call, context) -> CompletableFuture.completedStage("工具完成")))), mapper, runtime, runtime.scheduler, runtime.clock, logger, null, skills.prompts(source));
+    }
+    /**
+     * 用统一消息协议构造 Skill 加载或原工具调用，不替换真实执行链。
+     * @param name 实际工具名称
+     * @param arguments 原 JSON 参数
+     * @return 明确请求工具往返的响应
+     */
+    private ILLMResult skillCall(String name, String arguments) {
+        return LLMResult.builder().usage(LLMUsage.builder().totalTokens(2).build()).choices(List.of(LLMChoice.builder().index(0).finishReason("tool_calls")
+                .message(LLMAssistantMessage.builder().contents(List.of()).toolCalls(List.of(LLMToolCall.builder().id("调用-" + name).name(name).arguments(arguments).build())).build()).build())).build();
+    }
+    /** 验证按需读取、实际工具依赖和总预算，正文只供原轮次使用，关闭后拒绝旧完成重放。 */
+    @Test void skillWorkflowUsesOriginalBudgetAndKeepsInstructionsOutOfHistory() {
+        var catalog = mock(ISkillCatalog.class);
+        when(catalog.snapshot()).thenReturn(new SkillCatalogSnapshot(List.of(new SkillDefinition("sample", "流程说明", 1, true, List.of("work"), "专用于原轮次的流程正文"))));
+        var policy = new AtomicReference<>(new SkillPolicy(true, List.of("sample")));
+        var skills = new AgentSkills(catalog, ignored -> policy.get(), mapper, runtime);
+        try (var service = skillService(skills); var conversations = new AgentConversationService(service, AgentQueueSettings::defaults,
+                runtime, runtime.scheduler, runtime.clock, logger, AgentConversationSettings::defaults, (agent, request) -> options.get(), mapper)) {
+            var input = request(); var result = conversations.run(handle, input).toCompletableFuture(); runtime.runAll();
+            assertTrue(text(prompts.getFirst().getMessages()).contains("流程说明")); assertFalse(text(prompts.getFirst().getMessages()).contains("专用于原轮次的流程正文"));
+            replies.getLast().complete(skillCall("skill_load", "{\"id\":\"sample\"}")); runtime.runAll();
+            assertTrue(text(prompts.getLast().getMessages()).contains("专用于原轮次的流程正文"));
+            replies.getLast().complete(skillCall("work", "{}")); runtime.runAll();
+            assertTrue(text(prompts.getLast().getMessages()).contains("工具完成")); assertTrue(prompts.getLast().getOptions().getTools().isEmpty());
+            replies.getLast().complete(response(false)); runtime.runAll(); var done = result.join();
+            assertEquals(AgentRunResult.Status.SUCCESS, done.status()); assertEquals(3, done.interaction().orElseThrow().attempts().size());
+            var window = conversations.snapshot(handle, scope).orElseThrow().require(AgentConversationWindow.COMPONENT);
+            LLMMessageHistory.validateComplete(window.messages()); assertFalse(text(window.messages()).contains("专用于原轮次的流程正文"));
+            assertTrue(text(window.messages()).contains("后续需要时应重新调用工具"));
+            policy.set(new SkillPolicy(false, List.of())); var replay = conversations.run(handle, input).toCompletableFuture(); runtime.runAll();
+            assertNotEquals(AgentRunResult.Status.SUCCESS, replay.join().status()); assertEquals(3, prompts.size());
+        }
+    }
+    /** 验证依赖缺失不调用模型，目录换代阻止迟到结果，省略目录不注册隐藏工具。 */
+    @Test void skillDependenciesReloadAndOmissionRejectStaleCapabilities() {
+        var catalog = mock(ISkillCatalog.class); var snapshot = new AtomicReference<>(new SkillCatalogSnapshot(List.of(
+                new SkillDefinition("sample", "流程说明", 1, true, List.of("forbidden"), "原始正文"))));
+        when(catalog.snapshot()).thenAnswer(ignored -> snapshot.get());
+        var skills = new AgentSkills(catalog, ignored -> new SkillPolicy(true, List.of("sample")), mapper, runtime);
+        try (var service = skillService(skills)) {
+            var denied = service.run(handle, request()).toCompletableFuture(); runtime.runAll();
+            assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, denied.join().status()); assertTrue(prompts.isEmpty());
+            snapshot.set(new SkillCatalogSnapshot(List.of(new SkillDefinition("sample", "流程说明", 1, true, List.of(), "原始正文"))));
+            var pending = service.run(handle, request()).toCompletableFuture(); runtime.runAll();
+            snapshot.set(new SkillCatalogSnapshot(List.of(new SkillDefinition("sample", "流程说明", 1, true, List.of(), "换代正文"))));
+            replies.getLast().complete(response(false)); runtime.runAll();
+            assertEquals(AgentRunResult.Status.STALE_CONVERSATION, pending.join().status()); assertTrue(pending.join().answer().isEmpty());
+            var base = skills.tools((definition, input, config) -> List.of());
+            assertTrue(base.select(handle.definition(), request(), gateRuntime(), new AgentPromptInput(request().messages(), List.of(), 1)).isEmpty());
+        }
+    }
+    /**
+     * 从本夹具已有准入取得运行快照，不重复构造另一套模型参数。
+     * @return 实际就绪设置
+     */
+    private AgentRuntimeSnapshot gateRuntime() { return gate.evaluate(handle, request().actor(), AgentActivity.SERVICE).runtime().orElseThrow(); }
 
     /** 验证连续轮次只携带本轮资料，原文授权与工具选择不接收资料伪造，实际诊断仍保留资料。 */
     @Test void temporaryDataReachesModelWithoutAccumulatingInHistoryOrAuthorization() {

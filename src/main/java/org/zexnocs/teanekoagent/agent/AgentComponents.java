@@ -14,13 +14,15 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
  * Agent 底座的类型化数据键；组件仅保存不可变定义、状态和可信身份，不保存服务。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public final class AgentComponents {
     /** 当前会话已固定的人格身份，不承载人格正文或授权。 */
     public static final ComponentKey<String> PERSONALITY_IDENTITY = ComponentKey.of("agent.personality-identity", String.class);
+    /** 当前补正引用，仅用于共享 key 管理后的会话协调，不承载数据库对象或正文。 */
+    public static final ComponentKey<String> CORRECTION_KEY = ComponentKey.of("agent.correction-key", String.class);
     public static final ComponentKey<AgentDefinition> DEFINITION = ComponentKey.of("agent.definition", AgentDefinition.class);
     public static final ComponentKey<Boolean> CLOSED = ComponentKey.of("agent.closed", Boolean.class);
     public static final ComponentKey<AgentActorContext> ACTOR = ComponentKey.of("agent.actor", AgentActorContext.class);

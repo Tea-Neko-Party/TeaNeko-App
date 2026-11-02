@@ -1,6 +1,8 @@
 # 原生命令与 Agent 显式入口
 
-本模块提供完整的显式文本聊天、命令工具和基本空间管理。先配置有效本地模型与 Spring application 凭据，再在目标作用域登记 Agent；密钥不经聊天指令写入。
+本模块提供完整的显式文本聊天、命令工具、基本空间管理及持久化提醒。普通模型聊天需先配置有效本地模型与 Spring application 凭据；识别出的当前原文任务不调用模型，创建和执行仍要求目标作用域登记并启用 Agent。密钥不经聊天指令写入。
+
+提醒入口为 `/agent remind <ISO偏移时间> <时区> <重复秒数，单次填0> <正文>`、`/agent tasks [游标]`、`/agent task <任务UUID>` 和 `/agent canceltask <任务UUID>`；当前原生 `/agent chat 10分钟后提醒我喝水` 等有界表达也可直接创建、查询和取消。时间、当前身份、禁用后的管理权限和实际发送限制统一见 [任务说明](../../schedule/README.md)，本模块不重复维护任务规格。
 
 ```text
 /cfg reg agent
@@ -24,7 +26,11 @@
 
 私聊角色沿用平台现有 OWNER 规则，群成员不能执行 reset/setnamespace。未注册或禁用时不启动对话、命令工具或空间写入；状态与帮助可以说明如何开启。reset 不物理删除旧数据，不清除人格补正；操作真实提交后读取当前权威引用，协调同 scope 的所有 Agent 实例、窗口和完成记录。同步观察中断时明确反馈“已提交、需核对”，不声称回滚。
 
-当前 namespace 的权威值保存在原绑定服务中；`/cfg set agent memoryNamespace` 字段桥接、DEBUG clear/clone/export/编辑及人格 key 管理继续属于后续 S6。不要向 ConfigData DTO 添加与真实绑定不同步的同名值。自动群/私聊触发、旁观采集、模型发送计划、内部 Client/Sender 迁移、图片与主动任务的完整平台接入仍待后续阶段，本模块只新增显式文本入口。
+当前 namespace 的权威值保存在原绑定服务中，`/cfg set agent memoryNamespace <已有空间>` 已与 setnamespace 共用同一边界；`/cfg agent` 读取权威值，注册/注销保留原绑定，不向 ConfigData DTO 写入副本。App 通过 IConfigCommandFields 扩展独立业务字段，拒绝重名及覆盖 DTO 字段，Core 配置服务不依赖 Agent。
+
+DEBUG 已提供事实分页、JSON 导出、编辑/锁定、快照克隆、clear 及分批旧代次回收，参数和事务边界见 [记忆管理说明](../../memory/admin/README.md)。人格补正的 DEBUG key 绑定、备份/克隆、分页/导出、编辑/锁定和撤销也已接入，参数与共享会话边界见 [人格管理](../../personality/README.md#debug-补正管理)。自动群/私聊触发、旁观采集、模型发送计划、内部 Client/Sender 迁移、图片与主动任务的完整平台接入仍待后续阶段，本模块提供显式文本入口。
+
+Skill 已支持本地目录、按需加载及作用域启停。`/agent skills` 查看本 scope 的显式选择，`/agent reloadskills` 仅 DEBUG 可重载本地完整目录；OWNER 使用原 `/cfg` 设置 skills 与 skillsEnabled。Skill 不额外授予工具，参数及文件格式见 [Skill 说明](../../skill/README.md)。
 
 ## 实际请求与权限
 
@@ -38,9 +44,11 @@
 
 ## 防重、取消与重放
 
-`ICommandAttemptStore` 的默认适配器在 `general_data` 独立 `agent.command.v1` 域保存明确 schema。只保存原身份/空间、文本摘要及终态，不保存原生命令正文、客户端或任意返回对象。唯一键和原 DatabaseTask/Version 重试仲裁执行权，只有占用真实提交后才允许副作用。
+`ICommandAttemptStore` 的默认适配器在 `tea_neko_agent_data` 独立 `agent.command.v1` 域保存明确 schema。只保存原身份/空间、文本摘要及终态，不保存原生命令正文、客户端或任意返回对象。唯一键和原 DatabaseTask/Version 重试仲裁执行权，只有占用真实提交后才允许副作用。
 
-两种执行权分别定位：CHAT_ENTRY 固定原生 client/scope/消息的稳定请求 ID，TOOL 固定原请求 ID 与原工具调用 ID。原生消息在调用模型前先占用，进程重启后不会用新工具 ID 重跑同一消息；具体工具重放取得原终态，同 ID 改参数或身份返回 CONFLICT。在途记录默认 INDETERMINATE，不因超时、服务重建或源租约关闭而自动接管。前台原文和答案不通过该账本恢复，需要新操作时发送新消息。
+执行权按种类分别定位：CHAT_ENTRY 固定原生 client/scope/消息的稳定请求 ID，TOOL 固定原请求 ID 与原工具调用 ID；COLLECT_ENTRY 用于旁观采集，PROACTIVE_ENTRY 用于无用户权限的 SYSTEM 自主发生。原生消息在调用模型前先占用，进程重启后不会用新工具 ID 重跑同一消息；具体工具重放取得原终态，同 ID 改参数或身份返回 CONFLICT。在途记录默认 INDETERMINATE，不因超时、服务重建或源租约关闭而自动接管。前台原文和答案不通过该账本恢复，需要新操作时发送新消息。
+
+`/agent monitor` 仅真实 DEBUG 可查看当前 scope 的脱敏运行统计，详见[运行监控](../../agent/monitor/README.md)。
 
 同进程缓存最近最多一千个聊天/发送阶段，相同消息复用整个完成信号，避免重复发送。缓存满时只淘汰已结束项，在途满额明确拒绝。持久化防重记录不随内存缓存、namespace reset 或 clear 自动删除；清理前必须另外确认重放和回退需求。
 

@@ -53,7 +53,7 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
  *
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -108,6 +108,7 @@ class AgentServiceTest {
         when(readiness.inspect(any())).thenAnswer(ignored -> new AgentReadiness(availability.get(),
                 availability.get() == AgentReadiness.Status.READY ? Optional.of(snapshot.get()) : Optional.empty()));
         when(tools.select(any(), any(), any())).thenReturn(List.of());
+        doCallRealMethod().when(tools).select(any(), any(), any(), any());
         when(models.resolveOptions(any())).thenAnswer(invocation ->
                 LLMModelOptions.copyOf(invocation.<ILLMPrompt>getArgument(0).getOptions()));
         when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(invocation -> {

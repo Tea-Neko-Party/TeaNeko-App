@@ -5,6 +5,7 @@ import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.history.IAgentHistoryRecorder;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.monitor.AgentTurnReport;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.agent.summary.IAgentConversationSummaries;
@@ -21,6 +22,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.*;
+import java.util.function.Consumer;
 import java.util.function.Function;
 
 /**
@@ -28,11 +30,19 @@ import java.util.function.Function;
  * 同实例可执行不同轮次；默认会话服务在本端口外组合队列与窗口，本类只拥有独立轮次。
  *
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
+    private volatile Consumer<AgentTurnReport> observer = report -> { };
+
+    /**
+     * 安装只消费脱敏报告的宿主观察器，观察故障不改变业务结果。
+     * @param observer 报告消费者，不接收运行句柄或原文
+     * @return 当前服务，供装配组合
+     */
+    public AgentService observe(Consumer<AgentTurnReport> observer) { this.observer = Objects.requireNonNull(observer); return this; }
     private final AgentAccessGate gate;
     private final Executor executor;
     private final ScheduledExecutorService scheduler;
@@ -351,9 +361,9 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
                     AgentRunResult.Status.CONFIGURATION_ERROR, null, null, Map.of()));
         }
-        final AgentTurn turn;
+        final AgentTurn turn; final java.time.Instant acceptedAt;
         try {
-            var acceptedAt = clock.instant();
+            acceptedAt = clock.instant();
             turn = new AgentTurn(handle, request, parent == null ? ExecutionControl.create() : parent.child(), parent == null, acceptedAt);
         } catch (RuntimeException failure) {
             return completed(new AgentRunResult(handle.id(), request.requestId(),
@@ -376,6 +386,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         var completion = turn.lifetime.guard(work).handle((ignored, failure) -> turn.settled().thenApply(done -> {
             var result = turn.result(failure);
             if (result.status() == AgentRunResult.Status.FAILED) { reportFailure(); }
+            try { observer.accept(AgentTurnReport.from(request, result, java.time.Duration.between(acceptedAt, clock.instant()).toMillis())); }
+            catch (RuntimeException ignoredReportFailure) { /* 监控不能改写业务结果。 */ }
             return result;
         })).thenCompose(Function.identity()).whenComplete((ignored, failure) -> {
             turns.remove(turn.entity.snapshot().id(), turn);

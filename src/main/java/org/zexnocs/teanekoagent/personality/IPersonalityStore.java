@@ -8,7 +8,7 @@ import java.util.concurrent.CompletionStage;
 /**
  * 人格引用、补正和备份的事务端口；仅供可信业务调用，聊天管理权限由独立入口校验。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -40,6 +40,18 @@ public interface IPersonalityStore {
      * @return 提交后是否新增；相同请求相同内容返回 false
      */
     CompletionStage<Boolean> append(PersonalityBinding expected, PersonalityCorrection correction);
+    /**
+     * 学习候选在状态锁内校验原管理代次，并在提交前复核当前配置和取消。
+     * @param expected 原绑定
+     * @param correction 来源候选
+     * @param managementRevision 原管理代次
+     * @param guard 当前准入复核
+     * @return 提交后是否新增
+     * @throws UnsupportedOperationException 当自定义存储尚未实现管理换代保护时
+     */
+    default CompletionStage<Boolean> append(PersonalityBinding expected, PersonalityCorrection correction, long managementRevision, Runnable guard) {
+        throw new UnsupportedOperationException("当前人格存储未实现管理换代保护。");
+    }
     /**
      * 可信管理入口绑定已有或新空补正 key，保留原空间；不能由模型或普通 cfg 直接调用。
      * @param expected 原绑定及预期版本

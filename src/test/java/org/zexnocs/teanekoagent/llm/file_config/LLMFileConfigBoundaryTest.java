@@ -23,7 +23,7 @@ import static org.mockito.Mockito.*;
  * 离线验证模型文件的严格路由、非敏感选项合并及配置迁移边界。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -136,16 +136,13 @@ class LLMFileConfigBoundaryTest {
     }
 
     /**
-     * 验证主配置只有一个文件绑定，过渡服务也复用新类型。
+     * 验证主配置只有一个文件绑定，旧配置服务不再进入编译产物。
      *
-     * @throws Exception 当底层业务、反射调用或结果转换失败时
      */
     @Test
-    void mainConfigHasOneFileBindingAndOldServiceUsesTheNewType() throws Exception {
+    void mainConfigHasOneFileBindingAndOldServiceIsRemoved() {
         assertNotNull(AgentMainFileConfig.class.getAnnotation(FileConfig.class));
-        assertEquals(AgentMainFileConfig.class,
-                org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService.class
-                        .getMethod("getMainConfig").getReturnType());
+        assertThrows(ClassNotFoundException.class, () -> Class.forName("org.zexnocs.teanekoagent_old.file_config.interfaces.IAgentFileConfigService"));
         assertEquals("agent", AgentMainFileConfig.class.getAnnotation(FileConfig.class).path());
         assertEquals("main-config", AgentMainFileConfig.class.getAnnotation(FileConfig.class).value());
     }

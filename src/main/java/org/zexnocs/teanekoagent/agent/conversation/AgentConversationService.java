@@ -5,6 +5,7 @@ import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalityLearning;
 import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
@@ -36,7 +37,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 空闲会话按 TTL 和容量惰性淘汰；切换代次不移除仍占运行槽的旧邮箱。
  *
  * @author zExNocs
- * @date 2026/11/01
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -402,6 +403,28 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     }
 
     /**
+     * 在邮箱锁内收集引用该空间的作用域，锁外重新读取权威引用并协调各实例。
+     * @param namespace 已由管理边界验证的空间键，仅与既有引用匹配
+     * @param parent 借用管理控制
+     * @return 已实际推进代次的邮箱总数
+     */
+    @Override public CompletionStage<Integer> synchronizeNamespace(String namespace, ExecutionControl parent) {
+        Objects.requireNonNull(namespace, "同步空间不能为空。"); Objects.requireNonNull(parent, "同步控制不能为空。"); parent.checkActive();
+        if (memory == null) { throw new UnsupportedOperationException("当前邮箱未装配持久化记忆引用。"); }
+        final List<AgentScope> scopes;
+        synchronized (lock) {
+            scopes = mailboxes.values().stream().filter(box -> !box.retired && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE)
+                    .map(reference -> reference.namespaceId().value().equals(namespace)).orElse(false)).map(box -> box.key.scope()).distinct().toList();
+        }
+        CompletionStage<Integer> result = CompletableFuture.completedStage(0);
+        for (var scope : scopes) {
+            result = result.thenCompose(count -> synchronizeMemory(scope, parent).thenApply(changed ->
+                    Math.addExact(Objects.requireNonNull(count, "同步计数不能为空。"), Objects.requireNonNull(changed, "变更计数不能为空。"))));
+        }
+        return result;
+    }
+
+    /**
      * 只在锁内提交不可变引用、代次和空窗口，锁外取消旧请求；不接受低版本迟到观察。
      * @param reference 当前权威观察
      * @param head 可保留并转入新代次的当前队首，同步通知时为空
@@ -625,7 +648,18 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     @Override public Optional<AgentConversationStamp> invalidate(AgentHandle handle, AgentScope scope) {
         Objects.requireNonNull(handle, "Agent 实例不能为空。");
-        var key = new AgentConversationKey(handle.id(), scope);
+        return invalidateMailbox(new AgentConversationKey(handle.id(), scope), null, null);
+    }
+
+    /**
+     * 只在相同旧身份仍有效时同步新快照，防止迟到通知清除已采用新人格的窗口。
+     * @param key 已有邮箱
+     * @param expectedIdentity 选择时旧身份，普通显式失效不校验
+     * @param replacement 新人格快照，普通显式失效为空
+     * @return 实际新代次
+     */
+    private Optional<AgentConversationStamp> invalidateMailbox(AgentConversationKey key, @Nullable String expectedIdentity,
+            @Nullable AgentPersonalitySnapshot replacement) {
         var stamp = new AgentConversationStamp(key, UUID.randomUUID());
         var now = clock.instant();
         var cancelled = new ArrayList<Entry>();
@@ -634,12 +668,16 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         synchronized (lock) {
             var mailbox = mailboxes.get(key);
             if (mailbox != null && expired(mailbox, mailbox.retention, now)) { retire(mailbox); mailbox = null; }
-            if (!closed && mailbox != null && !mailbox.retired) {
+            if (!closed && mailbox != null && !mailbox.retired && (replacement == null
+                    || Objects.equals(expectedIdentity, mailbox.entity.snapshot().find(AgentComponents.PERSONALITY_IDENTITY).orElse(null))
+                    && !Objects.equals(expectedIdentity, replacement.identity()))) {
                 changed = true;
-                mailbox.entity.commit(mailbox.entity.snapshot().revision(), ComponentPatch.builder()
+                var patch = ComponentPatch.builder()
                         .put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(mailbox).lastActivity())))
                         .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
-                        .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty()).build());
+                        .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
+                if (replacement != null) { patch.put(AgentComponents.PERSONALITY_IDENTITY, replacement.identity()).put(AgentComponents.CORRECTION_KEY, replacement.correctionKey()); }
+                mailbox.entity.commit(mailbox.entity.snapshot().revision(), patch.build());
                 mailbox.waiting.clear();
                 for (var entry : List.copyOf(mailbox.requests.values())) {
                     if (entry.phase == Phase.FINISHED) { continue; }
@@ -653,6 +691,38 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         if (running != null) { stop(running, AgentRunResult.Status.STALE_CONVERSATION, false); }
         cancelled.forEach(entry -> deliver(entry, result(entry, null, null), null));
         return changed ? Optional.of(stamp) : Optional.empty();
+    }
+
+    /**
+     * 在锁外读取实际人格，在锁内按已观察身份协调所有实例；存储提交与内存同步分别完成。
+     * @param scope 真实管理作用域
+     * @param correctionKey 已验证补正 key
+     * @param shared 是否包含其他共享作用域
+     * @param parent 借用控制
+     * @return 实际换代数量
+     */
+    @Override public CompletionStage<Integer> synchronizePersonality(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
+        var source = personalities;
+        if (source == null) { return CompletableFuture.failedStage(new IllegalStateException("当前宿主未装配人格来源。")); }
+        var selected = new LinkedHashMap<AgentConversationKey, String>();
+        synchronized (lock) {
+            for (var box : mailboxes.values()) {
+                var snapshot = box.entity.snapshot();
+                if (shared ? snapshot.find(AgentComponents.CORRECTION_KEY).filter(correctionKey::equals).isPresent() : box.key.scope().equals(scope)) {
+                    selected.put(box.key, snapshot.find(AgentComponents.PERSONALITY_IDENTITY).orElse(null));
+                }
+            }
+        }
+        CompletionStage<Integer> result = CompletableFuture.completedStage(0);
+        for (var entry : selected.entrySet()) {
+            result = result.thenCompose(count -> {
+                parent.checkActive();
+                return parent.guard(source.resolve(entry.getKey().scope(), parent)).thenApply(snapshot -> {
+                    parent.checkActive(); return count + (invalidateMailbox(entry.getKey(), entry.getValue(), snapshot).isPresent() ? 1 : 0);
+                });
+            });
+        }
+        return parent.guard(result);
     }
 
     /**
@@ -873,6 +943,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                         entry.lifetime.checkActive();
                         if (!clock.instant().isBefore(entry.waitDeadline)) { stop(entry, AgentRunResult.Status.QUEUE_TIMED_OUT, true); return; }
                         if (!reference.scope().equals(entry.key.scope())) { throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE); }
+                        var pinned = entry.request.memoryReference();
+                        if (entry.request.activity() == AgentActivity.AUTOMATIC_REPLY && pinned != null && !pinned.equals(reference)) {
+                            throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
+                        }
                         alignMemory(reference, entry);
                         preparePersonality(entry, reference);
                     }, executor).exceptionally(failure -> { stop(entry, AgentMemoryBoundary.status(failure), false); return null; });
@@ -886,7 +960,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     }
 
     /**
-     * 在固定记忆引用之后、读取历史之前解析人格，未准入的实例不触发人格初始化。
+     * 在固定记忆引用之后、读取历史之前解析人格；自动入站采集已固定的人格不随排队刷新。
      * @param entry 当前队首
      * @param reference 可选固定记忆引用
      */
@@ -901,7 +975,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     return source.resolve(entry.key.scope(), control);
                 }, executor)).thenAcceptAsync(snapshot -> {
                     entry.lifetime.checkActive(); entry.reservedPersonalityBytes = engine.personalityBytes(snapshot);
-                    alignPersonality(entry, snapshot.identity()); startPrepared(entry, reference);
+                    var pinned = entry.request.personalityIdentity();
+                    if (entry.request.activity() == AgentActivity.AUTOMATIC_REPLY && pinned != null && !pinned.equals(snapshot.identity())) {
+                        throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
+                    }
+                    alignPersonality(entry, snapshot.identity(), snapshot.correctionKey()); startPrepared(entry, reference);
                 }, executor).exceptionally(failure -> { stop(entry, AgentMemoryBoundary.status(failure), false); return null; });
     }
 
@@ -909,15 +987,16 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * 仅在邮箱锁内协调纯数据，当前队首保留，旧等待项和窗口/缓存一起失效。
      * @param head 已固定新人格的队首
      * @param identity 实际人格身份
+     * @param correctionKey 当前补正引用
      */
-    private void alignPersonality(Entry head, String identity) {
+    private void alignPersonality(Entry head, String identity, String correctionKey) {
         var cancelled = new ArrayList<Entry>(); var now = clock.instant();
         synchronized (lock) {
             if (head.phase != Phase.PREPARING || head.stopped != null) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
             var box = Objects.requireNonNull(head.mailbox); var current = box.entity.snapshot();
             var previous = current.find(AgentComponents.PERSONALITY_IDENTITY).orElse(null);
             if (!Objects.equals(head.stamp, state(box).stamp())) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
-            var patch = ComponentPatch.builder().put(AgentComponents.PERSONALITY_IDENTITY, identity);
+            var patch = ComponentPatch.builder().put(AgentComponents.PERSONALITY_IDENTITY, identity).put(AgentComponents.CORRECTION_KEY, correctionKey);
             if (previous != null && !previous.equals(identity)) {
                 var stamp = new AgentConversationStamp(box.key, UUID.randomUUID()); head.stamp = stamp;
                 patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))

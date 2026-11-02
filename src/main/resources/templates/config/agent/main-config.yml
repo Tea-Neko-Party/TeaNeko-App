@@ -6,24 +6,8 @@ enabled: true
 
 # 默认模型适配器 ID
 # 该 ID 用于 Agent 在本次 Prompt 没有指定 provider 时选择模型适配器
-# 为空字符串表示不设置默认模型，调用方必须在 Prompt options 或作用域配置中指定模型适配器
+# 为空字符串表示不设置默认模型，独立宿主须在 Prompt options 中明确指定；聊天不写入路由或凭据
 default-model-id: ""
 
-
-# --- Thinking 相关配置 ---
-
-# 是否启用 Agent 自主的受控思考流程
-# 启用后每次模型调用会返回简短思考摘要、最终答案和置信度，不使用供应商原始 reasoning_content
-thinking-enabled: true
-
-# 单轮回答最多允许的模型思考步骤数，包含最后生成答案的步骤
-# 建议使用 2 到 4；数值越大越可能执行更多工具调用，同时会增加 token 消耗
-max-thinking-steps: 3
-
-# 每个可公开思考摘要允许的最大字符数
-# 建议限制在 32 到 1024 之间，较小的值有助于控制 completion token
-max-thought-summary-length: 240
-
-# 是否在 AgentOutput 中保留可公开的思考摘要
-# 关闭后 Agent 仍会执行思考流程，但输出只保留最终答案和 metadata
-include-thoughts-in-output: true
+# 次数与时限使用 application 的 tea-neko.llm.interaction 配置，默认3次模型、2轮工具、6次工具执行。
+# 新版不生成或输出供应商内部思考内容；正式答案及运行状态由独立响应与监控接口提供。

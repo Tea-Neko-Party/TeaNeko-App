@@ -28,18 +28,18 @@ tea-neko.agent.memory.max-created-namespaces=5
 
 | 表 | 物理 namespace | target | o_key | 存储内容 |
 | --- | --- | --- | --- | --- |
-| general_data | agent.namespace.v1 | namespace | 业务空间 ID | schemaVersion=1 的空间元数据 |
-| general_data | agent.namespace.v1 | creator:&lt;TeaNeko UUID&gt; | owned | schemaVersion=1 的个人活动空间索引 |
-| general_data | agent.namespace.v1 | binding:&lt;scope 摘要&gt; | current | schemaVersion=1 的权威绑定 |
-| general_data | agent.namespace.v1 | binding-op:&lt;scope 摘要&gt; | 原始 requestId | schemaVersion=1 的原命令及业务回执 |
+| tea_neko_agent_data | agent.namespace.v1 | namespace | 业务空间 ID | schemaVersion=1 的空间元数据 |
+| tea_neko_agent_data | agent.namespace.v1 | creator:&lt;TeaNeko UUID&gt; | owned | schemaVersion=1 的个人活动空间索引 |
+| tea_neko_agent_data | agent.namespace.v1 | binding:&lt;scope 摘要&gt; | current | schemaVersion=1 的权威绑定 |
+| tea_neko_agent_data | agent.namespace.v1 | binding-op:&lt;scope 摘要&gt; | 原始 requestId | schemaVersion=1 的原命令及业务回执 |
 
-首次插入使用既有唯一键仲裁。更新使用事务读取的原始 JPA 实体及 `@Version`，通过 `saveAndFlush` 保留并发校验，禁止无版本 upsert。个人索引虽为列表，但受行版本保护，并与对应空间记录同事务提交；竞争失败由 Core 的现有数据库重试阶段重新读取，不继续使用失败事务中的旧值。只在最终提交成功后公开回执，不使用 EasyData DTO 缓存，避免提交前污染缓存或读取旧配额。
+首次插入使用既有唯一键仲裁。更新使用事务读取的原始 JPA 实体及 `@Version`，通过 `saveAndFlush` 保留并发校验，禁止无版本 upsert。个人索引虽为列表，但受行版本保护，并与对应空间记录同事务提交；竞争失败由 Core 的现有数据库重试阶段重新读取，不继续使用失败事务中的旧值。只在最终提交成功后公开回执，通过 EasyData 事务 DTO 绕过普通缓存读取配额，提交后统一失效相关普通缓存。
 
 查询按空间或创建者稳定键进行，分页只读取索引指定的当前页记录，不调用全表 `findAll()`。JSON 使用显式 schema，验证记录定位与创建者归属；损坏 JSON、未来 schema 或索引异常都会失败，不能按空状态覆盖原数据。存储没有凭据、Bean、执行控制、HTTP 客户端或 Java 类名。
 
 ## 数据代次与后续边界
 
-`revision` 表示元数据版本，`generation` 表示有效事实/画像的数据代次，两者独立。存储端口的 `advanceGeneration(id, expectedRevision, requestId)` 是后续 DEBUG 管理服务使用的 CAS 原语，当前不注册 clear 命令或工具。它先推进持久化代次，尚不物理清理事实或宣称整个逻辑清空流程完成。
+`revision` 表示元数据版本，`generation` 表示有效事实/画像的数据代次，两者独立。存储端口的 `advanceGeneration(id, expectedRevision, requestId)` 是后续 DEBUG 管理服务使用的 CAS 原语，DEBUG clear 命令复用该原语完成逻辑清空与有界回收。它先推进持久化代次，尚不物理清理事实或宣称整个逻辑清空流程完成。
 
 重试必须保留原 expectedRevision 和 requestId。当前同一次换代可返回 UNCHANGED；已有后续变更时旧版本返回 CONFLICT，不再次推进。最近换代请求字段不是无限历史的持久化回执账本，不能把改变 expectedRevision 的再次提交当作原请求重试。版本耗尽明确失败，不允许整数溢出重置代次。
 
@@ -67,8 +67,10 @@ tea-neko.agent.memory.max-created-namespaces=5
 
 默认邮箱已提供 `synchronizeMemory(scope, parent)`，绑定提交后读取当前引用，协调同 scope 的全部实例。只有引用变化才原子换 epoch、清窗口和完成记录；旧运行槽保留到结束确认。通知失败可在下一队首惰性恢复，旧通知不能回退已观察版本，完成重放不补执行。本批没有向 ConfigData DTO 添加可直接写回的 memoryNamespace 字段；未来 `/cfg` 必须调用同一权威绑定路径，不能维护第二份独立值。
 
-[事实/偏好存储](../fact/README.md) 已在追加事务中锁定本 namespace 元数据并校验 generation，记录、去重索引及操作回执一起提交。Recall、UUID 画像、实际记忆工具、人格和摘要已接入。现在可通过 [显式管理入口](../../adapter/command/README.md) 的 reset/namespaces/setnamespace 使用原有配额、绑定和会话协调；reset/setnamespace 经过真实 OWNER 权限，列举只使用本人 UUID，绑定已有空间保留用户确认的共享规则。DEBUG clear/clone/export、分批物理清理及 `/cfg` namespace 字段桥接仍待后续 S6。
+[事实/偏好存储](../fact/README.md) 已在追加事务中锁定本 namespace 元数据并校验 generation，记录、去重索引及操作回执一起提交。Recall、UUID 画像、实际记忆工具、人格和摘要已接入。[显式管理入口](../../adapter/command/README.md) 的 reset/namespaces/setnamespace 及 `/cfg memoryNamespace` 共用原配额、权威绑定和会话协调；OWNER 可绑定已有他人空间，注册/注销保留绑定。[DEBUG 记忆管理](../admin/README.md) 已接入事实导出/编辑/锁定、原子快照克隆、generation 清空、跨群会话失效及有界旧代次回收，保留全局管理/命令防重和其他业务域。
 
-namespace 底座不删除旧 `llm_related` 表及 memory/profile/personality 键；事实和人格适配已提供各自显式预览/导入，不将旧 scope/agent 定位悄悄变成新 namespace 隔离规则。
+Agent 尚未上线，全部数据直接使用专用新表，不保留旧表预览或导入入口，也不删除或修改旧表。业务 namespace 仍独立于存储域及旧 scope/agent 定位。
 
 离线测试用事务替身模拟唯一键、Version、提交失败与回滚，覆盖真实适配器及并发竞争；它们不代替 MySQL/JPA、数据库排序规则与实际部署事务代理的实机验收。
+
+专用表、事务 DTO 和部署方式见 [Agent EasyData](../../database/easydata/README.md)，Store 不直接操作 Repository 或 JPA 实体。

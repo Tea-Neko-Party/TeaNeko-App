@@ -1,11 +1,13 @@
 package org.zexnocs.teanekoagent.adapter.memory;
 
 import org.jspecify.annotations.Nullable;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekoagent.memory.fact.*;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -19,7 +21,7 @@ import java.util.concurrent.CompletionStage;
  * 在既有 DatabaseTask 事务中保存独立事实、内容去重索引和完整操作回执。
  * 写入先锁定 namespace 元数据再校验 generation，原子提交后才交付；不使用 EasyData 列表缓存。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -27,23 +29,19 @@ import java.util.concurrent.CompletionStage;
 public final class EasyDataMemoryFactStore implements IMemoryFactStore {
     private static final String DOMAIN = "agent.fact.v1";
     private final EasyDataMemoryNamespaceStore namespaces;
-    private final MemoryNamespaceWriteRepository locks;
-    private final MemoryFactRepository repository;
+    private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
 
     /**
      * 保存基础设施依赖，不查询存储或创建默认空间。
      * @param namespaces 已有元数据事务适配器
-     * @param locks namespace 行锁仓库
-     * @param repository 事实物理仓库
+     * @param data Agent 专用数据入口
      * @param mapper 本地存储 JSON 转换器
      * @throws NullPointerException 当必需依赖为空时
      */
-    public EasyDataMemoryFactStore(EasyDataMemoryNamespaceStore namespaces, MemoryNamespaceWriteRepository locks,
-            MemoryFactRepository repository, ObjectMapper mapper) {
+    public EasyDataMemoryFactStore(EasyDataMemoryNamespaceStore namespaces, TeaNekoAgentEasyData data, ObjectMapper mapper) {
         this.namespaces = Objects.requireNonNull(namespaces, "事实元数据存储不能为空。");
-        this.locks = Objects.requireNonNull(locks, "事实 namespace 提交锁不能为空。");
-        this.repository = Objects.requireNonNull(repository, "事实仓库不能为空。");
+        this.data = Objects.requireNonNull(data, "事实 EasyData 不能为空。").inNamespace(DOMAIN);
         this.mapper = Objects.requireNonNull(mapper, "事实 JSON 转换器不能为空。");
     }
 
@@ -135,8 +133,21 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @return 当前事务内原记录页
      */
     MemoryFactPage listInTransaction(MemoryNamespaceId id, long generation, @Nullable UUID after, int limit) {
-        var rows = repository.findByNamespaceAndTargetAndKeyGreaterThanOrderByKeyAsc(DOMAIN, target("record", id, generation),
-                after == null ? "" : after.toString(), PageRequest.of(0, limit + 1));
+        var rows = dto(target("record", id, generation)).scan(after == null ? "" : after.toString(), null, limit + 1, EasyDataLock.NONE);
+        var records = rows.stream().limit(limit).map(row -> record(row, id, generation, null)).toList();
+        return new MemoryFactPage(records, rows.size() > limit ? records.getLast().id() : null);
+    }
+
+    /**
+     * 管理操作在持有空间锁后使用当前读，避免较早的配置查询固定旧事实快照。
+     * @param id 空间
+     * @param generation 代次
+     * @param after 原游标
+     * @param limit 一至一百的页大小
+     * @return 当前版本的有界事实页
+     */
+    MemoryFactPage listLockedInTransaction(MemoryNamespaceId id, long generation, @Nullable UUID after, int limit) {
+        var rows = dto(target("record", id, generation)).scan(after == null ? "" : after.toString(), null, limit + 1, EasyDataLock.READ);
         var records = rows.stream().limit(limit).map(row -> record(row, id, generation, null)).toList();
         return new MemoryFactPage(records, rows.size() > limit ? records.getLast().id() : null);
     }
@@ -160,7 +171,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @throws MemoryFactGenerationException 当空间缺失或代次失效时
      */
     void requireWriteGeneration(MemoryNamespaceId id, long generation) {
-        var row = locks.lockNamespace(id.value());
+        var row = namespaces.lockNamespace(id, EasyDataLock.WRITE);
         if (row == null) { throw new MemoryFactGenerationException(true); }
         if (namespaces.namespace(row, id).generation() != generation) { throw new MemoryFactGenerationException(false); }
     }
@@ -178,26 +189,60 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
     }
 
     /**
-     * 专用导入保留每个旧 ID 的时间和锁定状态；相同内容仍保留独立来源证据。
+     * 快照克隆保留原证据的时间和锁定状态；相同内容仍保留独立来源证据。
      * 内容索引只指向首条接受记录，后续普通追加继续复用既有去重协议。
-     * @param imported 已验证且带原始证据的导入记录
+     * @param imported 已验证且带原始证据的快照记录
      * @throws IllegalStateException 当来源缺失、稳定 ID 冲突或内容索引损坏时
      */
-    void insertImportedInTransaction(MemoryFactRecord imported) {
+    void insertSnapshotInTransaction(MemoryFactRecord imported) {
         var id = imported.namespaceId(); var generation = imported.generation();
         if (imported.provenance() == null || findInTransaction(id, generation, imported.id()) != null) {
-            throw new IllegalStateException("导入事实缺少原始证据或稳定 ID 已被使用。");
+            throw new IllegalStateException("快照事实缺少原始证据或稳定 ID 已被使用。");
         }
         var digest = digest(imported.subjectId(), imported.value()); var duplicate = row(target("duplicate", id, generation), digest);
         if (duplicate != null) {
             var previous = findInTransaction(id, generation, read(duplicate, DuplicateData.class).id());
             if (previous == null || !previous.subjectId().equals(imported.subjectId()) || !previous.value().equals(imported.value())) {
-                throw new IllegalStateException("导入事实的既有内容索引损坏。");
+                throw new IllegalStateException("快照事实的既有内容索引损坏。");
             }
         }
         write(target("record", id, generation), imported.id().toString(), new FactData(1, imported));
         if (duplicate == null) { write(target("duplicate", id, generation), digest, new DuplicateData(1, imported.id())); }
     }
+
+    /**
+     * 在空间写锁内修改事实并维护内容索引；编辑撞到其他已有内容时整体拒绝。
+     * @param before 原事实
+     * @param after 新事实
+     * @param snapshot 当前代次的完整有界快照，用于旧内容仍有其他证据时重定向索引
+     * @return 内容不冲突并已写入事务时为 true
+     */
+    boolean replaceInTransaction(MemoryFactRecord before, MemoryFactRecord after, List<MemoryFactRecord> snapshot) {
+        var id = before.namespaceId(); long generation = before.generation();
+        var indexTarget = target("duplicate", id, generation);
+        var oldDigest = digest(before.subjectId(), before.value()); var newDigest = digest(after.subjectId(), after.value());
+        if (!oldDigest.equals(newDigest)) {
+            var existing = row(indexTarget, newDigest);
+            if (existing != null && !read(existing, DuplicateData.class).id().equals(before.id())) { return false; }
+            var oldIndex = row(indexTarget, oldDigest);
+            if (oldIndex != null && read(oldIndex, DuplicateData.class).id().equals(before.id())) {
+                var replacement = snapshot.stream().filter(value -> !value.id().equals(before.id()) && value.subjectId().equals(before.subjectId())
+                        && value.value().equals(before.value())).findFirst();
+                if (replacement.isPresent()) { write(indexTarget, oldDigest, new DuplicateData(1, replacement.get().id())); }
+                else { dto(indexTarget).delete(oldIndex); }
+            }
+            write(indexTarget, newDigest, new DuplicateData(1, before.id()));
+        }
+        write(target("record", id, generation), after.id().toString(), new FactData(1, after));
+        return true;
+    }
+
+    /**
+     * 取得本事实域的事务目标，版本与锁留在 EasyData 基础层。
+     * @param target 固定物理目标
+     * @return 无缓存事务 DTO
+     */
+    private IEasyDataTransactionDto dto(String target) { return data.get(target).atomic(); }
 
     /**
      * 校验调用参数，不在无效参数下提交数据库任务。
@@ -225,7 +270,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @param key 稳定键
      * @return 事务原始行或空
      */
-    private @Nullable MemoryFactDataObject row(String target, String key) { return repository.findByNamespaceAndTargetAndKey(DOMAIN, target, key); }
+    private @Nullable EasyDataRow row(String target, String key) { return dto(target).find(key, EasyDataLock.NONE); }
 
     /**
      * 检查显式 schema 及记录完整定位，避免物理键与正文身份不同。
@@ -236,7 +281,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @return 不可变记录
      * @throws IllegalStateException 当定位或正文无效时
      */
-    private MemoryFactRecord record(MemoryFactDataObject row, MemoryNamespaceId id, long generation, @Nullable UUID recordId) {
+    private MemoryFactRecord record(EasyDataRow row, MemoryNamespaceId id, long generation, @Nullable UUID recordId) {
         var value = read(row, FactData.class).record(); validate(value, id, generation, recordId);
         if (!row.getNamespace().equals(DOMAIN) || !row.getTarget().equals(target("record", id, generation)) || !row.getKey().equals(value.id().toString())) {
             throw new IllegalStateException("事实记录的物理定位与正文不一致。");
@@ -288,7 +333,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @return 构造并验证的数据
      * @throws IllegalStateException 当内容损坏或版本不受支持时
      */
-    private <T> T read(BaseEasyDataObject row, Class<T> type) {
+    private <T> T read(EasyDataRow row, Class<T> type) {
         try { return Objects.requireNonNull(mapper.readValue(row.getValue(), type)); }
         catch (RuntimeException invalid) { throw new IllegalStateException("事实存储数据损坏或版本不受支持。"); }
     }
@@ -304,7 +349,10 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
         final String encoded;
         try { encoded = mapper.writeValueAsString(value); }
         catch (RuntimeException failure) { throw new IllegalStateException("事实存储数据无法编码。"); }
-        repository.saveAndFlush(repository.create(DOMAIN, target, key, encoded));
+        var existing = row(target, key);
+        var valueRow = existing == null ? dto(target).create(key, encoded) : existing;
+        valueRow.setValue(encoded);
+        dto(target).save(valueRow);
     }
 
     /**
@@ -312,7 +360,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
      * @param schemaVersion 结构版本
      * @param record 原记录
      * @author zExNocs
-     * @date 2026/10/29
+     * @date 2026/11/01
      * @since 4.0.0
      * @version 4.5.0-l
      */
@@ -367,8 +415,7 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
             if (schemaVersion != 1 || command == null || result == null || result.status() == MemoryFactReceipt.Status.CONFLICT) { throw new IllegalArgumentException("事实操作回执结构无效。"); }
             var record = result.record();
             validate(record, command.reference().namespaceId(), command.reference().generation(), null);
-            if (record == null || !record.subjectId().equals(command.subjectId()) || !record.value().equals(command.value())
-                    || result.status() == MemoryFactReceipt.Status.STORED && (!record.id().equals(command.operationId()) || !record.source().equals(command.source()))) {
+            if (!record.subjectId().equals(command.subjectId()) || !record.value().equals(command.value()) || result.status() == MemoryFactReceipt.Status.STORED && (!record.id().equals(command.operationId()) || !record.source().equals(command.source()))) {
                 throw new IllegalArgumentException("事实操作回执与原主语、内容或首次来源不一致。");
             }
         }

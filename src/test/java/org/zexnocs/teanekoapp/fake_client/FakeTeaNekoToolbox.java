@@ -20,13 +20,18 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * fake tea neko client 工具箱
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.2.3
  * @version 4.5.0-l
  */
 @Component
 @RequiredArgsConstructor
 public class FakeTeaNekoToolbox implements ITeaNekoToolbox {
+    /**
+     * 与测试发送器的机器人身份保持一致，不从收到的消息推断。
+     * @return 测试机器人的固定平台 ID
+     */
+    @Override public java.util.Optional<String> getSelfPlatformId() { return java.util.Optional.of("fake-bot"); }
     /// 日志记录器
     @Getter
     private final ILogger logger;

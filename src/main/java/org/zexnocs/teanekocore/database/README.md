@@ -65,6 +65,7 @@ table(entity class) + namespace + target + key -> value
 | `BaseEasyDataRepository<T>` | 通用 Repository，提供按 namespace/target/key 查询、删除和 upsert。 |
 | `IEasyData` / `BaseEasyData` | 面向业务的 EasyData 入口，指定 entity class 和 namespace。 |
 | `IEasyDataDto` / `EasyDataDto` | 某个 target 下的数据 DTO，懒加载数据库数据并提供 typed getter。 |
+| `IEasyDataTransactionDto` / `EasyDataRow` | 活动事务内的当前读、行锁、版本保存与有界分页；提交后失效缓存，不公开仓库或实体。 |
 | `IEasyDataDtoTaskConfig` | 修改 EasyData 的数据库任务，支持 `set`、`setBoolean`、`remove`。 |
 | `EasyDataRepositoryScanner` | 扫描 `BaseEasyDataRepository` 子类，并按实体类映射 Repository。 |
 | `EasyDataService` | 根据 `IEasyData` 和 target 获取缓存的 `EasyDataDto`。 |
@@ -177,3 +178,5 @@ dto.getDatabaseTaskConfig("add coin")
 | 并发冲突 | 数据完整性、乐观锁和约束冲突会被数据库 task stage 转换为可重试异常。 |
 | EasyData value | 非字符串对象会用 JSON 序列化存储，读取失败会抛出 `JsonSerializationFailedException`。 |
 | Config 字段修改 | 字段名通过反射匹配，List 字段操作会校验字段确实是 List。 |
+
+业务 Store 优先使用业务专用 EasyData 的 get(target) 和任务配置。需要同事务操作多个目标时，在原 DatabaseTask 的事务步骤内取得 dto.atomic()，不创建独立事务或线程。@ConfigManager.storage 可声明专用实体，默认仍为 GeneralEasyDataObject；配置注册服务经 EasyData 取得对应 DTO，不依赖具体业务模块。

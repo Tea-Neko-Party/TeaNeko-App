@@ -4,7 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.memory.namespace.*;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataObject;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -21,7 +21,7 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceBindingOu
  * 在既有空间存储事务中同时提交创建、配额、scope 引用与操作回执，不串联两次异步写入。
  * 同域适配器共享事务辅助方法，业务服务只依赖绑定端口，不接触仓库或 ConfigData 缓存。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -118,7 +118,7 @@ public final class EasyDataMemoryNamespaceBindingStore implements IMemoryNamespa
      * @return 本次业务结果
      */
     private MemoryNamespaceBindingOutcome change(MemoryNamespaceBindingRequest request, MemoryNamespaceBinding current,
-            @Nullable GeneralEasyDataObject currentRow, int maxCreated, Instant now) {
+            @Nullable EasyDataRow currentRow, int maxCreated, Instant now) {
         MemoryNamespace target;
         if (request.mode() == MemoryNamespaceBindingRequest.Mode.CREATE_AND_BIND) {
             var candidate = new MemoryNamespace(request.target(), 0, 0, now, new MemoryNamespace.Creation(request.requestId(), request.actor()), null);
@@ -153,7 +153,7 @@ public final class EasyDataMemoryNamespaceBindingStore implements IMemoryNamespa
      * @return 已校验绑定
      * @throws IllegalStateException 当存储内容不属于预期 scope 时
      */
-    private MemoryNamespaceBinding binding(@Nullable GeneralEasyDataObject row, AgentScope scope) {
+    private MemoryNamespaceBinding binding(@Nullable EasyDataRow row, AgentScope scope) {
         if (row == null) { return MemoryNamespaceBinding.initial(scope); }
         var value = namespaces.read(row, BindingData.class).value();
         if (!value.scope().equals(scope)) { throw new IllegalStateException("记忆空间绑定与作用域定位不一致。"); }

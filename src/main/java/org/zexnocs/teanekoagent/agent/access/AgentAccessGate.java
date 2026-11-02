@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.agent.access;
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.AgentActivity;
 import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekoagent.agent.AgentHandle;
@@ -16,7 +17,7 @@ import static org.zexnocs.teanekoagent.agent.access.AgentAccessDecision.Reason.*
  * 管理注册、注销与诊断入口不通过本门控执行，从而允许未注册作用域开通功能。
  *
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -25,6 +26,7 @@ public final class AgentAccessGate {
     private final IAgentScopePolicyPort scopes;
     private final IAgentReadiness readiness;
     private final ILogger logger;
+    private final @Nullable IAgentActivityPolicy activities;
 
     /**
      * 注入只读检查端口，不在构造时检查 scope 或加载配置。
@@ -34,10 +36,24 @@ public final class AgentAccessGate {
      * @param logger 固定原因日志
      */
     public AgentAccessGate(IAgentRegistry registry, IAgentScopePolicyPort scopes, IAgentReadiness readiness, ILogger logger) {
+        this(registry, scopes, readiness, logger, null);
+    }
+
+    /**
+     * 组合可选宿主活动策略，旧独立宿主保留原构造语义。
+     * @param registry 实例登记
+     * @param scopes 作用域开关
+     * @param readiness 就绪检查
+     * @param logger 诊断日志
+     * @param activities 可选动态活动准入
+     */
+    public AgentAccessGate(IAgentRegistry registry, IAgentScopePolicyPort scopes, IAgentReadiness readiness, ILogger logger,
+            @Nullable IAgentActivityPolicy activities) {
         this.registry = Objects.requireNonNull(registry, "实例注册表不能为空。");
         this.scopes = Objects.requireNonNull(scopes, "作用域端口不能为空。");
         this.readiness = Objects.requireNonNull(readiness, "就绪检查端口不能为空。");
         this.logger = Objects.requireNonNull(logger, "日志端口不能为空。");
+        this.activities = activities;
     }
 
     /**
@@ -55,6 +71,8 @@ public final class AgentAccessGate {
         if (handle.isClosed()) { return denied(INSTANCE_CLOSED); }
         if (registry.find(handle.id()).filter(registered -> registered == handle).isEmpty()) { return denied(INSTANCE_NOT_REGISTERED); }
         if (!handle.definition().activities().contains(activity)) { return denied(ACTIVITY_DISABLED); }
+        try { if (activities != null && !activities.allows(actor, activity)) { return denied(ACTIVITY_POLICY_REJECTED); } }
+        catch (RuntimeException failure) { return denied(ACTIVITY_POLICY_REJECTED); }
         if ((activity == AgentActivity.PROACTIVE || activity == AgentActivity.SCHEDULED)
                 && actor.origin() != AgentActorContext.Origin.SYSTEM
                 || activity == AgentActivity.COMMAND && actor.origin() != AgentActorContext.Origin.USER) {

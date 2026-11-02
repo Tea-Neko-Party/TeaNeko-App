@@ -2,11 +2,8 @@ package org.zexnocs.teanekoagent.memory.namespace;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.springframework.data.domain.Pageable;
 import org.zexnocs.teanekoagent.adapter.history.AgentHistoryToolSource;
-import org.zexnocs.teanekoagent.adapter.history.HistoryDataObject;
-import org.zexnocs.teanekoagent.adapter.history.HistoryRepository;
-import org.zexnocs.teanekoagent.adapter.history.JpaHistoryStore;
+import org.zexnocs.teanekoagent.adapter.history.EasyDataHistoryStore;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.access.AgentReadiness;
@@ -41,10 +38,12 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,7 +52,7 @@ import static org.mockito.Mockito.*;
 /**
  * 复用原事务任务夹具，集中验证历史实际存储、重建读取、绑定隔离和真实模型工具往返。
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -70,9 +69,6 @@ class HistoryIntegrationTest {
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
-        final HistoryRepository repository = mock(HistoryRepository.class);
-        final ConcurrentNavigableMap<Long, HistoryDataObject> rows = new ConcurrentSkipListMap<>();
-        final AtomicLong sequence = new AtomicLong();
         final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
         final ScheduledExecutorService timers = Executors.newSingleThreadScheduledExecutor();
         final AtomicReference<MemoryNamespaceReference> current = new AtomicReference<>(new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 1, 0));
@@ -80,29 +76,17 @@ class HistoryIntegrationTest {
         final AtomicReference<ConversationHistoryService.Policy> policy = new AtomicReference<>(new ConversationHistoryService.Policy(true, true, true));
         final IAgentMemoryReferences references = mock(IAgentMemoryReferences.class);
         final IAgentPersonalitySource personalities = mock(IAgentPersonalitySource.class);
-        final JpaHistoryStore store;
+        final EasyDataHistoryStore store;
         final ConversationHistoryService history;
         /** 初始化有界仓库替身与可变实际授权，不启动模型。 */
         Harness() {
-            when(repository.findByPartitionAndMessageKey(anyString(), anyString())).thenAnswer(call -> rows.values().stream()
-                    .filter(row -> row.getPartition().equals(call.getArgument(0)) && row.getMessageKey().equals(call.getArgument(1))).findFirst().orElse(null));
-            when(repository.saveAndFlush(any())).thenAnswer(call -> { HistoryDataObject row = call.getArgument(0); row.setId(sequence.incrementAndGet()); rows.put(row.getId(), row); return row; });
-            when(repository.findByPartitionAndIdLessThanAndExpiresAtGreaterThanOrderByIdDesc(anyString(), anyLong(), any(), any())).thenAnswer(call -> {
-                String partition = call.getArgument(0); long before = call.getArgument(1); Instant time = call.getArgument(2); Pageable page = call.getArgument(3);
-                return rows.descendingMap().values().stream().filter(row -> row.getPartition().equals(partition) && row.getId() < before && row.getExpiresAt().isAfter(time)).limit(page.getPageSize()).toList();
-            });
-            when(repository.findByExpiresAtLessThanEqualOrderByExpiresAtAscIdAsc(any(), any())).thenAnswer(call -> {
-                Instant time = call.getArgument(0); Pageable page = call.getArgument(1);
-                return rows.values().stream().filter(row -> !row.getExpiresAt().isAfter(time)).sorted(Comparator.comparing(HistoryDataObject::getExpiresAt)).limit(page.getPageSize()).toList();
-            });
-            doAnswer(call -> { Iterable<HistoryDataObject> values = call.getArgument(0); values.forEach(row -> rows.remove(row.getId())); return null; }).when(repository).deleteAllInBatch(any());
             when(references.resolve(any())).thenAnswer(call -> CompletableFuture.completedStage(current.get()));
             when(references.verify(any())).thenAnswer(call -> current.get().equals(call.getArgument(0)) ? CompletableFuture.completedStage(null)
                     : CompletableFuture.failedStage(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED)));
             when(personalities.resolve(any(), any())).thenAnswer(call -> CompletableFuture.completedStage(persona.get()));
             when(personalities.verify(any(), any(), any())).thenAnswer(call -> persona.get().identity().equals(call.<AgentPersonalitySnapshot>getArgument(1).identity())
                     ? CompletableFuture.completedStage(null) : CompletableFuture.failedStage(new AgentPromptException(AgentPromptException.Reason.CHANGED)));
-            store = new JpaHistoryStore(repository, db.database, db.mapper); history = service(store);
+            store = new EasyDataHistoryStore(db.data, db.mapper); history = service(store);
         }
         /**
          * 重建业务层而保留底层数据，模拟重启后的独立读取。
@@ -152,7 +136,7 @@ class HistoryIntegrationTest {
             assertFalse(h.history.append(old, first, control).toCompletableFuture().join());
             assertThrows(CompletionException.class, () -> h.history.append(old, message("一", "冲突正文", first.occurredAt()), control).toCompletableFuture().join());
             h.history.append(old, message("二", "原始提问二", now.minusSeconds(10)), control).toCompletableFuture().join();
-            var restored = h.service(new JpaHistoryStore(h.repository, h.db.database, h.db.mapper));
+            var restored = h.service(new EasyDataHistoryStore(h.db.data, h.db.mapper));
             var page = restored.search(h.context(), new HistoryQuery(Long.MAX_VALUE, "原始", null, null, 1, 6000), control).toCompletableFuture().join();
             assertEquals("二", page.messages().getFirst().messageId()); assertTrue(page.nextBefore() > 0);
             var second = restored.search(h.context(), new HistoryQuery(page.nextBefore(), "", null, null, 8, 6000), control).toCompletableFuture().join();
@@ -180,7 +164,7 @@ class HistoryIntegrationTest {
             assertTrue(h.history.search(h.context(), query(), control).toCompletableFuture().join().messages().isEmpty());
             assertEquals(1, h.store.prune(now).toCompletableFuture().join());
             h.policy.set(new ConversationHistoryService.Policy(true, false, true));
-            assertFalse(h.history.append(h.context(), message("新", "新正文", now), control).toCompletableFuture().join()); assertTrue(h.rows.isEmpty());
+            assertFalse(h.history.append(h.context(), message("新", "新正文", now), control).toCompletableFuture().join()); assertTrue(h.db.values("agent.history.v1", "history:").isEmpty());
             h.policy.set(new ConversationHistoryService.Policy(true, true, false));
             assertTrue(h.history.append(h.context(), message("新", "新正文", now), control).toCompletableFuture().join());
             assertThrows(CompletionException.class, () -> h.history.search(h.context(), query(), control).toCompletableFuture().join());
@@ -222,8 +206,8 @@ class HistoryIntegrationTest {
                             List.of(LLMUserMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()), null, null, new AgentUserText(text, text));
                     var run = turns.prepare(handle, request); run.start(); assertEquals(AgentRunResult.Status.SUCCESS, run.result().toCompletableFuture().join().status());
                 }
-                assertEquals(3, calls.get()); assertEquals(4, h.rows.size());
-                assertTrue(h.rows.values().stream().noneMatch(row -> row.getPayload().contains("基础人格") || row.getPayload().contains("查历史")));
+                assertEquals(3, calls.get()); assertEquals(4, h.db.values("agent.history.v1", "history:").size());
+                assertTrue(h.db.values("agent.history.v1", "history:").stream().noneMatch(text -> text.contains("基础人格") || text.contains("查历史")));
             }
         }
     }

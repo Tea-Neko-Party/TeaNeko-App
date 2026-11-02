@@ -6,7 +6,6 @@ import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.adapter.config.AgentScopeFieldChecker;
 import org.zexnocs.teanekoagent.adapter.personality.ConfiguredPersonalities;
-import org.zexnocs.teanekoagent.adapter.personality.EasyDataLegacyPersonalityStore;
 import org.zexnocs.teanekoagent.adapter.personality.EasyDataPersonalityStore;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
@@ -102,7 +101,7 @@ class PersonalityIntegrationTest {
         final AgentHandle handle = new AgentFactory(registry).create(new AgentDefinition("人格验证", new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.values())));
         final Map<String, AgentScopeConfigData> settings = new ConcurrentHashMap<>();
         final AgentPersonalityFileConfig file = new AgentPersonalityFileConfig();
-        final EasyDataPersonalityStore store = new EasyDataPersonalityStore(db.repository, db.personalityLocks, db.database, db.mapper);
+        final EasyDataPersonalityStore store = new EasyDataPersonalityStore(db.data, db.mapper);
         final List<ILLMPrompt> prompts = new CopyOnWriteArrayList<>();
         final AtomicReference<AgentConversationOptions> options = new AtomicReference<>(AgentConversationOptions.defaults());
         final AtomicLong bindingRevision = new AtomicLong(1);
@@ -220,6 +219,85 @@ class PersonalityIntegrationTest {
             h.options.set(new AgentConversationOptions(40, own + engine.personalityBytes(persona) + 2, 32, 1048576));
             var bounded = h.mailbox.run(h.handle, next).toCompletableFuture().join(); assertEquals(AgentRunResult.Status.SUCCESS, bounded.status());
             assertFalse(h.db.mapper.writeValueAsString(h.prompts.getLast().getMessages()).contains("离线回答"));
+        }
+    }
+
+    /** 验证编辑原证据、回滚、防重和共享会话换代，迟到学习不能覆盖管理结果。 */
+    @Test void managementEditsPreserveEvidenceAndInvalidateSharedSnapshots() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            var other = new AgentScope("客户端", "共享群"); h.settings.put(other.scopeId(), new AgentScopeConfigData());
+            var basis = h.personality.resolve(scope, control).toCompletableFuture().join();
+            h.personality.resolve(other, control).toCompletableFuture().join();
+            var binding = h.store.binding(scope).toCompletableFuture().join().orElseThrow();
+            h.store.bind(h.store.binding(other).toCompletableFuture().join().orElseThrow(), binding.correctionKey()).toCompletableFuture().join();
+            var input = request(scope); var original = correction(input, "原补正");
+            h.personality.propose(scope, basis, original, control).toCompletableFuture().join();
+            h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); h.mailbox.run(h.handle, request(other)).toCompletableFuture().join();
+            var edit = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.EDIT,
+                    binding.correctionKey(), binding.revision(), 1, original.requestId(), null, "修订表达", null);
+            var base = h.configuration.base(h.configuration.settings(scope)); var checks = new java.util.concurrent.atomic.AtomicInteger();
+            assertThrows(CompletionException.class, () -> h.store.apply(edit, base, now, () -> {
+                if (checks.incrementAndGet() == 2) { throw new IllegalStateException("提交前已撤销管理授权。"); }
+            }).toCompletableFuture().join());
+            assertTrue(h.store.backups(binding.correctionKey()).toCompletableFuture().join().isEmpty());
+            assertEquals(original, h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections().getFirst());
+            var first = h.store.apply(edit, base, now, () -> {}); var repeated = h.store.apply(edit, base, now.plusSeconds(1), () -> {});
+            var applied = first.toCompletableFuture().join(); assertEquals(applied, repeated.toCompletableFuture().join());
+            assertEquals(PersonalityManagementResult.Status.APPLIED, applied.status());
+            var rebuilt = new EasyDataPersonalityStore(h.db.data, h.db.mapper);
+            assertEquals(applied, rebuilt.apply(edit, base, now.plusSeconds(2), () -> {}).toCompletableFuture().join());
+            var state = rebuilt.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow();
+            assertEquals(1, state.managementRevision()); assertEquals(original.source(), state.corrections().getFirst().source());
+            assertEquals(original.occurredAt(), state.corrections().getFirst().occurredAt());
+            assertEquals(original, rebuilt.state(Objects.requireNonNull(applied.backupKey())).toCompletableFuture().join().orElseThrow().corrections().getFirst());
+            assertThrows(CompletionException.class, () -> h.personality.verify(scope, basis, control).toCompletableFuture().join());
+            assertThrows(CompletionException.class, () -> rebuilt.append(binding, correction(request(scope), "迟到学习"), 0, () -> {}).toCompletableFuture().join());
+            assertEquals(2, h.mailbox.synchronizePersonality(scope, binding.correctionKey(), true, control).toCompletableFuture().join());
+            assertTrue(h.mailbox.snapshot(h.handle, other).orElseThrow().require(AgentConversationWindow.COMPONENT).messages().isEmpty());
+            h.mailbox.run(h.handle, request(other)).toCompletableFuture().join();
+            assertEquals(0, h.mailbox.synchronizePersonality(scope, binding.correctionKey(), true, control).toCompletableFuture().join());
+            assertEquals(2, h.mailbox.snapshot(h.handle, other).orElseThrow().require(AgentConversationWindow.COMPONENT).messages().size());
+        }
+    }
+
+    /** 验证显式备份、克隆、锁定、撤销与绑定按原版本提交，失败不留下部分备份或新引用。 */
+    @Test void managementCloneBindingAndRevocationRemainAtomic() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            var basis = h.personality.resolve(scope, control).toCompletableFuture().join(); var input = request(scope);
+            var differentClient = h.personality.resolve(new AgentScope("其他客户端", scope.scopeId()), control).toCompletableFuture().join();
+            assertNotEquals(basis.correctionKey(), differentClient.correctionKey());
+            var original = correction(input, "可克隆补正"); h.personality.propose(scope, basis, original, control).toCompletableFuture().join();
+            var binding = h.store.binding(scope).toCompletableFuture().join().orElseThrow(); var base = h.configuration.base(h.configuration.settings(scope));
+            var backup = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.BACKUP,
+                    binding.correctionKey(), binding.revision(), 1, null, null, null, null);
+            var archived = h.store.apply(backup, base, now, () -> {}).toCompletableFuture().join();
+            var clone = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.CLONE,
+                    Objects.requireNonNull(archived.backupKey()), binding.revision(), 1, null, null, null, null);
+            h.db.failingWritePrefix.set("state");
+            assertThrows(CompletionException.class, () -> h.store.apply(clone, base, now, () -> {}).toCompletableFuture().join());
+            h.db.failingWritePrefix.set(null);
+            var copied = h.store.apply(clone, base, now, () -> {}).toCompletableFuture().join();
+            assertEquals(List.of(original), h.store.state(copied.key()).toCompletableFuture().join().orElseThrow().corrections());
+            var bind = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.BIND,
+                    copied.key(), binding.revision(), 0, null, null, null, null);
+            h.db.failingWritePrefix.set("scope:");
+            assertThrows(CompletionException.class, () -> h.store.apply(bind, base, now, () -> {}).toCompletableFuture().join());
+            assertEquals(binding, h.store.binding(scope).toCompletableFuture().join().orElseThrow());
+            assertEquals(List.of(archived.backupKey()), h.store.backups(binding.correctionKey()).toCompletableFuture().join());
+            h.db.failingWritePrefix.set(null);
+            var bound = h.store.apply(bind, base, now, () -> {}).toCompletableFuture().join();
+            assertEquals(bound, h.store.apply(bind, base, now.plusSeconds(1), () -> {}).toCompletableFuture().join());
+            var lock = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.LOCK,
+                    copied.key(), bound.bindingRevision(), 0, original.requestId(), null, null, true);
+            var locked = h.store.apply(lock, base, now, () -> {}).toCompletableFuture().join(); assertEquals(1, locked.stateRevision());
+            var changedReplay = new PersonalityManagementCommand(lock.operationId(), lock.actor(), lock.action(), lock.key(), lock.bindingRevision(), lock.stateRevision(), lock.correctionId(), null, null, false);
+            assertEquals(PersonalityManagementResult.Status.CONFLICT, h.store.apply(changedReplay, base, now, () -> {}).toCompletableFuture().join().status());
+            var remove = new PersonalityManagementCommand(UUID.randomUUID(), input.actor(), PersonalityManagementCommand.Action.REMOVE,
+                    copied.key(), bound.bindingRevision(), 1, original.requestId(), null, null, null);
+            h.store.apply(remove, base, now, () -> {}).toCompletableFuture().join();
+            assertTrue(h.store.state(copied.key()).toCompletableFuture().join().orElseThrow().corrections().isEmpty());
+            assertEquals(List.of(original), h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections());
+            assertThrows(CompletionException.class, () -> h.personality.propose(scope, basis, correction(request(scope), "旧引用"), control).toCompletableFuture().join());
         }
     }
 
@@ -352,42 +430,6 @@ class PersonalityIntegrationTest {
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
             var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
             assertTrue(h.store.state(key).toCompletableFuture().join().orElseThrow().corrections().isEmpty());
-        }
-    }
-    /** 验证显式旧行来源映射、原子回滚、锁定/冲突保留及全局幂等，旧表原文始终不改写。 */
-    @Test void legacyPersonalityImportPreservesEvidenceAndCommitsAtomically() {
-        try (var h = new Harness(); var control = ExecutionControl.create()) {
-            var basis = h.personality.resolve(scope, control).toCompletableFuture().join(); var input = request(scope);
-            var binding = h.store.binding(scope).toCompletableFuture().join().orElseThrow();
-            var base = h.configuration.base(h.configuration.settings(scope));
-            var legacy = new EasyDataLegacyPersonalityStore(h.store, h.db.factRepository, h.db.repository, h.db.mapper, h.clock);
-            var location = new ILegacyPersonalityStore.Location(scope.scopeId(), "teaneko", false);
-            var json = h.db.mapper.writeValueAsString(List.of(Map.of("id", "原记录", "field", "speaking detail", "content", "温和自然", "source", "旧消息",
-                    "createdAt", now.toString(), "locked", true), Map.of("id", "身份项", "field", "identity", "content", "不兼容身份")));
-            h.db.seedFactRow("memory", location.target(), location.key(), json);
-            var preview = legacy.preview(location, now).toCompletableFuture().join().orElseThrow();
-            assertThrows(CompletionException.class, () -> legacy.importSnapshot(new ILegacyPersonalityStore.Import(preview, binding, base, Map.of(), input.actor())).toCompletableFuture().join());
-            var command = new ILegacyPersonalityStore.Import(preview, binding, base, Map.of("旧消息", input.actor()), input.actor());
-            h.db.failingWritePrefix.set("legacy");
-            assertThrows(CompletionException.class, () -> legacy.importSnapshot(command).toCompletableFuture().join());
-            assertTrue(h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections().isEmpty());
-            h.db.failingWritePrefix.set(null); var result = legacy.importSnapshot(command).toCompletableFuture().join();
-            assertEquals(1, result.imported().size()); assertTrue(result.skipped().containsKey("身份项"));
-            assertEquals(result, legacy.importSnapshot(command).toCompletableFuture().join());
-            var saved = h.store.state(binding.correctionKey()).toCompletableFuture().join().orElseThrow().corrections().getFirst();
-            assertTrue(saved.locked()); assertEquals(input.actor(), saved.source()); assertEquals(now, saved.occurredAt());
-            assertEquals(json, h.db.storedValue("memory", location.target(), location.key()));
-            assertTrue(Objects.requireNonNull(h.db.storedValue("agent.personality.v1", "legacy", result.auditKey())).contains("旧消息"));
-            assertThrows(CompletionException.class, () -> h.personality.propose(scope, basis, correction(request(scope), "自动覆盖锁定"), control).toCompletableFuture().join());
-            var conflict = new ILegacyPersonalityStore.Location(scope.scopeId(), "teaneko", true);
-            h.db.seedFactRow("memory", conflict.target(), conflict.key(), "[{\"id\":\"冲突项\",\"field\":\"speaking detail\",\"content\":\"不能应用\",\"reason\":\"原边界拒绝\"}]");
-            var rejected = legacy.preview(conflict, now).toCompletableFuture().join().orElseThrow();
-            assertTrue(legacy.importSnapshot(new ILegacyPersonalityStore.Import(rejected, binding, base, Map.of(), input.actor())).toCompletableFuture().join().imported().isEmpty());
-            h.db.seedFactRow("memory", location.target(), location.key(), "[]");
-            assertThrows(CompletionException.class, () -> legacy.importSnapshot(command).toCompletableFuture().join());
-            h.db.seedFactRow("memory", location.target(), location.key(), json);
-            var changed = h.store.bind(binding, "新的补正").toCompletableFuture().join();
-            assertThrows(CompletionException.class, () -> legacy.importSnapshot(new ILegacyPersonalityStore.Import(preview, changed, base, command.sources(), input.actor())).toCompletableFuture().join());
         }
     }
 }

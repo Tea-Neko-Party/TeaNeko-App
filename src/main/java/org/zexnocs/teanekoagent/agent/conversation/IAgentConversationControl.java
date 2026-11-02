@@ -12,11 +12,33 @@ import java.util.concurrent.CompletionStage;
  * 宿主会话生命周期端口；管理调用者负责权限，不能直接作为开放的模型工具。
  * 引用同步可按需登记缺失的默认共享空间；不删除持久化数据，也不替代 namespace 绑定事务。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
 public interface IAgentConversationControl {
+    /**
+     * 管理提交后复核实际人格，只有身份变化才换代；重放不重复清除新窗口。
+     * @param scope 真实操作作用域
+     * @param correctionKey 已由业务层验证的补正 key
+     * @param shared 是否协调共享该 key 的全部已知作用域，否则仅当前 scope
+     * @param parent 借用管理控制
+     * @return 实际换代的会话数
+     * @throws UnsupportedOperationException 当宿主未支持人格协调时
+     */
+    default CompletionStage<Integer> synchronizePersonality(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
+        throw new UnsupportedOperationException("当前会话端口不支持人格管理同步。");
+    }
+    /**
+     * 管理清空提交后同步引用同一空间的全部已知作用域，不将共享数据误当成单群私有数据。
+     * @param namespace 已由业务边界验证的空间键，会话层不解析管理格式
+     * @param parent 借用管理控制
+     * @return 实际推进代次的会话数
+     * @throws UnsupportedOperationException 当实现不支持跨作用域同步时
+     */
+    default CompletionStage<Integer> synchronizeNamespace(String namespace, ExecutionControl parent) {
+        throw new UnsupportedOperationException("当前会话端口不支持共享空间同步。");
+    }
     /**
      * 持久化绑定提交后读取当前引用并协调同 scope 的所有实例；不以旧操作回执恢复状态。
      * 调用方负责管理权限，并保持借用父控制存活至完成。

@@ -25,7 +25,7 @@ import static org.mockito.Mockito.*;
  * 经真实存储适配器验证有界多页快照、代次竞争、原证据共享及业务层组合。
  * 事务替身的独占锁比实际共享锁更严格，不代替 MySQL 隔离及读并发性能验收。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -88,9 +88,9 @@ class MemoryRecallStoreTest {
     /** 验证构造没有 I/O，空间缺失明确异常且不读取事实或自动登记 default。 */
     @Test void missingNamespaceIsNotACompleteEmptyResult() {
         try (var fixture = new NamespaceDatabaseFixture()) {
-            verifyNoInteractions(fixture.repository, fixture.factRepository, fixture.namespaceLocks);
+            verifyNoInteractions(fixture.repository);
             var missing = assertInstanceOf(MemoryFactGenerationException.class, failure(fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 1000)));
-            assertTrue(missing.missingNamespace()); verifyNoInteractions(fixture.factRepository);
+            assertTrue(missing.missingNamespace()); verify(fixture.repository, never()).scanData(anyString(), anyString(), anyString(), any(), any());
             assertTrue(assertInstanceOf(MemoryFactGenerationException.class, failure(service(fixture).recall(
                     new MemoryRecallRequest(reference, MemoryRecallQuery.all(), MemoryRecallRequest.Use.TOOL, null)))).missingNamespace());
         }
@@ -102,10 +102,10 @@ class MemoryRecallStoreTest {
             prepare(fixture, 205); var partial = fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 201).toCompletableFuture().join();
             assertEquals(201, partial.evidence().size()); assertFalse(partial.complete()); assertEquals(new UUID(0, 201), partial.evidence().getLast().id());
             var pages = ArgumentCaptor.forClass(Pageable.class);
-            verify(fixture.factRepository, times(3)).findByNamespaceAndTargetAndKeyGreaterThanOrderByKeyAsc(eq("agent.fact.v1"), eq("record:default:g:0"), anyString(), pages.capture());
+            verify(fixture.repository, times(3)).scanData(eq("agent.fact.v1"), eq("record:default:g:0"), anyString(), isNull(), pages.capture());
             assertTrue(pages.getAllValues().stream().allMatch(page -> page.getPageSize() <= 101));
             var complete = fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 205).toCompletableFuture().join(); assertTrue(complete.complete()); assertEquals(205, complete.evidence().size());
-            verify(fixture.factRepository, never()).saveAndFlush(any());
+            verify(fixture.repository, never()).saveAndFlush(argThat(row -> row.getNamespace().equals("agent.fact.v1")));
         }
     }
 
@@ -151,7 +151,7 @@ class MemoryRecallStoreTest {
             assertThrows(IllegalArgumentException.class, () -> fixture.recall.scan(MemoryNamespaceId.SHARED, -1, 100));
             assertThrows(IllegalArgumentException.class, () -> fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 0));
             assertThrows(IllegalArgumentException.class, () -> fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 10001));
-            verifyNoInteractions(fixture.database, fixture.factRepository, fixture.namespaceLocks);
+            verifyNoInteractions(fixture.database, fixture.repository);
         }
     }
 
@@ -163,7 +163,6 @@ class MemoryRecallStoreTest {
             fixture.seedFactRow("其他域", "record:default:g:0", new UUID(0, 2).toString(), "其他资料");
             var result = fixture.recall.scan(MemoryNamespaceId.SHARED, 0, 100).toCompletableFuture().join(); assertEquals(1, result.evidence().size());
             assertEquals(original, fixture.storedValue("memory", "scope:旧群:agent:角色", "profile:用户"));
-            verify(fixture.factRepository, never()).lockLegacyProfile(anyString(), anyString());
         }
     }
 
@@ -188,7 +187,7 @@ class MemoryRecallStoreTest {
             try { await(entered); fixture.store.advanceGeneration(MemoryNamespaceId.SHARED, 0, UUID.randomUUID()).toCompletableFuture().join(); }
             finally { release.countDown(); }
             assertFalse(assertInstanceOf(MemoryFactGenerationException.class, failure(result)).missingNamespace());
-            verify(fixture.factRepository, never()).findByNamespaceAndTargetAndKeyGreaterThanOrderByKeyAsc(anyString(), anyString(), anyString(), any());
+            verify(fixture.repository, never()).scanData(anyString(), anyString(), anyString(), any(), any());
         }
     }
 
@@ -231,7 +230,7 @@ class MemoryRecallStoreTest {
                 await(writerReady); assertFalse(append.isDone());
             } finally { release.countDown(); }
             var original = result.toCompletableFuture().join(); assertTrue(original.complete()); assertEquals(205, original.evidence().size()); append.join();
-            var next = new EasyDataMemoryRecallStore(fixture.store, fixture.namespaceLocks, fixture.facts).scan(MemoryNamespaceId.SHARED, 0, 1000).toCompletableFuture().join();
+            var next = new EasyDataMemoryRecallStore(fixture.store, fixture.facts).scan(MemoryNamespaceId.SHARED, 0, 1000).toCompletableFuture().join();
             assertEquals(206, next.evidence().size()); assertEquals(new UUID(0, 0), next.evidence().getFirst().id());
         }
     }

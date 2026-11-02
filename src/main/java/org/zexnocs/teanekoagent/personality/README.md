@@ -1,6 +1,6 @@
 # 基础人格与独立补正
 
-默认完整装配通过 `PersonalityConfig` 向独立轮次和会话邮箱提供同一个 `IAgentPersonalitySource`。人格已实际进入模型输入，补正、备份和绑定保存到 `general_data` 的独立 `agent.personality.v1` 业务域；不与用户画像或 memory namespace 混存，不新增线程池。
+默认完整装配通过 `PersonalityConfig` 向独立轮次和会话邮箱提供同一个 `IAgentPersonalitySource`。人格已实际进入模型输入，补正、备份和绑定保存到 `tea_neko_agent_data` 的独立 `agent.personality.v1` 业务域；不与用户画像或 memory namespace 混存，不新增线程池。
 
 ## 配置与使用
 
@@ -19,7 +19,30 @@
 
 personalityId 为空时使用文件默认。自定义描述替换人格描述层，保留基础身份约束和硬边界，不能修改运行权限。开启自定义前先设置有效正文；自定义正文和风格各最多 4096 字符。应用补正和生成/接受候选是独立开关，均默认 true；关闭应用不删记录，也不自动关闭独立学习。学习开关不能授权写用户事实。
 
-correctionKey 不属于普通 cfg 字段。可信管理端口 `IPersonalityStore.bind` 支持绑定已有或新空 key，后续聊天管理入口必须经过真实 DEBUG 权限；当前没有向用户或模型开放任意 key、克隆、编辑或导出工具。
+correctionKey 不属于普通 cfg 字段。独立 DEBUG 指令已接入 key 绑定、分页/导出、备份、克隆、新增、编辑、锁定与撤销。真实角色和启用状态在入口及事务提交前复核，普通用户或模型参数不能自行获得权限；命令正文不作为人格运行规则。
+
+## DEBUG 补正管理
+
+下列指令仅供已登记且启用作用域的真实 DEBUG 使用。先执行 `/agent personality` 获取当前 key、bindingRevision、stateRevision 和允许字段；每次成功修改后重新查询版本。`key` 省略时取当前引用，指定其他 key 仅供可信 DEBUG 查询、克隆或备份；编辑只允许当前绑定的可写 key。字段 `speaking detail` 在命令中写成 `speaking_detail`。
+
+| 指令，均加 `/agent` 前缀 | 行为 |
+| --- | --- |
+| `personality [key] [offset]` | 显示版本、来源、锁定及正文，每页五项。首次查询原子初始化当前引用，基础人格变化时先备份再切换。 |
+| `exportpersonality [key] [offset]` | 每页两条完整来源 JSON，包含集合/管理版本及后继偏移；单页至多 128 KiB，长内容用原转发发送器分段。 |
+| `personalitybackups [key] [offset]` | 查询源 key 最近六十四份备份的分页引用，每页五项。较早备份仍可用完整 key 查询。 |
+| `setcorrectionkey <目标key> <bindingRevision> <目标stateRevision>` | 先备份当前补正，再仅切换当前 scope；新建空 key 的目标版本填 -1，已有 key 填其查询版本。 |
+| `clonecorrections <源key> <bindingRevision> <源stateRevision>` | 克隆为新的独立可写 key，保留来源、时间和锁定；不自动切换绑定。 |
+| `backuppersonality <源key> <bindingRevision> <源stateRevision>` | 显式保存不可变备份，不改变源内容。 |
+| `addcorrection <当前key> <bindingRevision> <stateRevision> <字段> <正文>` | 按共同白名单新增实际操作者的补正，不能改身份、硬边界、工具权限或画像。 |
+| `editcorrection <当前key> <bindingRevision> <stateRevision> <补正UUID> <正文>` | 修改正文，保留原记录标识、来源、时间、有效期与锁定。 |
+| `lockcorrection <当前key> <bindingRevision> <stateRevision> <补正UUID> <true或false>` | 明确锁定/解锁，不接受任意字符串冒充布尔值。 |
+| `revokecorrection <当前key> <bindingRevision> <stateRevision> <补正UUID>` | 保存修改前备份后撤销，迟到学习不能按旧管理代次重新写回。 |
+
+所有修改保存原操作回执；同一原消息的同一动作只有一笔管理操作，重放返回原结果，改变来源、参数或预期版本报告冲突；新操作须发送新消息。回执不是当前最新状态。备份、修改与回执同事务提交，授权失效或中途写入失败整体回滚；取消观察不证明已开始事务回滚。备份不可直接绑定或编辑，需要先克隆，再用新消息绑定克隆 key。
+
+管理编辑先保存不可变备份，保留原补正证据；普通候选不能授予 locked 或覆盖锁定字段。已有补正与当前基础版本/白名单不兼容时拒绝编辑，但允许撤销或克隆保存。共享 key 的管理变更协调全部已知 scope 的短期窗口、摘要、完成重放及在途请求；绑定只协调当前 scope。同步失败单独报告，使用前身份复核仍拒绝旧结果；重复同步不再次清除已经采用新人格的窗口。长期事实与 memoryNamespace 不受影响。
+
+分页查询是各次请求的版本快照，并非冻结导出；跨页应比较 key、revision 和 managementRevision，发现变化后从头查询。
 
 ## 轮次、历史与重放
 
@@ -27,11 +50,11 @@ correctionKey 不属于普通 cfg 字段。可信管理端口 `IPersonalityStore
 
 实际输入同时计入人格、补正、参考资料、原问题和历史的完整协议预算；按完整旧轮次缩小窗口，不能静默删掉基础人格。历史提交仍验证实际前缀、原输入投影、工具闭环和最终候选；窗口不重复保存人格或补正。基础内容指纹覆盖实际内容，修改正文而未递增配置版本也会触发身份更新。
 
-人格绑定或应用开关改变后，当前 scope 的短期窗口/完成缓存换代，旧等待项失效。每次模型、工具、最终交付及缓存重放只读复核当前配置和原绑定，旧运行不能公开新身份下的回答。补正 revision 更新从下一轮生效，不中途替换当前快照；已采用补正到期后不能继续使用或重放。
+人格绑定或应用开关改变后，当前 scope 的短期窗口/完成缓存换代，旧等待项失效。每次模型、工具、最终交付及缓存重放只读复核当前配置和原绑定，旧运行不能公开新身份下的回答。普通学习追加只改变内容 revision，从下一轮生效。DEBUG 新增/编辑/锁定/撤销同时推进 managementRevision，使共享该 key 的旧快照失效；候选在状态锁内复核原管理代次，迟到学习不能回灌。已采用补正到期后不能继续使用或重放。
 
 ## 持久化生命周期
 
-首次按 `scope-<scopeId>` 初始化空补正。基础人格变化时，在一个 DatabaseTask 事务中锁定当前绑定及旧补正，保存 `backup-<原key>-<时间>-<唯一序号>` 的不可变副本，创建当前 scope 的新空 key，再更新绑定 revision。其他引用原 key 的 scope 保留原补正；长期记忆、namespace 和其他 scope 的会话不被清除。
+首次按 `scope-<client和scope的摘要>` 初始化空补正，避免不同客户端的同名 scope 意外共享。基础人格变化时，在一个 DatabaseTask 事务中锁定当前绑定及旧补正，保存 `backup-<源key摘要>-<时间>-<操作ID>` 的不可变副本，创建当前 scope 的新空 key，再更新绑定 revision。其他引用原 key 的 scope 保留原补正；长期记忆、namespace 和其他 scope 的会话不被清除。
 
 补正以有容量上限的版本集合保存，每空间最多 64 条；追加、切换及共享写入使用同一行锁顺序和既有 Version 仲裁，提交成功才完成 Stage。达到上限明确拒绝，不悄悄覆盖来源。备份不允许作为可写空间绑定。旧绑定的迟到候选即使来源相同也不能改投新 key。
 
@@ -65,14 +88,8 @@ Spring application 支持以下本地配置：
 
 `reports()` 最近一百条记录及观察者提供原请求、独立执行 ID、实际模型状态、提交观察结果和逐次 REPORTED/ESTIMATED/未知 token，不含正文。APPLIED 表示已观察新增提交和最终校验；REJECTED/FAILED 不能证明已经开始的数据库事务回滚。模型表达仍是低信任数据，字段校验不保证自然语言质量，需真实模型人工验收。
 
-## 显式旧人格迁移
+## 数据入口与验证
 
-`ILegacyPersonalityStore.preview/importSnapshot` 仅供可信离线迁移及后续 DEBUG 管理入口，普通解析、启动、自动学习和 `/cfg` 不自动导入，也未注册模型工具。聊天管理命令尚未实现；后续入口必须先校验真实 DEBUG 权限，存储端口不从模型或任意布尔值取得权限。
+人格存储通过 [Agent EasyData](../database/easydata/README.md) 的事务 DTO 访问，不直接操作仓库。Agent 未上线，直接使用新表，不提供旧人格迁移端口。普通补正继续保留原始来源和字段兼容校验。真实 MySQL 事务代理、行锁及模型质量仍需实机验收。
 
-用 `Location(scopeId, agentId, conflicts)` 访问原 `llm_related` 中 `memory / scope:<scopeId>:agent:<agentId> / personality.delta` 或 `personality.conflict`。先预览源 Version、完整 JSON/摘要和逐条字段，再构造 `Import`，提供原目标绑定、当前可信基础人格、旧 source 字符串到真实 `AgentActorContext` 的明确映射及真实管理操作者。不能猜测旧平台主体 UUID；缺失 ID 固定为行内位置，缺失创建时间才用预览时固定的估算。
-
-导入与补正追加、审计同事务完成，统一按绑定、补正、旧行顺序持锁。复核原文/版本、目标基础指纹、scope 和共同白名单；明确来源缺失、正文非法、锁定冲突、容量或提交失败使整批回滚。原 locked/createdAt/expiresAt 保留，tags/eventTime/updatedAt/冲突原因等元数据保存在完整审计原文中，不自行解释为新语义。原表始终不修改或删除。
-
-冲突列表只作审计，不兼容字段、到期或低置信候选记录跳过原因，均不进入 Prompt。每个物理源行只迁移一次，来源定位为全局幂等键；相同完整映射返回原回执，不重复追加。源内容变化、换目标/key、改映射或换人格后不能借新请求标识重导，需要 DEBUG 人工核对和独立修正。审计不作为普通事实查询返回。
-
-离线验证复用原事务和模型夹具，只补关键流程及高风险路径；实际 MySQL/JPA 事务代理、行锁、真实旧 JSON、供应商生成质量/成本仍需实机联调。
+自定义可写人格存储须实现带 managementRevision 和准入 guard 的 append 重载；默认实现明确拒绝缺少换代保护的学习写入，不能降级到无校验追加。自定义只读人格源可继续只实现解析与复核端口。

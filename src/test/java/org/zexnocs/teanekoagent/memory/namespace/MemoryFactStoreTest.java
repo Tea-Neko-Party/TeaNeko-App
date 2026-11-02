@@ -17,9 +17,9 @@ import static org.mockito.Mockito.*;
 
 /**
  * 经真实事实适配器验证原子提交、来源/主语共享、幂等、损坏处理及换代提交竞争。
- * 事务替身共享 namespace 与事实两张表的测试状态，不连接真实 MySQL。
+ * 事务替身在 Agent 专用表内共享 namespace 与事实状态，不连接真实 MySQL。
  * @author zExNocs
- * @date 2026/10/29
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -73,12 +73,12 @@ class MemoryFactStoreTest {
     /** 验证构造没有仓库访问，缺失空间不自动创建且明确区别于无事实。 */
     @Test void missingNamespaceDoesNotInitializeOrPretendEmpty() {
         try (var fixture = new NamespaceDatabaseFixture()) {
-            verifyNoInteractions(fixture.factRepository, fixture.namespaceLocks, fixture.repository);
+            verifyNoInteractions(fixture.repository);
             var command = command(UUID.randomUUID(), 0, "事实");
             assertTrue(generationFailure(fixture.facts.append(command, now)).missingNamespace());
             assertTrue(generationFailure(fixture.facts.find(MemoryNamespaceId.SHARED, 0, command.operationId())).missingNamespace());
             assertTrue(generationFailure(fixture.facts.list(MemoryNamespaceId.SHARED, 0, null, 10)).missingNamespace());
-            verify(fixture.factRepository, never()).saveAndFlush(any());
+            verify(fixture.repository, never()).saveAndFlush(argThat(row -> row.getNamespace().equals("agent.fact.v1")));
         }
     }
 
@@ -139,7 +139,7 @@ class MemoryFactStoreTest {
     /** 验证同空间跨主语共享扫描，分页游标无重复且原证据不因过期而静默丢失。 */
     @Test void boundedCursorPagesKeepAllEvidenceWithoutSubjectFiltering() {
         try (var fixture = new NamespaceDatabaseFixture()) {
-            register(fixture); var expected = new TreeSet<UUID>(Comparator.comparing(UUID::toString));
+            register(fixture); var expected = new TreeSet<>(Comparator.comparing(UUID::toString));
             for (int i = 1; i <= 5; i++) {
                 var command = command(new UUID(0, i), 0, "事实" + i); expected.add(command.operationId());
                 fixture.facts.append(command, now).toCompletableFuture().join();
@@ -149,8 +149,8 @@ class MemoryFactStoreTest {
                 var page = fixture.facts.list(MemoryNamespaceId.SHARED, 0, cursor, 2).toCompletableFuture().join();
                 ids.addAll(page.records().stream().map(MemoryFactRecord::id).toList()); cursor = page.nextCursor();
             } while (cursor != null);
-            assertEquals(new ArrayList<>(expected), ids); verify(fixture.factRepository, never()).findAll();
-            verify(fixture.factRepository, never()).findByNamespaceAndTarget(anyString(), anyString());
+            assertEquals(new ArrayList<>(expected), ids); verify(fixture.repository, never()).findAll();
+            verify(fixture.repository, never()).findByNamespaceAndTarget(anyString(), anyString());
         }
     }
 
@@ -189,7 +189,7 @@ class MemoryFactStoreTest {
             try { await(entered); clear = fixture.store.advanceGeneration(MemoryNamespaceId.SHARED, 0, UUID.randomUUID()).toCompletableFuture(); assertFalse(clear.isDone()); }
             finally { release.countDown(); }
             assertEquals(MemoryFactReceipt.Status.STORED, append.join().status()); assertEquals(1, Objects.requireNonNull(clear.join().namespace()).generation());
-            generationFailure(fixture.facts.find(MemoryNamespaceId.SHARED, 0, command.operationId()));
+            assertFalse(generationFailure(fixture.facts.find(MemoryNamespaceId.SHARED, 0, command.operationId())).missingNamespace());
         }
     }
 
@@ -201,7 +201,7 @@ class MemoryFactStoreTest {
             var command = command(UUID.randomUUID(), 0, "旧快照事实"); var append = fixture.facts.append(command, now);
             try { await(entered); fixture.store.advanceGeneration(MemoryNamespaceId.SHARED, 0, UUID.randomUUID()).toCompletableFuture().join(); }
             finally { release.countDown(); }
-            assertFalse(generationFailure(append).missingNamespace()); verify(fixture.factRepository, never()).saveAndFlush(any());
+            assertFalse(generationFailure(append).missingNamespace()); verify(fixture.repository, never()).saveAndFlush(argThat(row -> row.getNamespace().equals("agent.fact.v1")));
         }
     }
 
@@ -255,7 +255,7 @@ class MemoryFactStoreTest {
     @Test void recreatedAdapterReadsPersistedOperationReceipt() {
         try (var fixture = new NamespaceDatabaseFixture()) {
             register(fixture); var command = command(UUID.randomUUID(), 0, "事实"); var original = fixture.facts.append(command, now).toCompletableFuture().join();
-            var recreated = new EasyDataMemoryFactStore(fixture.store, fixture.namespaceLocks, fixture.factRepository, fixture.mapper);
+            var recreated = new EasyDataMemoryFactStore(fixture.store, fixture.data, fixture.mapper);
             assertEquals(original, recreated.append(command, now.plusSeconds(60)).toCompletableFuture().join());
         }
     }
@@ -301,7 +301,7 @@ class MemoryFactStoreTest {
             assertThrows(IllegalArgumentException.class, () -> fixture.facts.list(MemoryNamespaceId.SHARED, 0, null, 0));
             assertThrows(IllegalArgumentException.class, () -> fixture.facts.list(MemoryNamespaceId.SHARED, 0, null, 101));
             assertThrows(IllegalArgumentException.class, () -> fixture.facts.find(MemoryNamespaceId.SHARED, -1, UUID.randomUUID()));
-            verifyNoInteractions(fixture.database, fixture.factRepository, fixture.namespaceLocks);
+            verifyNoInteractions(fixture.database, fixture.repository);
         }
     }
 }

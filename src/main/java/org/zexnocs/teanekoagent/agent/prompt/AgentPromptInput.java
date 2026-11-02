@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.llm.framework.message.*;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
 
 import java.util.ArrayList;
@@ -22,7 +23,7 @@ import java.util.List;
  * @param personality 可选已解析人格，基础设定与低信任补正分开呈现
  * @param summary 可选本轮固定摘要，仅作为 USER 资料，不沉积为原消息
  * @author zExNocs
- * @date 2026/10/30
+ * @date 2026/11/01
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -145,7 +146,7 @@ public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragm
     }
 
     /**
-     * 验证实际输入前缀、完整工具协议及最终候选，再只移除宿主生成的临时片段。
+     * 验证实际输入前缀、完整工具协议及最终候选，移除临时片段并替换仅供原轮次使用的工具正文。
      * @param interaction 已成功的原始完整交互
      * @param codec 宿主协议度量器
      * @return 原消息加本轮真实响应，不含本轮临时资料
@@ -167,7 +168,18 @@ public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragm
                 || !codec.signature(List.of(last)).equals(codec.signature(List.of(interaction.finalCandidate().orElseThrow())))) {
             throw new IllegalArgumentException("Prompt 响应的最终候选不一致。");
         }
-        var projected = new ArrayList<>(original); projected.addAll(response); LLMMessageHistory.validateComplete(projected);
+        var ephemeralTools = new HashSet<String>(); fragments.forEach(fragment -> ephemeralTools.addAll(fragment.transientToolResults()));
+        var ephemeralCalls = new HashSet<String>(); var projected = new ArrayList<>(original);
+        for (var message : response) {
+            if (message instanceof ILLMAssistantMessage callMessage) {
+                callMessage.getToolCalls().stream().filter(call -> ephemeralTools.contains(call.getName())).forEach(call -> ephemeralCalls.add(call.getId()));
+            }
+            if (message instanceof ILLMToolMessage tool && ephemeralCalls.contains(tool.getToolCallId())) {
+                projected.add(LLMToolMessage.builder().name(tool.getName()).toolCallId(tool.getToolCallId()).contents(new LLMContentListBuilder()
+                        .addText("该工具结果仅供原轮次使用；后续需要时应重新调用工具读取。").build()).build());
+            } else { projected.add(message); }
+        }
+        LLMMessageHistory.validateComplete(projected);
         return LLMProtocolSnapshots.messages(projected);
     }
 }

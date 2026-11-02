@@ -9,7 +9,7 @@ import java.util.concurrent.CompletionStage;
 /**
  * 命令副作用的持久化防重端口，先提交占用再执行；未知在途记录不得自动重新执行。
  * @author zExNocs
- * @date 2026/11/01
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -53,7 +53,7 @@ public interface ICommandAttemptStore {
             this(requestId, callId, actor, reference, commandDigest, Kind.TOOL);
         }
         /**
-         * 固定动作边界，拒绝模型提供的系统身份或无界调用标识。
+         * 普通动作限定人类来源，独立自主发生限定 SYSTEM；类别由宿主固定，不接受模型声明。
          * @param requestId 原请求
          * @param callId 原调用 ID
          * @param actor 原来源
@@ -65,7 +65,8 @@ public interface ICommandAttemptStore {
          */
         public Attempt {
             Objects.requireNonNull(requestId); Objects.requireNonNull(actor); Objects.requireNonNull(reference); Objects.requireNonNull(kind);
-            if (callId == null || callId.isBlank() || callId.length() > 256 || actor.origin() != AgentActorContext.Origin.USER
+            if (callId == null || callId.isBlank() || callId.length() > 256
+                    || actor.origin() != (kind == Kind.PROACTIVE_ENTRY ? AgentActorContext.Origin.SYSTEM : AgentActorContext.Origin.USER)
                     || !actor.scope().equals(reference.scope()) || commandDigest == null || !commandDigest.matches("[0-9a-f]{64}")) {
                 throw new IllegalArgumentException("命令动作来源、范围或摘要无效。");
             }
@@ -82,11 +83,11 @@ public interface ICommandAttemptStore {
      */
     record Claim(boolean acquired, CommandInvocationReceipt receipt) {}
     /**
-     * 分离原生消息的单次模型准入与模型内部工具调用，避免重启后以新工具 ID 重跑原消息。
+     * 分离原生消息的单次模型准入、采集和工具调用，避免重启或换代后重放旧来源。
      * @author zExNocs
-     * @date 2026/11/01
+     * @date 2026/11/02
      * @since 4.0.0
      * @version 4.5.0-l
      */
-    enum Kind { CHAT_ENTRY, TOOL }
+    enum Kind { CHAT_ENTRY, TOOL, COLLECT_ENTRY, PROACTIVE_ENTRY, CLIENT_ENTRY }
 }

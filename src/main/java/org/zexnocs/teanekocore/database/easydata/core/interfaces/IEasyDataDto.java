@@ -12,16 +12,26 @@ import java.util.Objects;
  * 数据传输对象接口
  *
  * @author zExNocs
- * @date 2026/02/15
+ * @date 2026/11/01
+ * @since 4.0.0
+ * @version 4.5.0-l
  */
 public interface IEasyDataDto {
     /**
+     * 取得不使用普通缓存的事务视图，必须在外层数据库任务事务中使用。
+     * @return 同域同目标的事务 DTO
+     * @throws UnsupportedOperationException 当自定义 DTO 尚未支持事务操作时
+     */
+    default IEasyDataTransactionDto atomic() { throw new UnsupportedOperationException("当前 EasyData DTO 不支持事务视图。"); }
+    /**
      * 获取命名空间。
+     * @return 固定业务域
      */
     String getNamespace();
 
     /**
      * 获取 target。
+     * @return 固定目标
      */
     String getTarget();
 
@@ -67,6 +77,7 @@ public interface IEasyDataDto {
      * @param clazz 类型。
      * @return 值。
      * @param <T> 类型。
+     * @throws JsonSerializationFailedException 当正文不能解析为目标类型时
      */
     @Nullable
     default <T> T get(String key, @NonNull Class<T> clazz) throws JsonSerializationFailedException {
@@ -78,6 +89,9 @@ public interface IEasyDataDto {
      * 默认值不能为null。
      * @param key 键。
      * @param defaultValue 默认值。
+     * @param <T> 目标类型
+     * @return 解析值或默认值
+     * @throws JsonSerializationFailedException 当正文不能解析为目标类型时
      */
     @NonNull
     @SuppressWarnings("unchecked")
@@ -91,6 +105,9 @@ public interface IEasyDataDto {
      *
      * @param key 键
      * @param clazz List 中元素的类型
+     * @param <T> 元素类型
+     * @return 反序列化列表，缺失时为空
+     * @throws JsonSerializationFailedException 当列表正文无法解析时
      */
     <T> List<T> getList(String key, @NonNull Class<T> clazz) throws JsonSerializationFailedException;
 

@@ -9,7 +9,7 @@ import java.util.Optional;
  * @param scope 已读取的作用域策略，尚未读取时为空
  * @param readiness 已完成的就绪检查，前置拒绝时为空
  * @author zExNocs
- * @date 2026/10/28
+ * @date 2026/11/02
  * @since 4.0.0
  * @version 4.5.0-l
  */
@@ -48,13 +48,14 @@ public record AgentAccessDecision(Reason reason, Optional<AgentScopePolicy> scop
     /**
      * 统一门控的稳定原因，不含模型输出、配置值或异常链。
      * @author zExNocs
-     * @date 2026/10/28
+     * @date 2026/11/02
      * @since 4.0.0
      * @version 4.5.0-l
      */
     public enum Reason {
         ALLOWED("Agent 活动已获准。"), INSTANCE_CLOSED("Agent 实例已关闭。"),
         INSTANCE_NOT_REGISTERED("Agent 实例未登记。"), ACTIVITY_DISABLED("当前定义未启用此活动。"),
+        ACTIVITY_POLICY_REJECTED("当前宿主活动票据或来源已失效。"),
         INVALID_ORIGIN("请求来源不适用于当前活动。"), SCOPE_UNREGISTERED("当前作用域未注册 Agent。"),
         SCOPE_DISABLED("当前作用域已关闭 Agent。"), MODE_RESTRICTED("当前作用域未允许主动活动。"),
         SCOPE_CONFIG_UNAVAILABLE("Agent 作用域配置不可用。"), LOCAL_DISABLED("本地配置已关闭 Agent。"),

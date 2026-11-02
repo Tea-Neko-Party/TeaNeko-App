@@ -3,16 +3,15 @@ package org.zexnocs.teanekoagent.adapter.command;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.command.CommandInvocationReceipt;
 import org.zexnocs.teanekoagent.agent.command.ICommandAttemptStore;
-import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
-import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
-import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyDataRepository;
+import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -25,18 +24,21 @@ import java.util.function.Supplier;
 @Service
 public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
     private static final String DOMAIN = "agent.command.v1";
-    private final GeneralEasyDataRepository repository;
-    private final IDatabaseService database;
+    private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
     /**
      * 保存借用持久化设施，不在构造时读取或清理记录。
-     * @param repository 原通用行仓库
-     * @param database 原数据库事务服务
+     * @param data Agent 专用数据入口
      * @param mapper 明确业务 schema 转换器
      */
-    public EasyDataCommandAttemptStore(GeneralEasyDataRepository repository, IDatabaseService database, ObjectMapper mapper) {
-        this.repository = Objects.requireNonNull(repository); this.database = Objects.requireNonNull(database); this.mapper = Objects.requireNonNull(mapper);
+    public EasyDataCommandAttemptStore(TeaNekoAgentEasyData data, ObjectMapper mapper) {
+        this.data = Objects.requireNonNull(data).inNamespace(DOMAIN); this.mapper = Objects.requireNonNull(mapper);
     }
+    /**
+     * 取得防重目标的事务视图，不缓存尚未提交的执行权。
+     * @return 固定目标 DTO
+     */
+    private IEasyDataTransactionDto attempts() { return data.get("attempt").atomic(); }
     /**
      * 唯一冲突由原 DatabaseTask 重试后读取最新回执，不重复执行宿主命令。
      * @param attempt 固定动作
@@ -44,13 +46,13 @@ public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
      */
     @Override public CompletionStage<Claim> claim(Attempt attempt) {
         return submit(() -> {
-            var key = key(attempt); var row = repository.findByNamespaceAndTargetAndKey(DOMAIN, "attempt", key);
+            var key = key(attempt); var row = attempts().find(key, EasyDataLock.NONE);
             if (row != null) {
                 var original = decode(row.getValue());
                 return new Claim(false, original.attempt().equals(attempt) ? original.receipt() : new CommandInvocationReceipt(CommandInvocationReceipt.Status.CONFLICT));
             }
             var receipt = new CommandInvocationReceipt(CommandInvocationReceipt.Status.INDETERMINATE);
-            repository.saveAndFlush(repository.create(DOMAIN, "attempt", key, mapper.writeValueAsString(new State(1, attempt, receipt))));
+            attempts().save(attempts().create(key, mapper.writeValueAsString(new State(1, attempt, receipt))));
             return new Claim(true, receipt);
         });
     }
@@ -62,7 +64,7 @@ public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
      */
     @Override public CompletionStage<CommandInvocationReceipt> finish(Attempt attempt, CommandInvocationReceipt receipt) {
         return submit(() -> {
-            var row = repository.findByNamespaceAndTargetAndKey(DOMAIN, "attempt", key(attempt));
+            var row = attempts().find(key(attempt), EasyDataLock.WRITE);
             if (row == null) { throw new IllegalStateException("命令执行占用记录缺失。"); }
             var original = decode(row.getValue());
             if (!original.attempt().equals(attempt)) { throw new IllegalStateException("命令执行占用身份已改变。"); }
@@ -70,7 +72,7 @@ public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
                 if (!original.receipt().equals(receipt)) { throw new IllegalStateException("命令执行终态不能被另一结果覆盖。"); }
                 return original.receipt();
             }
-            row.setValue(mapper.writeValueAsString(new State(1, attempt, receipt))); repository.saveAndFlush(row); return receipt;
+            row.setValue(mapper.writeValueAsString(new State(1, attempt, receipt))); attempts().save(row); return receipt;
         });
     }
     /**
@@ -99,9 +101,7 @@ public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
      */
     private <T> CompletionStage<T> submit(Supplier<T> action) {
         try {
-            var result = new AtomicReference<T>(); var task = new DatabaseTaskConfig(database, "命令执行防重事务");
-            task.addTransactionTask(() -> { result.set(null); result.set(action.get()); });
-            return task.pushAsync().thenApply(ignored -> Objects.requireNonNull(result.get(), "命令事务未产生回执。"));
+            return data.transaction("命令执行防重事务", action);
         } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
     }
     /**
