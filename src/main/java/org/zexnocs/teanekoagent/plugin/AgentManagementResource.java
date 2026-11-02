@@ -1,0 +1,91 @@
+package org.zexnocs.teanekoagent.plugin;
+
+import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.plugin.management.*;
+import java.util.*;
+import java.util.concurrent.*;
+
+/**
+ * 提供已注册实例及能力的脱敏全局管理视图，不反射导出组件值、记忆或运行控制。
+ * 全局实例查看需要宿主明确授予 agent.inspect 权限。
+ * @author zExNocs
+ * @date 2026/11/02
+ * @since 4.0.0
+ * @version 4.6.0-l
+ */
+@Component
+public final class AgentManagementResource implements ManagementResource<AgentManagementResource.Query, List<AgentManagementResource.View>> {
+    private final IAgentRegistry registry;
+    private final AgentPluginRuntime plugins;
+    /**
+     * 借用实例和能力目录。
+     * @param registry 实例目录
+     * @param plugins 能力目录
+     */
+    public AgentManagementResource(IAgentRegistry registry, AgentPluginRuntime plugins) { this.registry = registry; this.plugins = plugins; }
+    /** @return 受全局查看权限保护的只读资源 */
+    @Override public Descriptor descriptor() {
+        return new Descriptor("teaneko.agent", "instances", 1, "agent.inspect", false, List.of(
+                new Field("after", "string", "原页面末项实例ID，首屏可省略。", false, false, List.of()),
+                new Field("limit", "integer", "单页条数，一至一百。", true, false, List.of())));
+    }
+    /** @return 有界分页请求类型 */
+    @Override public Class<Query> requestType() { return Query.class; }
+    /**
+     * 按稳定实例 ID 排序，返回指定游标之后的有界视图。
+     * @param context 已授权上下文
+     * @param query 游标及页大小
+     * @return 不含敏感字段的实例列表，末项 ID 可作后继游标
+     */
+    @Override public CompletionStage<List<View>> execute(ManagementContext context, Query query) {
+        context.control().checkActive();
+        return CompletableFuture.completedStage(registry.snapshots().stream().sorted(Comparator.comparing(value -> value.id().value().toString()))
+                .filter(value -> query.after() == null || value.id().value().toString().compareTo(query.after()) > 0).limit(query.limit())
+                .map(value -> {
+                    var definition = value.require(AgentComponents.DEFINITION);
+                    return new View(value.id(), definition.id(), definition.features(), plugins.featureIds(), value.require(AgentComponents.CLOSED));
+                }).toList());
+    }
+    /**
+     * 有界实例查询。
+     * @param after 原排序游标，首屏为空
+     * @param limit 页大小，一至一百
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    public record Query(String after, int limit) {
+        /**
+         * 拒绝无界页面。
+         * @param after 游标
+         * @param limit 页大小
+         */
+        public Query { if (limit < 1 || limit > 100) { throw new IllegalArgumentException("实例页大小必须为一至一百。"); } }
+    }
+    /**
+     * 实例基础视图，已声明能力与全局可安装目录分别展示。
+     * @param id 实例 ID
+     * @param definitionId 定义 ID
+     * @param declaredFeatures 实例显式声明
+     * @param availableFeatures 已注册目录，不表示全部启用或有权执行
+     * @param closed 实例关闭标记
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    public record View(EntityId id, String definitionId, Set<String> declaredFeatures, Set<String> availableFeatures, boolean closed) {
+        /**
+         * 冻结能力视图。
+         * @param id 实例
+         * @param definitionId 定义
+         * @param declaredFeatures 显式声明
+         * @param availableFeatures 注册目录
+         * @param closed 关闭状态
+         */
+        public View { declaredFeatures = Set.copyOf(declaredFeatures); availableFeatures = Set.copyOf(availableFeatures); }
+    }
+}
