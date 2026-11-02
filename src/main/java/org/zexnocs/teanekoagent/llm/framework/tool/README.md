@@ -17,6 +17,14 @@ CompletionStage<ToolInvocationResult> result = tools.execute(toolCall, context);
 
 对普通 `LLMTool`，绑定会捕获当前 executor，而非稍后从可变 Bean 重取。反射执行器固定当前 provider 实例与方法，因此注册表重载不会替换已绑定的执行目标。自定义执行器仍须管理好自己引用的状态；定义快照不深拷贝任意业务服务。
 
+## 显式图像结果
+
+字符串执行接口保持兼容。需要视觉回填的绑定使用 `withOutputProjection(raw -> new LLMToolOutput(text, images))`，由工具适配器解释自己的完整结果协议；不扫描普通文本中的 URL。`images` 使用已校验的 `ImageLLMContentPart`，最多四张，总引用长度至多 2097152 字符，不在本层下载资源。client 白名单、同步/异步守卫和插件 `intercept` 包装都会保留投影。
+
+工具集先等待原执行及环绕全部成功，再运行投影和文本预算；非法图像返回固定失败结果。图像独立于文本预算，截断的文本结果不携带图像。交互层先完整回填本批全部 TOOL 消息，再将 `ToolInvocationResult.mediaMessage()` 提供的 USER 图像参考加入下一次模型输入，保留工具 ID 配对及已有能力、取消与预算检查。
+
+图像参考仅为工具数据。Agent 历史投影核对实际工具结果后移除这些临时 USER 消息；独立使用 LLM 交互的宿主须自行区分原始 `transcript` 中的工具图像参考和真实用户发言，不把原始诊断链直接当作用户身份记录。参考实现见 [OneBot 查询](../../../adapter/onebot/README.md)。
+
 ## 参数与可信上下文
 
 `ToolInvocationContext` 仅由宿主创建，包含 requestId、Core `EntitySnapshot` 及借用的 `ExecutionControl`。业务层用类型化 `ComponentKey<T>` 定义自己的身份/namespace/授权快照，LLM 层不导入这些业务类型。组件必须是不可变数据；凭据、Bean、Repository 不属于此上下文。上下文的 JSON 和 toString 只给出脱敏描述，不能放入 Prompt、模型参数或调试内容快照。

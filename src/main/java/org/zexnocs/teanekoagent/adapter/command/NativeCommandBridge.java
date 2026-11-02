@@ -29,10 +29,11 @@ import java.util.concurrent.Executor;
 /**
  * 在拥有者租约内保留原生消息，组件中只有真实请求数据，不序列化客户端或权限能力。
  * 防重占用提交后进入原分发链，异常或取消不假装回滚已启动业务。
+ * <br>2026/11/02：向平台工具和资料适配器提供受请求租约保护的来源读取。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service
 public final class NativeCommandBridge implements ICommandInvocationPort {
@@ -105,6 +106,19 @@ public final class NativeCommandBridge implements ICommandInvocationPort {
         synchronized (sources) { lease = sources.get(request.requestId()); }
         return lease != null && !lease.closed && lease.request.actor().equals(request.actor()) && Objects.equals(lease.request.userText(), request.userText())
                 && actor(lease.data).equals(request.actor());
+    }
+
+    /**
+     * 2026/11/02：仅向宿主平台适配器借出当前仍有效的原生来源，不进入组件或模型 JSON。
+     * @param request 已固定的真实请求，不能由模型替换来源身份
+     * @return 该请求仍拥有来源租约时的原始消息
+     */
+    @com.fasterxml.jackson.annotation.JsonIgnore
+    public Optional<ITeaNekoMessageData> source(AgentRunRequest request) {
+        synchronized (sources) {
+            var lease = sources.get(request.requestId());
+            return lease != null && available(request) ? Optional.of(lease.data) : Optional.empty();
+        }
     }
     /**
      * 先取得持久化执行权，再复核当前边界并等待原命令实际完成；不回传任意业务对象。

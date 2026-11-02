@@ -29,12 +29,13 @@ import java.util.concurrent.*;
 import java.util.function.Supplier;
 
 /**
- * 将当前真实用户画像及当前短原文字面匹配的共享事实接入实际 Prompt，不从历史推导授权。
+ * 将当前真实用户画像及同 namespace 的共享事实接入实际 Prompt，不从历史推导授权。
  * 两次读取共享条数、字符和扫描预算，各自保留读取时刻与覆盖，不冒充同一数据库快照。
+ * <br>2026/11/02：共享事实不再要求整句原文匹配，并为跨主体记忆预留读取预算。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class AgentMemoryPromptSource implements IAgentPromptSource {
     private final MemoryAccessService access;
@@ -65,7 +66,7 @@ public final class AgentMemoryPromptSource implements IAgentPromptSource {
     }
 
     /**
-     * 优先本人画像，再以剩余预算读取当前短原文的共享字面匹配；无引用、系统任务或初始读关闭时不读资料。
+     * 2026/11/02：优先本人画像并为 namespace 共享证据预留预算，无引用或读取关闭时不访问存储。
      * @param definition 当前实例定义，不增加工具或权限
      * @param request 已固定原身份、原文和实际引用的请求
      * @param runtime 本轮模型快照，不从中读取凭据
@@ -83,13 +84,15 @@ public final class AgentMemoryPromptSource implements IAgentPromptSource {
             var settings = Objects.requireNonNull(defaults.settings(), "记忆注入预算不能为空。");
             var budget = new MemoryRecallLimits(settings.injectionLimit(), Math.min(settings.maxCharacters(), 900_000), settings.maxScanned());
             var context = context(request);
-            return access.profile(context, request.actor().userId().orElseThrow(), MemoryRecallRequest.Use.INJECTION, budget, control)
+            // 2026/11/02：本人画像不能独占全部扫描、条数和字符预算而使共享读取永远饥饿。
+            var personal = new MemoryRecallLimits(Math.max(1, budget.maxResults() / 2), Math.max(2, budget.maxCharacters() / 2), Math.max(1, budget.maxScanned() / 2));
+            return access.profile(context, request.actor().userId().orElseThrow(), MemoryRecallRequest.Use.INJECTION, personal, control)
                     .thenComposeAsync(profile -> related(request, context, profile, budget, control), executor);
         });
     }
 
     /**
-     * 使用剩余总预算，查询只来自当前原文，不从注入历史推导；无可用短原文时只提供本人画像。
+     * 2026/11/02：按当前 namespace 读取共享事实，来源 scope 仅供追溯，不作为过滤条件。
      * @param request 当前原请求
      * @param context 固定访问上下文
      * @param profile 已通过访问边界的本人画像
@@ -105,19 +108,18 @@ public final class AgentMemoryPromptSource implements IAgentPromptSource {
                 profile.observedAt(), profile.evidence(), profile.scanned(), profile.matched(), profile.limits(), profile.characters(), profile.definitivelyEmpty());
         data.put("query", "当前真实用户的事实与偏好"); data.put("subjectId", profile.subjectId()); data.put("projectionVersion", profile.projectionVersion());
         fragments.add(fragment("memory_profile", data, profile.evidence()));
-        var original = request.userText(); var keyword = original == null ? "" : original.text().strip();
         int remaining = budget.maxResults() - profile.evidence().size();
         int characters = budget.maxCharacters() - profile.characters(); int scanned = budget.maxScanned() - profile.scanned();
-        if (remaining < 1 || characters < 2 || scanned < 1 || keyword.isEmpty() || keyword.length() > 128) {
+        if (remaining < 1 || characters < 2 || scanned < 1) {
             return CompletableFuture.completedStage(List.copyOf(fragments));
         }
-        var query = new MemoryRecallQuery(null, null, Set.of(), Set.of(), List.of(keyword), null, null, true, Set.of(profile.subjectId()));
+        var query = new MemoryRecallQuery(null, null, Set.of(), Set.of(), List.of(), null, null, true, Set.of(profile.subjectId()));
         return access.recall(context, query, MemoryRecallRequest.Use.INJECTION, new MemoryRecallLimits(remaining, characters, scanned), control)
                 .thenApplyAsync(result -> {
                     control.checkActive();
                     var projected = common(result.reference().namespaceId().value(), result.reference().bindingRevision(), result.reference().generation(),
                             result.observedAt(), result.evidence(), result.scanned(), result.matched(), result.limits(), result.characters(), result.definitivelyEmpty());
-                    projected.put("query", "当前短原文在共享空间其他主体中的字面匹配"); projected.put("keywords", query.keywords());
+                    projected.put("query", "当前 namespace 中其他主体的共享事实与偏好，不按来源 scope 隔离"); projected.put("keywords", query.keywords());
                     projected.put("excludedSubjects", query.excludedSubjects());
                     fragments.add(fragment("memory_related", projected, result.evidence())); return List.copyOf(fragments);
                 }, executor);

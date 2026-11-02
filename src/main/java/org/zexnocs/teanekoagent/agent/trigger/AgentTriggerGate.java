@@ -14,10 +14,11 @@ import java.util.function.Function;
 /**
  * 自动触发的有界准入与交付记账；只保存纯状态，不调用模型、Timer 或平台发送器。
  * 每个 scope 同时只借出一个六十秒票据，副作用前须 verify，结束后须 finish。
+ * <br>2026/11/02：原生私聊作为直接对话信号，不依赖无法产生的提及。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class AgentTriggerGate {
     private final Function<AgentScope, Settings> settings;
@@ -58,7 +59,8 @@ public final class AgentTriggerGate {
                         || state.lastProactive != null && now.isBefore(state.lastProactive.plusSeconds(policy.cooldownSeconds()))) { return Optional.empty(); }
             } else {
                 var user = signal.actor().userId().orElseThrow();
-                boolean direct = signal.mentionsBot() || signal.repliesToBot();
+                // 2026/11/02：私聊由宿主消息类型确认，仍经过登记、启用和占用检查。
+                boolean direct = signal.privateConversation() || signal.mentionsBot() || signal.repliesToBot();
                 boolean contextual = policy.scope().mode() != AgentScopePolicy.Mode.PASSIVE_BASIC
                         && (signal.namesBot() || state.recent.containsKey(user));
                 if (!direct && !contextual || state.recent.size() >= 256 && !state.recent.containsKey(user)) { return Optional.empty(); }
@@ -185,18 +187,32 @@ public final class AgentTriggerGate {
 
     /**
      * 原生适配器确定的信号，不从 LLM 工具参数推导。
+     * <br>2026/11/02：增加私聊直接触发标记，旧宿主默认按群聊信号处理。
      * @param actor 实际来源，定时信号可使用无用户身份的 SYSTEM
      * @param kind 消息、定时或接话候选
      * @param mentionsBot 原生提及机器人
      * @param repliesToBot 原生引用机器人
      * @param namesBot 命中宿主明确配置的称呼
      * @param botAuthored 是否机器人自己发出的消息
+     * @param privateConversation 宿主确认的原生私聊，不能从正文推导
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.0.0
-     * @version 4.5.0-l
+     * @version 4.6.0-l
      */
-    public record Signal(AgentActorContext actor, Kind kind, boolean mentionsBot, boolean repliesToBot, boolean namesBot, boolean botAuthored) {
+    public record Signal(AgentActorContext actor, Kind kind, boolean mentionsBot, boolean repliesToBot, boolean namesBot, boolean botAuthored, boolean privateConversation) {
+        /**
+         * 2026/11/02：保留原生群聊及自主信号构造方式，不隐式扩大触发范围。
+         * @param actor 实际来源
+         * @param kind 信号类别
+         * @param mentionsBot 提及
+         * @param repliesToBot 引用
+         * @param namesBot 称呼
+         * @param botAuthored 自发消息
+         */
+        public Signal(AgentActorContext actor, Kind kind, boolean mentionsBot, boolean repliesToBot, boolean namesBot, boolean botAuthored) {
+            this(actor, kind, mentionsBot, repliesToBot, namesBot, botAuthored, false);
+        }
         /**
          * 信号缺失不自动解释为普通用户消息。
          * @param actor 实际来源
@@ -205,6 +221,7 @@ public final class AgentTriggerGate {
          * @param repliesToBot 引用
          * @param namesBot 称呼
          * @param botAuthored 自发消息
+         * @param privateConversation 原生私聊
          */
         public Signal { Objects.requireNonNull(actor); Objects.requireNonNull(kind); }
     }

@@ -34,6 +34,7 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * 以独立请求状态编排有限模型/工具往返，复用阶段执行、共享预算和固定工具绑定。
  * 不创建线程池，不处理 Agent 人格、记忆、平台发送或业务历史提交。
  * <br>2026/11/02：在失败转为状态前记录请求关联、阶段及脱敏异常结构。
+ * <br>2026/11/02：完整工具批次回填之后追加显式视觉参考，供下一次真实模型请求使用。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -251,6 +252,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
     /**
      * 一次交互私有的串行编排状态；只有当前阶段的完成链可以推进它。
      * <br>2026/11/02：保留阶段化失败观察器，不在可交付结果中保存原异常。
+     * <br>2026/11/02：整批工具文本之后追加关联图像，后续只追加尚未观察的结果。
      *
      * @author zExNocs
      * @date 2026/10/28
@@ -373,8 +375,13 @@ public final class LLMInteractionService implements ILLMInteractionService {
          */
         private void appendTools() {
             var completed = execution.toolResults();
+            // 2026/11/02：先完成全部 TOOL 配对，再放图像 USER，避免打断多工具协议。
+            int first = appendedTools;
             for (; appendedTools < completed.size(); appendedTools++) {
                 transcript.add(LLMProtocolSnapshots.message(completed.get(appendedTools).toMessage()));
+            }
+            for (int index = first; index < completed.size(); index++) {
+                completed.get(index).mediaMessage().ifPresent(message -> transcript.add(LLMProtocolSnapshots.message(message)));
             }
         }
 

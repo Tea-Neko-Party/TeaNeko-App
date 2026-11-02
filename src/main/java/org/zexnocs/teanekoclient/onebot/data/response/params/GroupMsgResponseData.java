@@ -11,15 +11,21 @@ import java.util.List;
 
 /**
  * 根据 message id 获取到群消息的响应数据的子数据
+ * <br>2026/11/02：保留实现端返回的顶层群号，用于消息来源校验。
  *
  * @author zExNocs
  * @date 2026/02/28
  * @since 4.0.11
+ * @version 4.6.0-l
  */
 @Getter
 @AllArgsConstructor
 @NoArgsConstructor
 public class GroupMsgResponseData {
+    /** 2026/11/02：部分 OneBot 实现返回顶层群号，缺失时不得猜测消息所属群。 */
+    @JsonProperty("group_id")
+    private Long groupId;
+
     /// time 发送时间
     @JsonProperty("time")
     private long time;

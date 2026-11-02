@@ -65,6 +65,8 @@ import static org.mockito.Mockito.when;
  * 经过真实默认邮箱、Agent、有限 LLM 往返、工具集与事务适配验证记忆工具闭环。
  * 模型与数据库传输使用离线替身，不消费真实供应商或发送平台消息。
  * <br>2026/11/02：验证内置资料能力不再被新增总来源替换。
+ * <br>2026/11/02：验证同 namespace 的共享记忆跨 scope 和用户进入实际模型输入。
+ * <br>2026/11/02：注解条件撤销直接停止交互，不产生下一次模型请求。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
@@ -195,9 +197,10 @@ class AgentMemoryToolIntegrationTest {
             assertEquals(AgentRunResult.Status.SUCCESS, result.status()); var projection = Objects.requireNonNull(result.promptTranscript());
             assertEquals(List.of("memory_profile", "memory_related"), projection.input().fragments().stream().map(AgentPromptFragment::name).toList());
             var actual = h.db.mapper.writeValueAsString(h.prompts.getFirst().getMessages());
-            assertTrue(actual.contains("本人喜欢花茶")); assertTrue(actual.contains("另一位喜欢红茶")); assertTrue(actual.contains(other.toString())); assertFalse(actual.contains("无关咖啡"));
+            // 2026/11/02：自动共享资料按 namespace 提供，不再要求记忆包含当前整句原文。
+            assertTrue(actual.contains("本人喜欢花茶")); assertTrue(actual.contains("另一位喜欢红茶")); assertTrue(actual.contains(other.toString())); assertTrue(actual.contains("无关咖啡"));
             var related = h.db.mapper.readTree(projection.input().fragments().getLast().text().split("\n", 2)[1]);
-            assertEquals(1, related.path("evidence").size());
+            assertEquals(2, related.path("evidence").size());
             var window = h.mailbox.snapshot(h.handle, scope).orElseThrow().require(AgentConversationWindow.COMPONENT);
             assertEquals(2, window.messages().size()); assertFalse(h.db.mapper.writeValueAsString(window.messages()).contains("喜欢花茶"));
             int reads = h.memoryReads.get(); assertSame(result, h.mailbox.retry(h.handle, input).toCompletableFuture().join());
@@ -210,6 +213,20 @@ class AgentMemoryToolIntegrationTest {
             h.responses.add(response()); var fresh = h.mailbox.run(h.handle, request("新请求", "新请求")).toCompletableFuture().join();
             assertEquals(AgentRunResult.Status.SUCCESS, fresh.status()); assertEquals(1, Objects.requireNonNull(fresh.memoryReference()).generation());
             assertFalse(h.db.mapper.writeValueAsString(h.prompts.getLast().getMessages()).contains("喜欢花茶")); assertEquals(2, h.modelCalls.get());
+        }
+    }
+
+    /** 2026/11/02：另一 scope 的另一用户无需提供匹配整句，就能读取同 namespace 中的事实。 */
+    @Test void sharedNamespaceMemoryIsAvailableAcrossScopesAndSubjects() {
+        try (var h = new Harness(true)) {
+            h.seed(actor.userId().orElseThrow(), "喜欢花茶", null);
+            var otherScope = new AgentScope(scope.clientId(), "另一个群");
+            var visitor = new AgentActorContext(otherScope, AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "另一用户", "另一消息", otherScope.scopeId());
+            var input = new AgentRunRequest(UUID.randomUUID(), visitor, AgentActivity.SERVICE, request("你知道哪些偏好", null).messages());
+            h.responses.add(response()); var result = h.mailbox.run(h.handle, input).toCompletableFuture().join();
+            assertEquals(AgentRunResult.Status.SUCCESS, result.status());
+            assertEquals(MemoryNamespaceId.SHARED, Objects.requireNonNull(result.memoryReference()).namespaceId());
+            assertTrue(h.db.mapper.writeValueAsString(h.prompts.getLast().getMessages()).contains("喜欢花茶"));
         }
     }
 
@@ -322,14 +339,14 @@ class AgentMemoryToolIntegrationTest {
         }
     }
 
-    /** 验证选择后关闭读开关，模型仍提交原可见调用也会在实际执行边界拒绝。 */
+    /** 2026/11/02：选择后关闭读开关，执行条件撤销会停止交互，不交付旧结果。 */
     @Test void switchChangeAfterSelectionBlocksActualQuery() {
         try (var h = new Harness()) {
             h.beforeReply = ordinal -> { if (ordinal == 1) { h.policy.set(new MemoryAccessPolicy(true, false, true, false)); } };
             h.responses.add(response(call("已选查询", AgentMemoryToolSource.QUERY, "{}"))); h.responses.add(response());
             var result = h.mailbox.run(h.handle, request("询问记忆", null)).toCompletableFuture().join();
-            var tool = result.interaction().orElseThrow().tools().getFirst();
-            assertEquals("READ_DISABLED", h.db.mapper.readTree(tool.output()).path("error").path("code").stringValue()); assertEquals(2, h.modelCalls.get());
+            assertNotEquals(AgentRunResult.Status.SUCCESS, result.status());
+            assertTrue(result.committableTranscript().isEmpty()); assertEquals(1, h.modelCalls.get());
         }
     }
 

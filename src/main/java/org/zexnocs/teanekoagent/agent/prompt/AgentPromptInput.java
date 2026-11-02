@@ -18,6 +18,7 @@ import java.util.List;
 /**
  * 原始消息、本轮人格及临时资料的不可变布局；补正/资料只作为 USER 数据，不改写原系统规则。
  * <br>2026/11/02：固定实际安装能力的调用版本，供执行及完成重放复核。
+ * <br>2026/11/02：仅接受与真实工具结果严格对应的视觉参考消息，提交历史时移除临时图像。
  * @param original 宿主冻结的原消息，包含邮箱已经认可的历史
  * @param fragments 按原优先级保留的完整资料
  * @param omittedFragments 因输入预算省略的完整片段数，不表示来源确定无资料
@@ -177,9 +178,16 @@ public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragm
             throw new IllegalArgumentException("成功交互的实际 Prompt 前缀缺失或发生变化。");
         }
         var response = transcript.subList(actual.size(), transcript.size());
-        if (response.stream().anyMatch(message -> message.getRole() != LLMMessageRole.ASSISTANT && message.getRole() != LLMMessageRole.TOOL)) {
-            throw new IllegalArgumentException("Prompt 响应不能新增系统或用户身份消息。");
+        // 2026/11/02：USER 只允许已观察工具图片生成的准确消息，不能按名字或跳过条数放行。
+        var media = new java.util.HashSet<LLMMessageCodec.Signature>();
+        interaction.tools().forEach(tool -> tool.mediaMessage().ifPresent(message -> media.add(codec.signature(List.of(message)))));
+        for (var message : response) {
+            if (message.getRole() == LLMMessageRole.USER && media.remove(codec.signature(List.of(message)))) { continue; }
+            if (message.getRole() != LLMMessageRole.ASSISTANT && message.getRole() != LLMMessageRole.TOOL) {
+                throw new IllegalArgumentException("Prompt 响应包含无法与工具图像对应的身份消息。");
+            }
         }
+        if (!media.isEmpty()) { throw new IllegalArgumentException("Prompt 响应缺少已观察工具的视觉参考消息。"); }
         LLMMessageHistory.validateComplete(transcript);
         var last = response.getLast();
         if (!(last instanceof ILLMAssistantMessage assistant) || !assistant.getToolCalls().isEmpty()
@@ -189,6 +197,8 @@ public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragm
         var ephemeralTools = new HashSet<String>(); fragments.forEach(fragment -> ephemeralTools.addAll(fragment.transientToolResults()));
         var ephemeralCalls = new HashSet<String>(); var projected = new ArrayList<>(original);
         for (var message : response) {
+            // 2026/11/02：已严格验证的工具 USER 图像只供原轮次，不作为新的用户发言持久化。
+            if (message.getRole() == LLMMessageRole.USER) { continue; }
             if (message instanceof ILLMAssistantMessage callMessage) {
                 callMessage.getToolCalls().stream().filter(call -> ephemeralTools.contains(call.getName())).forEach(call -> ephemeralCalls.add(call.getId()));
             }

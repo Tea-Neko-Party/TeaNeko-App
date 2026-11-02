@@ -6,7 +6,7 @@
 
 ## 标识与创建来源
 
-`MemoryNamespaceId` 是业务共享空间 ID，与 EasyData 的物理 namespace 字段分开。`default` 为默认共享空间，无个人创建者且不占个人配额。用户自建空间由原始创建 requestId 定位为 `ns-<UUID>`；重试保留原 ID 和完整可信 actor，不能每次生成新 requestId。相同 ID 换成不同 UUID、client/scope 或来源消息会返回 CONFLICT，不覆盖原来源。
+`MemoryNamespaceId` 是业务共享空间 ID，与 EasyData 的物理 namespace 字段分开。所有尚未显式切换的 scope 都使用同一个 `default` 共享空间，无个人创建者且不占个人配额。事实按 namespace/generation 保存，来源 scope 仅作追溯；主体 UUID 用于区分“谁的事实”，不会另建 scope 分区。人格默认补正键仍按 client/scope 创建，不随共享记忆合并。用户自建空间由原始创建 requestId 定位为 `ns-<UUID>`；重试保留原 ID 和完整可信 actor，不能每次生成新 requestId。相同 ID 换成不同 UUID、client/scope 或来源消息会返回 CONFLICT，不覆盖原来源。
 
 新业务 ID 只接受一至六十四位的小写字母、数字、点、横线和下划线，并以字母或数字开头，不自动修剪或改大小写。旧 `scope:...:agent:...` 等存储定位不直接解释成新业务 ID。创建者使用 TeaNeko UUID，平台用户 ID、来源 client/scope/消息及时间作为审计来源保留；来源不自动变成同空间长期事实的检索隔离条件。
 

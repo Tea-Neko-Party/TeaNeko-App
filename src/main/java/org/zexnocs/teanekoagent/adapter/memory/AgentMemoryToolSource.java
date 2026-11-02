@@ -1,24 +1,27 @@
 package org.zexnocs.teanekoagent.adapter.memory;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.agent.AgentActivity;
 import org.zexnocs.teanekoagent.agent.AgentDefinition;
 import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
-import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekoagent.memory.access.*;
 import org.zexnocs.teanekoagent.memory.fact.MemoryEventTime;
 import org.zexnocs.teanekoagent.memory.fact.MemoryFactGenerationException;
 import org.zexnocs.teanekoagent.memory.fact.MemoryFactReceipt;
 import org.zexnocs.teanekoagent.memory.fact.MemoryFactValue;
 import org.zexnocs.teanekoagent.memory.recall.*;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolContext;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolParam;
+import org.zexnocs.teanekocore.framework.description.Description;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
@@ -31,13 +34,15 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 显式选择当前记忆工具，执行仍经过可信访问服务；不扫描全局工具或提供管理能力。
+ * 根据注解选择当前记忆工具，执行仍经过可信访问服务，不提供管理能力。
+ * <br>2026/11/02：业务方法和参数声明替代手写 schema，保留原文意图及访问边界。
  * 原始意图在模型调用前由独立原文凭据固定，正文、身份和操作标识均不成为模型业务参数。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
+@TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.memory", managedByFeature = true)
 public final class AgentMemoryToolSource implements IAgentToolSource {
     public static final String QUERY = "memory_query";
     public static final String PROFILE = "memory_profile";
@@ -75,66 +80,157 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
      * @throws MemoryAccessException 当当前开关读取不可用时
      */
     @Override public List<LLMToolBinding> select(AgentDefinition definition, AgentRunRequest request, AgentRuntimeSnapshot runtime) {
-        if (!definition.activities().contains(AgentActivity.TOOL) || request.memoryReference() == null) { return List.of(); }
-        var expected = new MemoryAccessContext(request.requestId(), request.actor(), request.memoryReference());
-        final MemoryAccessPolicy policy;
-        try { policy = Objects.requireNonNull(policies.read(request.actor().scope()), "记忆工具策略不能为空。"); }
-        catch (RuntimeException ignored) { throw new MemoryAccessException(MemoryAccessException.Reason.CONFIGURATION_ERROR); }
-        if (!policy.enabled()) { return List.of(); }
-        var selected = new ArrayList<LLMToolBinding>();
-        if (policy.readEnabled()) {
-            var query = budgetProperties(); query.put("subjectId", scalar("string", "可选事实主体的 TeaNeko UUID；省略时查询当前共享空间。"));
-            query.put("keywords", array("字面关键词，最多八项，每项不超过 128 字符。", scalar("string", "正文或标签中的字面关键词。")));
-            query.put("tags", array("必须全部命中的标签，最多十六项。", scalar("string", "精确标签。")));
-            query.put("kinds", array("事实或偏好类型；省略时不限类型。", kind()));
-            query.put("start", scalar("string", "可选事件开始边界，带时区的 ISO-8601 时间点。"));
-            query.put("end", scalar("string", "可选事件结束边界，带时区的 ISO-8601 时间点。"));
-            query.put("includeEstimated", scalar("boolean", "是否允许未知事件使用记录时间估算，默认允许。"));
-            selected.add(binding(QUERY, "查询当前共享空间的事实与偏好，保留主体、来源、时间和覆盖限制；部分无命中不表示确定不存在。", query, List.of(), expected, null));
-            var profile = budgetProperties(); profile.put("subjectId", scalar("string", "可选 TeaNeko UUID；省略时读取当前真实发起者的画像。"));
-            selected.add(binding(PROFILE, "读取指定用户的可追溯事实/偏好画像，结果可能因预算不完整；不推断人格或关系。", profile, List.of(), expected, null));
-        }
-        var original = request.userText();
-        if (policy.addEnabled() && original != null) {
-            MemoryAddIntent.fromUserText(expected, original.text()).ifPresent(intent -> selected.add(binding(ADD,
-                    "新增本次用户明确要求记住的原文，归属于该用户；可选择事实或偏好，不提供维护能力。",
-                    Map.of("kind", kind()), List.of("kind"), expected, intent)));
-        }
-        return List.copyOf(selected);
+        // 2026/11/02：显式宿主和 Spring 自动发现使用同一个注解入口。
+        return TeaNekoAgentToolMethods.select(this, definition, request, runtime, null, mapper, executor);
     }
 
     /**
-     * 为单轮固定定义、原始上下文和意图；工具参数不能替换闭包中的可信绑定。
-     * @param name 固定工具名称
-     * @param description 中文能力说明
-     * @param properties 模型业务属性
-     * @param required 必需业务属性
-     * @param expected 原可信上下文
-     * @param intent 仅新增工具需要的原始明确意图
-     * @return 不公开执行器的冻结绑定
+     * 依据实际空间和配置决定读取工具可见性，执行前后由宿主复核。
+     * @param context 固定宿主上下文
+     * @return 当前允许读取时为真
      */
-    private LLMToolBinding binding(String name, String description, Map<String, ILLMFunctionParameter> properties, List<String> required,
-            MemoryAccessContext expected, @Nullable MemoryAddIntent intent) {
-        var tool = LLMTool.builder().name(name).description(description).toolPackage("agent.memory")
-                .parameters(AbstractLLMFunctionParameter.object("记忆业务参数，不接受身份、空间或授权声明。", properties, required)).build();
-        return new LLMToolBinding(tool, (call, trusted) -> invoke(name, expected, intent, call, trusted));
+    public boolean canRead(TeaNekoAgentToolContext context) {
+        var policy = policy(context);
+        return policy != null && policy.enabled() && policy.readEnabled();
     }
+
+    /**
+     * 只有当前用户明确要求记住原文时才开放新增，不从模型参数推导意图。
+     * @param context 固定宿主上下文
+     * @return 当前允许新增且原文意图存在时为真
+     */
+    public boolean canAdd(TeaNekoAgentToolContext context) {
+        var policy = policy(context);
+        var original = context.request().userText();
+        return policy != null && policy.enabled() && policy.addEnabled() && original != null
+                && MemoryAddIntent.fromUserText(expected(context), original.text()).isPresent();
+    }
+
+    /**
+     * 读取真实配置，配置异常按原领域错误拒绝，不降级为允许访问。
+     * @param context 固定宿主上下文
+     * @return 当前配置，无记忆引用时为空
+     * @throws MemoryAccessException 当配置读取失败时
+     */
+    private @Nullable MemoryAccessPolicy policy(TeaNekoAgentToolContext context) {
+        if (context.request().memoryReference() == null) { return null; }
+        try { return Objects.requireNonNull(policies.read(context.request().actor().scope()), "记忆工具策略不能为空。"); }
+        catch (RuntimeException ignored) { throw new MemoryAccessException(MemoryAccessException.Reason.CONFIGURATION_ERROR); }
+    }
+
+    /**
+     * 保留共享空间查询、领域预算和错误信封，业务 DTO 展开为根参数。
+     * @param args 查询筛选及预算
+     * @param context 宿主注入的实际调用
+     * @return 有界记忆结果
+     */
+    @TeaNekoAgentTool(value = QUERY, condition = "canRead")
+    @Description("查询当前共享空间的事实与偏好，保留主体、来源、时间和覆盖限制；部分无命中不表示确定不存在。")
+    public CompletionStage<String> recall(@TeaNekoAgentToolParam(flatten = true) QueryArgs args, TeaNekoAgentToolContext context) {
+        return invoke(QUERY, expected(context), null, mapper.valueToTree(args), context.requireCall(), context.requireInvocation());
+    }
+
+    /**
+     * 读取指定用户画像，省略主体时使用真实发起者。
+     * @param args 画像主体及预算
+     * @param context 宿主注入的实际调用
+     * @return 可追溯画像结果
+     */
+    @TeaNekoAgentTool(value = PROFILE, condition = "canRead")
+    @Description("读取指定用户的可追溯事实/偏好画像，结果可能因预算不完整；不推断人格或关系。")
+    public CompletionStage<String> profile(@TeaNekoAgentToolParam(flatten = true) ProfileArgs args, TeaNekoAgentToolContext context) {
+        return invoke(PROFILE, expected(context), null, mapper.valueToTree(args), context.requireCall(), context.requireInvocation());
+    }
+
+    /**
+     * 新增原始明确意图，调用标识继续使用宿主原调用 ID。
+     * @param kind 事实或偏好类别
+     * @param context 宿主注入的实际调用
+     * @return 新增回执或固定领域错误
+     */
+    @TeaNekoAgentTool(value = ADD, condition = "canAdd")
+    @Description("新增本次用户明确要求记住的原文，归属于该用户；只选择事实或偏好，不提供维护能力。")
+    public CompletionStage<String> add(@Description("FACT 为明确事实，PREFERENCE 为明确偏好。") MemoryFactValue.Kind kind,
+            TeaNekoAgentToolContext context) {
+        var expected = expected(context);
+        var original = Objects.requireNonNull(context.request().userText(), "新增记忆缺少原文。");
+        var intent = MemoryAddIntent.fromUserText(expected, original.text()).orElseThrow(() -> new MemoryAccessException(MemoryAccessException.Reason.INTENT_REQUIRED));
+        return invoke(ADD, expected, intent, mapper.valueToTree(Map.of("kind", kind)), context.requireCall(), context.requireInvocation());
+    }
+
+    /**
+     * 从不可替换的请求取得访问身份，不接受模型指定空间。
+     * @param context 固定宿主上下文
+     * @return 原访问身份
+     */
+    private static MemoryAccessContext expected(TeaNekoAgentToolContext context) {
+        var request = context.request();
+        return new MemoryAccessContext(request.requestId(), request.actor(), Objects.requireNonNull(request.memoryReference(), "记忆工具缺少空间引用。"));
+    }
+
+    /**
+     * 查询业务参数，不包含宿主身份；省略字段沿用领域默认值。
+     * @param subjectId 可选事实主体
+     * @param keywords 可选字面关键词
+     * @param tags 可选精确标签
+     * @param kinds 可选事实类别
+     * @param start 可选事件开始时间
+     * @param end 可选事件结束时间
+     * @param includeEstimated 是否允许估算事件时间
+     * @param limit 可选结果条数
+     * @param maxCharacters 可选证据预算
+     * @param maxScanned 可选扫描预算
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record QueryArgs(
+            @Nullable @Description("可选事实主体 TeaNeko UUID；省略时查询当前共享空间。") String subjectId,
+            @Nullable @Description("字面关键词，最多八项，每项最多 128 字符。") List<String> keywords,
+            @Nullable @Description("必须全部命中的标签，最多十六项。") List<String> tags,
+            @Nullable @Description("事实或偏好类别，省略时不限。") List<MemoryFactValue.Kind> kinds,
+            @Nullable @Description("可选事件开始时间，带时区的 ISO-8601 时间点。") String start,
+            @Nullable @Description("可选事件结束时间，带时区的 ISO-8601 时间点。") String end,
+            @Nullable @Description("未知事件是否使用记录时间估算，默认允许。") Boolean includeEstimated,
+            @Nullable @Description("可选结果条数，正整数且受本地硬上限约束。") Integer limit,
+            @Nullable @Description("证据字符预算，至少为 2，不能扩大本地及工具上限。") Integer maxCharacters,
+            @Nullable @Description("候选检查预算，正整数且不能扩大本地上限。") Integer maxScanned) { }
+
+    /**
+     * 画像业务参数，省略主体时读取真实用户，不包含空间或授权字段。
+     * @param subjectId 可选画像主体
+     * @param limit 可选结果条数
+     * @param maxCharacters 可选证据预算
+     * @param maxScanned 可选扫描预算
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record ProfileArgs(
+            @Nullable @Description("可选 TeaNeko UUID，省略时使用真实发起者。") String subjectId,
+            @Nullable @Description("可选结果条数，受本地硬上限约束。") Integer limit,
+            @Nullable @Description("证据字符预算，不能扩大本地上限。") Integer maxCharacters,
+            @Nullable @Description("候选检查预算，不能扩大本地上限。") Integer maxScanned) { }
 
     /**
      * 验证可信交接后执行业务；原调用 ID 直接来自经过工具集校验的 call，不从 JSON 重建。
      * @param name 固定工具名称
      * @param expected 选择时固定的可信身份
      * @param intent 选择时固定的明确新增意图
+     * @param args 2026/11/02：由注解 DTO 转换的业务参数
      * @param call 工具集已接受的原调用
      * @param trusted 当前阶段上下文与借用控制
      * @return 实际业务完成后的完整有界信封
      */
     private CompletionStage<String> invoke(String name, MemoryAccessContext expected, @Nullable MemoryAddIntent intent,
-            ILLMToolCall call, ToolInvocationContext trusted) {
+            JsonNode args, ILLMToolCall call, ToolInvocationContext trusted) {
         try {
             trusted.control().checkActive();
             if (!MemoryToolContexts.from(trusted).equals(expected)) { throw new MemoryAccessException(MemoryAccessException.Reason.UNAVAILABLE); }
-            var args = mapper.readTree(call.getArguments() == null || call.getArguments().isBlank() ? "{}" : call.getArguments());
             CompletionStage<String> result = switch (name) {
                 case QUERY -> access.recall(expected, query(args), MemoryRecallRequest.Use.TOOL, limits(args), trusted.control()).thenApplyAsync(replies::recall, executor);
                 case PROFILE -> {
@@ -236,42 +332,4 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
         return replies.error(code);
     }
 
-    /**
-     * 声明共用预算字段；实际上下限由领域对象和本地策略检查，不依赖模型遵守描述。
-     * @return 可供本轮补充业务字段的独立映射
-     */
-    private static Map<String, ILLMFunctionParameter> budgetProperties() {
-        var properties = new LinkedHashMap<String, ILLMFunctionParameter>();
-        properties.put("limit", scalar("integer", "可选结果条数，正整数且受本地硬上限约束。"));
-        properties.put("maxCharacters", scalar("integer", "可选证据数组字符预算，最小为 2，不能扩大本地及工具上限。"));
-        properties.put("maxScanned", scalar("integer", "可选候选检查预算，正整数且不能扩大本地上限。"));
-        return properties;
-    }
-
-    /**
-     * 建立不含执行身份的基础业务 schema。
-     * @param type JSON 基础类型
-     * @param description 中文业务说明
-     * @return 基础属性定义
-     */
-    private static ILLMFunctionParameter scalar(String type, String description) { return AbstractLLMFunctionParameter.primitive(type, description); }
-
-    /**
-     * 声明当前事实类别，拒绝将人格、关系或摘要混入普通新增。
-     * @return 仅允许事实和偏好的字符串 schema
-     */
-    private static ILLMFunctionParameter kind() {
-        return AbstractLLMFunctionParameter.builder().type("string").description("FACT 为明确事实，PREFERENCE 为明确偏好。")
-                .enumValues(List.of("FACT", "PREFERENCE")).build();
-    }
-
-    /**
-     * 建立有类型元素的数组 schema，领域校验负责数量与长度边界。
-     * @param description 数组业务说明
-     * @param items 元素类型
-     * @return 数组属性定义
-     */
-    private static ILLMFunctionParameter array(String description, ILLMFunctionParameter items) {
-        return AbstractLLMFunctionParameter.builder().type("array").description(description).items(items).build();
-    }
 }

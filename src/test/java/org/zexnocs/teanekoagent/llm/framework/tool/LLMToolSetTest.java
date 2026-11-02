@@ -29,14 +29,33 @@ import static org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult.S
 
 /**
  * 验证固定工具集的可见范围、参数校验、异步完成及取消回填契约。
+ * <br>2026/11/02：验证图像必须由绑定显式声明，非法或超限投影不能形成视觉输入。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 class LLMToolSetTest {
     private final ObjectMapper mapper = new ObjectMapper();
+
+    /** 2026/11/02：普通 URL 仍是文字，显式投影中的文件引用和超量图像安全失败。 */
+    @Test void imageOutputsRequireExplicitProjectionAndRejectInvalidMedia() {
+        var url = "https://images.example/image.png";
+        var plain = new LLMToolBinding(tool("echo"), (call, context) -> CompletableFuture.completedStage(url));
+        try (var control = ExecutionControl.create()) {
+            var call = call("echo", "{\"text\":\"读取图片\"}");
+            var result = new LLMToolSet(mapper, List.of(plain)).execute(call, context(control)).toCompletableFuture().join();
+            assertTrue(result.images().isEmpty()); assertEquals(url, result.output());
+            var invalid = plain.withOutputProjection(output -> new LLMToolOutput(output, List.of(
+                    new org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart("file:///private.png"))));
+            var rejected = new LLMToolSet(mapper, List.of(invalid)).execute(call, context(control)).toCompletableFuture().join();
+            assertEquals(FAILED, rejected.status()); assertTrue(rejected.images().isEmpty());
+            var image = new org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart(url);
+            var excessive = plain.withOutputProjection(output -> new LLMToolOutput(output, Collections.nCopies(5, image)));
+            assertEquals(FAILED, new LLMToolSet(mapper, List.of(excessive)).execute(call, context(control)).toCompletableFuture().join().status());
+        }
+    }
     private static final ComponentKey<Actor> ACTOR = ComponentKey.of("tool-test.actor", Actor.class);
     /**
      * 只由宿主创建的不可变测试身份，供工具上下文注入断言使用。

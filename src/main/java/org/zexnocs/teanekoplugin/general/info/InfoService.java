@@ -15,11 +15,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 个人信息服务，提供获取用户信息的功能。
+ * <br>2026/11/02：提取按 UUID 读取的纯资料快照，供原命令展示及 Agent 工具复用。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service("infoService")
 public class InfoService {
@@ -49,6 +50,31 @@ public class InfoService {
     }
 
     /**
+     * 2026/11/02：读取已保存的公开资料，不调用平台、不发送消息，也不创建用户注册关系。
+     * @param target 需要查询的 TeaNeko UUID
+     * @return 简介、猫猫币和一条随机留言；没有留言时该字段为空
+     */
+    public GeneralInfo getGeneralInfo(UUID target) {
+        java.util.Objects.requireNonNull(target, "查询用户 UUID 不能为空。");
+        var messages = messageBoardInfoService.getMessageList(target);
+        var message = messages.isEmpty() ? null : messages.get(randomUtil.nextInt(messages.size())).getMessage();
+        return new GeneralInfo(target, personalInfoService.getPersonInfo(target), iTeaUserCoinService.getCoin(target).getCount(), message);
+    }
+
+    /**
+     * 按 UUID 读取的纯公开资料，不携带平台客户端或可执行资源。
+     * @param uuid 用户 TeaNeko UUID
+     * @param personalInfo 当前个人简介
+     * @param coinCount 当前猫猫币数量
+     * @param randomMessage 一条随机公开留言，无留言时为空
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.0.0
+     * @version 4.6.0-l
+     */
+    public record GeneralInfo(UUID uuid, String personalInfo, int coinCount, @org.jspecify.annotations.Nullable String randomMessage) { }
+
+    /**
      * 根据
      * {@link ITeaNekoMessageData}
      * 获取用户信息并发送到群聊。
@@ -59,17 +85,10 @@ public class InfoService {
      * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
     public CompletionStage<Void> sentGeneralInfo(ITeaNekoMessageData data, UUID target, String targetId) {
-        // 获取随机留言
-        var messageList = messageBoardInfoService.getMessageList(target);
-        String randomMessage;
-        if (!messageList.isEmpty()) {
-            var randomIndex = randomUtil.nextInt(messageList.size());
-            var messageInfo = messageList.get(randomIndex);
-            randomMessage = messageInfo.getMessage();
-        } else {
-            randomMessage = "暂无留言信息";
-        }
-        var coinInt = iTeaUserCoinService.getCoin(target).getCount();
+        // 2026/11/02：与只读工具共用资料读取，原平台查询和实际发送保持在此入口。
+        var info = getGeneralInfo(target);
+        var randomMessage = info.randomMessage() == null ? "暂无留言信息" : info.randomMessage();
+        var coinInt = info.coinCount();
 
         if(data.getMessageType().equals(TeaNekoMessageType.GROUP)) {
             // 如果是群组，则只显示群组消息
@@ -107,7 +126,7 @@ public class InfoService {
                                         joinTime,
                                         lastSpeakTime,
                                         coinInt,
-                                        personalInfoService.getPersonInfo(target),
+                                        info.personalInfo(),
                                         randomMessage));
                         return data.getMessageSender()
                                 .addMessages(builder.build())
@@ -142,7 +161,7 @@ public class InfoService {
                                         r.getNickname(),
                                         r.getLevel(),
                                         coinInt,
-                                        personalInfoService.getPersonInfo(target),
+                                        info.personalInfo(),
                                         randomMessage));
                         return data.getMessageSender()
                                 .addMessages(builder.build())

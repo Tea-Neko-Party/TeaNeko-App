@@ -103,10 +103,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用事务与 FakeClient，验证真实 Agent/命令往返、原权限、持久化防重及基本管理闭环。
+ * <br>2026/11/02：验证无提及私聊和独立模型元数据，保留图文顺序与平台回复。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -518,6 +519,23 @@ class AgentCommandIntegrationTest {
     }
 
     /**
+     * 2026/11/02：私聊无需提及即可回复，元数据仅送入模型，关闭开关仍拒绝。
+     * @throws Exception 当原生夹具装配失败时
+     */
+    @Test void privateMessagesReplyWithoutMentionsAndKeepMetadataOutOfReplies() throws Exception {
+        try (var h = new Harness(); var automatic = automatic(h)) {
+            h.automaticAnswer.set("你好"); var receiver = receiver(h, automatic);
+            var source = h.client.handlePrivateMessage("alice", "私聊昵称", "你好").getData();
+            assertTrue(receiver.receive(source).toCompletableFuture().get(10, TimeUnit.SECONDS));
+            var prompt = h.db.mapper.writeValueAsString(h.prompts.getFirst().getMessages());
+            assertTrue(prompt.contains(source.getUserData().getUuid().toString())); assertTrue(prompt.contains(source.getScopeId()));
+            assertTrue(prompt.contains("私聊昵称")); assertFalse(h.db.mapper.writeValueAsString(h.client.getSentMessages()).contains("senderUuid"));
+            h.config.setEnabled(false);
+            assertFalse(receiver.receive(h.client.handlePrivateMessage("alice", "私聊昵称", "还在吗").getData()).toCompletableFuture().join());
+        }
+    }
+
+    /**
      * 原生提及走真实 Agent 和 FakeClient，多段保持全文且重建后不重复执行原消息。
      * @throws Exception 当夹具装配或异步交付失败时
      */
@@ -656,7 +674,8 @@ class AgentCommandIntegrationTest {
                     .addImage("https://images.example/image.png").addText("看图后").build());
             var receiver = receiver(h, automatic, capture(h));
             assertTrue(receiver.receive(source).toCompletableFuture().join());
-            assertEquals(List.of("text", "image", "text"), h.prompts.getFirst().getMessages().getLast().getContents().stream().map(item -> item.getType()).toList());
+            // 2026/11/02：首个文本块为独立平台上下文，后面的原始图文顺序不变。
+            assertEquals(List.of("text", "image", "text"), h.prompts.getFirst().getMessages().getLast().getContents().stream().skip(1).map(item -> item.getType()).toList());
             assertEquals(3, h.client.getSentMessages().size());
             var image = h.client.getSentMessages().get(1).getMessages().stream().map(item -> item.getContentPart())
                     .filter(org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart.class::isInstance)

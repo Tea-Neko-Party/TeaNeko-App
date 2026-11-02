@@ -35,6 +35,8 @@ import java.util.function.Function;
  * 预编译准入、临时输入、交互和交付步骤；业务检查及投影校验统一切入借用执行器。
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
  * <br>2026/11/02：在准入之后及交互之后运行受控插件 System，等待决策与异步环绕。
+ * <br>2026/11/02：统一按可信 client 过滤工具并在实际执行时重新校验。
+ * <br>2026/11/02：携带工具图像的交互强制使用历史投影，避免伪装成用户新消息。
  *
  * @author zExNocs
  * @date 2026/11/01
@@ -249,7 +251,14 @@ final class AgentTurnPipeline {
         var runtime = context.snapshot().require(AgentComponents.RUNTIME);
         var input = context.snapshot().require(AgentComponents.PROMPT_INPUT);
         boolean guarded = references != null || !input.fragments().isEmpty() || input.personality() != null || input.summary() != null || !input.plugins().isEmpty();
-        var bound = selected.stream().map(binding -> !guarded
+        // 2026/11/02：插件筛选后仍过滤客户端，并在实际执行时使用可信组件重新检查。
+        var bound = selected.stream().filter(binding -> binding.supportsClient(request.actor().scope().clientId()))
+                .map(binding -> binding.guarded((call, trusted) -> {
+                    var actor = trusted.bindings().require(AgentComponents.ACTOR);
+                    if (!trusted.requestId().equals(request.requestId()) || !actor.equals(request.actor()) || !binding.supportsClient(actor.scope().clientId())) {
+                        throw new IllegalStateException("工具客户端或请求来源不匹配。");
+                    }
+                })).map(binding -> !guarded
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))
                 : binding.guardedAsync((call, trusted) -> guard(turn, true), executor)).toList();
         var toolSet = new LLMToolSet(mapper, bound);
@@ -265,7 +274,9 @@ final class AgentTurnPipeline {
                         turn.observe(result, null); return result;
                     }).thenApplyAsync(result -> {
                         var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
-                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null || !input.plugins().isEmpty())) {
+                        // 2026/11/02：显式无其他资料的工具图像也须经过历史身份与临时负载投影。
+                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null || !input.plugins().isEmpty()
+                                || result.tools().stream().anyMatch(tool -> !tool.images().isEmpty()))) {
                             var projection = AgentPromptTranscript.create(input, result, codec); turn.observe(result, projection);
                             patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
                         }

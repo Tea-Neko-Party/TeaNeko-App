@@ -31,10 +31,11 @@ import java.util.stream.Collectors;
 /**
  * 唯一的新 Agent 普通消息入口，先检查注册和原生信号，再借用原业务域执行。
  * 不取消其他插件事件，不接收内部 Agent 消息，不因文本里的身份声明授予触发权限。
+ * <br>2026/11/02：私聊普通图文使用独立原生信号直接触发。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @EventListener
 public final class NativeAgentReceiver {
@@ -149,7 +150,8 @@ public final class NativeAgentReceiver {
             if (!collected.accepted()) { return CompletableFuture.completedFuture(false); }
             return replyToSelf(data, input).thenComposeAsync(reply -> {
                 var ticket = triggers.acquire(new AgentTriggerGate.Signal(NativeCommandBridge.actor(data), AgentTriggerGate.Kind.MESSAGE,
-                        input.mention(), reply, input.named(), false));
+                        // 2026/11/02：群聊保留原提及/引用规则，私聊无需提及。
+                        input.mention(), reply, input.named(), false, data.getMessageType() == TeaNekoMessageType.PRIVATE || data.getMessageType() == TeaNekoMessageType.PRIVATE_TEMP));
                 if (ticket.isEmpty()) { return proactive == null ? CompletableFuture.completedFuture(false) : proactive.offer(data, input.payload()); }
                 if (proactive != null) { proactive.observe(data); }
                 return gateway.respond(data, input.payload(), ticket.get(), collected.context()).whenComplete((sent, failure) -> {

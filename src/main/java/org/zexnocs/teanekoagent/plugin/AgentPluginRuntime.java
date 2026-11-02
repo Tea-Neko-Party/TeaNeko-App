@@ -33,6 +33,7 @@ import java.util.function.Supplier;
 /**
  * Agent 能力目录与宿主组合器；固定版本、保护核心组件并复用原执行控制。
  * 不读取存储、不启动模型循环、不创建线程池，Spring 拥有来源和插件 Bean。
+ * <br>2026/11/02：合并注解工具自动能力，原能力拥有的工具不重复装配。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -47,6 +48,19 @@ public final class AgentPluginRuntime {
     private final Set<String> promptNames;
     private final ObjectProvider<IEventService> events;
     private final Map<String, SystemPipeline> pipelines = new ConcurrentHashMap<>();
+
+    /**
+     * 2026/11/02：Spring 默认合并注解目录，保留原构造供显式独立宿主使用。
+     * @param plugins 插件目录
+     * @param contributions 原能力
+     * @param events 懒事件端口
+     * @param annotations 注解工具目录
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public AgentPluginRuntime(PluginRegistry plugins, List<AgentFeature> contributions, ObjectProvider<IEventService> events,
+            ObjectProvider<org.zexnocs.teanekoagent.tool.TeaNekoAgentToolRegistry> annotations) {
+        this(plugins, annotations.getIfAvailable() == null ? contributions : annotations.getObject().combine(contributions), events);
+    }
 
     /**
      * 校验完整能力目录，拒绝重名及跨边界写入；不执行初始化回调。

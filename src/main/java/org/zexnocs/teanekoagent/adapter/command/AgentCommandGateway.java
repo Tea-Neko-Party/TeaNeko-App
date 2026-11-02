@@ -12,8 +12,6 @@ import org.zexnocs.teanekoagent.agent.command.CommandInvocationReceipt;
 import org.zexnocs.teanekoagent.agent.command.ICommandAttemptStore;
 import org.zexnocs.teanekoagent.agent.conversation.IAgentConversationControl;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.memory.namespace.IMemoryNamespaceDefaults;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceBindings;
@@ -33,10 +31,11 @@ import java.util.stream.Collectors;
 /**
  * 原生命令的应用边界，按需拥有一个共享定义实例，原生来源仅在请求生命周期内绑定。
  * 不自动监听平台消息，不接管旧 Client，不恢复未完成执行或任意跨 scope 原文。
+ * <br>2026/11/02：显式聊天加入发送者与 scope 上下文，原文凭据不包含显示元数据。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 @Service
 public final class AgentCommandGateway implements AutoCloseable {
@@ -90,7 +89,8 @@ public final class AgentCommandGateway implements AutoCloseable {
             var actor = NativeCommandBridge.actor(data); requireEnabled(actor.scope());
             if (text.isBlank() || text.length() > 65536) { return reply(data, "请输入一至65536字符的对话文本。"); }
             var id = operation(data, parent == null ? "chat" : "chat-child:" + parent.id()); var target = instance();
-            var request = new AgentRunRequest(id, actor, AgentActivity.COMMAND, List.of(AgentReplyPlan.instructions(), LLMUserMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()),
+            // 2026/11/02：命令聊天与普通原生图文共用模型上下文，原文凭据不包含元数据。
+            var request = new AgentRunRequest(id, actor, AgentActivity.COMMAND, List.of(AgentReplyPlan.instructions(), org.zexnocs.teanekoagent.adapter.platform.NativeMessageInput.textMessage(data, text)),
                     null, null, parent == null ? new AgentUserText(actor.sourceId(), text, data.getTime()) : null);
             if (parent != null) { return agents.run(target, request, parent).thenCompose(result -> deliver(data, target, request, result)); }
             final Chat chat;

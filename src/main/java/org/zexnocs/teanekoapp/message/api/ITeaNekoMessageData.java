@@ -11,12 +11,26 @@ import java.util.List;
 /**
  * 用于传递的消息信息接口，以便在 Tea Neko 服务器中进行处理。
  * 包含消息内容和消息发送者信息、消息来源客户端信息等元数据。
+ * <br>2026/11/02：提供可选群名片和 scope 显示名称，缺失时不伪造名称。
  *
  * @author zExNocs
  * @date 2026/02/21
  * @since 4.0.8
+ * @version 4.6.0-l
  */
 public interface ITeaNekoMessageData {
+    /**
+     * 2026/11/02：提供当前消息携带的发送者群名片，显示字段不作为身份或权限。
+     * @return 群名片，平台未提供时为空字符串
+     */
+    default String getSenderGroupNickname() { return ""; }
+
+    /**
+     * 2026/11/02：提供平台已知的 scope 显示名，不把 scope ID 当作名称。
+     * @return 群或会话显示名，未知时为空字符串
+     */
+    default String getScopeName() { return ""; }
+
     /**
      * 获取消息的发送时间戳。
      *

@@ -29,6 +29,7 @@ import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.llm.framework.tool.*;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -53,6 +54,7 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
  * <br>2026/11/02：验证管线失败记录可关联的安全诊断，日志失败仍不改变终态。
  *
+ * <br>2026/11/02：验证 client 工具白名单经过环绕后仍控制可见和实际执行。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
@@ -241,6 +243,24 @@ class AgentServiceTest {
         assertEquals(1, completed.budgetUsage().get(MODEL_REQUESTS).used());
         assertEquals(LLMOptionsPolicy.RESOLVED, prompts.getFirst().getOptionsPolicy());
         assertEquals(0, runtime.pendingTimers());
+    }
+
+    /** 2026/11/02：客户端限制经过插件环绕仍有效，未声明范围的工具保持通用。 */
+    @Test void clientToolRestrictionsSurviveWrappingAndFilterActualModelTools() {
+        var request = request(AgentActivity.COMMAND); var calls = new AtomicInteger();
+        var allowed = new LLMToolBinding(LLMTool.builder().name("work").build(), (call, context) -> {
+            calls.incrementAndGet(); return CompletableFuture.completedStage("完成");
+        }).forClients(Set.of(request.actor().scope().clientId())).intercept((call, context, next) -> next.call(call, context));
+        var hidden = new LLMToolBinding(LLMTool.builder().name("foreign").build(), (call, context) -> CompletableFuture.completedStage("不应调用"))
+                .forClients(Set.of("其他客户端")).guarded((call, context) -> { });
+        var common = new LLMToolBinding(LLMTool.builder().name("common").build(), (call, context) -> CompletableFuture.completedStage("通用"));
+        assertFalse(hidden.supportsClient(request.actor().scope().clientId()));
+        assertThrows(IllegalArgumentException.class, () -> hidden.forClients(Set.of()));
+        when(tools.select(any(), any(), any())).thenReturn(List.of(allowed, hidden, common));
+        var result = service.run(agent(), request).toCompletableFuture(); runtime.runAll();
+        assertEquals(List.of("work", "common"), requireOptions(prompts.getFirst()).getTools().stream().map(ILLMTool::getName).toList());
+        reply(response(call("受限工具"))); reply(response());
+        assertEquals(SUCCESS, result.join().status()); assertEquals(1, calls.get());
     }
 
     /** 验证工具真正完成前不发下一模型请求，模型参数不能覆盖可信身份。 */

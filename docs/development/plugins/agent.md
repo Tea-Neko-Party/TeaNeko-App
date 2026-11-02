@@ -2,7 +2,7 @@
 
 ## 能力包与实例选择
 
-先提供依赖 teaneko.agent 的 PluginModule，再提供一个或多个 AgentFeature Bean。AgentFeature 是能力装配声明，不是运行服务定位器；只覆写本能力需要的成员。
+普通工具优先使用 [注解式 Agent 工具](agent-tools.md)，Spring Bean 加上类和方法标记即可自动注册。需要组合组件、System、资料或事件时，提供依赖 teaneko.agent 的 PluginModule，再提供 AgentFeature Bean。AgentFeature 是能力装配声明，不是运行服务定位器；只覆写本能力需要的成员。
 
 | 成员 | 含义 |
 | --- | --- |
@@ -28,13 +28,17 @@ new AgentDefinition("业务助手", modelOptions,
 
 使用宿主注入的 IAgentFactory 创建实例。默认工厂会在登记前检查能力、初始化组件并编译两个阶段的 System 依赖；失败不登记半初始化实例。原三参数定义仍安装宿主默认能力；原独立构造的无插件工厂保留，不支持静默忽略显式 features。
 
-内置能力为 teaneko.agent:builtin-tools 和 teaneko.agent:builtin-memory。旧 IAgentToolSource/IAgentPromptSource Bean 现在代表宿主的额外总来源，不能再依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 AgentFeature 追加，避免多个总来源 Bean 歧义。
+内置能力为 teaneko.agent:builtin-tools、teaneko.agent:builtin-memory 和 teaneko.agent:onebot。旧 IAgentToolSource/IAgentPromptSource Bean 现在代表宿主的额外总来源，不能再依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 AgentFeature 追加，避免多个总来源 Bean 歧义。
 
 ## 新增工具
 
-使用 LLMTool.builder() 定义协议名、中文描述和参数 schema，再用 LLMToolBinding(definition, executor) 固定定义与异步执行目标。tools() 返回显式选择该绑定的 IAgentToolSource。完整可编译实现见 [ExampleClockFeature.tools](../../../src/main/java/org/zexnocs/teanekoplugin/agent_example/ExampleClockFeature.java)。
+常规工具在已有 Spring Bean 上使用 `@TeaNekoAgentToolClass`，公开方法使用 `@TeaNekoAgentTool`，方法和参数使用 `@Description`；宿主自动生成 schema 并注册普通能力。支持 client、DefaultValue、可信上下文、异步返回及图像；完整示例和限制见 [工具开发指南](agent-tools.md)。记忆、历史、命令、OneBot 和资料十项工具已按此方式实现。
+
+需要动态 schema 或后端策略的工具保留底层入口：使用 LLMTool.builder() 定义协议名、中文描述和参数 schema，再用 LLMToolBinding(definition, executor) 固定定义与异步执行目标。tools() 返回显式选择该绑定的 IAgentToolSource。完整可编译实现见 [ExampleClockFeature.tools](../../../src/main/java/org/zexnocs/teanekoplugin/agent_example/ExampleClockFeature.java)。
 
 执行器参数 call 只有模型业务参数；可信 requestId、实体快照和借用控制来自 ToolInvocationContext。通过 bindings().require(组件键) 读取宿主固定组件，不从 JSON 接收操作者、scope、角色、DEBUG、数据库连接或控制。
+
+平台专用工具使用 `new LLMToolBinding(definition, executor, Set.of("onebot"))`，或在原绑定上调用 `.forClients(Set.of("onebot"))`。不指定或使用空集合允许所有 client；已有受限绑定不能通过再次包装扩大范围。宿主在插件筛选后按请求 client 过滤模型可见工具，并在实际调用时再次核对可信 client 与请求身份。`guarded`、`guardedAsync`、`intercept` 都保留约束；独立于 Agent 使用 LLM 工具集的宿主须自行按 `supportsClient` 选择和校验。完整的平台适配见 [OneBot 工具](../../../src/main/java/org/zexnocs/teanekoagent/adapter/onebot/README.md)。
 
 协议工具名使用供应商允许的字母/数字/下划线/短横线，建议采用插件前缀，例如 example_clock_now，不直接把带冒号的能力 key 当工具名。绑定继续由 LLMToolSet 冻结 schema、校验 JSON、参数和返回大小；本轮重名明确失败，不悄悄覆盖其他工具。
 

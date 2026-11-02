@@ -19,11 +19,12 @@ import static org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult.S
 /**
  * 一轮固定的可见且可执行工具集。没有全局工具名回退，不授予业务权限。
  * 本入口等待真实完成并响应 control；阶段计时、次数预算和重放记录由交互/业务层负责。
+ * <br>2026/11/02：先执行显式结果投影再限制文本，视觉负载由独立容量合同校验。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public final class LLMToolSet {
     public static final int DEFAULT_RESULT_CHARACTER_LIMIT = 8000;
@@ -117,12 +118,18 @@ public final class LLMToolSet {
                 if (output == null) {
                     return error(call, Status.FAILED);
                 }
-                var end = Math.min(output.length(), resultCharacterLimit);
-                if (end < output.length() && end > 0 && Character.isHighSurrogate(output.charAt(end - 1))
-                        && Character.isLowSurrogate(output.charAt(end))) {
+                // 2026/11/02：只有该绑定明确声明的协议可提供图片，不从普通 URL 文本提取。
+                context.control().checkActive();
+                final LLMToolOutput projected;
+                try { projected = binding.projectOutput(output); }
+                catch (RuntimeException invalidOutput) { return error(call, Status.FAILED); }
+                var text = projected.text();
+                var end = Math.min(text.length(), resultCharacterLimit);
+                if (end < text.length() && end > 0 && Character.isHighSurrogate(text.charAt(end - 1))
+                        && Character.isLowSurrogate(text.charAt(end))) {
                     end--;
                 }
-                return new ToolInvocationResult(call, Status.SUCCESS, output.substring(0, end), end < output.length());
+                return new ToolInvocationResult(call, Status.SUCCESS, text.substring(0, end), end < text.length(), end < text.length() ? List.of() : projected.images());
             });
         } catch (Exception failure) {
             var cause = unwrap(failure);

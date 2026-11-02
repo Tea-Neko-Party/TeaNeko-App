@@ -20,7 +20,8 @@ import java.util.Optional;
  * transcript 包含诊断所需的中间链；只有成功结果允许通过专用入口提交为正常历史。
  *
  * @param status 明确终止原因
- * @param transcript 初始消息及已观察的模型/工具消息，失败时可能是不完整诊断链
+ * <br>2026/11/02：保留结构化工具图像，供实际视觉消息与历史投影交叉验证。
+ * @param transcript 初始消息及已观察的模型/工具/视觉参考消息，失败时可能是不完整诊断链
  * @param finalCandidate 终止时的模型消息，工具请求不会伪装成最终答案
  * @param attempts 每次实际模型尝试的响应和 usage，失败尝试可无响应
  * @param tools 已观察完成的工具结果，不推断未完成动作是否产生副作用
@@ -29,7 +30,7 @@ import java.util.Optional;
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.0-l
  */
 public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
                                     Optional<ILLMAssistantMessage> finalCandidate, List<ModelAttempt> attempts,
@@ -54,7 +55,8 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
         finalCandidate = finalCandidate.map(message -> (ILLMAssistantMessage) LLMProtocolSnapshots.message(message));
         attempts = List.copyOf(attempts);
         tools = tools.stream().map(result -> new ToolInvocationResult(LLMProtocolSnapshots.call(result.call()),
-                result.status(), result.output(), result.truncated())).toList();
+                // 2026/11/02：冻结结果时保留显式图片，不使诊断与实际视觉消息失去对应关系。
+                result.status(), result.output(), result.truncated(), result.images())).toList();
         budgetUsage = Map.copyOf(budgetUsage);
         Objects.requireNonNull(rejectedBudget, "预算终止维度容器不能为空。");
     }

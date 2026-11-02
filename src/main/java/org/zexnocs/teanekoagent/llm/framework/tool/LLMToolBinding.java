@@ -17,6 +17,8 @@ import java.util.function.BiFunction;
 /**
  * 固定一次交互的 schema 与执行目标；模型可见定义不携带执行器。
  * <br>2026/11/02：增加保持原 schema 与可信调用对象的异步环绕入口。
+ * <br>2026/11/02：增加不可变 client 白名单，所有环绕和守卫保留该限制。
+ * <br>2026/11/02：提供显式结构化结果投影，工具及插件保持字符串接口，图像独立回填。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -26,6 +28,10 @@ import java.util.function.BiFunction;
 public final class LLMToolBinding {
     private final ILLMTool definition;
     private final IContextualToolExecutor executor;
+    // 2026/11/02：限制属于宿主绑定，不进入模型参数或工具 schema。
+    private final Set<String> clients;
+    // 2026/11/02：投影由工具适配器显式安装，所有包装均保留，不按正文猜测图像。
+    private final java.util.function.Function<String, LLMToolOutput> outputProjection;
 
     /**
      * 递归冻结模型可见定义并捕获执行器引用，拒绝非法名称、非对象根参数和循环 schema。
@@ -36,6 +42,20 @@ public final class LLMToolBinding {
      * @throws NullPointerException 当必需的输入或依赖为空时
      */
     public LLMToolBinding(ILLMTool definition, IContextualToolExecutor executor) {
+        this(definition, executor, Set.of());
+    }
+
+    /**
+     * 2026/11/02：固定工具及可用客户端，空白名单表示允许所有客户端。
+     * @param definition 工具定义
+     * @param executor 本地执行器
+     * @param clients 允许的客户端 ID，不接受空白 ID
+     * @throws IllegalArgumentException 当定义或客户端标识不合法时
+     * @throws NullPointerException 当必需参数为空时
+     */
+    public LLMToolBinding(ILLMTool definition, IContextualToolExecutor executor, Set<String> clients) {
+        this.clients = validatedClients(clients);
+        this.outputProjection = LLMToolOutput::new;
         Objects.requireNonNull(definition, "definition");
         this.executor = Objects.requireNonNull(executor, "executor");
         if (!"function".equals(definition.getType())
@@ -61,6 +81,57 @@ public final class LLMToolBinding {
      */
     public ILLMTool definition() {
         return definition;
+    }
+
+    /**
+     * 2026/11/02：查询不可变客户端约束，不使用模型提供的客户端字段。
+     * @param clientId 宿主固定的客户端 ID
+     * @return 未限制或客户端属于白名单时为真
+     */
+    public boolean supportsClient(String clientId) { return clients.isEmpty() || clients.contains(clientId); }
+
+    /**
+     * 2026/11/02：为工具自己的返回协议安装结构化投影，仍等待完整执行及插件守卫成功。
+     * @param projection 将完整文字结果转换为文字和已验证图片的纯函数
+     * @return 保留原 schema、客户端范围和执行目标的新绑定
+     */
+    public LLMToolBinding withOutputProjection(java.util.function.Function<String, LLMToolOutput> projection) {
+        return new LLMToolBinding(this, executor, clients, Objects.requireNonNull(projection, "工具结果投影不能为空。"));
+    }
+
+    /**
+     * 在受控工具集内解释完整返回值，先投影后执行文本裁剪。
+     * @param output 原工具及环绕完成后的结果
+     * @return 显式结构化结果
+     */
+    LLMToolOutput projectOutput(String output) { return Objects.requireNonNull(outputProjection.apply(output), "工具结果投影不能为空。"); }
+
+    /**
+     * 2026/11/02：为已有绑定追加客户端限制，环绕不能扩大已有白名单。
+     * @param allowed 允许的客户端 ID，空集合仅在原绑定未受限时代表全部
+     * @return 定义与执行目标不变的独立绑定
+     * @throws IllegalArgumentException 当试图扩大已有允许范围或标识不合法时
+     */
+    public LLMToolBinding forClients(Set<String> allowed) {
+        var fixed = validatedClients(allowed);
+        if (!clients.isEmpty() && (fixed.isEmpty() || !clients.containsAll(fixed))) {
+            throw new IllegalArgumentException("工具包装不能扩大允许的客户端范围。");
+        }
+        return new LLMToolBinding(this, executor, fixed);
+    }
+
+    /**
+     * 2026/11/02：复制客户端声明并拒绝没有稳定标识的条目。
+     * @param values 待固定的白名单
+     * @return 不可变客户端集合
+     * @throws IllegalArgumentException 当标识为空白或包含外围空格时
+     */
+    private static Set<String> validatedClients(Set<String> values) {
+        var fixed = Set.copyOf(values);
+        if (fixed.stream().anyMatch(value -> value.isBlank() || !value.equals(value.strip()))) {
+            throw new IllegalArgumentException("工具客户端标识不能为空白或包含外围空格。");
+        }
+        return fixed;
     }
 
     /**
@@ -164,8 +235,34 @@ public final class LLMToolBinding {
      * @param executor 带宿主守卫的执行链
      */
     private LLMToolBinding(LLMToolBinding source, IContextualToolExecutor executor) {
+        // 2026/11/02：同步守卫、异步守卫和插件环绕均保留原客户端限制。
+        this(source, executor, source.clients);
+    }
+
+    /**
+     * 2026/11/02：复用冻结定义与已校验的客户端范围，不重复解析 schema。
+     * @param source 原始绑定
+     * @param executor 包装后的执行链
+     * @param clients 已固定的客户端范围
+     */
+    private LLMToolBinding(LLMToolBinding source, IContextualToolExecutor executor, Set<String> clients) {
+        // 2026/11/02：客户端限制和环绕均不能意外丢弃结构化结果投影。
+        this(source, executor, clients, source.outputProjection);
+    }
+
+    /**
+     * 固定执行链及显式结果解释，复用已冻结 schema。
+     * @param source 已冻结的原绑定
+     * @param executor 完整执行链
+     * @param clients 不可变客户端范围
+     * @param outputProjection 已声明的结果投影
+     */
+    private LLMToolBinding(LLMToolBinding source, IContextualToolExecutor executor, Set<String> clients,
+            java.util.function.Function<String, LLMToolOutput> outputProjection) {
         this.definition = source.definition;
         this.executor = executor;
+        this.clients = clients;
+        this.outputProjection = outputProjection;
     }
 
     /**

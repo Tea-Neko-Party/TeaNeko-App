@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * 装配独立 Agent 轮次，借用 Core 执行资源，不创建默认实例或启动后台业务。
  * <br>2026/11/02：组合内置和插件来源并安装受控 System、决策事件及异步拦截。
+ * <br>2026/11/02：注解提供者只经其能力贡献一次，不作为宿主额外来源重复聚合。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -56,7 +57,8 @@ public class AgentExecutionConfig {
     public AgentService agentTurnService(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
             @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references) {
-        return new AgentService(gate, interactions, tools.getIfAvailable(this::defaultTools), mapper,
+        // 2026/11/02：注解工具由插件能力统一拥有，独立宿主仍可直接传入显式工具端口。
+        return new AgentService(gate, interactions, extraTools(tools), mapper,
                 executor, scheduler, Clock.systemUTC(), logger, references);
     }
 
@@ -86,7 +88,8 @@ public class AgentExecutionConfig {
             ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentHistoryRecorder> history,
             ObjectProvider<IAgentConversationSummaries> summaries, ObjectProvider<AgentSkills> skills, ObjectProvider<AgentRuntimeMonitor> monitor,
             ObjectProvider<org.zexnocs.teanekoagent.plugin.AgentPluginRuntime> plugins) {
-        var selectedTools = tools.getIfAvailable(this::defaultTools); var selectedPrompts = prompts.getIfAvailable(IAgentPromptSource::empty);
+        // 2026/11/02：过滤同时实现旧来源接口的注解提供者，避免工具和参考资料重复。
+        var selectedTools = extraTools(tools); var selectedPrompts = extraPrompts(prompts);
         // 2026/11/02：旧总来源只代表宿主附加来源，不再替换内置能力。
         var pluginRuntime = plugins.getIfAvailable();
         if (pluginRuntime != null) { selectedTools = pluginRuntime.tools(selectedTools); selectedPrompts = pluginRuntime.prompts(selectedPrompts); }
@@ -96,5 +99,29 @@ public class AgentExecutionConfig {
                 Clock.systemUTC(), logger, references, selectedPrompts, personalities.getIfAvailable(), history.getIfAvailable(), summaries.getIfAvailable());
         if (pluginRuntime != null) { service.installPlugins(pluginRuntime); }
         var observer = monitor.getIfAvailable(); if (observer != null) { service.observe(observer::accept); } return service;
+    }
+
+    /**
+     * 取得明确的宿主附加工具来源，注解提供者由能力路径单独装配。
+     * @param providers 候选工具端口
+     * @return 唯一附加来源或空来源
+     * @throws IllegalStateException 当存在多个未明确组合的附加来源时
+     */
+    private IAgentToolSource extraTools(ObjectProvider<IAgentToolSource> providers) {
+        var values = providers.orderedStream().filter(value -> !org.zexnocs.teanekoagent.tool.TeaNekoAgentToolRegistry.isProvider(value)).toList();
+        if (values.size() > 1) { throw new IllegalStateException("宿主附加工具来源必须明确组合为一个端口。"); }
+        return values.isEmpty() ? defaultTools() : values.getFirst();
+    }
+
+    /**
+     * 取得宿主附加资料，不重复处理注解能力已经拥有的平台资料。
+     * @param providers 候选资料端口
+     * @return 唯一附加来源或静态空来源
+     * @throws IllegalStateException 当存在多个未明确组合的附加来源时
+     */
+    private IAgentPromptSource extraPrompts(ObjectProvider<IAgentPromptSource> providers) {
+        var values = providers.orderedStream().filter(value -> !org.zexnocs.teanekoagent.tool.TeaNekoAgentToolRegistry.isProvider(value)).toList();
+        if (values.size() > 1) { throw new IllegalStateException("宿主附加资料来源必须明确组合为一个端口。"); }
+        return values.isEmpty() ? IAgentPromptSource.empty() : values.getFirst();
     }
 }

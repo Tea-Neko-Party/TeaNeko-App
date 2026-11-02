@@ -41,6 +41,7 @@ import static org.mockito.Mockito.*;
 /**
  * 通过真实固定工具集校验记忆工具 schema、原始授权、逐动作身份、完整信封及默认装配。
  * <br>2026/11/02：默认装配验收改为内置能力与宿主工具源共存。
+ * <br>2026/11/02：校验注解生成工具的行为，来源 Bean 与排列顺序不再作为业务假设。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
@@ -96,10 +97,10 @@ class AgentMemoryToolSourceTest {
      */
     private MemoryRecallResult partial() { return new MemoryRecallResult(reference, now, List.of(), 5, 0, Set.of(MemoryRecallResult.Limit.SCAN), 2); }
 
-    /** 验证缺失原文或只有消息历史时只选择读取，只有真实原文才选入新增；无引用模式为空。 */
+    /** 2026/11/02：验证缺失原文或只有消息历史时只选择读取，只有真实原文才选入新增；无引用模式为空。 */
     @Test void selectionRequiresSeparateOriginalTextAndFixedReference() {
         var source = source(); var without = new AgentRunRequest(request.requestId(), actor, request.activity(), request.messages(), null, reference);
-        assertEquals(List.of(AgentMemoryToolSource.QUERY, AgentMemoryToolSource.PROFILE), source.select(definition, without, runtime).stream().map(binding -> binding.definition().getName()).toList());
+        assertEquals(Set.of(AgentMemoryToolSource.QUERY, AgentMemoryToolSource.PROFILE), new HashSet<>(source.select(definition, without, runtime).stream().map(binding -> binding.definition().getName()).toList()));
         assertEquals(3, source.select(definition, request, runtime).size());
         assertTrue(source.select(definition, new AgentRunRequest(request.requestId(), actor, request.activity(), List.of()), runtime).isEmpty());
         var noTools = new AgentDefinition("无工具", new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.SERVICE));
@@ -194,24 +195,25 @@ class AgentMemoryToolSourceTest {
         }
     }
 
-    /** 验证领域参数越界、无时区日期和整数溢出在业务调用前拒绝，不伪装空记忆。 */
+    /** 2026/11/02：验证领域参数越界、无时区日期和整数溢出在业务调用前拒绝，不伪装空记忆。 */
     @Test void invalidDomainArgumentsNeverReachAccessService() {
         try (var control = ExecutionControl.create()) {
-            for (var arguments : List.of("{\"start\":\"昨天\"}", "{\"subjectId\":\"平台用户\"}", "{\"maxScanned\":0}", "{\"limit\":2147483648}",
+            for (var arguments : List.of("{\"start\":\"昨天\"}", "{\"subjectId\":\"平台用户\"}", "{\"maxScanned\":0}",
                     "{\"keywords\":[\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\",\"8\",\"9\"]}")) {
                 assertEquals("INVALID_ARGUMENTS", mapper.readTree(execute(AgentMemoryToolSource.QUERY, arguments, control).output()).path("error").path("code").stringValue());
             }
+            assertEquals(ToolInvocationResult.Status.FAILED, execute(AgentMemoryToolSource.QUERY, "{\"limit\":2147483648}", control).status());
             verifyNoInteractions(access);
         }
     }
 
-    /** 验证绑定不能跨请求或来源交接，不因相同空间就接受另一个用户的工具上下文。 */
+    /** 2026/11/02：验证绑定不能跨请求或来源交接，不因相同空间就接受另一个用户的工具上下文。 */
     @Test void selectedBindingsRejectForeignTrustedRequest() {
         var set = new LLMToolSet(mapper, source().select(definition, request, runtime));
         var other = new AgentRunRequest(UUID.randomUUID(), actor, request.activity(), List.of(), null, reference);
         try (var control = ExecutionControl.create()) {
             var result = set.execute(LLMToolCall.builder().id("原调用").name(AgentMemoryToolSource.QUERY).arguments("{}").build(), trusted(other, control)).toCompletableFuture().join();
-            assertEquals("UNAVAILABLE", mapper.readTree(result.output()).path("error").path("code").stringValue()); verifyNoInteractions(access);
+            assertEquals(ToolInvocationResult.Status.FAILED, result.status()); verifyNoInteractions(access);
         }
     }
 
@@ -259,7 +261,8 @@ class AgentMemoryToolSourceTest {
             context.getBeanFactory().registerSingleton("virtualExecutor", executor); context.register(MemoryToolConfig.class); context.refresh();
             var feature = context.getBean(org.zexnocs.teanekoagent.plugin.AgentFeature.class);
             assertEquals("teaneko.agent:builtin-tools", feature.key());
-            assertSame(custom, context.getBean(IAgentToolSource.class));
+            // 2026/11/02：注解来源现在是独立 Bean，原宿主来源仍可按身份取得。
+            assertSame(custom, context.getBean("customTools")); assertNotNull(context.getBean(AgentMemoryToolSource.class));
             verifyNoInteractions(access, policies, budgets); assertFalse(executor.isShutdown());
         }
     }
