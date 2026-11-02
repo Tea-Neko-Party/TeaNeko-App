@@ -62,7 +62,38 @@ correctionKey 不属于普通 cfg 字段。独立 DEBUG 指令已接入 key 绑�
 
 取消、配置变化或交付前拒绝不意味着已经开始的事务回滚；候选追加仍以原存储回执为准。数据库内部备份/绑定是原子提交，配置文件、数据库与内存会话之间采用使用前复核和代次协调，不宣称跨资源原子事务。
 
-## 后台自动补正
+## 持久观察式人格
+
+4.6.1-l 默认从已采集的真实人类表达中观察风格，不要求用户逐条发出人格修改指令。观察与长期事实整理共用原 LEARNING 活动、一次无工具模型调用和同一个后台处理器；事实与风格分别返回候选，memoryLearningEnabled 和 personalityLearningEnabled 独立生效。关闭事实学习仍可观察表达，关闭人格学习也不停止已授权事实学习和短期采集。
+
+StyleObservationService 固定原 scope、基础人格和管理身份，并从原短期行筛选仍属于该人格的有效 USER 样本。模型只能选择 speakingStyle 或 speaking detail 中当前配置允许的字段；摘要、助手回答、工具结果不能作为新的风格证据。单个用户要求“对我简短些”应进入用户偏好，临时指令只影响当前轮次，不能变成全群人格。自然语言识别与模仿质量仍需真实模型验收。
+
+每个模式保留场景 GENERAL/TECHNICAL/CASUAL、最多十二条真实来源和样本原话。相同 client/scope、作者与平台消息只算一条独立证据，重复整理不提高支持次数。至少三条不同消息、来自至少两个中期片段才可采用；单批最多采用一个模式，采用间隔沿用 cooldown-seconds，默认五分钟。作用于整个 scope 的模式始终带场景说明，不把用户的身份、经历、个人偏好或关系复制给机器人。
+
+观察、原人格补正与长期整理水位在同一个专用 EasyData 事务提交；任意写入失败整体回滚。clear、原租约、基础人格切换、管理换代或学习资格撤销后不能提交迟到观察。字段锁定或补正容量已满时保留合格观察但不自动覆盖原补正。补正从后续轮次生效，不改写已经生成的答案。
+
+原基础人格和显式管理入口继续有效。观察目标按真实 scope 与人格身份隔离，不因长期 namespace 共享而把其他群的交流方式直接套入当前群；原管理操作改变身份后，旧观察不会自动回灌。人格引用被管理员显式共享时，已接受补正仍遵循原共享语义。用户事实独立保存，更换基础角色不删除事实。
+
+本地默认：
+
+```properties
+tea-neko.agent.personality-learning.enabled=true
+tea-neko.agent.personality-learning.observation-enabled=true
+tea-neko.agent.personality-learning.cooldown-seconds=300
+tea-neko.agent.personality-learning.retention-days=30
+```
+
+保留期控制观察可用样本及新补正的有效期，补正实际到期时刻在采用时固定；修改配置不自动延长已经采用的补正。到期模式只有取得采用之后的新独立样本才可再次采用，不用旧证据自动续期。
+
+默认后台维护按域分页精简过期原话；支持样本已清空且补正已到期的模式物理回收，将采用时刻与到期时刻移入无正文水位，防止空记录长期占据查询窗口。仍在有效期的已采用模式即使原话已到期，也可显示采用状态及当前零样本覆盖。普通可写补正集合去掉到期项并推进内容 revision，释放六十四条容量；managementRevision 保持不变，不重置管理保护，不清除有效/无期限补正，不修改不可变备份。维护失败时游标和修改一起回滚。
+
+新增注解工具 personality_observations，默认所有 client 可用，要求真实登记并启用 Agent、historyReadEnabled 和 memoryReadEnabled。它只查询当前 scope 当前人格的最多十六项摘要，包含表达模式、场景、独立消息/片段数、作者 UUID 及是否采用，不返回原话或其他区域数据；关闭学习不自动关闭查询。字段锁定、撤销和基础角色管理继续使用原 /agent personality 入口。
+
+IStyleObservationStore 可替换观察持久化，联合生成由 ILongTermMemoryConsolidator.analyze 扩展；原 consolidate 函数式实现继续只返回事实。自定义联合存储必须支持与原水位同事务提交，缺少支持时明确失败，不静默丢弃风格候选。默认事务适配器以 EasyDataPersonalityStore 为基础；替换整个人格存储时需同时提供兼容观察端口及服务，或保留原独立学习入口。
+
+## 兼容后台自动补正
+
+下述逐轮入口在缺少默认观察装配、关闭 observation-enabled 或关闭分层功能时继续可用；默认观察已装配并开启时不再对同一聊天重复发起这一人格模型分析。
 
 默认邮箱提交完整成功轮次后，在锁外交接 `IAgentPersonalityLearning`，前台不等待模型。只有具有 `AgentUserText` 原文、真实 UUID、实际人格和完整空间引用的人类互动参与；失败、系统任务和缓存重放不触发。旧显式构造保留不自动学习模式；独立宿主可显式交接已接受互动，同时提供原会话有效性检查。
 

@@ -11,10 +11,11 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 新 Agent 的作用域注册数据，只有真实登记记录才允许使用默认启用值。
  * 不提供认证、连接或补正 key 的普通 cfg 写入入口。
  *
+ * <br>2026/11/03：新 scope 默认允许自动长期学习，已有显式关闭配置继续生效。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Getter @Setter @NoArgsConstructor
 public class AgentScopeConfigData implements IConfigData {
@@ -40,11 +41,13 @@ public class AgentScopeConfigData implements IConfigData {
     @Description("是否允许记忆检索、画像读取及记忆注入。")
     private boolean memoryReadEnabled = true;
 
-    @Description("是否允许用户明确请求新增自己的事实；不包含维护、导出或其他主体写入。")
+    // 2026/11/03：新长期模块允许按版本维护本人条目，旧事实管理权限继续沿用原入口。
+    @Description("是否允许明确新增本人事实及新长期条目的本人纠正/遗忘；不允许修改他人数据，旧事实管理仍须原管理权限。")
     private boolean memoryAddEnabled = true;
 
-    @Description("独立记忆学习策略开关；当前尚无自动学习执行器，不能代替明确新增意图或人格补正开关。")
-    private boolean memoryLearningEnabled = false;
+    // 2026/11/03：自动学习由持久中期片段触发，不要求用户逐条请求记住。
+    @Description("是否允许从已采集的真实对话自动整理长期事实、偏好和用户画像；关闭不停止已授权的短期采集，也不删除现有记忆。")
+    private boolean memoryLearningEnabled = true;
 
     @Description("基础人格 ID，空值使用本地 personality.yml 的默认人格。")
     private String personalityId = "";

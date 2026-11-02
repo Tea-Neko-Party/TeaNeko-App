@@ -11,6 +11,84 @@
   ],
   "properties": [
     {
+      "name": "tea-neko.agent.memory.maintenance.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "维护短期、中期、长期来源和人格观察的到期内容，独立于学习开关；关闭不延长逻辑有效期。"
+    },
+    {
+      "name": "tea-neko.agent.memory.maintenance.interval-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 10000,
+      "description": "维护轮询间隔毫秒，每域有界处理并等待真实事务完成，不重叠启动。"
+    },
+    {
+      "name": "tea-neko.agent.personality-learning.observation-enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "从已持久中期片段联合提取真实人类表达；默认装配开启时停止旧逐轮人格模型分析，关闭后保留回退入口。"
+    },
+    {
+      "name": "tea-neko.agent.memory.long-term.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "启用中期到长期自动整理、用户画像和注解维护工具；原作用域读取、学习与本人写入权限独立生效。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.enabled",
+      "type": "java.lang.Boolean",
+      "defaultValue": true,
+      "description": "启用持久近期上下文和后台中期压缩，不替代原历史采集开关。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.trigger-messages",
+      "type": "java.lang.Integer",
+      "defaultValue": 12,
+      "description": "未处理消息达到该数量时尝试压缩连续旧段。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.trigger-bytes",
+      "type": "java.lang.Integer",
+      "defaultValue": 32768,
+      "description": "候选旧消息的紧凑 JSON 字节触发阈值，与消息数满足其一即可。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.keep-messages",
+      "type": "java.lang.Integer",
+      "defaultValue": 4,
+      "description": "自动压缩时保留的最新原始消息数，至少为二。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.batch-messages",
+      "type": "java.lang.Integer",
+      "defaultValue": 16,
+      "description": "每次模型压缩最多处理的连续消息数。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.max-input-bytes",
+      "type": "java.lang.Integer",
+      "defaultValue": 131072,
+      "description": "压缩模型完整消息输入的字节上限，仍受实际模型 token 预算约束。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.timeout-seconds",
+      "type": "java.lang.Long",
+      "defaultValue": 45,
+      "description": "后台生成及提交观察的总时限，最多一百二十秒。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.retention-days",
+      "type": "java.lang.Long",
+      "defaultValue": 90,
+      "description": "持久中期片段允许参与注入的天数，范围一至三百六十五。"
+    },
+    {
+      "name": "tea-neko.agent.memory.layered.poll-ms",
+      "type": "java.lang.Long",
+      "defaultValue": 5000,
+      "description": "持久任务目录的扫描周期，不创建新线程池。"
+    },
+    {
       "name": "tea-neko.plugins.disabled",
       "type": "java.util.List<java.lang.String>",
       "description": "启动时逻辑禁用的插件ID列表；运行期开关不自动写回，宿主基础模块不可关闭。"

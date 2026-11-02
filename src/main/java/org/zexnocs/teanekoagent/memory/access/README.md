@@ -41,10 +41,10 @@ var result = agentService.run(handle, request);
 | 字段 | 已登记记录的默认值 | 当前行为 |
 | --- | --- | --- |
 | memoryReadEnabled | true | 控制事实查询、画像读取，以及后续共用此边界的工具/注入。 |
-| memoryAddEnabled | true | 控制用户明确请求新增；关闭读取不自动关闭新增。 |
-| memoryLearningEnabled | false | 独立策略数据，当前没有自动学习执行器；开启也不能绕过明确新增意图，不控制人格补正。 |
+| memoryAddEnabled | true | 控制用户明确请求新增，以及新长期模块按版本纠正/遗忘本人条目；新维护入口同时要求读取，旧事实管理继续使用原权限。 |
+| memoryLearningEnabled | true | 控制可信后台从中期自动整理长期事实、偏好和画像；不代替普通新增工具的明确意图，也不控制独立人格观察。 |
 
-例如 `/cfg set agent memoryReadEnabled false`。原 `/cfg` 的权限链继续执行；没有增加第二份权威 namespace 配置。缺失登记或 enabled=false 时所有普通记忆访问关闭。旧 JSON 缺失新字段沿用上述默认值，实际登记仍是前提；非法模式/配置失败明确报告配置不可用，不按宽松策略继续。
+例如 `/cfg set agent memoryReadEnabled false`。原 `/cfg` 的权限链继续执行；没有增加第二份权威 namespace 配置。缺失登记或 enabled=false 时所有普通记忆访问关闭。旧 JSON 缺失字段沿用上述默认值，已有明确 false 保留，实际登记仍是前提；非法模式/配置失败明确报告配置不可用，不按宽松策略继续。自动三层流程和新工具见[分层记忆](../layered/README.md)。
 
 每次调用先在借用业务域检查停止及当前开关，等待原引用只读验证，回到业务域再次检查后才启动业务。完成后再检查开关、引用及停止，随后交付原不可变结果；来源引用、画像主体或显式预算错位整体失败。保留 Recall/画像的 SCAN/RESULTS/CHARACTERS 和原统计，不把部分空结果当成确定不存在。共享空间查询仍可跨主体和来源，读取其他主体不授予写入其画像的权限。`verifyRead` 只复核当前读开关、原完整引用和停止，不重新检索，供资料的实际使用与授权重放调用。
 

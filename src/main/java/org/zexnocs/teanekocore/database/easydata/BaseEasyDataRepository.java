@@ -20,11 +20,12 @@ import java.util.List;
  * 1. 加上 @Repository 注解。
  * 2. 重写 getFactory 方法，返回一个IEasyDataFactory的实现类。
  *
+ * <br>2026/11/03：为基础层维护任务增加按域和行序号的有界分页。
  * @param <T> 对应的 EasyDataObject
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @NoRepositoryBean
 public interface BaseEasyDataRepository<T extends BaseEasyDataObject>
@@ -94,6 +95,15 @@ public interface BaseEasyDataRepository<T extends BaseEasyDataObject>
      */
     @Transactional(propagation = Propagation.MANDATORY)
     List<T> findByNamespaceAndTargetAndIdLessThanOrderByIdDesc(String namespace, String target, long before, Pageable page);
+    /**
+     * 2026/11/03：维护扫描只读固定域，不对未取得业务锁的记录加锁。
+     * @param namespace 固定域
+     * @param before 排除序号
+     * @param page 有界页面
+     * @return 序号倒序页
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    List<T> findByNamespaceAndIdLessThanOrderByIdDesc(String namespace, long before, Pageable page);
     /**
      * 通过命名空间和对象获取数据对象。
      * @param namespace 命名空间。

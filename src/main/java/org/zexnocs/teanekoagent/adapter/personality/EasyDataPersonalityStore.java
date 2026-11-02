@@ -4,7 +4,9 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.database.easydata.EasyDataMaintenancePage;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
+import org.zexnocs.teanekoagent.memory.layered.IMemoryMaintenance;
 import org.zexnocs.teanekoagent.personality.*;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
@@ -20,13 +22,15 @@ import java.util.function.Supplier;
 /**
  * 在独立人格业务域保存绑定、补正及不可变备份，切换和版本写入同事务提交。
  * 不接触画像或 memory namespace，不沿用旧无保护 JSON 整列表写回。
+ * <br>2026/11/03：允许表达观察在原事务中按固定人格和管理代次渐进采用。
+ * <br>2026/11/03：释放到期补正占用的容量，保持备份不可变与管理代次稳定。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Service
-public final class EasyDataPersonalityStore implements IPersonalityStore, IPersonalityManagementStore {
+public final class EasyDataPersonalityStore implements IPersonalityStore, IPersonalityManagementStore, IMemoryMaintenance {
     private static final String DOMAIN = "agent.personality.v1";
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
@@ -164,6 +168,59 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
         var items = new ArrayList<>(current.corrections()); items.add(correction);
         write(row, "state", physical(key), new PersonalityState(key, Math.addExact(current.revision(), 1), items, false, current.managementRevision()));
         guard.run(); return true;
+    }
+    /**
+     * 2026/11/03：观察与长期水位同事务提交，目标变化明确拒绝，锁定或容量不足只保留观察。
+     * @param scope 原作用域
+     * @param basis 生成时固定人格
+     * @param correction 已核对观察派生的表达补正
+     * @param guard 当前学习和执行守卫
+     * @return 新增或同候选已采用时为真，受管理保护时为假
+     */
+    public boolean adoptObservedInTransaction(AgentScope scope, org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot basis,
+            PersonalityCorrection correction, Runnable guard) {
+        verifyObservationTargetInTransaction(scope, basis, guard);
+        guard.run(); var bindingRow = lock(scopeTarget(scope), "binding");
+        if (bindingRow == null) { throw changed(); }
+        var binding = read(bindingRow, PersonalityBinding.class); var state = requireState(binding.correctionKey());
+        if (!binding.correctionKey().equals(basis.correctionKey()) || !binding.identity(true, state.managementRevision()).equals(basis.identity())
+                && !binding.identity(false, state.managementRevision()).equals(basis.identity())) { throw changed(); }
+        if (state.backup() || state.corrections().stream().anyMatch(item -> item.locked() && item.field().equals(correction.field()))
+                || state.corrections().size() >= 64) { return false; }
+        appendInTransaction(binding, correction, state.managementRevision(), guard); return true;
+    }
+    /**
+     * 2026/11/03：即使样本不足以采用，也不能把迟到观察写入已换代人格。
+     * @param scope 固定作用域
+     * @param basis 生成时人格
+     * @param guard 当前学习守卫
+     */
+    public void verifyObservationTargetInTransaction(AgentScope scope, org.zexnocs.teanekoagent.agent.personality.AgentPersonalitySnapshot basis, Runnable guard) {
+        guard.run(); var row = lock(scopeTarget(scope), "binding"); if (row == null) { throw changed(); }
+        var binding = read(row, PersonalityBinding.class); var state = requireState(binding.correctionKey());
+        if (!binding.scope().equals(scope) || !binding.correctionKey().equals(basis.correctionKey())
+                || !binding.identity(true, state.managementRevision()).equals(basis.identity())
+                && !binding.identity(false, state.managementRevision()).equals(basis.identity())) { throw changed(); }
+        guard.run();
+    }
+    /**
+     * 2026/11/03：到期补正从可写集合物理移除，不修改不可变备份，不回收有效或无期限补正。
+     * @param now 当前时刻
+     * @return 实际精简的状态数量
+     */
+    @Override public CompletionStage<Integer> maintain(Instant now) {
+        return EasyDataMaintenancePage.run(data, "释放到期人格补正容量", rows -> {
+            int changed = 0;
+            for (var scanned : rows) {
+                if (!scanned.getTarget().equals("state")) { continue; }
+                var row = dto("state").find(scanned.getKey(), EasyDataLock.WRITE); if (row == null) { continue; }
+                var value = read(row, PersonalityState.class); if (value.backup()) { continue; }
+                var active = value.corrections().stream().filter(item -> item.activeAt(now)).toList();
+                if (active.size() == value.corrections().size()) { continue; }
+                write(row, "state", row.getKey(), new PersonalityState(value.key(), Math.addExact(value.revision(), 1), active, false, value.managementRevision())); changed++;
+            }
+            return changed;
+        });
     }
 
     /**

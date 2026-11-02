@@ -42,10 +42,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证宿主身份、明确原文、独立开关及取消/交付边界，不调用真实模型或数据库。
+ * <br>2026/11/03：新建 scope 的学习默认开启，显式关闭仍独立保留。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Timeout(10)
 class MemoryAccessServiceTest {
@@ -173,7 +174,9 @@ class MemoryAccessServiceTest {
         assertEquals(new MemoryAccessPolicy(false, false, false, false), adapter.read(scope));
         var data = new ObjectMapper().readValue("{\"enabled\":true}", AgentScopeConfigData.class);
         when(configs.getConfigData(manager, AgentScopeConfigData.class, scope.scopeId())).thenReturn(Optional.of(data));
-        assertEquals(new MemoryAccessPolicy(true, true, true, false), adapter.read(scope));
+        // 2026/11/03：自然学习默认开启，旧配置中的显式 false 不被默认值覆盖。
+        assertEquals(new MemoryAccessPolicy(true, true, true, true), adapter.read(scope));
+        assertFalse(new ObjectMapper().readValue("{\"memoryLearningEnabled\":false}", AgentScopeConfigData.class).isMemoryLearningEnabled());
         data.setMemoryReadEnabled(false); data.setMemoryLearningEnabled(true);
         assertEquals(new MemoryAccessPolicy(true, false, true, true), adapter.read(scope));
         data.setEnabled(false); assertFalse(adapter.read(scope).enabled()); data.setMode("非法模式"); assertThrows(IllegalArgumentException.class, () -> adapter.read(scope));

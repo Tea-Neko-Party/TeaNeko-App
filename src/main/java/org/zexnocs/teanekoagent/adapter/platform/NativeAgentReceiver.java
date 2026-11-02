@@ -32,10 +32,11 @@ import java.util.stream.Collectors;
  * 唯一的新 Agent 普通消息入口，先检查注册和原生信号，再借用原业务域执行。
  * 不取消其他插件事件，不接收内部 Agent 消息，不因文本里的身份声明授予触发权限。
  * <br>2026/11/02：私聊普通图文使用独立原生信号直接触发。
+ * <br>2026/11/03：入站失败补充不含原文和密钥的异常类型及代码位置。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 @EventListener
 public final class NativeAgentReceiver {
@@ -109,6 +110,7 @@ public final class NativeAgentReceiver {
 
     /**
      * 原命令仍由原入口处理，自动链失败仅记固定诊断，不向用户重复发送错误反馈。
+     * 2026/11/03：保留脱敏根因，避免只有泛化失败文本而无法定位。
      * @param event 原生普通消息事件
      */
     @EventHandler(priority = Integer.MIN_VALUE + 1)
@@ -116,7 +118,8 @@ public final class NativeAgentReceiver {
         var data = event.getData();
         if (data == null || event.isCancelled()) { return; }
         receive(data).whenComplete((sent, failure) -> {
-            if (failure != null) { logger.error("Agent 自动入站", "自动消息未完成；已开始的外部动作不表示已撤销，不自动重试。"); }
+            if (failure != null) { logger.error("Agent 自动入站", "自动消息未完成；已开始的外部动作不表示已撤销，不自动重试。"
+                    + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure)); }
         });
     }
 

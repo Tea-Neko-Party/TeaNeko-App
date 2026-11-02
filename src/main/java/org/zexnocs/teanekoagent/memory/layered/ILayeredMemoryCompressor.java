@@ -1,0 +1,22 @@
+package org.zexnocs.teanekoagent.memory.layered;
+
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import java.util.concurrent.CompletionStage;
+
+/**
+ * 可替换的中期生成端口，模型只提供摘要，不决定身份、覆盖范围或提交水位。
+ * @author zExNocs
+ * @date 2026/11/02
+ * @since 4.0.0
+ * @version 4.6.1-l
+ */
+@FunctionalInterface
+public interface ILayeredMemoryCompressor {
+    /**
+     * 在原控制和有界输入下生成压缩候选。
+     * @param batch 宿主固定输入
+     * @param control 借用工作控制
+     * @return 模型实际完成后的摘要候选
+     */
+    CompletionStage<MemoryLayers.Digest> compress(MemoryLayers.Batch batch, ExecutionControl control);
+}

@@ -40,10 +40,11 @@ import static org.mockito.Mockito.when;
 /**
  * 模拟事务隔离、唯一键、Version 仲裁和提交回滚，用于离线验证真实适配器的事务合同。
  * 不替代 MySQL/JPA 实机测试；仓库访问由实际 EasyData 基础层发起。
+ * <br>2026/11/03：复用固定域维护分页，保持真实事务、版本与回滚夹具。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 final class NamespaceDatabaseFixture implements AutoCloseable {
     final TeaNekoAgentEasyDataRepository repository = mock(TeaNekoAgentEasyDataRepository.class);
@@ -95,6 +96,12 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
         when(repository.findByNamespaceAndTargetAndIdLessThanOrderByIdDesc(anyString(), anyString(), org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
             String domain = call.getArgument(0), target = call.getArgument(1); long before = call.getArgument(2); Pageable page = call.getArgument(3);
             return transaction.get().rows.values().stream().filter(row -> row.getNamespace().equals(domain) && row.getTarget().equals(target) && row.getId() < before)
+                    .sorted(Comparator.comparingLong(BaseEasyDataObject::getId).reversed()).limit(page.getPageSize()).map(row -> (TeaNekoAgentEasyDataObject) row).toList();
+        });
+        // 2026/11/03：域维护仍通过 Core 事务 DTO，不为新 Store 绕过仓库封装。
+        when(repository.findByNamespaceAndIdLessThanOrderByIdDesc(anyString(), org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
+            String domain = call.getArgument(0); long before = call.getArgument(1); Pageable page = call.getArgument(2);
+            return transaction.get().rows.values().stream().filter(row -> row.getNamespace().equals(domain) && row.getId() < before)
                     .sorted(Comparator.comparingLong(BaseEasyDataObject::getId).reversed()).limit(page.getPageSize()).map(row -> (TeaNekoAgentEasyDataObject) row).toList();
         });
         when(database.__pushTask(any())).thenAnswer(call -> {

@@ -4,7 +4,7 @@
 
 ## 进行中
 
-当前没有进行中的实施计划。
+- [三层自动记忆与观察式人格](4.6.1-layered-memory.md)：短期持久化、中期自动压缩、长期整理、画像和观察学习的实际接入与验证。
 
 ## 已完成
 
@@ -17,6 +17,8 @@
 | [4.5.0 Agent](old/4.5.0-agent.md) | S0–S9 实现与离线交付，原始需求、规格和分阶段证据随主计划归档 | [v4.5.0-l](../changelog/4.5.0-l.md) |
 
 ## 后续验收与设计
+
+- [记忆与人格重设计规格](../design/agent-memory-personality.md)：自动三层记忆、观察式人格、持久化契约及采用边界；当前实现与验收以进行中的实施计划为准，项目对照记录仅放在 temp/docs。
 
 - 真实 MySQL、OneBot、模型、完整启动与性能检查继续维护在 [部署验收清单](../development/agent-deployment.md#实机验收清单)，不计入已完成计划的实机通过结论。
 - [Web 管理设计](../design/web-management-api.md) 保留后续业务资源、HTTP 和实时订阅的设计范围，实际已有能力以 [管理扩展指南](../development/plugins/management.md) 为准；当前不将整套 Web 标记为已经开工或完成。

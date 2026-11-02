@@ -28,7 +28,7 @@ new AgentDefinition("业务助手", modelOptions,
 
 使用宿主注入的 IAgentFactory 创建实例。默认工厂会在登记前检查能力、初始化组件并编译两个阶段的 System 依赖；失败不登记半初始化实例。原三参数定义仍安装宿主默认能力；原独立构造的无插件工厂保留，不支持静默忽略显式 features。
 
-内置能力为 teaneko.agent:builtin-tools、teaneko.agent:builtin-memory 和 teaneko.agent:onebot。旧 IAgentToolSource/IAgentPromptSource Bean 现在代表宿主的额外总来源，不能再依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 AgentFeature 追加，避免多个总来源 Bean 歧义。
+内置能力包括 teaneko.agent:builtin-tools、teaneko.agent:builtin-memory、teaneko.agent:onebot 和 teaneko.agent:layered-memory。最后一项提供同 scope 持久近期与中期资料；显式选择能力集合的实例需自行加入。旧 IAgentToolSource/IAgentPromptSource Bean 代表宿主的额外总来源，不能依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 AgentFeature 追加，避免多个总来源 Bean 歧义。
 
 ## 新增工具
 
@@ -125,6 +125,9 @@ IAgentPromptSource.resolve 返回完整资料；verify 在原模型、工具及�
 | 文件/代码后端 | 实现 IAgentFileAccess 或 IAgentCodeExecutor，经 AgentExtensionTools 生成工具；必须显式提供 IAgentExtensionPolicy，不能因注册 Bean 就开放宿主文件或 shell |
 | 模型供应商 | 实现 ILLMModel，标记 @LLMModel 与 @PluginOwned；继续使用统一 model.yml、原 ExecutionPolicy 和实际 IO 取消；模型服务在完成时复核插件版本 |
 | 记忆、画像、人格业务 | 复用已有服务及专用 EasyData，可贡献候选、工具和资料；最终写入仍受 namespace/generation、主体、来源、锁定和 DEBUG 管理约束 |
+| 自动三层记忆 | ILayeredMemoryCompressor 与 ILongTermMemoryConsolidator 可分别替换摘要和长期选择；复用单个 LayeredMemoryProcessor。替换 ILongTermMemoryStore 仍须实现证据验证、索引/水位原子提交、维护幂等和遗忘抑制。普通资料及工具通过 teaneko.agent:layered-memory、teaneko.agent:long-memory 安装，详见[分层记忆](../../../src/main/java/org/zexnocs/teanekoagent/memory/layered/README.md) |
+| 观察式人格 | ILongTermMemoryConsolidator.analyze 可在原模型请求同时返回 StyleObservations.Analysis；Target 由宿主固定，插件不能替换人格或自报来源。IStyleObservationStore 在原事务保存观察与采用，独立样本、原管理身份、字段锁定和已关闭学习域仍由宿主验证；旧 consolidate 函数式实现继续兼容 |
+| 记忆维护 | 实现 IMemoryMaintenance 并注册 Bean，原 MemoryMaintenanceService 串行等待每个端口完成；每批必须有界，游标与回收同事务提交，不使用学习关闭作为无限保留过期数据的依据。替换 Store 时同时实现维护或明确提供独立清理后端，保留有效数据、幂等及遗忘保护 |
 | Skill | 继续经现有本地目录校验/发布与 Skill 策略选择；插件功能配套的 Skill 资源按部署说明安装，不因 JAR 存在就自动发布目录或增加权限 |
 | 显式工作流 | 借用已有 AgentWorkflowService 安排实例，共享原父预算；不透明地自动调用其他 Agent 不属于注册能力 |
 | 管理页面 | 贡献 ManagementResource，按 [管理扩展](management.md) 提供脱敏查询或明确管理操作 |

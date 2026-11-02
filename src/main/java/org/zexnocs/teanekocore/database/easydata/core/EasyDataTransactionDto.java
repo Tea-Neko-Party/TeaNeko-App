@@ -13,11 +13,12 @@ import java.util.Objects;
 
 /**
  * EasyData 基础层的事务 DTO 实现，集中封装仓库、实体、锁和提交后缓存协调。
+ * <br>2026/11/03：提供不扩展写入权限的固定域维护分页。
  * @param <T> 由数据入口固定的实体类型，不由业务参数选择
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class EasyDataTransactionDto<T extends BaseEasyDataObject> implements IEasyDataTransactionDto {
     private final BaseEasyDataRepository<T> repository;
@@ -100,6 +101,20 @@ public final class EasyDataTransactionDto<T extends BaseEasyDataObject> implemen
         requireTransaction(); validateLimit(limit);
         if (before < 1) { throw new IllegalArgumentException("EasyData 逆序游标必须为正。"); }
         return repository.findByNamespaceAndTargetAndIdLessThanOrderByIdDesc(namespace, target, before, PageRequest.of(0, limit))
+                .stream().map(entity -> new EasyDataRow(repository, entity)).toList();
+    }
+    /**
+     * 2026/11/03：保持域隔离和分页上限，不使用缓存或在扫描阶段改变行锁顺序。
+     * @param before 排除序号
+     * @param limit 页面大小
+     * @return 固定域的倒序只读 DTO 页
+     * @throws IllegalArgumentException 当序号或页大小无效时
+     * @throws IllegalStateException 当缺少活动数据库事务时
+     */
+    @Override public List<EasyDataRow> recentNamespace(long before, int limit) {
+        requireTransaction(); validateLimit(limit);
+        if (before < 1) { throw new IllegalArgumentException("EasyData 域维护游标必须为正。"); }
+        return repository.findByNamespaceAndIdLessThanOrderByIdDesc(namespace, before, PageRequest.of(0, limit))
                 .stream().map(entity -> new EasyDataRow(repository, entity)).toList();
     }
     /**

@@ -1,6 +1,9 @@
 package org.zexnocs.teanekoagent.adapter.history;
 
+import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.adapter.memory.EasyDataLayeredMemoryStore;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekoagent.history.*;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
@@ -20,23 +23,36 @@ import java.util.function.Supplier;
 /**
  * 通过专用 EasyData 保存历史及到期索引，不依赖独立 JPA 历史表或业务仓库。
  * 两个目标同事务提交，行序号支持重启分页，到期索引支持有界回收。
+ * <br>2026/11/02：短期分层消息和可恢复目录加入原历史事务，不依赖事后内存通知。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Service
 public final class EasyDataHistoryStore implements IHistoryStore {
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
+    private final @Nullable EasyDataLayeredMemoryStore layered;
     /**
      * 保存专用入口，复用现有 DTO、任务和事务设施。
      * @param data Agent EasyData
      * @param mapper JSON 转换器
      */
     public EasyDataHistoryStore(TeaNekoAgentEasyData data, ObjectMapper mapper) {
+        this(data, mapper, null);
+    }
+    /**
+     * 2026/11/02：可选接入默认分层存储，独立宿主保留原构造。
+     * @param data 原数据入口
+     * @param mapper 原 JSON 转换器
+     * @param layered 可选分层消息存储，同步加入当前事务
+     */
+    @Autowired
+    public EasyDataHistoryStore(TeaNekoAgentEasyData data, ObjectMapper mapper, @Nullable EasyDataLayeredMemoryStore layered) {
         this.data = Objects.requireNonNull(data).inNamespace("agent.history.v1");
         this.mapper = mapper.rebuild().disable(SerializationFeature.INDENT_OUTPUT, SerializationFeature.WRAP_ROOT_VALUE).build();
+        this.layered = layered;
     }
     /**
      * 同来源重投不覆盖正文或延长保留期，历史及到期索引原子保存。
@@ -47,6 +63,8 @@ public final class EasyDataHistoryStore implements IHistoryStore {
      */
     @Override public CompletionStage<Boolean> append(HistoryContext context, HistoryMessage message, Instant expiresAt) {
         return submit(() -> {
+            // 2026/11/02：包括原历史的幂等重投，分层消息、目录及原历史原子保存或回滚。
+            if (layered != null) { layered.captureInTransaction(context, message, expiresAt); }
             var partition = partition(context.reference(), context.personality().identity());
             var key = digest(mapper.writeValueAsString(List.of(message.role(), message.messageId()))); var dto = history(partition);
             var old = dto.find(key, EasyDataLock.NONE);

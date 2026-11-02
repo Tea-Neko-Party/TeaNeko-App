@@ -72,6 +72,12 @@ v4.6.0-l 的插件开发见 [插件指南](docs/development/plugins/README.md)�
 -Dspring.profiles.active=dev
 ```
 
+开发热重启会断开 OneBot 连接，平台端应启用自动重连；客户端在停机前关闭连接并释放收发执行器。停机期间关闭握手遇到已关闭通道仅记调试日志，运行期传输故障仍记错误。
+
+默认关闭 DevTools 的条件装配差异报告，保留自动热重启。需要比较装配变化时设置 `spring.devtools.restart.log-condition-evaluation-delta=true`。运行中的项目执行 `clean`、强制重新编译或整批覆盖 class 文件会触发多次重启，甚至在编译未完成时临时缺少业务 Bean；这类构建应先停止 IntelliJ 中的应用，构建完成后重新运行。
+
+IntelliJ 直接运行主类时，可在 VM options 加入 `--enable-native-access=ALL-UNNAMED`，允许 Netty 的原生库访问并消除 Java 25 的原生访问提示；Gradle 的 `bootRun` 和可执行 JAR 已有对应配置。
+
 ---
 
 ## 🤝 交流
