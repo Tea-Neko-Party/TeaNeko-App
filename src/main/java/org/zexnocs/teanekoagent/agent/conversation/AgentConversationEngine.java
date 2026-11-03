@@ -27,10 +27,11 @@ import java.util.Map;
 /**
  * 负责窗口装配、协议提交验证和缓存度量；不持有邮箱锁、执行控制或外部资源。
  * 所有深层冻结和 JSON 工作由邮箱拥有者在锁外调用。
+ * <br>2026/11/03：会话提交核验一次编译的表达语义投影。
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class AgentConversationEngine {
     private final LLMMessageCodec codec;
@@ -132,6 +133,7 @@ public final class AgentConversationEngine {
     }
     /**
      * 只生成通过原协议验证的成功轮次，供窗口提交和后台摘要共同使用。
+     * 2026/11/03：原始模型链、最后语义答案与冻结表达计划分别核验。
      * @param prepared 原装配数据
      * @param result 原结果
      * @return 完整新增轮次；非成功为空
@@ -155,7 +157,8 @@ public final class AgentConversationEngine {
                     || codec.signature(projection.input().messages()).bytes() > prepared.options().maxInputBytes()) {
                 throw new IllegalArgumentException("Prompt 投影与会话原始输入或字节预算不一致。");
             }
-            var verified = projection.input().project(interaction, codec);
+            // 2026/11/03：原模型链与表达语义投影同时复核，不放宽前缀或身份检查。
+            var verified = projection.revalidate(codec);
             if (!codec.signature(verified).equals(codec.signature(projection.messages()))) {
                 throw new IllegalArgumentException("Prompt 已验证投影在交接中发生变化。");
             }
@@ -172,7 +175,7 @@ public final class AgentConversationEngine {
         LLMMessageHistory.validateComplete(transcript);
         var last = transcript.getLast();
         if (!(last instanceof ILLMAssistantMessage assistant) || !assistant.getToolCalls().isEmpty()
-                || !codec.signature(List.of(last)).equals(codec.signature(List.of(interaction.finalCandidate().orElseThrow())))) {
+                || !codec.signature(List.of(last)).equals(codec.signature(List.of(result.answer().orElseThrow())))) {
             throw new IllegalArgumentException("成功轮次的最终候选与完整历史不一致。");
         }
         var delta = transcript.subList(prepared.historyMessages(), transcript.size());
@@ -197,6 +200,11 @@ public final class AgentConversationEngine {
     public long resultBytes(AgentRunResult result) {
         try {
             long bytes = add(4096, codec.serializedBytes(result.budgetUsage()));
+            // 2026/11/03：重放缓存同时计入冻结计划及插件版本，未知负载按原失败策略拒绝保留。
+            if (result.replyPlan() != null) {
+                bytes = add(bytes, codec.serializedBytes(result.replyPlan().steps()));
+                bytes = add(bytes, codec.serializedBytes(result.replyPlan().tokens()));
+            }
             var projection = result.promptTranscript();
             if (projection != null) {
                 bytes = add(bytes, codec.serializedBytes(projection.input()));

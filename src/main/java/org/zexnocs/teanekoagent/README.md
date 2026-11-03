@@ -9,6 +9,8 @@ v4.6.0-l 增加插件能力装配，开发入口见 [Agent 插件指南](../../.
 | 首次部署、配置及实机检查 | [部署说明](../../../../../../docs/development/agent-deployment.md) |
 | 显式聊天、管理与命令工具 | [命令说明](adapter/command/README.md) |
 | 自动图文入站、回复形式、定时/接话 | [平台说明](adapter/platform/README.md) |
+| 拟人分段、发送节奏与注解协议 | [表达与交付](expression/README.md) |
+| 表情包采集、视觉分类、共享素材及容量 | [素材库](sticker/README.md) |
 | 内部客户端、三类 Sender、直接服务 | [内部集成](client/README.md) |
 | 实例、共享会话、预算与取消 | [运行领域](agent/README.md) |
 | 数据库入口 | [专用 EasyData](database/easydata/README.md) |

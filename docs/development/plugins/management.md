@@ -14,6 +14,10 @@ requestType 返回具体请求 DTO 的 Class，宿主按该类型解析与验证
 | --- | --- | --- |
 | teaneko.core:plugins | PluginCatalogResource.Query；plugins.inspect，全局授权 | PluginRegistry.View 列表：声明、当前有效开关、revision |
 | teaneko.agent:instances | AgentManagementResource.Query(after, limit)；agent.inspect，全局授权 | 实例 ID、定义 ID、显式声明能力、全局注册能力目录及关闭状态；limit 为 1–100，末项 ID 可作为后继游标 |
+| teaneko.agent:stickers | StickerManagement.Query(kind,after,limit,category,state)；agent.stickers.inspect，scopeRef=global | 图库或作业有界分页、类别与容量统计；没有作者、源 URL 或原话 |
+| teaneko.agent:stickers.preview | StickerManagement.Preview(id,expectedRevision)；agent.stickers.preview，scopeRef=global | 最多 1.5MiB 的单幅合成 PNG 内联预览 |
+| teaneko.agent:stickers.change | StickerManagement.Change；agent.stickers.manage，scopeRef=global | 按版本固定、停用、删除、恢复、修正或重新分析的持久回执 |
+| teaneko.agent:stickers.operation | StickerManagement.OperationQuery(operationId)；agent.stickers.inspect，scopeRef=global | 当前主体本人原操作的真实回执 |
 
 availableFeatures 是可安装目录，不代表全部启用或当前主体获准执行；declaredFeatures 是实例显式声明，不把默认/依赖展开伪装为用户声明。全局实例视图没有 group 过滤参数，不得授予仅有某群管理权限的主体。
 
@@ -33,9 +37,13 @@ ManagementContext 的 subject、scopeRef 来自已认证适配器，requestId �
 
 Agent Store 仍经 TeaNekoAgentEasyData；群配置普通字段复用 ConfigData 校验，namespace/人格绑定等特殊管理走专用用例。当前 ConfigData 通用字段接口尚无完整的 Web 原子版本更新合同，不能先在 Controller 读一次版本就声称具备 CAS。
 
+图库请求与视图定义在 StickerManagement，业务服务为 StickerManagementService，四项资源为自动注册的 StickerManagementResources Bean。例如先通过 stickers 查询得到 id/revision，再提交 Change(UUID.randomUUID(),id,revision,Action.PIN,null,null)。超时后保留同一 operationId 查询 stickers.operation；在保留窗口内使用完全相同请求重放亦可，不能生成新 ID 猜测上次是否提交。
+
+图库幂等回执与目录写入在同一 DTO 根事务，保留 24 小时且最多 512 项；冲突或窗口满拒绝，授权在执行及返回时复核。DELETE 保留拒绝同图自动复活的墓碑，RESTORE 才解除；REFRESH 要求明确已登记分析区域，只借用 SYSTEM 视觉活动和原有预算，不把管理身份变成聊天 USER。各动作和预览/刷新文件占用的完整约束见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md#全局管理-spi)。
+
 ## 后续业务资源
 
-[Web 管理设计](../../design/web-management-api.md) 保留了记忆、群配置、任务/Timer/运行实例、运行报告、日志及实时事件的资源形状。当前已经落地的是插件管理 SPI 和上面的两个查询资源，其他业务资源需要各自完成授权映射、结构化 DTO、版本更新或持久历史后发布，不提供空路由。
+[Web 管理设计](../../design/web-management-api.md) 保留了记忆、群配置、任务/Timer/运行实例、运行报告、日志及实时事件的资源形状。当前已经落地的是插件管理 SPI、插件与实例查询以及四项图库资源；其他业务资源需要各自完成授权映射、结构化 DTO、版本更新或持久历史后发布，不提供空路由。
 
 Timer 定义、持久计划和单次 TaskRun 分开展示。底层命令调用任务可能先结束，外层业务 Stage 尚未结束，页面应跟踪业务 runId 的真实阶段。取消请求不等于已撤销副作用，INDETERMINATE 不显示为安全可重试。
 

@@ -12,6 +12,9 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 不提供认证、连接或补正 key 的普通 cfg 写入入口。
  *
  * <br>2026/11/03：新 scope 默认允许自动长期学习，已有显式关闭配置继续生效。
+ * <br>2026/11/03：登记独立拟人表达开关。
+ * <br>2026/11/03：登记独立素材采集开关，不绑定记忆学习。
+ * <br>2026/11/03：分别控制共享图库回复和客户端原生表情。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -21,6 +24,18 @@ import org.zexnocs.teanekocore.framework.description.Description;
 public class AgentScopeConfigData implements IConfigData {
     @Description("是否启用当前作用域的 Agent 功能。")
     private boolean enabled = true;
+    // 2026/11/03：表达与记忆学习开关独立，旧记录缺省允许。
+    @Description("是否使用人格驱动的拟人分段和发送节奏；关闭后保留原普通回复。")
+    private boolean expressionEnabled = true;
+
+    // 2026/11/03：已登记启用区域默认允许收集真实人类图片，仍执行本地限流。
+    @Description("是否允许当前作用域主动/被动收集表情包；全实例共享图库，独立于记忆学习。")
+    private boolean stickerCollectEnabled = true;
+    // 2026/11/03：选择发送与采集独立，关闭采集仍可使用既有图库。
+    @Description("是否允许当前作用域按本轮类别查询使用共享表情包；仍要求表达能力与客户端支持。")
+    private boolean stickerReplyEnabled=true;
+    @Description("是否允许当前作用域使用当前客户端明确提供的原生表情目录，不占表情包图库。")
+    private boolean nativeExpressionsEnabled=true;
 
     @Description("是否向真实原生用户请求开放命令工具；仍执行原命令权限，默认关闭。")
     private boolean commandToolsEnabled = false;

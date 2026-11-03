@@ -15,15 +15,17 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.*;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
  * 组合可信身份、动态开关、引用复核及事实业务，不授予模型记忆管理或其他主体写入能力。
  * 所有策略和业务调用回到借用业务域；动作前观察不替代原存储事务中的 generation 仲裁。
+ * <br>2026/11/03：默认明确保存路由到新长期领域，独立旧宿主保留原事实端口。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class MemoryAccessService {
     private final IMemoryAccessPolicy policies;
@@ -32,6 +34,7 @@ public final class MemoryAccessService {
     private final IUserProfileService profiles;
     private final MemoryFacts facts;
     private final Executor executor;
+    private final @Nullable Function<MemoryFactAppend, CompletionStage<MemoryAddResult>> explicit;
 
     /**
      * 保存可替换业务端口，构造不读取配置、数据库或创建执行器。
@@ -45,12 +48,29 @@ public final class MemoryAccessService {
      */
     public MemoryAccessService(IMemoryAccessPolicy policies, IAgentMemoryReferences references, IMemoryRecallService recall,
             IUserProfileService profiles, MemoryFacts facts, Executor executor) {
+        // 2026/11/03：旧独立宿主不自动改变存储域。
+        this(policies, references, recall, profiles, facts, executor, null);
+    }
+    /**
+     * 2026/11/03：新增可替换的明确保存路由，原权限与原文校验继续在本边界完成。
+     * @param policies 当前策略
+     * @param references 原空间校验
+     * @param recall 旧事实检索
+     * @param profiles 旧画像
+     * @param facts 原事实追加
+     * @param executor 原业务域
+     * @param explicit 可选的新长期保存路由
+     */
+    public MemoryAccessService(IMemoryAccessPolicy policies, IAgentMemoryReferences references, IMemoryRecallService recall,
+            IUserProfileService profiles, MemoryFacts facts, Executor executor,
+            @Nullable Function<MemoryFactAppend, CompletionStage<MemoryAddResult>> explicit) {
         this.policies = Objects.requireNonNull(policies, "记忆访问策略端口不能为空。");
         this.references = Objects.requireNonNull(references, "记忆引用校验端口不能为空。");
         this.recall = Objects.requireNonNull(recall, "记忆检索端口不能为空。");
         this.profiles = Objects.requireNonNull(profiles, "记忆画像端口不能为空。");
         this.facts = Objects.requireNonNull(facts, "记忆追加服务不能为空。");
         this.executor = Objects.requireNonNull(executor, "记忆业务执行器不能为空。");
+        this.explicit = explicit;
     }
 
     /**
@@ -137,6 +157,8 @@ public final class MemoryAccessService {
             var source = new MemoryFactSource(context.requestId(), actionId, context.actor());
             var operationId = UUID.nameUUIDFromBytes(("agent-memory-add-v1:" + context.requestId() + ":" + source.actionId()).getBytes(StandardCharsets.UTF_8));
             var command = new MemoryFactAppend(operationId, context.reference(), subject, value, source);
+            // 2026/11/03：工具和内部客户端共用此路径，明确原文立即提交，不等待后台模型。
+            if (explicit != null) { return explicit.apply(command); }
             return facts.append(command).thenApplyAsync(receipt -> {
                 Objects.requireNonNull(receipt, "明确新增回执不能为空。");
                 var record = receipt.record();

@@ -35,6 +35,7 @@ import static org.mockito.Mockito.*;
 /**
  * 复用真实事务夹具验证观察积累、渐进采用、原人格隔离与联合提交回滚。
  * <br>2026/11/03：补充观察原话和补正到期清理、容量释放及不可变备份保护。
+ * <br>2026/11/03：核对默认送达账本与分层资料的联合装配。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
@@ -194,7 +195,7 @@ class StyleObservationIntegrationTest {
             }
         }
     }
-    /** 默认 Spring 组合能找到观察事务端口，构造期间不读取配置、创建模型实例或启动学习。 */
+    /** 2026/11/03：默认 Spring 组合能找到观察与送达端口，构造期间不读取配置、创建模型实例或启动学习。 */
     @Test void wiresDefaultObservationWithoutStartingModels() {
         try (var h = new Harness(); var executor = Executors.newVirtualThreadPerTaskExecutor(); var timers = Executors.newSingleThreadScheduledExecutor();
              var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
@@ -209,9 +210,11 @@ class StyleObservationIntegrationTest {
             beans.registerSingleton("manager", new org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigManager());
             beans.registerSingleton("virtualExecutor", executor); beans.registerSingleton("taskExecutor", timers); beans.registerSingleton("logger", mock(ILogger.class));
             context.register(org.zexnocs.teanekoagent._app_config.StyleObservationConfig.class, org.zexnocs.teanekoagent._app_config.LayeredMemoryConfig.class,
-                    org.zexnocs.teanekoagent._app_config.PersonalityLearningConfig.class);
+                    org.zexnocs.teanekoagent._app_config.PersonalityLearningConfig.class, org.zexnocs.teanekoagent._app_config.AgentDeliveryConfig.class);
             context.refresh();
             assertInstanceOf(EasyDataStyleObservationStore.class, context.getBean(IStyleObservationStore.class));
+            assertInstanceOf(org.zexnocs.teanekoagent.adapter.memory.EasyDataDeliveryStore.class, context.getBean(org.zexnocs.teanekoagent.history.IAgentDeliveryStore.class));
+            assertNotNull(context.getBean(org.zexnocs.teanekoagent.history.AgentDeliveryService.class));
             assertNotNull(context.getBean(StyleObservationService.class));
             assertEquals(List.of("personality_observations"), org.zexnocs.teanekoagent.tool.TeaNekoAgentToolMethods.names(context.getBean(StyleObservationTools.class).getClass()));
             verifyNoInteractions(models, gate, refs, configs);

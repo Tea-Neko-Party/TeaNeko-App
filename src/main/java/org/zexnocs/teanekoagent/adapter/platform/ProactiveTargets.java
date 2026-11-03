@@ -13,10 +13,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 自主发送的可信目标解析，不从模型输出接收客户端、群号或用户身份。
+ * <br>2026/11/03：发送完成必须包含实际平台消息 ID。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Service
 public final class ProactiveTargets {
@@ -90,7 +91,8 @@ public final class ProactiveTargets {
     public CompletionStage<Void> send(Target target, String text, Runnable guard) {
         guard.run(); var client = verify(target); var tools = client.getTeaNekoToolbox().getMessageSenderTools();
         var sender = target.group() ? tools.getGroupBuilder(target.id()) : tools.getPrivateBuilder(target.id());
-        sender.setRetryCount(0).setRecordFailed(false).addTextMessage(text); guard.run(); return sender.sendAsync();
+        // 2026/11/03：自主发言也要求平台返回实际消息标识。
+        sender.setRetryCount(0).setRecordFailed(false).addTextMessage(text); guard.run(); return AgentReplySender.confirm(sender.sendWithFuture());
     }
 
     /**

@@ -1,6 +1,8 @@
 package org.zexnocs.teanekoagent.memory.layered;
 
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.memory.access.MemoryAddResult;
+import org.zexnocs.teanekoagent.memory.fact.MemoryFactAppend;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekoagent.personality.StyleObservations;
 
@@ -13,12 +15,22 @@ import java.util.concurrent.CompletionStage;
 /**
  * 长期整理与召回事务端口，权威记录和索引同事务更新，不直接访问仓库。
  * <br>2026/11/03：联合提交风格观察，未支持的替换存储明确拒绝观察写入。
+ * <br>2026/11/03：明确保存与后台整理共用长期记录及索引。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
  * @version 4.6.1-l
  */
 public interface ILongTermMemoryStore {
+    /**
+     * 2026/11/03：保存已经过可信原文意图验证的本人事实，不调用模型。
+     * @param command 固定身份、空间、原文及操作 ID
+     * @param now 实际提交时刻
+     * @return 实际事务回执
+     */
+    default CompletionStage<MemoryAddResult> appendExplicit(MemoryFactAppend command, Instant now) {
+        return java.util.concurrent.CompletableFuture.failedStage(new UnsupportedOperationException("当前长期存储不支持明确保存。"));
+    }
     /**
      * 领取尚未整理的中期片段，只有原任务租约拥有提交权。
      * @param stream 来源分区

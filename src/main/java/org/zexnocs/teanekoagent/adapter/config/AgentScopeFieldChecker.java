@@ -9,10 +9,13 @@ import java.util.Arrays;
 /**
  * 校验作用域开关、活动模式及窗口覆盖，拒绝未知字段，不承担调用者权限校验。
  *
+ * <br>2026/11/03：沿用原 cfg 权限校验新的表达开关。
+ * <br>2026/11/03：素材采集开关执行相同严格布尔校验。
+ * <br>2026/11/03：共享图库和原生表情回复开关同样严格校验。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class AgentScopeFieldChecker implements IConfigFieldChecker {
     /**
@@ -24,7 +27,9 @@ public final class AgentScopeFieldChecker implements IConfigFieldChecker {
      */
     @SuppressWarnings("ResultOfMethodCallIgnored")
     @Override public String isValid(String field, String value) {
-        if ("proactiveTimedEnabled".equals(field) || "proactiveInterjectionEnabled".equals(field) || "enabled".equals(field) || "commandToolsEnabled".equals(field) || "skillsEnabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
+        // 2026/11/03：表达与素材采集开关沿用原严格布尔校验。
+        // 2026/11/03：资源开关沿用现有 cfg 权限与严格布尔约束。
+        if ("stickerReplyEnabled".equals(field) || "nativeExpressionsEnabled".equals(field) || "stickerCollectEnabled".equals(field) || "expressionEnabled".equals(field) || "proactiveTimedEnabled".equals(field) || "proactiveInterjectionEnabled".equals(field) || "enabled".equals(field) || "commandToolsEnabled".equals(field) || "skillsEnabled".equals(field) || "memoryReadEnabled".equals(field) || "memoryAddEnabled".equals(field) || "memoryLearningEnabled".equals(field)
                 || "customPersonalityEnabled".equals(field) || "personalityCorrectionsEnabled".equals(field) || "personalityLearningEnabled".equals(field)
                 || "historyCaptureEnabled".equals(field) || "historyReadEnabled".equals(field) || "autoSummaryEnabled".equals(field)) {
             return "true".equals(value) || "false".equals(value) ? null : "Agent 开关只能为 true 或 false。";

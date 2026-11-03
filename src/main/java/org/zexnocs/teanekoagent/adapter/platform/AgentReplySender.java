@@ -5,10 +5,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 将已授权计划的一段投影到原发送器，不从模型读取用户或消息 ID。
+ * <br>2026/11/03：只有包含实际平台消息 ID 的回执才确认发送。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class AgentReplySender {
     /** 禁止创建无状态工具实例。 */
@@ -30,6 +31,17 @@ public final class AgentReplySender {
             case AgentReplyPlan.Text text -> sender.addTextMessage(text.value());
             case AgentReplyPlan.Image image -> sender.addImageMessage(image.platformReference());
         }
-        return sender.sendAsync();
+        // 2026/11/03：通用完成信号不额外证明平台接受，本边界要求有效消息回执。
+        return confirm(sender.sendWithFuture());
+    }
+    /**
+     * 2026/11/03：确认原发送返回实际消息标识，不将非空错误对象当作送达。
+     * @param task 原平台发送任务
+     * @return 带有效消息标识的真实回执阶段
+     */
+    public static CompletionStage<Void> confirm(org.zexnocs.teanekocore.actuator.task.TaskFuture<? extends org.zexnocs.teanekoapp.response.api.IMessageSendResponseData> task) {
+        return task.asStage().thenAccept(response -> {
+            if (response == null || response.getMessageId() == null || response.getMessageId().isBlank()) { throw new IllegalStateException("平台没有返回有效消息标识，发送结果未确认。"); }
+        });
     }
 }

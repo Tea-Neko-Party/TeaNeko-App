@@ -22,6 +22,24 @@
 ## Java 代码约定
 
 - 所有显式声明的 `serialVersionUID` 字段必须添加 `java.io.Serial` 的 `@Serial` 注解。
+- 优先使用菱形语法 `<>` 和上下文可推断的泛型实参，避免冗余显式类型参数；异步链、条件表达式或重载导致推断不稳定时，优先给局部变量或阶段声明准确类型，不使用原始类型、未经检查的强制转换或压制警告掩盖问题。
+- 仅转发参数调用已有方法且语义完全相同时，优先使用清晰的方法引用替代 lambda；保留需要分支、额外参数、执行顺序或不同求值时机的 lambda，不为消除提示改变行为。
+- 空值标注须符合实际契约：允许接收 null 的 setter、构造参数及辅助方法参数显式标注 `@Nullable`，并与字段和返回值保持一致；字段可空仅表示尚未装配时，不据此扩大必须非空的注入参数契约。使用 Lombok 生成访问器时核对空值注解是否正确传递，必要时显式声明访问器，不靠忽略检查解决。
+- 新增或修改时顺手消除冗余初始化、重复赋值和无必要别名；异步资源须按真实执行阶段保留和释放，不能为消除警告提前关闭。
+
+## 代码排版与可读性
+
+- Java 使用四个空格缩进，运算符、逗号及控制语句周围保留常规空格；每行原则上只写一条语句，不将多个字段赋值、分支或资源清理压在同一行。
+- 方法、构造方法、条件分支、循环、同步块及 try/catch 使用清晰的多行结构；注解与方法声明分行，JavaDoc 的各个标签分别占行，成员和不同逻辑步骤之间保留必要空行。
+- 长参数列表、条件和链式调用按语义换行并统一缩进，通常以 120 字符为软上限；不为机械对齐堆叠空格，也不将简单表达式拆成难以连读的碎片。
+- 含业务分支的异步 lambda 展开为可阅读代码块；必要时用准确命名的局部变量或小方法说明阶段和数据类型，避免多层嵌套与复杂条件表达式相互叠加。
+- 修改范围内主动检查 IDE 常见提示及编译器泛型警告；不为全局统一格式引入无关大范围重排、额外格式化框架或大量机械测试。
+
+## 扩展与装配
+
+- 新增或实质调整需要按类型、协议或标识分派的扩展点时，优先采用职责明确的接口、声明式注解、Spring Bean 和注册表组合；扩展实现通过现有 scanner 发现，不手动实例化依赖 Spring 管理的实现，不以不断增加中央条件分支代替扩展契约。
+- 注解声明稳定标识及必要版本或适用范围；注册时校验接口、声明和键的唯一性，冲突须明确报告，不依赖扫描顺序静默覆盖。具体业务注解与接口留在所属模块，仅将确有复用价值的扫描或注册机制放入 Core。
+- 扩展发现与实际启用分开；继续遵守原插件归属、能力选择、客户端范围、权限、预算、并发和生命周期约束。普通数据对象和内部辅助方法不为套用该模式增加无用注解、扫描或注册层。
 
 ## 文件配置与环境变量
 
@@ -64,8 +82,11 @@
 
 ## 测试与诊断习惯
 
-- 修改行为时补充与风险相称的测试；线程切换、权限边界、参数绑定、迁移幂等和资源关闭必须优先覆盖。
-- 开发优先交付正确、可用的完整功能；只补必要的核心流程、重要业务约束和高风险边界测试，优先复用已有夹具和用例，不重复验证既有覆盖，不为简单数据结构、机械分支或实现细节堆叠测试；不以测试数量或覆盖率替代功能交付。
+- 修改行为时补充与风险相称的测试，优先验证核心业务逻辑、身份认证、重要 API、数据库操作及关键用户流程；失败影响最大的功能应优先覆盖，尤其是线程切换、权限边界、参数绑定、迁移幂等和资源关闭。
+- 开发优先交付正确、可用的完整功能；只编写能发现实际缺陷的必要核心流程、重要业务约束和高风险边界测试，优先复用已有夹具和用例，不重复验证既有覆盖，不为简单数据结构、机械分支或实现细节堆叠测试，避免无意义断言；不以测试数量或覆盖率替代功能交付。
+- 根据风险选择测试层级，优先使用快速的单元测试和集成测试；仅为关键用户流程补充端到端测试。
+- 沿用现有测试工具和项目约定，不引入无必要的框架、模拟对象或复杂测试基础设施，避免过度设计。
+- 运行相关测试并修复发现的问题；交付时简要说明验证范围、通过情况和剩余风险。
 - 诊断启动问题时读取完整的第一条根因和最深层 `Caused by`，不要只根据最后一层包装异常判断。
 - 以日志中的实际活动 Profile、JDBC URL 类型和驱动类型为准；先区分配置错误、框架错误和业务构造错误。
 - `sun.misc.Unsafe` 的 JOML 警告以及 Windows OSHI 性能计数器警告来自服务端依赖；除非它们导致启动失败，否则不要当作插件缺陷修改业务代码。
@@ -95,9 +116,3 @@
 - 开始任务或上下文压缩后，先读最新 AGENTS.md 和对应计划入口，再按本次修改读取必要的规格章节、模块文档及代码；不默认重读所有需求、源码和历史报告。出现歧义、并发修改或上下文缺失时扩大阅读，用户明确要求完整重读时仍完整执行。
 - 交付报告只说明本次新增功能、必要验证、剩余限制及下一步；不重复粘贴既有实现经过或完整测试列表。详细证据留在日志或按需查阅的归档中。
 - 节约 token 不降低必要的代码阅读、风险测试、中文 JavaDoc 和验收要求；用户明确要求的完整重读仍完整执行。
--Prioritize critical functionality: Test core business logic, authentication, important API endpoints, database operations, and essential user workflows.
--Focus on high-risk areas: Prioritize functionality where failures would have the greatest impact.
--Keep testing minimal: Write only meaningful tests that catch realistic bugs. Avoid excessive coverage, redundant tests, and trivial assertions.
--Choose the appropriate test level: Prefer fast unit and integration tests. Add E2E tests only for essential user journeys.
--Avoid overengineering: Use existing testing tools and project conventions. Do not introduce unnecessary frameworks, mocks, or complex test infrastructure.
--Verify and report: Run relevant tests, fix discovered issues, and summarize what was tested, what passed, and any remaining risks.

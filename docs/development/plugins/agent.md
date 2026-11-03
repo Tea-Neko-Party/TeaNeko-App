@@ -96,6 +96,29 @@ AgentTurnReport 字段：requestId、agentId、scope、activity、status 定位�
 
 报告依赖原 AgentRuntimeMonitor 的有界异步发布，拥塞或监听失败允许丢弃，不能把它作为持久审计或完整历史数据库。异步监听只消费快照，不延长原轮次成功或失败。
 
+## 表情包生命周期事件
+
+这两项为全实例图库事件，独立于某个 AgentFeature。监听器仍使用 Core @EventListener、@EventHandler 和 @PluginOwned；安装 PluginModule 后还须在 config/agent/stickers.yml 的 event-plugins 列出插件 ID，默认无第三方参与。
+
+| 事件 | 触发与字段 | 允许操作 |
+| --- | --- | --- |
+| StickerCollectingEvent | 入队前；getData() 的 proposalId 是候选去重定位，scope 为真实 client/区域，manual 是主动收藏，image 为从零起的图片序号，occurredAt 为原时间；不含图片链接、原话和作者 | public void 同步监听，suggest 最多 256 字符低信任视觉建议，setCancelled(true) 单向拒绝；不能改来源、取消后恢复或使用异步监听 |
+| StickerCommittedEvent | 事务成功后；catalogId 标识实例图库，kind 为 COLLECTION_COMPLETED 或 MANAGEMENT，operationId 是原作业/管理操作 UUID，entryId 可能为空，catalogRevision 是已提交版本，at 为提交观察时间，status 为作业终态或管理动作 | 只读通知，可异步观察；不能取消或替换，不能借通知重新执行原副作用 |
+
+```java
+@EventListener
+@PluginOwned("example.stickers")
+public final class StickerHintListener {
+    /** @param event 宿主提供的真实候选草稿 */
+    @EventHandler
+    public void collecting(StickerCollectingEvent event) {
+        event.suggest("优先判断人物动作是否能够独立表达聊天情绪");
+    }
+}
+```
+
+补充提示不会改变插画排除、类型门槛、容量或当前来源权限。决策在通知结束、失败或五秒超时后冻结，迟到修改抛错；未结束的物理任务仍占有界名额。提交事件是尽力观察，可能因拥塞/失败缺失，不是可靠审计或浏览器订阅协议；消费者通过管理 SPI 查询当前状态，不能以事件回调失败推断事务回滚。文件后端、预览和刷新合同见[素材扩展文档](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md#扩展开发)。
+
 ## 修改异步 Stage 链
 
 当前明确开放的是资料解析操作：promptInterceptors() 返回 `OperationPipeline.Binding<AgentPluginContext, List<AgentPromptFragment>>`。Binding 的 pluginId 必须与能力所属一致；order 越大越先进入，相同顺序由稳定标识决定。
@@ -128,6 +151,11 @@ IAgentPromptSource.resolve 返回完整资料；verify 在原模型、工具及�
 | 自动三层记忆 | ILayeredMemoryCompressor 与 ILongTermMemoryConsolidator 可分别替换摘要和长期选择；复用单个 LayeredMemoryProcessor。替换 ILongTermMemoryStore 仍须实现证据验证、索引/水位原子提交、维护幂等和遗忘抑制。普通资料及工具通过 teaneko.agent:layered-memory、teaneko.agent:long-memory 安装，详见[分层记忆](../../../src/main/java/org/zexnocs/teanekoagent/memory/layered/README.md) |
 | 观察式人格 | ILongTermMemoryConsolidator.analyze 可在原模型请求同时返回 StyleObservations.Analysis；Target 由宿主固定，插件不能替换人格或自报来源。IStyleObservationStore 在原事务保存观察与采用，独立样本、原管理身份、字段锁定和已关闭学习域仍由宿主验证；旧 consolidate 函数式实现继续兼容 |
 | 记忆维护 | 实现 IMemoryMaintenance 并注册 Bean，原 MemoryMaintenanceService 串行等待每个端口完成；每批必须有界，游标与回收同事务提交，不使用学习关闭作为无限保留过期数据的依据。替换 Store 时同时实现维护或明确提供独立清理后端，保留有效数据、幂等及遗忘保护 |
+| 明确保存 | 默认 ConversationHistoryService 借用 ExplicitMemoryCapture 在模型前提交真实用户原文；替换 IAgentHistoryRecorder 时自行接入这一职责，不能依赖模型必定调用 memory_add。替换 ILongTermMemoryStore 时实现 appendExplicit 的幂等、完整附加信息、有效期和人工保护；未实现默认失败，不能丢弃保存请求 |
+| 平台回执 | 实现 IAgentDeliveryStore 并注册 Bean，AgentDeliveryService 复用原发送链；先占用、等待真实平台消息 ID、逐段记录。已确认重放跳过传输，未知占用禁止自动补发；按原 scope/绑定/generation 读取并有界清理，不把生成或已接受当成对方已读 |
+| 回复协议、指令与内容 | Spring Bean 分别声明 @TeaNekoReplyProtocol、@TeaNekoReplyDirective、@TeaNekoReplyPartHandler 并实现对应接口，按精确 ID/版本注册；复用 scanner 和原插件归属。内容 resolve 可异步，宿主统一冻结计划、控制节奏并检查真实回执，见[表达扩展](../../../src/main/java/org/zexnocs/teanekoagent/expression/README.md#扩展开发) |
+| 表情包采集后端 | Spring Bean 实现 IStickerAnalyzer、IStickerAssetStore、IStickerAdmissionPolicy 或 IStickerCatalog，并声明对应 @TeaNekoSticker 注解；本地配置精确选择标识，复用原插件代次。目录回调保持短事务，分析和文件动作在事务外；类型、容量、来源及迟到提交仍由宿主复核，见[素材扩展](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md#扩展开发) |
+| 类别选图与原生表情 | teaneko.agent:media-replies 依赖 expression；sticker_list 只在实际资料保留时安装，编译只接受本轮成功完整回执。客户端 Bean 实现 IExpressionClientAdapter 并声明 @TeaNekoExpressionClient，提供明确能力、目录和独立确认；资源发送覆写 IReplyPartHandler 的 ReplySendContext 重载并在异步动作后再次守卫，详见[客户端扩展](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md#扩展客户端编码) |
 | Skill | 继续经现有本地目录校验/发布与 Skill 策略选择；插件功能配套的 Skill 资源按部署说明安装，不因 JAR 存在就自动发布目录或增加权限 |
 | 显式工作流 | 借用已有 AgentWorkflowService 安排实例，共享原父预算；不透明地自动调用其他 Agent 不属于注册能力 |
 | 管理页面 | 贡献 ManagementResource，按 [管理扩展](management.md) 提供脱敏查询或明确管理操作 |

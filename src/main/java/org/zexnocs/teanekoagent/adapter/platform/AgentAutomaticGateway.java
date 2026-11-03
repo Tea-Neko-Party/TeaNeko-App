@@ -9,11 +9,15 @@ import org.zexnocs.teanekoagent.agent.command.CommandInvocationReceipt;
 import org.zexnocs.teanekoagent.agent.command.ICommandAttemptStore;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.agent.trigger.AgentTriggerGate;
+import org.zexnocs.teanekoagent.expression.ExpressionDelivery;
+import org.zexnocs.teanekoagent.expression.ReplyCoordinator;
+import org.zexnocs.teanekoagent.history.AgentDeliveryService;
 import org.zexnocs.teanekoagent.history.HistoryContext;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.nio.charset.StandardCharsets;
@@ -26,10 +30,13 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 自动消息的模型、持久化防重与顺序发送闭环，不借用命令 DEBUG 或内部客户端。
+ * <br>2026/11/03：逐段保存实际平台回执，失败不自动补发。
+ * <br>2026/11/03：自动回复接入独立等待及精确类型发送，关闭停止未发送尾部。
+ * <br>2026/11/03：来源租约改用确定赋值，明确同步失败与异步交付的释放边界并整理排版。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Service
 public final class AgentAutomaticGateway implements AutoCloseable {
@@ -43,6 +50,32 @@ public final class AgentAutomaticGateway implements AutoCloseable {
     private final NativeCommandBridge nativeCommands;
     private @Nullable AgentHandle handle;
     private boolean closed;
+    private @Nullable AgentDeliveryService delivery;
+    // 2026/11/03：拥有者只标记本入口生命周期，不作为持久身份或目标边界。
+    private final String replyOwner = "automatic:" + UUID.randomUUID();
+    private @Nullable ReplyCoordinator coordinator;
+    private @Nullable ExpressionDelivery expressionDelivery;
+    /**
+     * 2026/11/03：完整默认装配共享真实目标队列，旧独立宿主保持原行为。
+     * @param delivery 表达交付边界
+     * @param coordinator 目标顺序与取消
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setExpressions(ExpressionDelivery delivery, ReplyCoordinator coordinator) {
+        // 2026/11/03：可选装配的非空依赖分别赋值，保留未装配时的可空字段状态。
+        this.expressionDelivery = delivery;
+        this.coordinator = coordinator;
+    }
+
+    /**
+     * 2026/11/03：默认宿主可选接入账本，保留原独立构造方式。
+     * @param delivery 持久回执边界
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setDelivery(@Nullable AgentDeliveryService delivery) {
+        // 2026/11/03：参数与可清除的可空字段契约一致。
+        this.delivery = delivery;
+    }
 
     /**
      * 组合原会话、引用和防重服务，构造不创建实例或调用模型。
@@ -79,6 +112,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
 
     /**
      * 图文保持原顺序，已经采集的原消息继续使用同一空间及人格，排队后变化则拒绝。
+     * 2026/11/03：先取得真实发送目标的顺序位置，再运行原生成和交付。
      * @param data 原生来源
      * @param input 原生冻结图文
      * @param ticket 原触发票据
@@ -87,40 +121,90 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      */
     public CompletionStage<Boolean> respond(ITeaNekoMessageData data, NativeMessageInput input, AgentTriggerGate.Ticket ticket,
             @Nullable HistoryContext captured) {
+        if (coordinator != null) {
+            var actor = ticket.signal().actor();
+            var id = requestId(actor);
+            return coordinator.execute(replyOwner, actor, id, data.getClient().getTeaNekoToolbox().getSelfPlatformId().orElse(""),
+                    control -> respondPrepared(data, input, ticket, captured, control)).whenComplete((sent, failure) -> {
+                        if (failure != null) { access.release(ticket); triggers.finish(ticket, false); }
+                    });
+        }
+        return respondPrepared(data, input, ticket, captured, null);
+    }
+    /**
+     * 2026/11/03：保留原持久化准入，在真实顺序位置执行生成与发送。
+     * 2026/11/03：租约只赋值一次，完整异步交付和同步装配失败分别释放，不提前关闭。
+     * @param data 原来源
+     * @param input 原图文
+     * @param ticket 原票据
+     * @param captured 固定采集边界
+     * @param control 可选协调控制
+     * @return 实际交付状态
+     */
+    private CompletionStage<Boolean> respondPrepared(ITeaNekoMessageData data, NativeMessageInput input, AgentTriggerGate.Ticket ticket,
+            @Nullable HistoryContext captured, @Nullable ExecutionControl control) {
         try {
-            triggers.verify(ticket); var actor = ticket.signal().actor();
-            if (!actor.equals(org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge.actor(data)) || !input.hasContent() || input.text().length() > 65536) {
+            triggers.verify(ticket);
+            var actor = ticket.signal().actor();
+            if (!actor.equals(NativeCommandBridge.actor(data)) || !input.hasContent() || input.text().length() > 65536) {
                 throw new IllegalArgumentException("自动消息来源或文本无效。");
             }
-            var id = UUID.nameUUIDFromBytes(StableDigest.sha256("automatic-reply-v1", actor.scope().clientId(), actor.scope().scopeId(),
-                    actor.sourceId()).getBytes(StandardCharsets.UTF_8));
-            var fixed = captured == null ? references.resolve(actor.scope()) : references.verify(captured.reference()).thenApply(ignored -> captured.reference());
+            var id = requestId(actor);
+            var fixed = captured == null
+                    ? references.resolve(actor.scope())
+                    : references.verify(captured.reference()).thenApply(ignored -> captured.reference());
             return fixed.thenCompose(reference -> {
                 triggers.verify(ticket);
-                var attempt = new ICommandAttemptStore.Attempt(id, "automatic-entry", actor, reference, input.digest(), ICommandAttemptStore.Kind.CHAT_ENTRY);
+                var attempt = new ICommandAttemptStore.Attempt(id, "automatic-entry", actor, reference, input.digest(),
+                        ICommandAttemptStore.Kind.CHAT_ENTRY);
                 return attempts.claim(attempt).thenCompose(claim -> {
-                    if (!claim.acquired()) { return CompletableFuture.completedFuture(false); }
-                    CompletionStage<Boolean> work;
-                    NativeCommandBridge.Lease source = null;
-                    try {
-                        triggers.verify(ticket); access.bind(ticket); var target = instance();
-                        var request = new AgentRunRequest(id, actor, AgentActivity.AUTOMATIC_REPLY,
-                                List.of(AgentReplyPlan.instructions(), input.message()), null, reference, new AgentUserText(actor.sourceId(), input.text(), input.occurredAt()),
-                                Long.MAX_VALUE, captured == null ? null : captured.personality().identity());
-                        source = nativeCommands.open(request, data); var owner = source;
-                        work = agents.run(target, request).thenCompose(result -> send(data, target, request, result, ticket))
-                                .whenComplete((sent, failure) -> owner.close());
-                    } catch (RuntimeException failure) {
-                        if (source != null) { source.close(); } work = CompletableFuture.failedFuture(failure);
+                    if (!claim.acquired()) {
+                        return CompletableFuture.completedFuture(false);
                     }
+
+                    CompletionStage<Boolean> work;
+                    try {
+                        triggers.verify(ticket);
+                        access.bind(ticket);
+                        var target = instance();
+                        var request = new AgentRunRequest(id, actor, AgentActivity.AUTOMATIC_REPLY,
+                                List.of(AgentReplyPlan.instructions(), input.message()), null, reference,
+                                new AgentUserText(actor.sourceId(), input.text(), input.occurredAt()),
+                                Long.MAX_VALUE, captured == null ? null : captured.personality().identity());
+
+                        var source = nativeCommands.open(request, data);
+                        try {
+                            var generated = agents.run(target, request);
+                            if (control != null) {
+                                java.util.Objects.requireNonNull(coordinator).observe(control, generated,
+                                        () -> agents.cancel(target, actor.scope(), id, actor.userId().orElseThrow()));
+                            }
+                            work = generated.thenCompose(result -> send(data, target, request, result, ticket, control))
+                                    .whenComplete((sent, failure) -> source.close());
+                        } catch (RuntimeException failure) {
+                            source.close();
+                            throw failure;
+                        }
+                    } catch (RuntimeException failure) {
+                        work = CompletableFuture.failedFuture(failure);
+                    }
+
                     return work.whenComplete((sent, failure) -> access.release(ticket))
-                            .handle((sent, failure) -> attempts.finish(attempt, new CommandInvocationReceipt(failure == null
-                            ? CommandInvocationReceipt.Status.COMPLETED : CommandInvocationReceipt.Status.FAILED)).thenApply(receipt -> {
-                                if (failure != null) { throw new CompletionException(failure); } return sent;
-                            })).thenCompose(stage -> stage);
+                            .handle((sent, failure) -> {
+                                var status = failure == null
+                                        ? CommandInvocationReceipt.Status.COMPLETED : CommandInvocationReceipt.Status.FAILED;
+                                return attempts.finish(attempt, new CommandInvocationReceipt(status)).thenApply(receipt -> {
+                                    if (failure != null) {
+                                        throw new CompletionException(failure);
+                                    }
+                                    return sent;
+                                });
+                            }).thenCompose(stage -> stage);
                 });
             });
-        } catch (RuntimeException failure) { return CompletableFuture.failedFuture(failure); }
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
     }
 
     /**
@@ -130,15 +214,33 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      * @param request 原固定请求
      * @param result 原模型结果
      * @param ticket 原触发票据
+     * @param control 2026/11/03：可选独立交付控制
      * @return 全部平台回执成功时为真，空答案不发送
      */
     private CompletionStage<Boolean> send(ITeaNekoMessageData data, AgentHandle target, AgentRunRequest request,
-            AgentRunResult result, AgentTriggerGate.Ticket ticket) {
+            AgentRunResult result, AgentTriggerGate.Ticket ticket, @Nullable ExecutionControl control) {
+        // 2026/11/03：表达计划复用原票据和目标守卫，完成段数不通过重解析推断。
+        if (result.replyPlan() != null) {
+            if (result.replyPlan().steps().isEmpty()) { return CompletableFuture.completedStage(false); }
+            if (expressionDelivery == null || control == null) { return CompletableFuture.failedStage(new IllegalStateException("表达计划缺少实际交付装配。")); }
+            return expressionDelivery.send(data, request, result, control, () -> agents.retry(target, request).thenAccept(checked -> {
+                synchronized (this) { if (closed) { throw new IllegalStateException("自动回复入口已关闭。"); } }
+                triggers.verify(ticket);
+                if (checked.status() != AgentRunResult.Status.SUCCESS || !java.util.Objects.equals(checked.replyPlan(), result.replyPlan()) || !NativeCommandBridge.actor(data).equals(request.actor())) {
+                    throw new IllegalStateException("自动表达回复的原结果或目标已失效。");
+                }
+            })).thenApply(ignored -> true);
+        }
         var plan = AgentReplyPlan.from(result);
         if (plan.isEmpty()) { return CompletableFuture.completedFuture(false); }
         CompletionStage<Void> chain = CompletableFuture.completedFuture(null);
+        int next = 0;
         for (var part : plan.get().parts()) {
-            chain = chain.thenCompose(ignored -> agents.retry(target, request)).thenCompose(checked -> {
+            int index = next++;
+            // 2026/11/03：授权复核保留在实际发送回调内，不能被数据库等待隔开。
+            java.util.function.Supplier<CompletionStage<Void>> sending = () -> agents.retry(target, request).thenCompose(checked -> {
+                // 2026/11/03：旧协议同样响应已经生成后的发送取消。
+                if (control != null) { control.checkActive(); }
                 if (checked.status() != AgentRunResult.Status.SUCCESS || !AgentReplyPlan.from(checked).equals(plan)) {
                     return CompletableFuture.failedFuture(new IllegalStateException("自动回复的原结果已失效。"));
                 }
@@ -149,6 +251,8 @@ public final class AgentAutomaticGateway implements AutoCloseable {
                 }
                 return AgentReplySender.send(data, part);
             });
+            chain = chain.thenCompose(ignored -> delivery == null ? sending.get() : delivery.send(result.memoryReference(), request.actor(), request.requestId(),
+                    index, plan.get().parts().size(), part, sending));
         }
         return chain.thenApply(ignored -> true);
     }
@@ -165,5 +269,18 @@ public final class AgentAutomaticGateway implements AutoCloseable {
     }
 
     /** 关闭本入口拥有的实例，不关闭借用邮箱、执行器或其他宿主实例。 */
-    @Override @PreDestroy public synchronized void close() { closed = true; if (handle != null) { registry.remove(handle.id()); handle = null; } }
+    @Override @PreDestroy public void close() {
+        // 2026/11/03：先标记关闭，再在锁外停止等待与原实例。
+        AgentHandle current; synchronized (this) { closed = true; current = handle; handle = null; }
+        if (coordinator != null) { coordinator.cancelOwner(replyOwner); }
+        if (current != null) { registry.remove(current.id()); }
+    }
+    /**
+     * 2026/11/03：排队与原账本使用相同稳定请求标识。
+     * @param actor 原身份
+     * @return 稳定请求 ID
+     */
+    private static UUID requestId(AgentActorContext actor) {
+        return UUID.nameUUIDFromBytes(StableDigest.sha256("automatic-reply-v1", actor.scope().clientId(), actor.scope().scopeId(), actor.sourceId()).getBytes(StandardCharsets.UTF_8));
+    }
 }

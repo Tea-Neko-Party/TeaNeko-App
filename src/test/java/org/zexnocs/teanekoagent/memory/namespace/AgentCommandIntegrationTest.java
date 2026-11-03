@@ -91,6 +91,7 @@ import org.zexnocs.teanekocore.utils.StableDigest;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -104,10 +105,12 @@ import static org.mockito.Mockito.*;
 /**
  * 复用事务与 FakeClient，验证真实 Agent/命令往返、原权限、持久化防重及基本管理闭环。
  * <br>2026/11/02：验证无提及私聊和独立模型元数据，保留图文顺序与平台回复。
+ * <br>2026/11/03：原命令、自动和自主发送集成逐段持久回执。
+ * <br>2026/11/03：覆盖拟人编译、语义历史及双原生入口交付。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -133,13 +136,17 @@ class AgentCommandIntegrationTest {
     }
     /**
      * 实际扫描、分发、权限、执行、事件和 Agent 管线；只替换任务调度、scope 覆盖存储和供应商传输。
+     * <br>2026/11/03：加入真实专用数据发送账本，复用原发送、失败和取消用例。
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.0.0
-     * @version 4.5.0-l
+     * @version 4.6.1-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
+        // 2026/11/03：原入口集成用例同时验证实际平台发送账本，不另造网关夹具。
+        final org.zexnocs.teanekoagent.history.AgentDeliveryService delivery = new org.zexnocs.teanekoagent.history.AgentDeliveryService(
+                new org.zexnocs.teanekoagent.adapter.memory.EasyDataDeliveryStore(db.data, db.store, db.mapper), Runnable::run, Clock.systemUTC(), () -> Duration.ofDays(7));
         final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
         final ScheduledExecutorService timers = Executors.newScheduledThreadPool(2);
         final ILogger logger = mock(ILogger.class);
@@ -150,6 +157,36 @@ class AgentCommandIntegrationTest {
                 this.config.getProactiveCooldownSeconds(), this.config.getProactiveQuietStartHour(), this.config.getProactiveQuietEndHour()), Clock.systemUTC());
         final AgentAutomaticAccess automaticAccess = new AgentAutomaticAccess(triggers);
         final AtomicReference<String> automaticAnswer = new AtomicReference<>();
+        // 2026/11/03：仅新表达闭环用例启用，复用原事务、模型和发送夹具。
+        final @org.jspecify.annotations.Nullable ExpressionHarness expression;
+        /**
+         * 当前测试拥有的局部表达容器与队列，不引入新的数据库替身。
+         * @author zExNocs
+         * @date 2026/11/03
+         * @since 4.0.0
+         * @version 4.6.1-l
+         */
+        private final class ExpressionHarness implements AutoCloseable {
+            final org.springframework.context.annotation.AnnotationConfigApplicationContext beans = new org.springframework.context.annotation.AnnotationConfigApplicationContext();
+            final org.zexnocs.teanekoagent.expression.ExpressionRuntime runtime;
+            final org.zexnocs.teanekoagent.expression.ReplyCoordinator replies;
+            final org.zexnocs.teanekoagent.expression.ExpressionDelivery sending;
+            /** 仅注册真实协议类，配置和实际回执继续借用原夹具。 */
+            ExpressionHarness() {
+                beans.register(org.zexnocs.teanekoagent.expression.ExpressionReplyProtocol.class, org.zexnocs.teanekoagent.expression.TextReplyDirective.class,
+                        org.zexnocs.teanekoagent.expression.PlainReplyProtocol.class, org.zexnocs.teanekoagent.expression.JsonReplyProtocol.class,
+                        org.zexnocs.teanekoagent.expression.TextReplyHandler.class, org.zexnocs.teanekoagent.expression.ImageReplyHandler.class);
+                beans.refresh(); beans.getBeanFactory().registerSingleton("receipts", delivery);
+                runtime = new org.zexnocs.teanekoagent.expression.ExpressionRuntime(new org.zexnocs.teanekoagent.expression.ReplyExtensionRegistry(
+                        new org.zexnocs.teanekocore.utils.scanner.BeanScanner(beans, logger), null), org.zexnocs.teanekoagent.expression.ExpressionSettings::defaults,
+                        scope -> registered.get() && config.isEnabled() && config.isExpressionEnabled(), db.mapper);
+                replies = new org.zexnocs.teanekoagent.expression.ReplyCoordinator(workers, timers, Clock.systemUTC(), runtime::settings);
+                sending = new org.zexnocs.teanekoagent.expression.ExpressionDelivery(runtime, replies, beans.getBeanProvider(org.zexnocs.teanekoagent.history.AgentDeliveryService.class));
+            }
+            /** 先结束自有队列，再释放局部容器，不关闭原线程设施。 */
+            @Override public void close() { replies.close(); beans.close(); }
+        }
+
         final AtomicReference<LLMAssistantMessage> mediaAnswer = new AtomicReference<>();
         final AtomicReference<Runnable> onModel = new AtomicReference<>(() -> { });
         final AgentScopeConfigData config = new AgentScopeConfigData();
@@ -200,7 +237,16 @@ class AgentCommandIntegrationTest {
          * @throws Exception 当原生夹具装配失败时
          */
         @SuppressWarnings({"rawtypes", "unchecked"})
-        Harness(boolean realPersonality, boolean platformFeatures) throws Exception {
+        Harness(boolean realPersonality, boolean platformFeatures) throws Exception { this(realPersonality, platformFeatures, false); }
+        /**
+         * 2026/11/03：可选择完整表达编译与实际回执交付，其他用例不重复装配。
+         * @param realPersonality 是否启用真实人格
+         * @param platformFeatures 是否启用原历史及视觉能力
+         * @param expressions 是否启用拟人交付
+         * @throws Exception 当原夹具装配失败时
+         */
+        @SuppressWarnings({"rawtypes", "unchecked"})
+        Harness(boolean realPersonality, boolean platformFeatures, boolean expressions) throws Exception {
             config.setCommandToolsEnabled(true);
             IAgentScopePolicyPort scopes = ignored -> registered.get() ? new AgentScopePolicy(true, config.isEnabled(), AgentScopePolicy.Mode.ACTIVE) : AgentScopePolicy.unregistered();
             references = new StoreAgentMemoryReferences(scopes, bindingStore, namespaces, workers);
@@ -260,12 +306,17 @@ class AgentCommandIntegrationTest {
                 return new TaskFuture<>(logger, "离线命令模型", CompletableFuture.completedFuture(LLMResult.builder().usage(LLMUsage.builder().totalTokens(2).build())
                         .choices(List.of(LLMChoice.builder().index(0).finishReason(response.getToolCalls().isEmpty() ? "stop" : "tool_calls").message(response).build())).build()));
             });
+            expression = expressions ? new ExpressionHarness() : null;
             turns = new AgentService(gate, new LLMInteractionService(models, LLMInteractionSettings::defaults, workers, timers),
-                    (definition, request, actual) -> tools.select(definition, request), db.mapper, workers, timers, Clock.systemUTC(), logger, references, IAgentPromptSource.empty(), personalities,
+                    (definition, request, actual) -> tools.select(definition, request), db.mapper, workers, timers, Clock.systemUTC(), logger, references, expression == null ? IAgentPromptSource.empty() : new org.zexnocs.teanekoagent.expression.ExpressionFeature(expression.runtime).prompts(), personalities,
                     platformFeatures ? history : null);
+            if (expression != null) { turns.installExpressions(expression.runtime); }
             mailbox = new AgentConversationService(turns, AgentQueueSettings::defaults, workers, timers, Clock.systemUTC(), logger, AgentConversationSettings::defaults,
                     (definition, request) -> AgentConversationOptions.defaults(), db.mapper, references, personalities);
             gateway = new AgentCommandGateway(new AgentFactory(registry), registry, mailbox, mailbox, scopes, bridge, references, bindings, namespaces, () -> 1, timers, attempts);
+            // 2026/11/03：默认发送等待真实回执提交。
+            gateway.setDelivery(delivery);
+            if (expression != null) { gateway.setExpressions(expression.sending, expression.replies); }
             configFields = new AgentNamespaceConfigFields(configs, new AgentScopeConfigManager(), bindings, new AgentNamespaceCommands(scopes, references, bindings, mailbox, timers));
             management = new AgentMemoryManagementCommands(new EasyDataMemoryManagementStore(db.store, db.facts, db.data,
                     () -> 1, db.mapper, new org.springframework.mock.env.MockEnvironment()), db.store, scopes, mailbox, timers, db.mapper);
@@ -290,8 +341,8 @@ class AgentCommandIntegrationTest {
          * @return 实际原生消息对象
          */
         ITeaNekoMessageData source(String user, CommandPermission role, String text) { return client.handleGroupMessage("群", user, "用户", role, text).getData(); }
-        /** 关闭拥有者及借用设施，原业务可在取消后结束，不阻塞用例关闭。 */
-        @Override public void close() { handler.business.complete("关闭验证"); gateway.close(); mailbox.close(); turns.close(); registry.close(); timers.shutdownNow(); workers.close(); db.close(); }
+        /** 2026/11/03：先释放表达队列，再关闭原拥有者；不阻塞未开始的等待。 */
+        @Override public void close() { handler.business.complete("关闭验证"); gateway.close(); if (expression != null) { expression.close(); } mailbox.close(); turns.close(); registry.close(); timers.shutdownNow(); workers.close(); db.close(); }
     }
     /**
      * 验证真实模型到原命令的异步闭环、原生类型及父控制、最终发送和入口去重。
@@ -612,7 +663,12 @@ class AgentCommandIntegrationTest {
      * @return 独立拥有者的自动回复应用服务
      */
     private AgentAutomaticGateway automatic(Harness h) {
-        return new AgentAutomaticGateway(new AgentFactory(h.registry), h.registry, h.mailbox, h.references, h.attempts, h.automaticAccess, h.triggers, h.bridge);
+        // 2026/11/03：自动消息走默认持久回执路径。
+        var gateway = new AgentAutomaticGateway(new AgentFactory(h.registry), h.registry, h.mailbox, h.references, h.attempts, h.automaticAccess, h.triggers, h.bridge);
+        gateway.setDelivery(h.delivery);
+        // 2026/11/03：自动入口与命令使用同一个实际目标队列和回执服务。
+        if (h.expression != null) { gateway.setExpressions(h.expression.sending, h.expression.replies); }
+        return gateway;
     }
 
     /**
@@ -755,10 +811,11 @@ class AgentCommandIntegrationTest {
 
     /**
      * 自主接话使用 SYSTEM、独立一次预算及空工具，慢或失败的监控监听不阻断真实发送。
+     * 2026/11/03：通过共享表达队列运行，保持原零工具及身份边界。
      * @throws Exception 当原生夹具装配或候选执行失败时
      */
     @Test void proactiveInterjectionUsesSystemAndIsolatesMonitoring() throws Exception {
-        try (var h = new Harness(false, true)) {
+        try (var h = new Harness(false, true, true)) {
             active(h); var source = incoming(h, "alice", "讨论进行中", false); var targets = proactiveTargets(h, source);
             var events = new DefaultListableBeanFactory(); var bus = mock(IEventService.class);
             var listener = new CompletableFuture<ITaskResult<Void>>();
@@ -799,10 +856,11 @@ class AgentCommandIntegrationTest {
 
     /**
      * 原 Timer 重建只安排未来候选，明确弃言不发送、不保存控制信封，也不因即时重扫重复调用。
+     * 2026/11/03：共享目标队列不改变弃言、时间和原持久准入语义。
      * @throws Exception 当原生夹具装配失败时
      */
     @SuppressWarnings("unchecked") @Test void proactiveTimerRebuildsFutureAndCanAbstain() throws Exception {
-        try (var h = new Harness(false, true)) {
+        try (var h = new Harness(false, true, true)) {
             active(h); h.config.setProactiveIntervalSeconds(60);
             var source = incoming(h, "alice", "用于判断是否需要发言的资料", false); var targets = proactiveTargets(h, source);
             capture(h).capture(source, NativeMessageInput.from(source)).toCompletableFuture().join();
@@ -830,10 +888,11 @@ class AgentCommandIntegrationTest {
 
     /**
      * 当前动作开关变化拒绝晚到发言，候选退避防止重试风暴，格式错误不能被当作正文发送。
+     * 2026/11/03：在新队列接入后继续核验撤销及迟到结果。
      * @throws Exception 当原生夹具装配失败时
      */
     @Test void proactiveRevocationBackoffAndInvalidEnvelopeDoNotSpeak() throws Exception {
-        try (var h = new Harness(false, true)) {
+        try (var h = new Harness(false, true, true)) {
             active(h); var source = incoming(h, "alice", "接话候选", false); var targets = proactiveTargets(h, source); var monitor = monitor(h);
             h.turns.observe(report -> { throw new IllegalStateException("坏观察器不能影响业务终态。"); });
             try (var proactive = proactive(h, targets, monitor, h.turns)) {
@@ -885,8 +944,13 @@ class AgentCommandIntegrationTest {
      * @return 自有独立预算的自主服务
      */
     private ProactiveService proactive(Harness h, ProactiveTargets targets, AgentRuntimeMonitor monitor, org.zexnocs.teanekoagent.agent.IAgentTurnService turns) {
-        return new ProactiveService(h.configs, new AgentScopeConfigManager(), targets, h.references, h.personalities, h.history, h.attempts, turns,
+        // 2026/11/03：自主消息也逐段等待实际平台确认及回执提交。
+        var service = new ProactiveService(h.configs, new AgentScopeConfigManager(), targets, h.references, h.personalities, h.history, h.attempts, turns,
                 new AgentFactory(h.registry), h.registry, h.automaticAccess, h.triggers, monitor, h.timers, h.workers, h.logger, h.db.mapper);
+        service.setDelivery(h.delivery);
+        // 2026/11/03：复用既有自主场景核验实际共享队列，不另建用例。
+        if (h.expression != null) { service.setCoordinator(h.expression.replies); }
+        return service;
     }
 
     /**
@@ -989,4 +1053,29 @@ class AgentCommandIntegrationTest {
                 scope -> h.registered.get() ? h.config.toPolicy() : AgentScopePolicy.unregistered(), h.references, h.bridge, h.attempts, access,
                 h.personalities, (org.zexnocs.teanekoagent.personality.IPersonalityLearningTarget) h.personalities, h.workers, h.timers);
     }
+    /**
+     * 2026/11/03：真实模型、邮箱、历史、命令和自动入口完成同一表达分段与回执闭环。
+     * @throws Exception 当原异步链未在时限内完成时
+     */
+    @Test void deliversExpressionPlansThroughBothNativeEntrypoints() throws Exception {
+        try (var h = new Harness(false, true, true); var automatic = automatic(h)) {
+            h.onModel.set(() -> {
+                var json = h.db.mapper.writeValueAsString(h.prompts.getLast().getMessages());
+                var matcher = java.util.regex.Pattern.compile("TNK:([a-f0-9]{12})[|]BEGIN").matcher(json);
+                assertTrue(matcher.find()); var head = "⟦TNK:" + matcher.group(1) + "|";
+                h.automaticAnswer.set(head + "BEGIN|protocol=teaneko:expression|v=1⟧\n" + head + "TEXT|mode=plain|wait=0⟧\n第一段\n"
+                        + head + "TEXT|mode=reply|wait=10⟧\n第二段\n" + head + "END⟧");
+            });
+            var source = h.source("甲", CommandPermission.MEMBER, "/agent chat 你好");
+            h.gateway.chat(source, "你好", null).toCompletableFuture().get(10, TimeUnit.SECONDS);
+            assertEquals(2, h.client.getSentMessages().size()); assertEquals(1, h.prompts.size());
+            assertFalse(h.db.mapper.writeValueAsString(history(h, source).messages()).contains("⟦TNK:"));
+            assertTrue(h.db.mapper.writeValueAsString(history(h, source).messages()).contains("第二段"));
+            var incoming = incoming(h, "乙", "你好", true);
+            assertTrue(receiver(h, automatic).receive(incoming).toCompletableFuture().get(10, TimeUnit.SECONDS));
+            assertEquals(4, h.client.getSentMessages().size()); assertEquals(2, h.prompts.size());
+            assertFalse(h.db.mapper.writeValueAsString(h.client.getSentMessages()).contains("⟦TNK:"));
+        }
+    }
+
 }

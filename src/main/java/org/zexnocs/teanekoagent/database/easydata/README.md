@@ -11,9 +11,11 @@ Agent 的作用域配置、空间、事实、人格、命令账本及历史统�
 | agent.command.v1 | 原生命令工具的执行占用与终态 |
 | agent.history.v1 | 按完整有效引用和人格隔离的消息、可排序到期索引 |
 | agent.memory.layers.v1 | 与历史同事务采集的短期消息、持久分区目录、压缩租约/水位及中期片段 |
-| agent.memory.long.v1 | 自动长期事实/偏好/经历、画像及话题索引、整理水位、本人维护回执和旧证据抑制 |
+| agent.memory.long.v1 | 自动及明确保存的长期事实/偏好/经历、画像及话题/正文索引、整理水位、附加信息、本人维护回执和旧证据抑制 |
+| agent.delivery.v1 | 按完整 scope/引用分区的逐段平台发送占用、确认与未知状态；跟随历史保留期有界回收 |
 | agent.personality.observations.v1 | 按 scope/人格身份隔离的真实表达样本、模式和渐进采用时间；与长期水位及人格补正同事务提交 |
 | agent.memory.lifecycle.v1 | 空间及分区的无正文定位标记，原目录回收后仍能判定旧代次数据归属 |
+| agent.sticker.v1 | 按部署 catalog-id 组织的共享素材、候选作业、下载/分析额度、来源去重、有限人类统计及待删元数据；不随记忆清空 |
 
 普通配置沿用 `TeaNekoAgentEasyData.of(namespace).get(target)` 的缓存读取和 `getTaskConfig(...).set(...).pushAsync()`。构造 Store 时注入根入口，通过 `inNamespace(namespace)` 捕获同一个 EasyData 服务，便于隔离测试及宿主装配。
 

@@ -43,6 +43,7 @@ import static org.mockito.Mockito.*;
 /**
  * 验证宿主身份、明确原文、独立开关及取消/交付边界，不调用真实模型或数据库。
  * <br>2026/11/03：新建 scope 的学习默认开启，显式关闭仍独立保留。
+ * <br>2026/11/03：默认明确保存可懒路由新长期存储。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
@@ -124,10 +125,11 @@ class MemoryAccessServiceTest {
 
     /** 验证只识别完整原消息的明确前缀，普通聊天、否定、引用和空白不产生授权。 */
     @Test void intentRequiresExplicitOriginalPrefixAndHumanActor() {
-        for (var prefix : List.of("记住：", "记住:", "请记住：", "请记住:")) {
+        // 2026/11/03：自然前缀可省略冒号，但回顾询问不授予新增权限。
+        for (var prefix : List.of("记住：", "记住:", "请记住：", "请记住:", "记住", "请记住")) {
             assertEquals("我喜欢茶", MemoryAddIntent.fromUserText(context, "  " + prefix + " 我喜欢茶  ").orElseThrow().text());
         }
-        for (var text : List.of("我喜欢茶", "不要记住：我喜欢茶", "他说：记住：我喜欢茶", "> 记住：我喜欢茶", "记住： ", "记住：" + "茶".repeat(4097))) {
+        for (var text : List.of("我喜欢茶", "不要记住：我喜欢茶", "他说：记住：我喜欢茶", "> 记住：我喜欢茶", "记住了吗", "请记住了吗？", "记住了", "记住？", "记住： ", "记住：" + "茶".repeat(4097))) {
             assertTrue(MemoryAddIntent.fromUserText(context, text).isEmpty());
         }
         var system = new AgentActorContext(scope, AgentActorContext.Origin.SYSTEM, Optional.empty(), "", "任务", "目标");
@@ -196,7 +198,10 @@ class MemoryAccessServiceTest {
     @Test void compositionIsLazyAndOwnsNoExecutor() {
         var policies = mock(IMemoryAccessPolicy.class);
         try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            assertNotNull(new MemoryAccessConfig().memoryAccessService(policies, references, recall, profiles, new MemoryFacts(store, Clock.systemUTC()), executor));
+            // 2026/11/03：空端口提供者维持旧独立装配，构造期间不取得新存储。
+            assertNotNull(new MemoryAccessConfig().memoryAccessService(policies, references, recall, profiles, new MemoryFacts(store, Clock.systemUTC()), executor,
+                    new org.springframework.beans.factory.support.DefaultListableBeanFactory().getBeanProvider(org.zexnocs.teanekoagent.memory.layered.ILongTermMemoryStore.class),
+                    new org.springframework.core.env.StandardEnvironment()));
             verifyNoInteractions(policies, recall, profiles, store); verify(references, never()).verify(any()); assertFalse(executor.isShutdown());
         }
     }

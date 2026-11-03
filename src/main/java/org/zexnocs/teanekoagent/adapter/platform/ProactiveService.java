@@ -40,10 +40,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 自主候选的独立受限轮次；SYSTEM 不携带用户权限，只能选择弃言或向固定目标发送文本。
+ * <br>2026/11/03：自主发言也经持久发送回执，不把生成成功当作平台确认。
+ * <br>2026/11/03：自主文本沿用原控制并加入同目标顺序。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @Service
 public final class ProactiveService implements AutoCloseable {
@@ -70,6 +72,23 @@ public final class ProactiveService implements AutoCloseable {
     private final Map<UUID, ExecutionControl> active = new HashMap<>();
     private @Nullable AgentHandle handle;
     private volatile boolean closed;
+    private @Nullable AgentDeliveryService delivery;
+    // 2026/11/03：拥有者只标记本入口生命周期，不作为持久身份或目标边界。
+    private final String replyOwner = "proactive:" + UUID.randomUUID();
+    private org.zexnocs.teanekoagent.expression.@Nullable ReplyCoordinator coordinator;
+    /**
+     * 2026/11/03：自主文本与命令、自动回复共用真实目标顺序。
+     * @param coordinator 原目标协调器
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCoordinator(org.zexnocs.teanekoagent.expression.@Nullable ReplyCoordinator coordinator) { this.coordinator = coordinator; }
+
+    /**
+     * 2026/11/03：默认装配发送账本，独立原宿主可保留既有构造。
+     * @param delivery 持久发送边界
+     */
+    @Autowired(required = false)
+    public void setDelivery(@Nullable AgentDeliveryService delivery) { this.delivery = delivery; }
 
     /**
      * 借用原业务设施，不创建线程池、实例或主动任务。
@@ -138,7 +157,8 @@ public final class ProactiveService implements AutoCloseable {
         try {
             Runnable guard = () -> guard(target, kind, policy, control);
             access.bind(ticket, guard);
-            var work = CompletableFuture.supplyAsync(() -> { guard.run(); return references.resolve(target.scope()); }, executor)
+            // 2026/11/03：生成也排入当前 Agent 目标顺序，保留原零工具与三十秒控制。
+            java.util.function.Supplier<CompletionStage<Delivery>> generation = () -> CompletableFuture.supplyAsync(() -> { guard.run(); return references.resolve(target.scope()); }, executor)
                     .thenCompose(control::guard).thenCompose(reference -> control.guard(personalities.resolve(target.scope(), control))
                     .thenCompose(personality -> {
                         var context = new HistoryContext(reference, personality); var actor = ticket.signal().actor();
@@ -163,7 +183,11 @@ public final class ProactiveService implements AutoCloseable {
                                         var text = answer(result);
                                         if (text.isEmpty()) { return CompletableFuture.completedFuture(Delivery.ABSTAINED); }
                                         return references.verify(reference).thenCompose(ignored -> personalities.verify(target.scope(), personality, control))
-                                                .thenCompose(ignored -> targets.send(target, text, () -> { guard.run(); triggers.verify(ticket); }))
+                                                // 2026/11/03：占用之后仍复核原目标和策略，确认以后才记录已交付历史。
+                                                .thenCompose(ignored -> delivery == null ? targets.send(target, text, () -> { guard.run(); triggers.verify(ticket); })
+                                                        : delivery.send(reference, actor, id, 0, 1, new AgentReplyPlan.Text(text, AgentReplyPlan.Mode.PLAIN),
+                                                        () -> references.verify(reference).thenCompose(checked -> personalities.verify(target.scope(), personality, control))
+                                                                .thenCompose(checked -> targets.send(target, text, () -> { guard.run(); triggers.verify(ticket); }))))
                                                 .thenCompose(ignored -> {
                                                     delivered.set(true); triggers.finish(ticket, true);
                                                     return history.append(context, new HistoryMessage(id.toString(), actor, HistoryMessage.Role.ASSISTANT, text,
@@ -179,6 +203,11 @@ public final class ProactiveService implements AutoCloseable {
                             })).thenCompose(stage -> stage);
                         });
                     }));
+            var requestId = UUID.nameUUIDFromBytes(ticket.signal().actor().sourceId().getBytes(StandardCharsets.UTF_8));
+            var work = coordinator == null ? generation.get() : coordinator.execute(replyOwner, ticket.signal().actor(), requestId, target.self(),
+                    queued -> coordinator.observe(queued, generation.get(), control::cancel));
+            var queueStop = control.onTermination(reason -> { if (coordinator != null) { coordinator.cancelOwned(replyOwner, requestId); } });
+            work.whenComplete((outcome, failure) -> queueStop.close());
             return control.guard(work).handle((outcome, failure) -> delivered.get() ? Delivery.SENT : failure != null ? Delivery.FAILED : outcome)
                     .whenComplete((outcome, failure) -> {
                         access.release(ticket); triggers.finish(ticket, false); synchronized (active) { active.remove(control.id()); }

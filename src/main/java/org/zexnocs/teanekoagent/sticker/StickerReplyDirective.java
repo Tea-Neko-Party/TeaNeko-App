@@ -1,0 +1,25 @@
+package org.zexnocs.teanekoagent.sticker;
+
+import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoagent.expression.IReplyDirectiveParser;
+import org.zexnocs.teanekoagent.expression.ReplyPlans;
+import org.zexnocs.teanekoagent.expression.ResourceReplySyntax;
+import org.zexnocs.teanekoagent.expression.TeaNekoReplyDirective;
+
+/**
+ * 表情包指令，只产生草稿，资源证明由处理器异步验证。
+ * @author zExNocs
+ * @date 2026/11/03
+ * @since 4.0.0
+ * @version 4.6.1-l
+ */
+@Component @TeaNekoReplyDirective("STICKER")
+public final class StickerReplyDirective implements IReplyDirectiveParser {
+    /**
+     * @param directive 原指令
+     * @return 单项资源草稿
+     */
+    @Override public ReplyPlans.Draft parse(ReplyPlans.Directive directive){return ResourceReplySyntax.parse(directive, id->new MediaReplies.Sticker(id,null));}
+    /** @return 本类型语法 */
+    @Override public String instructions(){return "STICKER|id=本轮提供的ID|mode=plain/reply|wait=非负毫秒；独立控制行，不跟正文，不附带at；仅可引用本轮已授权表情包。";}
+}

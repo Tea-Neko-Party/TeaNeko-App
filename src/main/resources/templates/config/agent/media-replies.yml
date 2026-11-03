@@ -1,0 +1,16 @@
+# 媒体表达与素材采集分别管理；关闭采集后仍可使用已有图库。
+enabled: true
+max-per-reply: 2
+max-categories: 2
+# 按本功能已准入的对话尝试计轮次；不是按机器人自己展示次数计热度。
+cooldown-turns: 3
+# 必须完整提供某类全部当前可用项，超过此预算返回 complete=false。
+max-category-characters: 7800
+# 当前 client 的明确目录，ID 与描述应按实际客户端版本核实；可增删，最多64项。
+native-faces:
+  onebot:
+    '14': 微笑
+    '5': 流泪
+    '32': 疑问
+    '76': 赞
+    '66': 爱心

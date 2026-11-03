@@ -38,13 +38,16 @@ import java.util.function.Function;
  * <br>2026/11/02：统一按可信 client 过滤工具并在实际执行时重新校验。
  * <br>2026/11/02：携带工具图像的交互强制使用历史投影，避免伪装成用户新消息。
  *
+ * <br>2026/11/03：在持久历史之前编译完整表达计划，避免控制符进入会话。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;
+    // 2026/11/03：只允许宿主在服务启动前安装，不把服务写入 ECS。
+    org.zexnocs.teanekoagent.expression.@Nullable ExpressionRuntime expressions;
     // 2026/11/02：插件仅在服务开始接受轮次前安装，运行期目录及步骤不再变化。
     private org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins;
     private final Function<EntityId, AgentTurn> turns;
@@ -272,15 +275,23 @@ final class AgentTurnPipeline {
                             : ILLMInteractionGuard.asynchronous(modelContext -> guard(turn, false))), "交互端口返回的阶段不能为空。")
                     .thenApply(result -> {
                         turn.observe(result, null); return result;
-                    }).thenApplyAsync(result -> {
+                    }).thenComposeAsync(result -> {
+                        var compilation = expressions == null ? CompletableFuture.<org.zexnocs.teanekoagent.expression.ReplyPlans.Approved>completedStage(null)
+                                : expressions.compile(fixedRequest(context.snapshot()), input, result, context.control());
+                        return compilation.thenApplyAsync(plan -> {
                         var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
                         // 2026/11/02：显式无其他资料的工具图像也须经过历史身份与临时负载投影。
-                        if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null || !input.plugins().isEmpty()
+                        // 2026/11/03：正式答案先完整编译，再保存语义历史；诊断交互仍保留实际原文。
+                        if (plan != null) {
+                            var projection = AgentPromptTranscript.createExpression(input, result, codec, plan);
+                            turn.observe(result, projection); patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
+                        } else if (result.status() == LLMInteractionResult.Status.SUCCESS && (!input.fragments().isEmpty() || input.omittedFragments() > 0 || input.personality() != null || input.summary() != null || !input.plugins().isEmpty()
                                 || result.tools().stream().anyMatch(tool -> !tool.images().isEmpty()))) {
                             var projection = AgentPromptTranscript.create(input, result, codec); turn.observe(result, projection);
                             patch.put(AgentComponents.PROMPT_TRANSCRIPT, projection);
                         }
                         return SystemResult.continueWith(patch.build());
+                        }, executor);
                     }, executor);
         } finally {
             turn.attachedInteraction();

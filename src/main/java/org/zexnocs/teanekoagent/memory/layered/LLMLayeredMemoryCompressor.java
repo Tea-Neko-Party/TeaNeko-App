@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoagent.memory.layered;
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.*;
@@ -22,10 +24,7 @@ import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -36,6 +35,7 @@ import java.util.stream.Collectors;
 /**
  * 复用原交互服务生成有界中期候选，模型前后复核 SUMMARY 准入、策略和固定空间。
  * 模型不能提交覆盖序号、主体或持久化指令，业务实例到首次工作才创建。
+ * <br>2026/11/03：压缩时读取实际平台回执，区分已确认、部分发送和原生成候选。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -52,6 +52,13 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
     private final Executor executor;
     private AgentHandle handle;
     private volatile boolean closed;
+    private @Nullable IAgentDeliveryStore deliveries;
+    /**
+     * 2026/11/03：默认 Spring 可选注入回执，独立旧宿主保留原构造。
+     * @param deliveries 平台回执
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setDeliveries(@Nullable IAgentDeliveryStore deliveries) { this.deliveries = deliveries; }
     /**
      * 只保存依赖，构造不创建实例或检查模型。
      * @param factory 懒实例工厂
@@ -77,6 +84,22 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
      * @return 严格解析的生成结果
      */
     @Override public CompletionStage<MemoryLayers.Digest> compress(MemoryLayers.Batch batch, ExecutionControl control) {
+        // 2026/11/03：只取有限轮次的回执，未找到的候选仍按未确认处理。
+        return CompletableFuture.supplyAsync(() -> {
+            var ids = batch.messages().stream().filter(item -> item.message().role() == org.zexnocs.teanekoagent.history.HistoryMessage.Role.ASSISTANT)
+                    .map(item -> requestId(item.message().messageId())).filter(Objects::nonNull).limit(24).collect(Collectors.toSet());
+            return deliveries == null ? CompletableFuture.<Map<UUID, IAgentDeliveryStore.View>>completedStage(Map.of())
+                    : control.guard(deliveries.read(batch.stream().reference(), ids, java.time.Instant.now()));
+        }, executor).thenCompose(stage -> stage).thenComposeAsync(values -> generate(batch, control, values), executor);
+    }
+    /**
+     * 2026/11/03：原始输入与有限回执分别作为参考，不修改待提交的原消息指纹。
+     * @param batch 原固定输入
+     * @param control 原控制
+     * @param receipts 实际平台回执
+     * @return 中期候选
+     */
+    private CompletionStage<MemoryLayers.Digest> generate(MemoryLayers.Batch batch, ExecutionControl control, Map<UUID, IAgentDeliveryStore.View> receipts) {
         return CompletableFuture.supplyAsync(() -> {
             var instance = instance(); var actor = actor(batch); var decision = gate.evaluate(instance, actor, AgentActivity.SUMMARY);
             if (!decision.allowed()) { throw new IllegalStateException("当前作用域不允许中期记忆生成。"); }
@@ -87,9 +110,14 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
                     + "只输出 JSON 对象，且仅有 brief、details 两个字符串；brief 最多600字，details 最多4000字，并应明显短于原输入。"
                     + "保留参与者、主题、决定、纠正、未解决事项及重要日期。普通经历用大致时间，明确约定保留原精度；不得伪造时间。"
                     + "USER 才是用户原话，ASSISTANT 是已生成但发送未确认的回答，不把助手推测写成用户事实。"
+                    + "deliveryReceipts 是宿主真实平台回执。ACKNOWLEDGED 表示该轮各段被平台确认，PARTIAL 只确认其中部分；UNKNOWN 或缺失不能声称已发送。"
+                    + "确认只表示平台接受，不表示用户已读。已确认文本可能有省略，不据此补造未确认部分。"
                     + "区分猜测、建议、计划和已执行结果。不要复述所有消息，不输出思维过程、代码围栏或额外字段。").build()).build();
             var user = LLMUserMessage.builder().contents(new LLMContentListBuilder().addText(mapper.writeValueAsString(Map.of(
-                    "scope", batch.stream().reference().scope(), "messages", batch.messages()))).build()).build();
+                    "scope", batch.stream().reference().scope(), "messages", batch.messages(), "deliveryReceipts", receipts.entrySet().stream()
+                            .collect(Collectors.toMap(item -> item.getKey().toString(), item -> Map.of("state", item.getValue().state(),
+                                    "confirmed", item.getValue().confirmed(), "total", item.getValue().total(), "confirmedText",
+                                    item.getValue().text().length() > 500 ? item.getValue().text().substring(0, 500) + "（尾部省略）" : item.getValue().text())))))).build()).build();
             var prompt = new LLMPrompt(List.of(system, user), options, LLMOptionsPolicy.RESOLVED);
             if (mapper.writeValueAsBytes(prompt.getMessages()).length > settings.get().maxInputBytes()) { throw new IllegalArgumentException("中期模型输入超过预算。"); }
             return check(instance, actor, batch, control).thenComposeAsync(ignored -> interactions.interact(prompt, new LLMToolSet(mapper, List.of()),
@@ -98,6 +126,12 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
                     .thenComposeAsync(result -> check(instance, actor, batch, control).thenApply(ignored -> decode(result)), executor);
         }, executor).thenCompose(stage -> stage);
     }
+    /**
+     * 2026/11/03：旧来源标识不猜测成发送请求 UUID。
+     * @param value 原消息标识
+     * @return 请求 UUID，格式不符时为空
+     */
+    private static @Nullable UUID requestId(String value) { try { return UUID.fromString(value); } catch (IllegalArgumentException ignored) { return null; } }
     /**
      * 每次模型请求前和候选交付前核对原身份，不改变目标引用。
      * @param instance 实际工作实例

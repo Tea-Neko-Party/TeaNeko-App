@@ -3,31 +3,48 @@ package org.zexnocs.teanekoagent.adapter.onebot;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.adapter.platform.NativeMessageInput;
+import org.zexnocs.teanekoagent.agent.AgentActivity;
+import org.zexnocs.teanekoagent.agent.AgentComponents;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm.framework.interaction.*;
-import org.zexnocs.teanekoagent.llm.framework.message.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.llm.framework.response.*;
-import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatCompletionMapper;
-import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.adapter.platform.NativeMessageInput;
-import org.zexnocs.teanekoagent.agent.*;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatCompletionMapper;
+import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
-import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.core.OnebotToolbox;
-import org.zexnocs.teanekoclient.onebot.data.receive.message.*;
-import org.zexnocs.teanekoclient.onebot.data.response.params.*;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageData;
+import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.GroupListResponseData;
+import org.zexnocs.teanekoclient.onebot.data.response.params.GroupMemberResponseData;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupMemberInfoSender;
 import org.zexnocs.teanekoclient.onebot.sender.message.OnebotGetMsgSender;
@@ -37,22 +54,27 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.TaskResult;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
-import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
+
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
  * 验证 OneBot 工具的真实工具集执行、跨 scope 拒绝及模型元数据与原文分离。
  * <br>2026/11/02：验证引用图片经真实工具往返成为供应商图像块，并从用户历史投影移除。
+ * <br>2026/11/03：验证机器人原生身份和自身提及，不污染用户原文。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 class OnebotAgentToolsTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -118,6 +140,17 @@ class OnebotAgentToolsTest {
         var input = NativeMessageInput.from(source);
         assertEquals("请记住花茶", input.text()); assertTrue(mapper.writeValueAsString(input.message()).contains("senderUuid"));
         assertTrue(mapper.writeValueAsString(input.message()).contains("群名片"));
+        // 2026/11/03：真实机器人账号不要求先注册用户，@机器人与@其他人、@全体明确区分。
+        when(toolbox.getSelfPlatformId()).thenReturn(Optional.of("999"));
+        ((OnebotMessageData) source).setMessages(new DefaultTeaNekoContentListBuilder().addAt("999").addText("你好").build());
+        var ownMention = NativeMessageInput.from(source);
+        assertTrue(mapper.writeValueAsString(ownMention.message()).contains("mentionedSelf"));
+        assertTrue(NativeMessageInput.contextText(source).contains("\"mentionedSelf\":true"));
+        assertTrue(NativeMessageInput.contextText(source).contains("\"selfPlatformId\":\"999\""));
+        assertEquals("你好", ownMention.text());
+        ((OnebotMessageData) source).setMessages(new DefaultTeaNekoContentListBuilder().addAt("123").addAt("all").addText("你好").build());
+        assertTrue(NativeMessageInput.contextText(source).contains("\"mentionedSelf\":false"));
+        ((OnebotMessageData) source).setMessages(new DefaultTeaNekoContentListBuilder().addText("请记住花茶").build());
         var sender = execute(OnebotAgentTools.SENDER, "{}");
         assertEquals("群名片", sender.path("groupNickname").stringValue()); assertEquals("茶群", sender.path("groupName").stringValue());
         assertTrue(sender.path("avatarUrl").stringValue().contains("456"));
@@ -170,7 +203,7 @@ class OnebotAgentToolsTest {
             assertEquals(LLMInteractionResult.Status.SUCCESS, result.status()); assertEquals(2, prompts.size());
             var actual = prompts.getLast(); LLMMessageHistory.validateComplete(actual.getMessages());
             assertEquals(List.of(LLMMessageRole.USER, LLMMessageRole.ASSISTANT, LLMMessageRole.TOOL, LLMMessageRole.TOOL, LLMMessageRole.USER),
-                    actual.getMessages().stream().map(value -> value.getRole()).toList());
+                    actual.getMessages().stream().map(ILLMMessage::getRole).toList());
             var wire = mapper.valueToTree(DeepSeekChatCompletionMapper.toRequest(actual, options, "https://api.example", "/chat/completions", "test-key"));
             var wireMessages = wire.path("messages"); var content = wireMessages.get(wireMessages.size() - 1).path("content");
             assertEquals("image_url", content.get(1).path("type").stringValue());

@@ -1,0 +1,38 @@
+# 整个机器人部署实例共享；不要在此复制模型密钥或请求地址。
+enabled: true
+collect-enabled: true
+passive-enabled: true
+catalog-id: main
+# 多副本共享数据库时必须共享此素材卷及其身份文件，不可只共享数据库。
+storage-root: data/agent/stickers
+analyzer: llm
+assets: local
+admission: weighted
+catalog: easydata
+# 空值沿用默认模型；非空填写 model.yml 中的适配器标识，须明确支持用户图片。
+model-id: ''
+analysis-version: 1
+max-active: 200
+max-per-category: 32
+max-pending: 32
+max-storage-bytes: 536870912
+max-pending-bytes: 67108864
+max-file-bytes: 6291456
+downloads-per-hour: 120
+scope-downloads-per-hour: 30
+analyses-per-hour: 20
+scope-analyses-per-hour: 5
+timeout-seconds: 60
+maintenance-seconds: 60
+min-confidence: 0.85
+min-quality: 0.65
+probation-days: 3
+replacement-margin: 0.08
+# 依次为质量、独立人类、衰减频率、近期使用、类别稀缺；总和须为1。
+score-weights: [0.40, 0.20, 0.20, 0.10, 0.10]
+# 每次重定向均须仍在可信主机内。自建媒体主机须显式加入，私有地址另加 private-hosts。
+allowed-hosts: [gchat.qpic.cn, multimedia.nt.qq.com, '*.qpic.cn', '*.gtimg.cn']
+private-hosts: []
+# 允许参与后台采集决策及只读提交通知的插件 ID，最多16项；仅安装插件不会自动获准。
+event-plugins: []
+# 类别缺省使用内置十二类；可覆盖为稳定 ID 到中文说明的映射，最多32类。

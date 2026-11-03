@@ -37,13 +37,23 @@ import java.util.concurrent.*;
  * 根据注解选择当前记忆工具，执行仍经过可信访问服务，不提供管理能力。
  * <br>2026/11/02：业务方法和参数声明替代手写 schema，保留原文意图及访问边界。
  * 原始意图在模型调用前由独立原文凭据固定，正文、身份和操作标识均不成为模型业务参数。
+ * <br>2026/11/03：说明统一长期保存后的查询与维护入口。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.memory", managedByFeature = true)
 public final class AgentMemoryToolSource implements IAgentToolSource {
+    private java.util.function.Predicate<AgentRunRequest> preSaved = ignored -> false;
+    /**
+     * 2026/11/03：实际轮次记录器负责前置保存时复用其原回执，替换宿主仍保留工具入口。
+     * @param recorders 实际原轮次记录端口
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setRecorders(org.springframework.beans.factory.ObjectProvider<org.zexnocs.teanekoagent.agent.history.IAgentHistoryRecorder> recorders) {
+        preSaved = request -> recorders.getIfAvailable() instanceof org.zexnocs.teanekoagent.history.ConversationHistoryService service && service.capturesExplicit(request);
+    }
     public static final String QUERY = "memory_query";
     public static final String PROFILE = "memory_profile";
     public static final String ADD = "memory_add";
@@ -149,12 +159,20 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
      * @return 新增回执或固定领域错误
      */
     @TeaNekoAgentTool(value = ADD, condition = "canAdd")
-    @Description("新增本次用户明确要求记住的原文，归属于该用户；只选择事实或偏好，不提供维护能力。")
+    // 2026/11/03：默认保存进入新长期领域，旧读取工具继续用于旧记录。
+    @Description("立即保存本轮用户明确要求记住的原文，归属于本人；只选择事实或偏好，不改写原文。默认保存到新长期记忆，用 memory_search、memory_user_profile 查询，用 memory_correct、memory_forget 维护；旧模块独立装配保留原入口。")
     public CompletionStage<String> add(@Description("FACT 为明确事实，PREFERENCE 为明确偏好。") MemoryFactValue.Kind kind,
             TeaNekoAgentToolContext context) {
         var expected = expected(context);
         var original = Objects.requireNonNull(context.request().userText(), "新增记忆缺少原文。");
         var intent = MemoryAddIntent.fromUserText(expected, original.text()).orElseThrow(() -> new MemoryAccessException(MemoryAccessException.Reason.INTENT_REQUIRED));
+        // 2026/11/03：默认前置路径已经保存，工具只复用原请求回执，不依模型分类重复新增。
+        if (preSaved.test(context.request())) {
+            var value = new MemoryFactValue(MemoryFactValue.Kind.FACT, intent.text(), List.of(), 1,
+                    MemoryFactValue.Importance.NORMAL, MemoryEventTime.unknown(), null);
+            return access.append(expected, "explicit-user-request", intent, value, context.requireInvocation().control())
+                    .thenApply(replies::success).exceptionally(failure -> replies.error("EXPLICIT_CAPTURE_UNAVAILABLE"));
+        }
         return invoke(ADD, expected, intent, mapper.valueToTree(Map.of("kind", kind)), context.requireCall(), context.requireInvocation());
     }
 

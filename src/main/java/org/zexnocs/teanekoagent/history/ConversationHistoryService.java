@@ -12,6 +12,7 @@ import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.memory.access.ExplicitMemoryCapture;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 
@@ -27,11 +28,12 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * 在业务域组合历史授权、时间保留与存储，不自动恢复窗口或生成个人事实。
+ * 在业务域组合历史授权、时间保留与存储，并在默认轮次前等待可信明确保存。
+ * <br>2026/11/03：默认轮次前先等待用户明确原文保存，关闭历史采集不关闭明确保存。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public final class ConversationHistoryService implements IConversationHistory, IAgentHistoryRecorder {
     private final IHistoryStore store;
@@ -41,6 +43,19 @@ public final class ConversationHistoryService implements IConversationHistory, I
     private final Executor executor;
     private final Clock clock;
     private final Supplier<Duration> retention;
+    private @Nullable ExplicitMemoryCapture explicit;
+    /**
+     * 2026/11/03：默认宿主注入前置保存，旧独立历史服务仍可不安装。
+     * @param explicit 当前明确保存边界
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setExplicit(@Nullable ExplicitMemoryCapture explicit) { this.explicit = explicit; }
+    /**
+     * 2026/11/03：工具检查实际轮次记录器，复用已经前置完成的保存回执。
+     * @param request 原请求
+     * @return 当前记录器负责本轮明确保存时为真
+     */
+    public boolean capturesExplicit(AgentRunRequest request) { return explicit != null && explicit.handles(request); }
     /**
      * 借用现有资源，构造期间不读数据或启动任务。
      * @param store 历史事务端口
@@ -98,6 +113,19 @@ public final class ConversationHistoryService implements IConversationHistory, I
      * @return 已提交或明确无可采集内容的完成信号
      */
     @Override public CompletionStage<Void> record(AgentRunRequest request, AgentPromptInput input, @Nullable ILLMAssistantMessage answer, ExecutionControl control) {
+        // 2026/11/03：模型尚未执行时完成明确保存；输出记录不再次触发同一用户意图。
+        return controlled(control, () -> (answer == null && explicit != null ? explicit.capture(request, control) : CompletableFuture.<Void>completedStage(null))
+                .thenComposeAsync(ignored -> recordHistory(request, input, answer, control), executor));
+    }
+    /**
+     * 2026/11/03：保存原历史职责独立于明确保存，继续只记录可信本轮输入或答案。
+     * @param request 原请求
+     * @param input 原布局
+     * @param answer 可选助手答案
+     * @param control 原控制
+     * @return 原历史提交阶段
+     */
+    private CompletionStage<Void> recordHistory(AgentRunRequest request, AgentPromptInput input, @Nullable ILLMAssistantMessage answer, ExecutionControl control) {
         // 自主控制信封不是发言，交付后的真实正文由自主发送边界单独记录。
         if (request.activity() == org.zexnocs.teanekoagent.agent.AgentActivity.PROACTIVE) { return CompletableFuture.completedStage(null); }
         if (request.memoryReference() == null || input.personality() == null || answer == null && request.userText() == null) {

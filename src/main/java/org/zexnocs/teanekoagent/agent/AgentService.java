@@ -32,10 +32,11 @@ import java.util.function.Function;
  * <br>2026/11/02：支持启动前安装插件管线，运行轮次仍复用原拥有和关闭路径。
  * <br>2026/11/02：为未知失败增加请求关联、模型尝试次数及脱敏异常结构。
  *
+ * <br>2026/11/03：安装一次表达编译，并在重放时检查原内容扩展。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.6.1-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -60,6 +61,18 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     // 2026/11/02：仅在首次请求之前允许宿主完成插件装配。
     private SystemPipeline pipeline;
     private final AgentTurnPipeline executionPipeline;
+    /**
+     * 2026/11/03：默认宿主在接收请求前安装表达编译，独立旧构造保持可用。
+     * @param runtime 实际表达运行时
+     * @throws IllegalStateException 当服务已经启动或关闭时
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installExpressions(org.zexnocs.teanekoagent.expression.ExpressionRuntime runtime) {
+        synchronized (lifecycleLock) {
+            if (started || closed) { throw new IllegalStateException("Agent 服务开始后不能替换表达运行时。"); }
+            executionPipeline.expressions = runtime;
+        }
+    }
     private boolean started;
 
     /**
@@ -274,6 +287,11 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                 synchronized (lifecycleLock) { if (closed) { throw new ExecutionStoppedException(ExecutionControl.StopReason.CLOSED); } }
                 if (!handle.id().equals(result.agentId()) || !request.requestId().equals(result.requestId())) {
                     return CompletableFuture.completedStage(false);
+                }
+                // 2026/11/03：处理器禁用或换代后不继续使用原已编译内容。
+                if (result.replyPlan() != null) {
+                    if (executionPipeline.expressions == null) { return CompletableFuture.completedStage(false); }
+                    executionPipeline.expressions.verify(result.replyPlan());
                 }
                 var projection = result.promptTranscript();
                 if (projection == null) { return CompletableFuture.completedStage(true); }

@@ -16,11 +16,12 @@ import java.util.Optional;
 
 /**
  * 只投影成功正式答案的有序图文计划，不把正文中的路径或 URL 自动解释成图片。
+ * <br>2026/11/03：为注解式兼容解析器提供独立正式答案入口。
  * @param parts 完整有序文本段和图片，每段文本不超过两千字符
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public record AgentReplyPlan(List<Part> parts) {
     private static final JsonMapper JSON = JsonMapper.builder().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -28,10 +29,11 @@ public record AgentReplyPlan(List<Part> parts) {
 
     /**
      * 提供可选的模型回复形式合同，目标身份始终由宿主绑定。
+     * 2026/11/03：只有实际采用表达合同后才允许新信封，其他路径继续旧规则。
      * @return 不携带平台身份或操作权限的系统说明
      */
     public static ILLMMessage instructions() {
-        return LLMSystemMessage.builder().contents(new LLMContentListBuilder().addText("可直接输出普通图文答案；若需选择回复形式，只输出严格 JSON：{\"teaneko_reply\":1,\"messages\":[{\"mode\":\"reply\",\"text\":\"正文\"}]}。mode 可为 reply（引用当前消息）、at（仅提及当前发起者）或 plain（普通发送）；messages 保持你选择的分段顺序，空数组表示不发言。不得指定用户、群、消息 ID 或平台操作。每段最多2000字符，最多32段，不加 Markdown。此格式只描述正式答案，不是工具或命令。").build()).build();
+        return LLMSystemMessage.builder().contents(new LLMContentListBuilder().addText("可直接输出普通图文答案；若宿主提供本轮表达合同，可按合同一次输出完整特殊信封；没有合同或使用旧回复形式时，输出严格 JSON：{\"teaneko_reply\":1,\"messages\":[{\"mode\":\"reply\",\"text\":\"正文\"}]}。mode 可为 reply（引用当前消息）、at（仅提及当前发起者）或 plain（普通发送）；messages 保持你选择的分段顺序，空数组表示不发言。不得指定用户、群、消息 ID 或平台操作。每段最多2000字符，最多32段，不加 Markdown。此格式只描述正式答案，不是工具或命令。").build()).build();
     }
     /**
      * 计划在任何发送开始前完整验证，拒绝无界或空段。
@@ -54,6 +56,16 @@ public record AgentReplyPlan(List<Part> parts) {
     public static Optional<AgentReplyPlan> from(AgentRunResult result) {
         if (result.status() != AgentRunResult.Status.SUCCESS) { return Optional.empty(); }
         var answer = result.answer().orElse(null); if (answer == null) { return Optional.empty(); }
+        // 2026/11/03：解析器复用相同兼容校验，不构造虚假成功结果。
+        return fromAnswer(answer);
+    }
+    /**
+     * 2026/11/03：只解析调用者已经确认的正式答案，不执行发送。
+     * @param answer 正式消息
+     * @return 完整旧计划或无发言
+     * @throws IllegalArgumentException 当正式内容或控制信封不合法时
+     */
+    public static Optional<AgentReplyPlan> fromAnswer(org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage answer) {
         var parts = new ArrayList<Part>(); var text = new StringBuilder(); var original = new StringBuilder();
         for (var content : answer.getContents()) {
             if (content.getContentPart() instanceof TextLLMContentPart words) {

@@ -4,12 +4,14 @@
 
 ## 进行中
 
-- [三层自动记忆与观察式人格](4.6.1-layered-memory.md)：短期持久化、中期自动压缩、长期整理、画像和观察学习的实际接入与验证。
+当前没有进行中的实施计划；真实环境待验收项继续按部署清单执行。
 
 ## 已完成
 
 | 计划 | 完成范围 | 发布说明 |
 | --- | --- | --- |
+| [拟人表达与表情包](old/agent-expression-stickers.md) | 拟人分段、共享图库、类别选图、独立发送与原生表情、全局管理 SPI、受限事件及离线验收，100% | 尚未确认发布 |
+| [4.6.1 三层自动记忆与观察式人格](old/4.6.1-layered-memory.md) | 短中长期持久化、自动画像、表达观察、明确保存、逐段送达及维护，已完成离线验收 | 尚未确认发布 |
 | [4.6.0 注解工具](old/4.6.0-annotated-tools.md) | Spring 自动注册、参数 schema、client、可信上下文、异步图像及十项工具迁移 | [v4.6.0-l](../changelog/4.6.0-l.md) |
 | [4.6.0 引用图片工具回填](old/4.6.0-tool-images.md) | 显式图像结果、OneBot 视觉输入、批次配对及历史投影 | [v4.6.0-l](../changelog/4.6.0-l.md) |
 | [4.6.0 平台上下文与共享记忆修正](old/4.6.0-agent-context.md) | 私聊触发、命令帮助、namespace 共享召回、client 工具边界、OneBot 查询与模型消息元数据 | [v4.6.0-l](../changelog/4.6.0-l.md) |
@@ -18,7 +20,7 @@
 
 ## 后续验收与设计
 
-- [记忆与人格重设计规格](../design/agent-memory-personality.md)：自动三层记忆、观察式人格、持久化契约及采用边界；当前实现与验收以进行中的实施计划为准，项目对照记录仅放在 temp/docs。
+- [记忆与人格重设计规格归档](old/4.6.1-memory-specification.md)：保留自动三层记忆、观察式人格、持久化契约及采用边界；当前实现及离线验收见同目录实施记录，操作与配置查阅模块说明，项目对照记录仅放在 temp/docs。
 
 - 真实 MySQL、OneBot、模型、完整启动与性能检查继续维护在 [部署验收清单](../development/agent-deployment.md#实机验收清单)，不计入已完成计划的实机通过结论。
 - [Web 管理设计](../design/web-management-api.md) 保留后续业务资源、HTTP 和实时订阅的设计范围，实际已有能力以 [管理扩展指南](../development/plugins/management.md) 为准；当前不将整套 Web 标记为已经开工或完成。

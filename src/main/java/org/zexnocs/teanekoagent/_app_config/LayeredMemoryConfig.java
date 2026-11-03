@@ -13,6 +13,7 @@ import org.zexnocs.teanekoagent.agent.AgentScope;
 import org.zexnocs.teanekoagent.agent.IAgentFactory;
 import org.zexnocs.teanekoagent.agent.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.agent.memory.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.memory.layered.*;
 import org.zexnocs.teanekoagent.personality.IStyleObservationStore;
@@ -37,6 +38,7 @@ import java.util.function.Supplier;
  * <br>2026/11/03：装配长期整理、画像召回及注解维护能力，沿用统一后台预算。
  * <br>2026/11/03：可选观察端口与联合生成共用处理器和事务。
  * <br>2026/11/03：独立装配持久维护，关闭学习不停止到期回收。
+ * <br>2026/11/03：近期资料接入实际发送回执。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -216,12 +218,15 @@ public class LayeredMemoryConfig {
      * @param environment 本地开关
      * @param mapper 原转换器
      * @param executor 借用业务域
+     * @param deliveries 可选实际平台回执
      * @return 默认安装的分层上下文能力
      */
     @Bean
     public AgentFeature layeredMemoryFeature(ILayeredMemoryStore store, IAgentMemoryReferences references, IConfigDataService configs,
-            AgentScopeConfigManager manager, Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor) {
-        var prompts = new LayeredMemoryPromptSource(store, references, settings(environment), policies(configs, manager), mapper, executor, Clock.systemUTC());
+            AgentScopeConfigManager manager, Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
+            ObjectProvider<IAgentDeliveryStore> deliveries) {
+        // 2026/11/03：近期资料读取真实回执，不因生成历史存在而声称已发送。
+        var prompts = new LayeredMemoryPromptSource(store, references, settings(environment), policies(configs, manager), mapper, executor, Clock.systemUTC(), deliveries.getIfAvailable());
         return new SourceAgentFeature("teaneko.agent", "layered-memory", true, (definition, request, runtime) -> List.of(), prompts, LayeredMemoryPromptSource.NAMES);
     }
     /**

@@ -25,10 +25,11 @@ import java.util.*;
  * @param conversation 会话拥有者固定的代次；独立执行或未准入时可为空，出站前仍需复核
  * @param memoryReference 实际固定的持久化空间引用；未启用此能力或解析失败时为空
  * @param promptTranscript 可选已验证的本轮临时输入/历史投影，原交互诊断始终保留实际模型输入
+ * <br>2026/11/03：公开已验证语义答案及固定表达计划，不改变原构造入口。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                              Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
@@ -127,6 +128,8 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      * @return 当前允许交付的最终消息
      */
     public Optional<ILLMAssistantMessage> answer() {
+        // 2026/11/03：平台协议控制符只保留在诊断中，公开答案使用已核验语义投影。
+        if (status == Status.SUCCESS && promptTranscript != null && promptTranscript.replyPlan() != null) { return Optional.of(promptTranscript.projectedAnswer()); }
         return status == Status.SUCCESS ? interaction.flatMap(LLMInteractionResult::finalCandidate) : Optional.empty();
     }
 
@@ -139,6 +142,10 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                 : interaction.flatMap(LLMInteractionResult::committableTranscript);
     }
 
+    /** @return 2026/11/03：成功轮次冻结的表达计划；旧宿主为空 */
+    public org.zexnocs.teanekoagent.expression.ReplyPlans.@Nullable Approved replyPlan() {
+        return status == Status.SUCCESS && promptTranscript != null ? promptTranscript.replyPlan() : null;
+    }
     /**
      * 稳定业务状态，配置拒绝和执行取消与供应商终止分开表达。
      * @author zExNocs

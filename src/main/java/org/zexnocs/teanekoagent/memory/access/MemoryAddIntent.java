@@ -10,15 +10,17 @@ import java.util.Optional;
 
 /**
  * 由可信入口从单条原始用户消息识别的保守新增意图，不从模型结论、历史或工具文字授予写权限。
- * 仅支持明确冒号前缀，正文保持原文；其他自然语言需上层澄清或未来独立可信策略处理。
+ * 支持明确“记住/请记住”前缀及可选冒号，正文保持原文，疑问、否定和引用不授予新增。
+ * <br>2026/11/03：允许自然省略冒号，仍拒绝“记住了吗”等回顾询问。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.6.1-l
  */
 @JsonIgnoreType
 public final class MemoryAddIntent {
-    private static final List<String> PREFIXES = List.of("请记住：", "请记住:", "记住：", "记住:");
+    // 2026/11/03：标点与意图分开识别，不要求用户记住特定冒号格式。
+    private static final List<String> PREFIXES = List.of("请记住", "记住");
     private final MemoryAccessContext context;
     private final String text;
 
@@ -44,6 +46,11 @@ public final class MemoryAddIntent {
         for (var prefix : PREFIXES) {
             if (input.startsWith(prefix)) {
                 var body = input.substring(prefix.length()).strip();
+                // 2026/11/03：带冒号继续保留原显式格式；自然前缀中的疑问不被当成保存命令。
+                boolean colon = body.startsWith("：") || body.startsWith(":");
+                if (colon) { body = body.substring(1).strip(); }
+                else if (List.of("了", "啦", "吗", "么", "没", "没有").contains(body)
+                        || body.matches(".*[吗么没][？?。!！]*$") || body.endsWith("?") || body.endsWith("？")) { return Optional.empty(); }
                 return body.isBlank() || body.length() > 4096 ? Optional.empty() : Optional.of(new MemoryAddIntent(context, body));
             }
         }

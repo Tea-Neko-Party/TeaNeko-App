@@ -6,9 +6,13 @@
 
 `MemoryAccessContext` 保存原请求 ID、真实 `AgentActorContext` 和完整 `MemoryNamespaceReference`。工具适配器使用 `MemoryToolContexts.from(toolContext)` 从宿主组件取得它，同时检查请求/actor/固定引用的交接一致性。缺少引用时失败，不临时解析另一个空间。模型业务参数不得包含或反序列化这些上下文、授权对象、操作者、namespace 或 operationId。
 
-宿主从当前发起者的**单条原始消息**调用 `MemoryAddIntent.fromUserText(context, originalUserText)`，当前保守格式为 `记住：正文`、`记住:正文`、`请记住：正文` 或 `请记住:正文`，允许首尾空白。正文保留原文，长度 1–4096 个 Java 字符。普通聊天、否定句、外层引用和其他格式不会自动获得新增授权；含糊或未支持的表述由后续入口澄清，不由模型填写“已同意”布尔值。引用/转发的文字不能冒充原始消息，不能扫描历史或整个 Prompt 来寻找前缀。
+宿主从当前发起者的**单条原始消息**调用 `MemoryAddIntent.fromUserText(context, originalUserText)`，支持以 `记住`、`请记住` 开头，冒号可省略，例如 `请记住我喜欢花茶`、`记住：我住在茶城`。正文保留原文，长度 1–4096 个 Java 字符。普通聊天、否定句、外层引用及“你记住了吗”“记住了吗？”等追问不会自动获得新增授权；含糊或未支持的表述由入口澄清，不由模型填写“已同意”布尔值。引用/转发的文字不能冒充原始消息，不能扫描历史或整个 Prompt 来寻找前缀。
 
-意图固定完整原上下文和正文，不能在换空间、换请求、换来源后复用，模型不能把正文改写成另一条事实。平台消息的验真由可信入口承担；私有构造、类型标记和脱敏序列化用于防误传，不代替平台身份验证。当前没有通用自然语言授权分类器或自动个人事实提取。
+意图固定完整原上下文和正文，不能在换空间、换请求、换来源后复用，模型不能把正文改写成另一条事实。平台消息的验真由可信入口承担；私有构造、类型标记和脱敏序列化用于防误传，不代替平台身份验证。这里不使用通用自然语言授权分类器；普通聊天的自动提取由[分层记忆](../layered/README.md)的独立后台流程负责。
+
+默认 `ConversationHistoryService` 在模型执行前通过 `ExplicitMemoryCapture` 等待明确保存，使用固定动作 `explicit-user-request`；不要求模型恰好调用工具，也不依赖历史采集或自动学习开关，仍须当前登记、`memoryAddEnabled` 和固定空间有效。模型随后调用 `memory_add` 时复用同一事务回执，不按模型选择的分类重复保存。原始明确正文固定为 FACT，后续自动整理可以补充来源，不覆盖人工保护。
+
+默认新长期模块启用时，明确保存与自动长期结果统一进入 `agent.memory.long.v1`，通过 `memory_search`、`memory_user_profile` 和新画像资料读取；同主体、同原文的内容索引跨 FACT/PREFERENCE 分类去重。完整 `MemoryFactValue` 附加信息、有效期和动作回执同事务保存，换参拒绝，过期条目不再召回。旧事实不自动迁移，`memory_query`、`memory_profile` 继续查询旧领域；关闭新模块或使用原独立构造时保留原追加端口。
 
 ```java
 var context = MemoryToolContexts.from(toolContext);
@@ -18,7 +22,7 @@ var value = new MemoryFactValue(MemoryFactValue.Kind.PREFERENCE, intent.text(), 
 var committed = memoryAccessService.append(context, originalActionId, intent, value, toolContext.control());
 ```
 
-示例的 `originalUserText` 必须来自该 actor.sourceId 的当前原始用户消息；`originalActionId` 来自宿主已接受的原工具调用标识，不能是工具 JSON 中的字段。正文之外的类型、时间等仍经过现有领域校验，不从原文无条件推断精确事件时间。实际工具在模型往返前固定意图，执行时沿用原调用 ID，不能拿回填后的工具文字重新识别意图。
+示例的 `originalUserText` 必须来自该 actor.sourceId 的当前原始用户消息；`originalActionId` 来自宿主固定的前置保存动作或已接受的原工具调用标识，不能是工具 JSON 中的字段。正文之外的类型、时间等仍经过领域校验，不从原文无条件推断精确事件时间。实际工具在模型往返前固定意图，执行时沿用宿主动作，不能拿回填后的工具文字重新识别意图。
 
 实际 Agent 调用通过可选 `AgentUserText` 传入独立原文凭据：
 
@@ -66,11 +70,11 @@ var result = agentService.run(handle, request);
 | --- | --- | --- |
 | memory_query | 可选 subjectId、keywords、tags、kinds、start/end、includeEstimated，以及 limit/maxCharacters/maxScanned。 | 当前共享空间的确定性检索；省略主体不强制限定当前用户，时间使用带时区的 ISO-8601。 |
 | memory_profile | 可选 subjectId 和三项读取预算。 | 默认当前真实发起者 UUID，也可明确查询同空间其他 UUID；系统任务必须显式提供主体。 |
-| memory_add | 必填 kind，仅 FACT 或 PREFERENCE。 | 仅本轮原文凭据识别出明确新增且新增开关开启时可见；正文来自已固定意图，真实发起者是唯一主体。 |
+| memory_add | 必填 kind，仅 FACT 或 PREFERENCE。 | 仅本轮原文凭据识别出明确新增且新增开关开启时可见；默认记录器已前置保存时返回原回执，其他宿主按原工具动作追加。 |
 
-工具 schema 禁止额外字段，不接受 actor、namespace、授权、正文、subjectId 写入目标或 actionId。`IContextualToolExecutor.call` 已提供真实 `ILLMToolCall`，新增直接使用其原 ID；不扩展 LLM 上下文、不生成随机替代 ID。超出既有 actionId 的 128 字符上限时明确 INVALID_CALL，不截断导致动作碰撞。模型无法把工具结果、旧历史或新生成的“记住”文字变成新增凭据。
+工具 schema 禁止额外字段，不接受 actor、namespace、授权、正文、subjectId 写入目标或 actionId。`IContextualToolExecutor.call` 提供真实 `ILLMToolCall`；默认前置保存重用固定动作，其他宿主新增使用其原 ID，不生成随机替代 ID。超出既有 actionId 的 128 字符上限时明确 INVALID_CALL，不截断导致动作碰撞。模型无法把工具结果、旧历史或新生成的“记住”文字变成新增凭据。
 
-新增仅保留用户明确原文，可选择事实/偏好；标签为空、重要度 NORMAL、来源置信度 1，事件时间保留 UNKNOWN，不擅自生成精确事件或关系。调用原事实事务，STORED/DUPLICATE 才返回成功业务信封，参数冲突为 OPERATION_CONFLICT；成功结果只含状态和记录 ID。取消或超时后已经开始的事务仍按上一节核对，不假装回滚。
+新增仅保留用户明确原文；默认前置保存为 FACT，独立旧入口可选择事实/偏好。工具标签为空、重要度 NORMAL、来源置信度 1，事件时间保留 UNKNOWN，不擅自生成精确事件或关系。STORED/DUPLICATE 才返回成功业务信封，参数冲突为 OPERATION_CONFLICT；成功结果只含状态和记录 ID。取消或超时后已经开始的事务仍按上一节核对，不假装回滚。
 
 查询默认条数沿用本地 tool-limit，默认八条，显式提高仍受 hard-limit。证据数组额外收紧到通用 8000 字符工具结果上限减去 1024 字符信封预留，即最多 6976 字符；扫描和字符也不能扩大本地策略。输出只序列化一次有序证据，保留主体、来源、事件/记录时间估算、namespace/generation、画像规则版本、检查/命中数量、覆盖限制和 definitivelyEmpty，不输出管理审计 JSON。
 

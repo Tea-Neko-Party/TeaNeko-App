@@ -1,10 +1,15 @@
 package org.zexnocs.teanekoagent.adapter.memory;
 
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekoagent.database.easydata.EasyDataMaintenancePage;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekoagent.history.HistoryMessage;
+import org.zexnocs.teanekoagent.memory.access.MemoryAddResult;
+import org.zexnocs.teanekoagent.memory.fact.MemoryFactAppend;
 import org.zexnocs.teanekoagent.memory.fact.MemoryFactGenerationException;
+import org.zexnocs.teanekoagent.memory.fact.MemoryFactReceipt;
+import org.zexnocs.teanekoagent.memory.fact.MemoryFactValue;
 import org.zexnocs.teanekoagent.memory.layered.*;
 import org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekoagent.personality.IStyleObservationStore;
@@ -17,6 +22,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletionStage;
@@ -27,6 +33,7 @@ import java.util.function.Supplier;
  * 记录、主体/话题索引和整理水位同事务提交，遗忘墓碑阻止旧内容自动复活。
  * <br>2026/11/03：表达样本、渐进采用和整理水位共同提交，保留生成端口替换能力。
  * <br>2026/11/03：回收旧代次与失效索引，精简过期原话并保留当前遗忘保护。
+ * <br>2026/11/03：明确保存接入同一长期领域，保留原文和完整附加信息。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -40,6 +47,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     private final Supplier<LayeredMemorySettings> settings;
     private final @Nullable IStyleObservationStore styles;
     private final EasyDataMemoryLifecycle lifecycle;
+    private final Clock clock;
     /**
      * 借用专用数据入口，构造不进行 I/O。
      * @param data 原数据入口
@@ -62,11 +70,71 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      */
     public EasyDataLongTermMemoryStore(TeaNekoAgentEasyData data, EasyDataMemoryNamespaceStore namespaces, ObjectMapper mapper,
             Supplier<LayeredMemorySettings> settings, @Nullable IStyleObservationStore styles) {
+        // 2026/11/03：原构造继续使用实际时钟。
+        this(data, namespaces, mapper, settings, styles, Clock.systemUTC());
+    }
+    /**
+     * 2026/11/03：明确条目的有效期读取同一时钟，支持独立宿主确定性验证。
+     * @param data 原入口
+     * @param namespaces 空间锁
+     * @param mapper 原转换器
+     * @param settings 原预算
+     * @param styles 可选观察端口
+     * @param clock 实际时钟
+     */
+    public EasyDataLongTermMemoryStore(TeaNekoAgentEasyData data, EasyDataMemoryNamespaceStore namespaces, ObjectMapper mapper,
+            Supplier<LayeredMemorySettings> settings, @Nullable IStyleObservationStore styles, Clock clock) {
         this.data = data.inNamespace("agent.memory.long.v1"); this.layers = data.inNamespace("agent.memory.layers.v1");
         this.namespaces = namespaces; this.settings = settings; this.styles = styles;
+        this.clock = clock;
         // 2026/11/03：作业与共享索引保持无正文的稳定归属。
         this.lifecycle = new EasyDataMemoryLifecycle(data, namespaces, mapper);
         this.mapper = mapper.rebuild().disable(SerializationFeature.INDENT_OUTPUT, SerializationFeature.WRAP_ROOT_VALUE).build();
+    }
+    /**
+     * 2026/11/03：本人明确保存无需等待中期整理，完整元数据与回执同事务保存。
+     * @param command 已验证原文的宿主命令
+     * @param now 实际提交时刻
+     * @return 原操作回执，人工保护或失效条目返回冲突
+     * @throws IllegalArgumentException 当来源不是当前真实用户本人时
+     */
+    @Override public CompletionStage<MemoryAddResult> appendExplicit(MemoryFactAppend command, Instant now) {
+        var actor = command.source().actor(); var value = command.value();
+        if (actor.origin() != AgentActorContext.Origin.USER || !actor.userId().orElseThrow().equals(command.subjectId())) {
+            throw new IllegalArgumentException("明确保存只能写入真实发起者本人事实。");
+        }
+        return data.transaction("明确保存本人长期记忆", () -> {
+            requireGeneration(command.reference());
+            lifecycle.registerInTransaction(new MemoryLayers.Stream(MemoryLayers.stream(command.reference()), command.reference()));
+            String space = space(command.reference()); var receipts = dto("explicit:" + space);
+            String fingerprint = StableDigest.sha256(mapper.writeValueAsString(command));
+            var prior = receipts.find(command.operationId().toString(), EasyDataLock.WRITE);
+            if (prior != null) {
+                var receipt = read(prior, ExplicitReceipt.class);
+                return receipt.fingerprint().equals(fingerprint) ? receipt.result() : new MemoryAddResult(MemoryFactReceipt.Status.CONFLICT, null);
+            }
+            var kind = LongMemories.Kind.valueOf(value.kind().name()); String content = contentKey(command.subjectId(), value.text());
+            var alias = dto("content:" + space).find(content, EasyDataLock.READ);
+            var id = alias == null ? UUID.nameUUIDFromBytes(("explicit:" + content).getBytes(StandardCharsets.UTF_8)) : UUID.fromString(alias.getValue());
+            var entries = dto("entries:" + space); var row = entries.find(id.toString(), EasyDataLock.WRITE);
+            var old = row == null ? null : read(row, LongMemories.Entry.class);
+            var explicit = dto("explicit-values:" + space).find(id.toString(), EasyDataLock.READ);
+            MemoryAddResult result;
+            if (value.expiresAt() != null && !value.expiresAt().isAfter(now) || explicit != null && !read(explicit, MemoryFactValue.class).equals(value)
+                    || old != null && (old.status() != LongMemories.Status.ACTIVE || !old.text().equals(value.text()) || !liveExplicit(space, id))) {
+                result = new MemoryAddResult(MemoryFactReceipt.Status.CONFLICT, null);
+            } else if (old != null) {
+                if (explicit == null) { save(dto("explicit-values:" + space), null, id.toString(), value); }
+                result = new MemoryAddResult(MemoryFactReceipt.Status.DUPLICATE, id);
+            } else {
+                String sourceKey = "source:" + StableDigest.sha256(actor.scope().clientId(), actor.scope().scopeId(), actor.userId().orElseThrow().toString(), actor.sourceId());
+                write(space, null, new LongMemories.Entry(id, kind, command.subjectId(), "explicit." + kind.name().toLowerCase(Locale.ROOT), value.text(),
+                        LongMemories.Status.ACTIVE, 0, false, List.of(), List.of(sourceKey), List.of(), now, now, ""));
+                save(dto("explicit-values:" + space), null, id.toString(), value);
+                result = new MemoryAddResult(MemoryFactReceipt.Status.STORED, id);
+            }
+            save(receipts, null, command.operationId().toString(), new ExplicitReceipt(fingerprint, result)); return result;
+        });
     }
     /**
      * 领取至多四个中期片段；只有一个片段时，空闲十分钟后也可整理。
@@ -219,6 +287,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 var row = dto("entries:" + space).find(id.toString(), EasyDataLock.NONE); if (row == null) { continue; }
                 var value = read(row, LongMemories.Entry.class);
                 if ((value.status() == LongMemories.Status.ACTIVE || value.status() == LongMemories.Status.CONFLICT)
+                        && liveExplicit(space, value.id())
                         && (subjectId == null || subjectId.equals(value.subjectId())) && (terms.isEmpty() || score(value, terms) > 0)) { values.add(value); }
             }
             values.sort(Comparator.<LongMemories.Entry>comparingInt(value -> score(value, terms)).reversed()
@@ -291,6 +360,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 if (row == null) { return false; }
                 var value = read(row, LongMemories.Entry.class);
                 if ((value.status() != LongMemories.Status.ACTIVE && value.status() != LongMemories.Status.CONFLICT)
+                        || !liveExplicit(space(reference), value.id())
                         || !value.item().equals(item)) { return false; }
             }
             return true;
@@ -387,10 +457,12 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 : candidate.quotes().stream().anyMatch(quote -> quote.evidenceId().equals(value.id())))
                 .anyMatch(value -> blocks.find(sourceKey(value.message()), EasyDataLock.NONE) != null)) { return; }
         var identity = candidate.kind() == LongMemories.Kind.EPISODE ? batch.stream().id() + candidate.segments() : Objects.toString(candidate.subjectId());
-        var id = UUID.nameUUIDFromBytes(StableDigest.sha256(identity, candidate.kind().name(), candidate.attribute(), candidate.text()).getBytes(StandardCharsets.UTF_8));
+        // 2026/11/03：同正文的明确保存和自动提取共用记录，不在两个来源重复增加事实。
+        var alias = candidate.kind() == LongMemories.Kind.EPISODE ? null : dto("content:" + space).find(contentKey(candidate.subjectId(), candidate.text()), EasyDataLock.READ);
+        var id = alias == null ? UUID.nameUUIDFromBytes(StableDigest.sha256(identity, candidate.kind().name(), candidate.attribute(), candidate.text()).getBytes(StandardCharsets.UTF_8)) : UUID.fromString(alias.getValue());
         var entries = dto("entries:" + space); var row = entries.find(id.toString(), EasyDataLock.WRITE);
         var old = row == null ? null : read(row, LongMemories.Entry.class);
-        if (old != null && (old.locked() || old.status() == LongMemories.Status.FORGOTTEN || old.status() == LongMemories.Status.SUPERSEDED)) { return; }
+        if (old != null && (old.locked() || old.status() == LongMemories.Status.FORGOTTEN || old.status() == LongMemories.Status.SUPERSEDED || !liveExplicit(space, id))) { return; }
         var observed = batch.evidence().stream().filter(value -> candidate.quotes().stream().anyMatch(quote -> quote.evidenceId().equals(value.id())))
                 .map(value -> value.message().occurredAt()).max(Comparator.naturalOrder()).orElse(batch.segments().getLast().occurredThrough());
         var status = candidate.mode() == LongMemories.Mode.CONFLICT ? LongMemories.Status.CONFLICT : LongMemories.Status.ACTIVE;
@@ -422,7 +494,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
         if (old != null) { sourceKeys.addAll(old.sourceKeys()); }
         batch.evidence().stream().filter(value -> candidate.quotes().stream().anyMatch(quote -> quote.evidenceId().equals(value.id())))
                 .map(value -> sourceKey(value.message())).forEach(sourceKeys::add);
-        write(space, row, new LongMemories.Entry(id, candidate.kind(), candidate.subjectId(), candidate.attribute(), candidate.text(), status,
+        write(space, row, new LongMemories.Entry(id, old == null ? candidate.kind() : old.kind(), candidate.subjectId(), old == null ? candidate.attribute() : old.attribute(), candidate.text(), status,
                 old == null ? 0 : old.revision() + 1, false, quotes.stream().limit(32).toList(), sourceKeys.stream().limit(32).toList(), sourceIds.stream().limit(32).toList(),
                 old != null && old.observedAt().isAfter(observed) ? old.observedAt() : observed, now, candidate.timeHint()));
     }
@@ -435,6 +507,11 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     private void write(String space, @Nullable EasyDataRow row, LongMemories.Entry entry) {
         var previous = row == null ? null : read(row, LongMemories.Entry.class);
         save(dto("entries:" + space), row, entry.id().toString(), entry);
+        // 2026/11/03：正文别名作为同代次保护保留；人工改写不让旧正文被重新自动生成。
+        if (entry.subjectId() != null) {
+            var aliases = dto("content:" + space); String key = contentKey(entry.subjectId(), entry.text());
+            if (aliases.find(key, EasyDataLock.NONE) == null) { aliases.save(aliases.create(key, entry.id().toString())); }
+        }
         if (previous != null) {
             for (var target : targets(space, previous)) {
                 var index = dto(target); var old = index.find(indexKey(previous), EasyDataLock.NONE);
@@ -476,6 +553,33 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @return 稳定索引键
      */
     private static String indexKey(LongMemories.Entry entry) { return entry.revision() + ":" + entry.id(); }
+    /**
+     * 2026/11/03：同主体正文防重，类别和属性的提取差异不应让同一原文保存多份。
+     * @param subject 真实主体
+     * @param text 事实正文
+     * @return 稳定别名摘要
+     */
+    private static String contentKey(@Nullable UUID subject, String text) { return StableDigest.sha256(Objects.toString(subject), text); }
+    /**
+     * 2026/11/03：明确保存的有效期独立于后台原话保留期。
+     * @param space 共享空间
+     * @param id 条目标识
+     * @return 原明确值尚在有效期或没有设置有效期时为真
+     */
+    private boolean liveExplicit(String space, UUID id) {
+        var row = dto("explicit-values:" + space).find(id.toString(), EasyDataLock.NONE);
+        if (row == null) { return true; } var expiry = read(row, MemoryFactValue.class).expiresAt(); return expiry == null || expiry.isAfter(clock.instant());
+    }
+    /**
+     * 明确保存的原操作回执，不因后台合并而更换原请求结果。
+     * @param fingerprint 原始命令摘要
+     * @param result 实际回执
+     * @author zExNocs
+     * @date 2026/11/03
+     * @since 4.0.0
+     * @version 4.6.1-l
+     */
+    private record ExplicitReceipt(String fingerprint, MemoryAddResult result) { }
     /**
      * 以真实平台来源标识证据，空间重新绑定后重复导入同一旧消息也不能绕过遗忘。
      * @param message 原真实消息

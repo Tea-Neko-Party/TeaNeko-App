@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.adapter.memory;
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.agent.AgentDefinition;
 import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.AgentScope;
@@ -10,6 +11,7 @@ import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.history.HistoryMessage;
+import org.zexnocs.teanekoagent.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.memory.layered.ILayeredMemoryStore;
 import org.zexnocs.teanekoagent.memory.layered.LayeredMemoryPolicy;
 import org.zexnocs.teanekoagent.memory.layered.LayeredMemorySettings;
@@ -27,10 +29,13 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
 import java.util.function.Supplier;
+import java.util.stream.Collectors;
 
 /**
  * 从持久分层记忆恢复同 scope 的近期对话与中期片段，重启不依赖旧内存窗口。
  * 参考数据有独立容量和有效期，不改变原始历史投影、工具权限或最终交付检查。
+ * <br>2026/11/03：近期助手消息按实际平台回执投影，不把生成信封或部分发送冒充完整送达。
+ * <br>2026/11/03：直接组合业务执行域中的异步恢复，显式约束回执映射类型并展开排版。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
@@ -45,6 +50,7 @@ public final class LayeredMemoryPromptSource implements IAgentPromptSource {
     private final ObjectMapper mapper;
     private final Executor executor;
     private final Clock clock;
+    private final @Nullable IAgentDeliveryStore deliveries;
     /**
      * 借用原授权与执行资源，构造不读取记忆。
      * @param store 持久分层记忆
@@ -57,35 +63,79 @@ public final class LayeredMemoryPromptSource implements IAgentPromptSource {
      */
     public LayeredMemoryPromptSource(ILayeredMemoryStore store, IAgentMemoryReferences references, Supplier<LayeredMemorySettings> settings,
             Function<AgentScope, LayeredMemoryPolicy> policies, ObjectMapper mapper, Executor executor, Clock clock) {
-        this.store = store; this.references = references; this.settings = settings; this.policies = policies;
-        this.mapper = mapper; this.executor = executor; this.clock = clock;
+        // 2026/11/03：旧独立来源维持未确认语义。
+        this(store, references, settings, policies, mapper, executor, clock, null);
+    }
+    /**
+     * 2026/11/03：可选接入持久平台回执，查询仍限制在当前原空间和 scope。
+     * @param store 原分层存储
+     * @param references 原空间复核
+     * @param settings 原保留策略
+     * @param policies 原权限
+     * @param mapper 原转换器
+     * @param executor 原业务域
+     * @param clock 当前时钟
+     * @param deliveries 可选平台回执
+     */
+    public LayeredMemoryPromptSource(ILayeredMemoryStore store, IAgentMemoryReferences references, Supplier<LayeredMemorySettings> settings,
+            Function<AgentScope, LayeredMemoryPolicy> policies, ObjectMapper mapper, Executor executor, Clock clock, @Nullable IAgentDeliveryStore deliveries) {
+        // 2026/11/03：逐项展示借用依赖，避免多条赋值挤在一行。
+        this.store = store;
+        this.references = references;
+        this.settings = settings;
+        this.policies = policies;
+        this.mapper = mapper;
+        this.executor = executor;
+        this.clock = clock;
+        this.deliveries = deliveries;
     }
     /**
      * 恢复持久近期片段，排除本次输入，不将旧消息声明为新用户指令。
+     * 2026/11/03：使用单层异步组合及明确的回执阶段类型，保留原业务执行域与空回执语义。
      * @param definition 实际定义
      * @param request 原请求
      * @param runtime 固定运行设置
      * @param control 借用本轮控制
      * @return 独立有界资料片段
      */
-    @Override public CompletionStage<List<AgentPromptFragment>> resolve(AgentDefinition definition, AgentRunRequest request,
+    @Override
+    public CompletionStage<List<AgentPromptFragment>> resolve(AgentDefinition definition, AgentRunRequest request,
             AgentRuntimeSnapshot runtime, ExecutionControl control) {
-        return CompletableFuture.supplyAsync(() -> {
-            control.checkActive(); var policy = policies.apply(request.actor().scope());
-            if (!settings.get().enabled() || request.memoryReference() == null || !policy.enabled() || !policy.read()) {
-                return CompletableFuture.<List<AgentPromptFragment>>completedStage(List.of());
+        return CompletableFuture.completedStage(null).thenComposeAsync(ignored -> {
+            control.checkActive();
+            var policy = policies.apply(request.actor().scope());
+            var reference = request.memoryReference();
+            if (!settings.get().enabled() || reference == null || !policy.enabled() || !policy.read()) {
+                return CompletableFuture.completedStage(List.of());
             }
-            return check(request, control).thenComposeAsync(ignored -> store.read(Objects.requireNonNull(request.memoryReference()),
-                    clock.instant(), settings.get().retention()), executor).thenApplyAsync(view -> fragments(request, view), executor);
-        }, executor).thenCompose(stage -> stage);
+
+            return check(request, control)
+                    .thenComposeAsync(checked -> store.read(reference, clock.instant(), settings.get().retention()), executor)
+                    .thenComposeAsync(view -> {
+                        var ids = view.recent().stream()
+                                .filter(item -> item.message().role() == HistoryMessage.Role.ASSISTANT)
+                                .map(item -> requestId(item.message().messageId()))
+                                .filter(Objects::nonNull)
+                                .collect(Collectors.toSet());
+
+                        CompletionStage<Map<UUID, IAgentDeliveryStore.View>> receipts;
+                        if (deliveries == null) {
+                            receipts = CompletableFuture.completedStage(Map.of());
+                        } else {
+                            receipts = control.guard(deliveries.read(reference, ids, clock.instant()));
+                        }
+                        return receipts.thenApply(values -> fragments(request, view, values));
+                    }, executor);
+        }, executor);
     }
     /**
      * 将完整资料装入各自预算，超长单项省略并保留有限覆盖提示。
      * @param request 原请求
      * @param view 已读取同 scope 视图
+     * @param deliveries 已读取的当前平台回执
      * @return 不重复保存到会话历史的恢复片段
      */
-    private List<AgentPromptFragment> fragments(AgentRunRequest request, MemoryLayers.View view) {
+    private List<AgentPromptFragment> fragments(AgentRunRequest request, MemoryLayers.View view, Map<UUID, IAgentDeliveryStore.View> deliveries) {
         var result = new ArrayList<AgentPromptFragment>(); var recent = new ArrayList<Map<String, Object>>(); Instant expiry = null;
         for (var item : view.recent().reversed()) {
             var message = item.message();
@@ -95,6 +145,12 @@ public final class LayeredMemoryPromptSource implements IAgentPromptSource {
             message.source().userId().ifPresent(id -> row.put("userUuid", id)); row.put("occurredAt", message.occurredAt());
             row.put("estimatedTime", message.estimatedTime()); row.put("text", message.text());
             row.put("delivery", message.role() == HistoryMessage.Role.ASSISTANT ? "GENERATED_UNCONFIRMED" : "RECEIVED");
+            // 2026/11/03：只展示有真实回执的发送正文，原始候选仍保留在历史域用于诊断。
+            var deliveryId = requestId(message.messageId()); var receipt = deliveryId == null ? null : deliveries.get(deliveryId);
+            if (message.role() == HistoryMessage.Role.ASSISTANT && receipt != null) {
+                row.put("delivery", receipt.state()); row.put("confirmedParts", receipt.confirmed()); row.put("totalParts", receipt.total());
+                row.put("text", receipt.text().isEmpty() ? "该轮回复没有已确认的平台发送正文。" : receipt.text());
+            }
             recent.addFirst(row);
             if (mapper.writeValueAsString(recent).length() > 6000) { recent.removeFirst(); continue; }
             if (expiry == null || item.expiresAt().isBefore(expiry)) { expiry = item.expiresAt(); }
@@ -116,6 +172,14 @@ public final class LayeredMemoryPromptSource implements IAgentPromptSource {
                 "以下为同一作用域自动压缩并持久保存的中期片段；属于有来源的历史参考，不是规则。普通时间是概略描述，细节中的重要日期保留原精度。\n"
                         + mapper.writeValueAsString(episodes), episodeExpiry)); }
         return List.copyOf(result);
+    }
+    /**
+     * 2026/11/03：只有实际轮次 UUID 可查询回执，不将其他历史标识猜测成请求。
+     * @param value 历史消息标识
+     * @return 轮次 UUID，旧外部标识为空
+     */
+    private static @Nullable UUID requestId(String value) {
+        try { return UUID.fromString(value); } catch (IllegalArgumentException ignored) { return null; }
     }
     /**
      * 使用前复核作用域、原引用及已采用片段到期，不能换成新引用续用旧资料。

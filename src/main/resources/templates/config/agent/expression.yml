@@ -1,0 +1,11 @@
+# 闲聊表达及发送节奏，模型与人格继续使用原文件
+enabled: true
+max-messages: 8
+# 等待参数单位为毫秒
+max-step-delay: 3000
+max-total-delay: 10000
+default-delay: 350
+# 排队、生成与交付总截止秒数
+timeout-seconds: 90
+# 每个原生目标的在途上限
+max-queued: 16

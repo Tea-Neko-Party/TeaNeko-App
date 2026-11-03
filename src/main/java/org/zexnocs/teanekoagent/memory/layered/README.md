@@ -1,6 +1,6 @@
 # 三层持久记忆与自动画像
 
-当前版本：4.6.1-l。三层记忆、观察式人格与新域到期维护已经接通；显式入口统一及最终接入收尾仍按 [实施计划](../../../../../../../../docs/plan/4.6.1-layered-memory.md) 继续开发。
+当前版本：4.6.1-l。三层记忆、观察式人格、显式保存、平台回执与到期维护已经接通；交付范围及验证记录见[实施归档](../../../../../../../../docs/plan/old/4.6.1-layered-memory.md)。
 
 默认完整装配将 teaneko.agent:layered-memory 和 teaneko.agent:long-memory 安装到使用默认能力的实例。显式选择 features 的实例需分别加入所需能力，才能向模型提供恢复资料和长期工具。
 
@@ -8,7 +8,7 @@
 
 短期记录和原历史记录在同一个 EasyData 事务提交；任何写入失败一起回滚。每条消息保存原作者 UUID、完整 client/scope、实际事件时间、角色和采集时人格；来源重投不增加序号或延长保留期。短期分区包含 namespace、绑定版本和 generation，不包含人格身份，因此单纯换人格仍可追溯原消息。
 
-近期资料默认只来自当前 scope，标明来源和精确时间。USER 是收到的发言；ASSISTANT 是生成但尚未确认平台发送的答案，不能当作用户自述或成功发送回执。本批不新增平台送达状态持久化。
+近期资料默认只来自当前 scope，标明来源和精确时间。USER 是收到的发言；ASSISTANT 原记录只表示生成答案。近期注入叠加实际平台回执：ACKNOWLEDGED 表示全部分段确认，PARTIAL 只展示已确认正文，UNKNOWN 不展示未确认的候选；没有回执的旧记录明确为 GENERATED_UNCONFIRMED，不能当作用户自述或成功发送。
 
 每次最多读取 24 条近期消息和 6 段中期片段，分别最多装入 6000 字符的完整资料；单项过长时省略，不截断成另一句话。近期注入排除当前原文和已被中期覆盖的消息。资料由原 Prompt 总预算决定最终采用，有限窗口不代表完整历史。重启后从数据库读回，不恢复旧模型调用、工具副作用或未完成发送。
 
@@ -18,7 +18,7 @@
 
 后台在原调度器扫描持久分区目录，最多一个在途压缩任务。未处理消息达到数量阈值，或可压缩旧段达到字节阈值时领取任务，保留最新若干消息。通过原 SUMMARY 活动门控执行一次无工具 LLM 请求，预算独立于前台，仍受原模型能力和 token 预检限制。
 
-领取的连续输入和租约写入数据库。生成后复核原消息指纹、代次、租约和原始保留期；摘要必须符合结构、容量并缩小输入。中期片段与压缩水位同事务提交；其间新追加的尾部不会阻止原前缀提交。旧租约、clear 后的旧代次或策略撤销均不能交付迟到结果。
+领取的连续输入和租约写入数据库。摘要模型同时取得有界送达回执，部分成功只采用已确认部分，不把候选答案记成已经说出的话；确认只代表平台接受，不代表收件人已阅读。生成后复核原消息指纹、代次、租约和原始保留期；摘要必须符合结构、容量并缩小输入。中期片段与压缩水位同事务提交；其间新追加的尾部不会阻止原前缀提交。旧租约、clear 后的旧代次或策略撤销均不能交付迟到结果。
 
 失败不推进水位，按 30 秒起步、最长一小时的有界退避重新尝试；次数计入持久状态。原始数据与未完成状态仍在，重启后租约到期可重新领取。关闭停止调度并结束自有控制，原模型或数据库已经发生的工作不因此承诺回滚。
 
@@ -56,7 +56,15 @@
 
 数据继续放在 tea_neko_agent_data 的 agent.memory.layers.v1 域：short: 保存消息，source: 防重，streams 为恢复目录，states 为租约与水位，medium: 为片段。业务只访问专用 EasyData DTO，不直接操作 Repository。
 
-长期派生数据位于同表的 agent.memory.long.v1 域。共享键只包含 namespace 与 generation；来源 client/scope 和绑定版本保存在证据链，不用于隐式过滤长期召回。jobs 为持久整理租约和水位，entries: 为权威记录，subject:/term:/recent:/family: 为索引，changes: 为本人操作回执，blocked: 为旧证据抑制。原事实与人格域继续保留，本批不将旧事实自动导入新索引。
+长期数据位于同表的 agent.memory.long.v1 域。共享键只包含 namespace 与 generation；来源 client/scope 和绑定版本保存在证据链，不用于隐式过滤长期召回。jobs 为持久整理租约和水位，entries: 为权威记录，subject:/term:/recent:/family: 为索引，changes: 为本人操作回执，blocked: 为旧证据抑制。content: 为同主体原文索引，explicit: 保存明确动作回执，explicit-values: 保留明确条目的完整附加信息及有效期。原事实与人格域继续保留，不将旧事实自动导入新索引。
+
+## 明确保存与平台回执
+
+默认轮次在模型前识别当前真实用户原文的“记住/请记住”前缀，冒号可省略；通过原可信记忆访问边界完成保存后才继续。关闭 historyCaptureEnabled 或 memoryLearningEnabled 不关闭明确保存，memoryAddEnabled 仍须开启。原文按 FACT 保存到同一长期领域，工具复用原操作回执；同主体同正文跨类型去重，人工纠正、遗忘、锁定及过期保护继续有效。独立宿主和开关回退见[访问契约](../access/README.md)。
+
+命令、自动回复与自主发言通过 AgentDeliveryService 等待逐段账本和实际传输。agent.delivery.v1 的 receipts: 分区按完整 scope、绑定和空间代次隔离，发送前占用，取得有效平台消息 ID 后确认；失败保守记为 UNKNOWN。下一段只在前段实际完成后启动，每段仍复核原授权与目标。已有 ACKNOWLEDGED 重放跳过传输，未决或冲突占用拒绝自动补发，重启不恢复外部发送。
+
+回执只保存有界已发送文本投影或图片占位与完整内容摘要，不保存图片数据或链接；使用原历史 retention-days，默认七天，由同一维护调度回收过期及旧代次。取消、断网和数据库写入失败不证明平台没收到，也不能撤回已发内容。普通服务调用没有平台发送时保持未确认状态；真实人类事实仍只从 USER 原话提取。
 
 ## 到期维护与旧代次回收
 
@@ -91,7 +99,7 @@ agent.memory.lifecycle.v1 保存空间/分区的无正文定位标记，新采�
 
 | 工具 | 用途 |
 | --- | --- |
-| memory_search | 按 query、可选 subjectId 和 limit 检索当前共享 namespace 的自动长期结果 |
+| memory_search | 按 query、可选 subjectId 和 limit 检索当前共享 namespace 的自动及明确保存结果 |
 | memory_user_profile | 默认读取当前用户的自动画像，可显式指定共享空间内的用户 UUID |
 | memory_correct | 根据已查询的 id、revision 纠正本人条目，锁定人工结果 |
 | memory_forget | 根据已查询的 id、revision 遗忘本人条目并留下墓碑 |
@@ -104,6 +112,6 @@ agent.memory.lifecycle.v1 保存空间/分区的无正文定位标记，新采�
 
 ILayeredMemoryStore 和 ILayeredMemoryCompressor 分离持久化与生成；可以替换摘要后端，不重写调度器。自定义存储须同时提供可靠采集适配，不能仅替换读取端口后假定默认历史事务会为其写入。旧独立 EasyDataHistoryStore(data, mapper) 构造保留原语义，不自动采集新分层数据。
 
-ILongTermMemoryStore 与 ILongTermMemoryConsolidator 分离证据提交、索引和模型选择；LongTermMemoryAccess 为资料与注解工具共用的可信入口。替换生成器仍需经过原处理器的学习/引用复核与事务端口证据校验，不以模型返回成功代替真实提交。新模型适配和存储均在构造期不进行 I/O。
+ILongTermMemoryStore 与 ILongTermMemoryConsolidator 分离证据提交、索引和模型选择；LongTermMemoryAccess 为资料与注解工具共用的可信入口。替换 Store 时需实现 appendExplicit 的完整原文、附加信息、保护和幂等语义；默认未实现会明确失败。替换生成器仍需经过原处理器的学习/引用复核与事务端口证据校验，不以模型返回成功代替真实提交。IAgentDeliveryStore 可替换实际回执后端，继续遵守占用、逐段确认、未知不补发与有界清理契约。新模型适配和存储均在构造期不进行 I/O。
 
 维护不迁移旧事实，不回收有效长期结论、无期限补正或不可变备份；原历史按自身保留策略维护。离线测试使用现有事务夹具；真实 MySQL 事务代理、锁、索引与真实模型摘要质量仍需实机验收。
