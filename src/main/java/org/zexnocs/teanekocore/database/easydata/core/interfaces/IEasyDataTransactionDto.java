@@ -10,9 +10,11 @@ import java.util.List;
  * 现有数据库事务内的单目标 DTO，提供无缓存读、当前读、版本写入和有界扫描。
  * 不自行开启事务；调用者通过 EasyData 任务组合多个目标，提交前不发布缓存。
  * <br>2026/11/03：维护可按固定域分页，跨目标结果须经各自 DTO 重新锁定后修改。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 public interface IEasyDataTransactionDto {

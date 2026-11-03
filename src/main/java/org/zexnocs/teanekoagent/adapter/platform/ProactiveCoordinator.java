@@ -29,9 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 将真实旁观消息及原 Core Timer 转为自主候选，定时状态只保存未来发生，不补跑旧任务。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -183,12 +185,14 @@ public final class ProactiveCoordinator implements AutoCloseable {
 
     /**
      * 有界进程内调度状态，私聊目标不由配置键推断。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param target 固定原生目标
      * @param next 下次未来时刻
      * @param interval 固定间隔
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Scheduled(ProactiveTargets.Target target, Instant next, int interval) { }

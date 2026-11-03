@@ -25,9 +25,11 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * 默认后台人格学习组合根，配置按尝试懒读取，不建立额外线程池。
  * <br>2026/11/03：观察式人格已装配时停止旧逐轮模型分析，关闭观察后保留回退入口。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 @Configuration(proxyBeanMethods = false)

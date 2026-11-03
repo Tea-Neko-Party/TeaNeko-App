@@ -209,6 +209,8 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
         /**
          * 单次调用的配置快照；异步分段不再读取构造器的可变字段。
          *
+         * <br>2026/11/04：校正 @since 为首次引入版本。
+         *
          * @param prompt 经过宿主装配的消息与本次模型选项
          * @param source 待处理的来源数据
          * @param summary 转发消息摘要
@@ -218,7 +220,7 @@ public class GroupForwardMessageSender extends AbstractOnebotSender<GroupForward
          * @param recordFailed 是否记录任务失败
          * @author zExNocs
          * @date 2026/10/28
-         * @since 4.0.0
+         * @since 4.5.0-l
          * @version 4.5.0-l
          */
         private record SendOptions(String prompt, String source, String summary,

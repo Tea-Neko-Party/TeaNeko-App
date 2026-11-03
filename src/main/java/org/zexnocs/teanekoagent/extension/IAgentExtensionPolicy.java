@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 可替换的扩展授权与当前数据复核，真实角色、路径根、执行环境和源版本由宿主判断。
  * 写操作还须核对实际确认及防重，不能从模型参数接受“已授权”布尔值。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

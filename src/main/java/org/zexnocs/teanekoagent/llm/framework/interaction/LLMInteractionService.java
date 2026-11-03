@@ -36,9 +36,11 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * <br>2026/11/02：在失败转为状态前记录请求关联、阶段及脱敏异常结构。
  * <br>2026/11/02：完整工具批次回填之后追加显式视觉参考，供下一次真实模型请求使用。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  * @see LLMInteractionExecution
  */
@@ -254,9 +256,11 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * <br>2026/11/02：保留阶段化失败观察器，不在可交付结果中保存原异常。
      * <br>2026/11/02：整批工具文本之后追加关联图像，后续只追加尚未观察的结果。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.6.0-l
      */
     private static final class Run {

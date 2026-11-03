@@ -11,9 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 包级依赖约束，防止新内容/适配器重新把 App 或上层 Agent 类型带入 LLM。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMLayerBoundaryTest {

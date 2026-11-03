@@ -21,9 +21,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 验证本地估算包含正文、图像和工具定义的成本，且不会执行工具或暴露其运行对象。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMTokenEstimatorTest {

@@ -26,9 +26,11 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 不执行模型的可控冷轮次端口，业务完成与取消回执分别由用例推进。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class AgentConversationTestBackend implements IAgentTurnService, AutoCloseable {
@@ -121,9 +123,11 @@ final class AgentConversationTestBackend implements IAgentTurnService, AutoClose
 
 /**
  * 单次替身业务，成功结果使用真实不可变协议容器。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class AgentConversationTestCall {

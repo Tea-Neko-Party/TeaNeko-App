@@ -7,9 +7,11 @@ import java.time.Clock;
 
 /**
  * 空间注册与绑定事务服务的组合根；不注册聊天管理入口，不在构造时访问数据或启用 Agent。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Configuration(proxyBeanMethods = false)

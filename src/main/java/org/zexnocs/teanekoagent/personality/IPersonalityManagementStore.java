@@ -8,12 +8,27 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 独立管理事务端口，复用人格存储；原生权限与配置由可信入口持续复核。
+ * <br>2026/11/03：新增同主体管理回执查询。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public interface IPersonalityManagementStore {
+    /**
+     * 2026/11/03：查询同主体原回执，不猜测提交结果。
+     * @param operationId 原操作
+     * @param actor 原主体及目标
+     * @param guard 当前授权
+     * @return 持久化原结果
+     * @throws UnsupportedOperationException 当自定义存储未支持查询时
+     */
+    default CompletionStage<PersonalityManagementResult> operation(java.util.UUID operationId,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, Runnable guard) {
+        throw new UnsupportedOperationException("当前人格存储未实现管理回执查询。");
+    }
     /**
      * 管理查询的原子初始化或基础切换，同事务复核授权。
      * @param scope 原作用域

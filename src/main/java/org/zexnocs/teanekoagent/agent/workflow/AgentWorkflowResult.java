@@ -10,13 +10,15 @@ import java.util.*;
 
 /**
  * 一次显式协作的只读观察，步骤诊断可能含旧答案，只有整体成功才能公开最终答案。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param workflowId 宿主协作标识
  * @param status 整体结果
  * @param steps 已观察的顺序步骤结果
  * @param budgetUsage 原父预算的累计观察，包含在途预留，不累加各子步骤读数
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentWorkflowResult(UUID workflowId, AgentRunResult.Status status, List<StepResult> steps,
@@ -45,11 +47,13 @@ public record AgentWorkflowResult(UUID workflowId, AgentRunResult.Status status,
     public String toString() { return "Agent 协作结果[标识=" + workflowId + ", 状态=" + status + ", 步骤=" + steps.size() + "]"; }
     /**
      * 一个已经观察结束的真实步骤，不用模型文字冒充业务完成。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param name 原步骤名
      * @param result 实际轮次结果
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record StepResult(String name, AgentRunResult result) {}

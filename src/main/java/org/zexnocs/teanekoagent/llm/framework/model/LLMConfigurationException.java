@@ -3,9 +3,11 @@ package org.zexnocs.teanekoagent.llm.framework.model;
 /**
  * 可向配置状态界面报告的错误；消息和异常链不得含配置值或凭据。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public class LLMConfigurationException extends IllegalStateException {

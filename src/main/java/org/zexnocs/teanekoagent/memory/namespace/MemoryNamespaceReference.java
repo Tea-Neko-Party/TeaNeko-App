@@ -5,13 +5,15 @@ import java.util.Objects;
 
 /**
  * 一次事务观察到的只读空间引用，供后续运行快照固定并在动作前复核，不代表永久授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param scope 真实作用域
  * @param namespaceId 业务空间 ID
  * @param bindingRevision 作用域引用版本
  * @param generation 空间数据代次，与绑定版本分开变化
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryNamespaceReference(AgentScope scope, MemoryNamespaceId namespaceId, long bindingRevision, long generation) {

@@ -7,9 +7,11 @@ import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
  * 可放入组件的只读模型参数快照，内部容器不向调用者暴露，嵌套数据也已冻结。
  * 工具执行绑定由交互调用单独提供，不随模型参数保存。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMModelOptionsSnapshot {

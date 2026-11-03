@@ -36,13 +36,58 @@ import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
 
 /**
  * 使用真实参数处理、扫描、分发、执行和事件服务；仅替换任务调度与外部权限存储。
+ * <br>2026/11/03：验证管理来源默认拒绝及排队后授权复核。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public class CommandAsyncTest {
+    /**
+     * 管理来源不能调用未声明方法；声明方法排队后撤权也不能启动。
+     * @throws Exception 当反射定位测试方法失败时
+     */
+    @Test
+    void managementSourceRejectsNativeMethodsAndRechecksQueuedAuthorization() throws Exception {
+        var fixture = new Fixture();
+        var source = new ManagedInput();
+        var data = CommandData.builder().origin(CommandOrigin.MANAGEMENT).body("/async").args(new String[]{"managed"})
+                .scope(CommandScope.GROUP).scopeId("trusted-scope").senderId("web.local-admin")
+                .permission(CommandPermission.MEMBER).clientClass(AllowedClient.class).rawData(source).build();
+        assertThrows(SecurityException.class, () -> ManagementCommandPolicy.check(data,
+                Handler.class.getMethod("sub", CommandData.class)));
+        var method = Handler.class.getMethod("managed", CommandData.class);
+        ManagementCommandPolicy.check(data, method);
+        var stage = fixture.executor.execute(fixture.handler, method, new Object[]{data}, "管理排队验证");
+        source.valid = false;
+        fixture.tasks.runAll();
+        assertInstanceOf(SecurityException.class, failure(stage));
+        assertEquals(0, fixture.handler.calls);
+    }
+
+    /**
+     * 只用于离线复核的受信管理能力，不实现原生消息接口。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
+     * @author zExNocs
+     * @date 2026/11/03
+     * @since 4.7.0-l
+     * @version 4.7.0-l
+     */
+    public static final class ManagedInput implements IManagedCommandSource {
+        boolean valid = true;
+
+        /** @param method 原目录方法 */
+        @Override
+        public void checkCommand(java.lang.reflect.Method method) {
+            if (!valid) {
+                throw new SecurityException("测试管理来源已撤权。");
+            }
+        }
+    }
     /**
      * 验证事件之后任务尚未开始时取消父控制，不执行原业务方法。
      * @throws Exception 当反射定位或任务夹具建立失败时
@@ -59,36 +104,44 @@ public class CommandAsyncTest {
     /**
      * 命令声明允许使用的客户端标记，用于原客户端校验。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class AllowedClient implements ICommandClient {}
     /**
      * 未被命令声明支持的客户端标记，用于拒绝分支验证。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class OtherClient implements ICommandClient {}
     /**
      * 用于命令参数注入的基础可信来源数据。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class Input {}
     /**
      * 用于验证原始输入类型继承与实例保持的派生数据。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class DerivedInput extends Input {}
@@ -96,15 +149,29 @@ public class CommandAsyncTest {
     // 非 static 的测试类不会成为 Spring 自动扫描候选。
     /**
      * 提供受控异步方法与非法返回分支的命令夹具。
+     * <br>2026/11/03：加入显式管理来源方法以验证排队后撤权。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
-     * @version 4.5.0-l
+     * @since 4.5.0-l
+     * @version 4.7.0-l
      */
     @Command(value = {"/async", "/alias"}, permission = CommandPermission.ADMIN, scope = CommandScope.GROUP,
             supportedClients = AllowedClient.class, taskNamespace = "test-command-stage")
     public class Handler {
+        /**
+         * 2026/11/03：提供具有正确管理来源签名的真实扫描目标。
+         * @param data 原管理来源
+         * @return 受控业务阶段
+         */
+        @SubCommand("managed")
+        @ManagementCommand
+        public CompletionStage<String> managed(CommandData<ManagedInput> data) {
+            calls++;
+            return business;
+        }
         final CompletableFuture<String> business = new CompletableFuture<>();
         int calls;
         int number;
@@ -167,9 +234,11 @@ public class CommandAsyncTest {
     /**
      * 用于验证正则命令绑定规则的独立夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command(value = "echo \\d+", mode = Command.CommandMode.REGEX, scope = CommandScope.ALL)
@@ -185,9 +254,11 @@ public class CommandAsyncTest {
     /**
      * 用于验证已关闭命令不会进入业务方法的夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command(value = "/closed", enable = false)
@@ -203,9 +274,11 @@ public class CommandAsyncTest {
     /**
      * 没有默认处理方法的子命令夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command(value = "/sub-only")
@@ -221,9 +294,11 @@ public class CommandAsyncTest {
     /**
      * 装配真实事件、扫描、参数、分发及执行服务的离线命令夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private class Fixture {
@@ -604,9 +679,11 @@ public class CommandAsyncTest {
     /**
      * 捕获并由用例主动推进的任务执行队列。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static class TaskRunner {

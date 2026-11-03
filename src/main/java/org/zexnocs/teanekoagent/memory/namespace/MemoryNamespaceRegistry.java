@@ -11,9 +11,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 可信宿主使用的空间注册底层服务，固定创建身份并等待持久化；不切换 scope 或修改会话。
  * 上层须先检查当前启用状态及操作权限，本类没有聊天命令、模型工具或自动执行入口。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryNamespaceRegistry {

@@ -26,9 +26,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 历史组合根，默认构造无 I/O；清理使用既有调度器并限制同时一个批次。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Configuration(proxyBeanMethods = false)
@@ -70,9 +72,11 @@ public class ConversationHistoryConfig {
     @Bean public Cleanup historyCleanup(IHistoryStore store, ILogger logger) { return new Cleanup(store, logger); }
     /**
      * 复用 Spring 已有定时设施，每次清理一百行，失败只记固定原因。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static final class Cleanup {

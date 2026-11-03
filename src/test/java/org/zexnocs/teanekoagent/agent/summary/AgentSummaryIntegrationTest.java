@@ -47,9 +47,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 集中验证真实会话、LLM 交互及后台摘要的生成、采用、失败和代次失效，不重复测试普通数据结构。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)
@@ -57,9 +59,11 @@ class AgentSummaryIntegrationTest {
     private final AgentScope scope = new AgentScope("客户端", "群甲");
     /**
      * 使用真实执行器和 LLM 循环，仅替换模型传输与已测试的配置/引用端口。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private final class Harness implements AutoCloseable {

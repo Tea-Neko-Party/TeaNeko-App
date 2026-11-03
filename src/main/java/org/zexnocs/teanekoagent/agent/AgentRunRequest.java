@@ -14,6 +14,8 @@ import java.util.UUID;
 /**
  * 宿主规范化的一次请求，不接受模型提供的身份、执行器或配置绑定。
  * <br>2026/11/02：统一派生实际空间引用，插件与核心步骤使用同一固定请求语义。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 宿主生成的请求标识，不自动提供跨请求幂等
  * @param actor 可信发起者、来源和目标
  * @param activity 本次业务活动类别
@@ -26,7 +28,7 @@ import java.util.UUID;
  * @param summary 邮箱固定的已生成摘要；普通入口覆盖调用者提示，实际使用仍须复核
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity,

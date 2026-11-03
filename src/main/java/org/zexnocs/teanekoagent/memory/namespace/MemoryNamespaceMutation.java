@@ -5,11 +5,13 @@ import java.util.Objects;
 
 /**
  * 事务已结束后的空间元数据回执；拒绝、版本冲突与提交成功分别表达。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 事务业务结果
  * @param namespace 已提交或冲突时观察到的空间；不存在及配额拒绝时为空
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryNamespaceMutation(Status status, @Nullable MemoryNamespace namespace) {
@@ -29,9 +31,11 @@ public record MemoryNamespaceMutation(Status status, @Nullable MemoryNamespace n
 
     /**
      * 不把重复确认、业务拒绝或乐观锁冲突当作新的外部动作。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { CREATED, UNCHANGED, GENERATION_ADVANCED, NOT_FOUND, CONFLICT, QUOTA_EXCEEDED }

@@ -5,9 +5,11 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
 
 /**
  * Agent 专用表的基础设施仓库，仅由 Core EasyData 服务发现和访问，业务 Store 不注入此类型。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Repository

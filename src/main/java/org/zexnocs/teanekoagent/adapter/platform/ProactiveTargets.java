@@ -16,9 +16,11 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：发送完成必须包含实际平台消息 ID。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @Service
@@ -99,13 +101,15 @@ public final class ProactiveTargets {
 
     /**
      * 仅保存数据的发送边界，不携带原始消息、客户端或借来的用户权限。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param scope 实际作用域
      * @param id 原生目标
      * @param group 是否群目标
      * @param self 当时确认的机器人自身 ID
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Target(AgentScope scope, String id, boolean group, String self) { }

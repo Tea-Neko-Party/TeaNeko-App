@@ -6,6 +6,8 @@ import java.util.Set;
 
 /**
  * 从可信配置冻结的基础人格，允许补正的字段始终受代码绝对白名单收束。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 人格标识
  * @param version 配置版本
  * @param name 角色名称
@@ -13,7 +15,7 @@ import java.util.Set;
  * @param mutableFields 配置允许的表达字段
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record BasePersonality(String id, int version, String name, List<String> rules, Set<String> mutableFields) {

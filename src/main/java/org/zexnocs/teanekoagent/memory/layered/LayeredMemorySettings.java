@@ -4,6 +4,8 @@ import java.time.Duration;
 
 /**
  * 分层记忆的本地工作量和时限，作用域权限由原配置独立决定。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param enabled 是否启用分层记忆
  * @param triggerMessages 自动压缩触发消息数
  * @param keepMessages 保留近期原始消息数
@@ -14,7 +16,7 @@ import java.time.Duration;
  * @param triggerBytes 原始消息字节触发阈值
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public record LayeredMemorySettings(boolean enabled, int triggerMessages, int keepMessages, int batchMessages,

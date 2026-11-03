@@ -20,9 +20,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 验证 System 装配顺序、步骤提交、取消、失败及实体租约边界。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class SystemPipelineTest {
@@ -376,11 +378,13 @@ class SystemPipelineTest {
     /**
      * 以显式声明和受控回调组成的测试 System。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param descriptor 用于本次测试的 {@code descriptor} 数据
      * @param action 需要运行的处理回调
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record TestSystem(SystemDescriptor descriptor,

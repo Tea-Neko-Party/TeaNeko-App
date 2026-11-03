@@ -22,9 +22,11 @@ import java.util.function.Supplier;
 /**
  * 原生提醒动作与当前身份策略；目标只由可信 scope 解析，不从动作参数接受客户端或权限。
  * 群身份每次查询平台，私聊核对原用户目录，不构造系统 DEBUG 或原生消息替身。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -175,12 +177,14 @@ public final class NativeScheduleAdapter implements AgentScheduleService.Policy,
 
     /**
      * 仅适配器短暂持有实际客户端，不写入任务或组件。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param client 当前客户端
      * @param id 原生发送目标
      * @param group 是否群聊
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Destination(ITeaNekoClient client, String id, boolean group) { }

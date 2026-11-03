@@ -20,9 +20,11 @@ import java.util.concurrent.Executor;
  * <br>2026/11/03：资源发送交接原请求和控制，不丢失异步后的守卫。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class ReplyExtensionRegistry {
@@ -246,13 +248,15 @@ public final class ReplyExtensionRegistry {
      * 固定内容声明与泛型处理器代理。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 内容 ID
      * @param version 内容版本
      * @param ownerType 注解目标类
      * @param handler 原容器代理
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private record PartBinding(String id, int version, Class<?> ownerType, IReplyPartHandler<?> handler) {}

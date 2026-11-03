@@ -14,10 +14,24 @@ import java.time.Instant;
  * 执行时间：rate
  * 不保证任务只有一个线程执行。
  *
+ * 2026/11/03：提供原规则的只读预计触发与等待状态。
+ *
+ * @param <T> 任务结果类型
  * @author zExNocs
  * @date 2026/02/14
+ * @since 4.0.0
+ * @version 4.7.0-l
  */
 public class FixedRateTimer<T> implements ITimer<T> {
+    /**
+     * 2026/11/03：返回实际规则，等待上次完成时不编造预计时间。
+     * @return 本计时器的近时观测
+     */
+    @Override
+    public TimerObservation observation() {
+        return new TimerObservation("FIXED_RATE", "固定触发间隔：" + rate, lastExecutionTime.plus(rate), false, "UTC");
+    }
+
     /// 任务配置
     private final ITimerTaskConfig<T> timerTaskConfig;
 
@@ -25,7 +39,8 @@ public class FixedRateTimer<T> implements ITimer<T> {
     private final Duration rate;
 
     /// 上次执行的时间
-    private Instant lastExecutionTime;
+    // 2026/11/03：调度线程发布的新时刻供只读观测读取。
+    private volatile Instant lastExecutionTime;
 
     /// result type
     @Getter
@@ -35,6 +50,7 @@ public class FixedRateTimer<T> implements ITimer<T> {
      * 构造函数。
      * @param timerTaskConfig 任务配置
      * @param rate 任务 rate
+     * @param resultType 任务结果类型
      */
     public FixedRateTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig, @NonNull Duration rate, @NonNull Class<T> resultType) {
         this.timerTaskConfig = timerTaskConfig;

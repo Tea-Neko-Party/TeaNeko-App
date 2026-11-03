@@ -34,12 +34,25 @@ import java.time.Instant;
  * - @weekly: 0 0 0 * * 0 表示每周 0（周天） 0 时 0 分 0 秒触发
  * - @daily: 0 0 0 * * * 表示每天 0 时 0 分 0 秒触发
  * - @hourly: 0 0 * * * * 表示每小时 0 分 0 秒触发
- * <p>
- * @see CronExpression
+ * 2026/11/03：提供原规则的只读预计触发与等待状态。
+ *
+ * @param <T> 原任务结果类型
  * @author zExNocs
  * @date 2026/02/14
+ * @since 4.0.0
+ * @version 4.7.0-l
+ * @see CronExpression
  */
 public class CronTimer<T> implements ITimer<T>  {
+    /**
+     * 2026/11/03：返回实际规则，等待上次完成时不编造预计时间。
+     * @return 本计时器的近时观测
+     */
+    @Override
+    public TimerObservation observation() {
+        return new TimerObservation("CRON", cron.toString(), nextTriggerTime, false, "Asia/Shanghai");
+    }
+
     /// 任务配置
     private final ITimerTaskConfig<T> timerTaskConfig;
 
@@ -47,7 +60,8 @@ public class CronTimer<T> implements ITimer<T>  {
     private final CronExpression cron;
 
     /// 下次触发时间点。
-    private Instant nextTriggerTime;
+    // 2026/11/03：调度线程发布的新时刻供只读观测读取。
+    private volatile Instant nextTriggerTime;
 
     /// result type
     @Getter
@@ -58,6 +72,7 @@ public class CronTimer<T> implements ITimer<T>  {
      *
      * @param timerTaskConfig 任务配置
      * @param cronExpression  Cron 表达式
+     * @param resultType 任务结果类型
      */
     public CronTimer(@NonNull ITimerTaskConfig<T> timerTaskConfig,
                      @NonNull String cronExpression,

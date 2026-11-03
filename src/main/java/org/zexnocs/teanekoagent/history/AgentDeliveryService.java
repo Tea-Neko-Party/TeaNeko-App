@@ -19,13 +19,26 @@ import java.util.function.Supplier;
  * 原发送链的持久回执边界，先占用再调用宿主守卫和传输，失败保守记录不确定且不补发。
  * <br>2026/11/03：支持类型扩展提供的固定历史投影与实际内容摘要。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ * <br>2026/11/03：在实际逐段发送边界记录平台回执，不把模型成功当作交付。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.6.2-l
+ * @version 4.7.0-l
  */
 public final class AgentDeliveryService {
+    private org.zexnocs.teanekoagent.agent.monitor.@Nullable AgentActivityTimeline timeline;
+
+    /**
+     * 2026/11/03：注入只观察脱敏节点的宿主窗口。
+     * @param timeline 实际活动窗口
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installTimeline(org.zexnocs.teanekoagent.agent.monitor.AgentActivityTimeline timeline) {
+        this.timeline = timeline;
+    }
     private final IAgentDeliveryStore store;
     private final Executor executor;
     private final Clock clock;
@@ -74,7 +87,8 @@ public final class AgentDeliveryService {
     public CompletionStage<Void> sendRecorded(@Nullable MemoryNamespaceReference reference, AgentActorContext actor, UUID requestId,
             int index, int total, String text, String digest, Supplier<CompletionStage<Void>> guardedSend) {
         return CompletableFuture.supplyAsync(() -> {
-            if (reference == null) { return guardedSend.get(); }
+            // 2026/11/03：无持久化模式也只能按实际平台阶段报告完成。
+            if (reference == null) { return observed(actor, requestId, index, guardedSend); }
             var duration = retention.get();
             if (duration.compareTo(Duration.ofDays(1)) < 0 || duration.compareTo(Duration.ofDays(365)) > 0) { throw new IllegalArgumentException("平台回执保留期必须在一至三百六十五天内。"); }
             String projection = text.length() > 4096 ? text.substring(0, 4000) + "（发送正文较长，尾部省略）" : text;
@@ -83,7 +97,7 @@ public final class AgentDeliveryService {
             return store.begin(command).thenComposeAsync(acquired -> {
                 if (!acquired) { return CompletableFuture.completedStage(null); }
                 CompletionStage<Void> sending;
-                try { sending = guardedSend.get(); } catch (RuntimeException failure) { sending = CompletableFuture.failedStage(failure); }
+                try { sending = observed(actor, requestId, index, guardedSend); } catch (RuntimeException failure) { sending = CompletableFuture.failedStage(failure); }
                 return sending.thenComposeAsync(ignored -> store.finish(command, true, clock.instant()), executor)
                         .exceptionallyCompose(failure -> store.finish(command, false, clock.instant()).handle((ignored, recordFailure) -> {
                             // 已发送但回执写入失败也不补发，不把数据库失败解释为平台未收到。
@@ -91,5 +105,29 @@ public final class AgentDeliveryService {
                         }));
             }, executor);
         }, executor).thenCompose(stage -> stage);
+    }
+
+    /**
+     * 2026/11/03：记录实际调用及真实完成，不记录消息正文或把失败判为未送达。
+     * @param actor 原目标
+     * @param request 原请求
+     * @param index 当前段
+     * @param send 原守卫和发送
+     * @return 原平台完成阶段
+     */
+    private CompletionStage<Void> observed(AgentActorContext actor, UUID request, int index,
+                                            Supplier<CompletionStage<Void>> send) {
+        var observer = timeline;
+        if (observer == null) {
+            return send.get();
+        }
+        observer.delivery(request, actor.scope(), index, "STARTED");
+        try {
+            return send.get().whenComplete((ignored, failure) -> observer.delivery(request, actor.scope(), index,
+                    failure == null ? "SENT" : "INDETERMINATE"));
+        } catch (RuntimeException failure) {
+            observer.delivery(request, actor.scope(), index, "INDETERMINATE");
+            throw failure;
+        }
     }
 }

@@ -41,9 +41,11 @@ import static org.mockito.Mockito.mock;
  * 核验注解代理、扩展分派、语义历史与取消后的真实顺序。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Timeout(15)
@@ -182,9 +184,11 @@ class ExpressionProtocolTest {
      * 测试用新增指令。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @TeaNekoReplyDirective("CUSTOM")
@@ -202,9 +206,11 @@ class ExpressionProtocolTest {
      * 测试用独立协议。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @org.zexnocs.teanekocore.plugin.PluginOwned("test.extra")

@@ -26,9 +26,11 @@ import java.util.concurrent.ScheduledExecutorService;
 /**
  * 自动摘要组合根，配置在业务域懒读取，不拥有 Core 执行器或默认创建会话。
  * <br>2026/11/02：默认分层摘要启用时停用旧内存生成，避免重复消耗同一段聊天。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 @Configuration(proxyBeanMethods = false)

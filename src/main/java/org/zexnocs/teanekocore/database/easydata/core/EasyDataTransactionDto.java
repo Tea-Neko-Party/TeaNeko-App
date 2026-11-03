@@ -14,10 +14,12 @@ import java.util.Objects;
 /**
  * EasyData 基础层的事务 DTO 实现，集中封装仓库、实体、锁和提交后缓存协调。
  * <br>2026/11/03：提供不扩展写入权限的固定域维护分页。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <T> 由数据入口固定的实体类型，不由业务参数选择
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 public final class EasyDataTransactionDto<T extends BaseEasyDataObject> implements IEasyDataTransactionDto {

@@ -14,6 +14,8 @@ import java.util.UUID;
 
 /**
  * 可供上层检索使用的独立证据，保留事实主语、可信来源与时间，不包含旧审计原文。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 稳定记录 ID
  * @param namespaceId 证据所属空间
  * @param generation 数据代次
@@ -28,7 +30,7 @@ import java.util.UUID;
  * @param externalOrigin 可选外部证据定位，不包含原 JSON
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallEvidence(UUID id, MemoryNamespaceId namespaceId, long generation, long revision, UUID subjectId,
@@ -76,14 +78,18 @@ public record MemoryRecallEvidence(UUID id, MemoryNamespaceId namespaceId, long 
     }
     /**
      * 区分来源提供的事件时间与使用记录时间的兼容估算。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum TimeBasis { EVENT_TIME, RECORDED_TIME_ESTIMATE }
     /**
      * 可审计的外部定位；原 source 等字段仍通过独立可信管理操作读取。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param system 来源格式
      * @param target 原目标
      * @param key 原键
@@ -91,7 +97,7 @@ public record MemoryRecallEvidence(UUID id, MemoryNamespaceId namespaceId, long 
      * @param digest 原文摘要
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record ExternalOrigin(String system, String target, String key, String externalId, String digest) {

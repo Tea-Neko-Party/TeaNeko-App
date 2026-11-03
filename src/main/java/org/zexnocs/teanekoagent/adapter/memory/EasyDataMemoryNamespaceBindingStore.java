@@ -20,9 +20,11 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceBindingOu
 /**
  * 在既有空间存储事务中同时提交创建、配额、scope 引用与操作回执，不串联两次异步写入。
  * 同域适配器共享事务辅助方法，业务服务只依赖绑定端口，不接触仓库或 ConfigData 缓存。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -184,11 +186,13 @@ public final class EasyDataMemoryNamespaceBindingStore implements IMemoryNamespa
 
     /**
      * 明确 schema 的绑定存储，不与普通 ConfigData 字段维护两份权威值。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储版本
      * @param value 作用域绑定
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record BindingData(int schemaVersion, MemoryNamespaceBinding value) {
@@ -205,13 +209,15 @@ public final class EasyDataMemoryNamespaceBindingStore implements IMemoryNamespa
 
     /**
      * 单个操作的持久化原始命令与结果；后续绑定不覆盖此前回执。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储版本
      * @param request 原始命令
      * @param outcome 原始业务回执
      * @param occurredAt 原始操作时刻
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record BindingOperation(int schemaVersion, MemoryNamespaceBindingRequest request, MemoryNamespaceBindingOutcome outcome, Instant occurredAt) {

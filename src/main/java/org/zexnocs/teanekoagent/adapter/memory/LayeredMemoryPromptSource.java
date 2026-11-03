@@ -38,9 +38,11 @@ import java.util.stream.Collectors;
  * <br>2026/11/03：直接组合业务执行域中的异步恢复，显式约束回执映射类型并展开排版。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.2-l
  */
 public final class LayeredMemoryPromptSource implements IAgentPromptSource {

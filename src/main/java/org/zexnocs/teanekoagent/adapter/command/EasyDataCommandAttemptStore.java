@@ -16,9 +16,11 @@ import java.util.function.Supplier;
 
 /**
  * 用既有事务、唯一键和 Version 仲裁命令防重，进程重启后不接管未知副作用。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -106,12 +108,14 @@ public final class EasyDataCommandAttemptStore implements ICommandAttemptStore {
     }
     /**
      * 明确的持久化 schema，不保存命令正文或业务任意返回对象。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储版本
      * @param attempt 原动作身份
      * @param receipt 已观察终态或在途状态
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record State(int schemaVersion, Attempt attempt, CommandInvocationReceipt receipt) {}

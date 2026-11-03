@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 独立事实 Recall 端口，不读取人格、不收集历史、不自动查询聊天客户端。
  * 启用、当前引用、读开关和业务权限由宿主在调用及注入前检查。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

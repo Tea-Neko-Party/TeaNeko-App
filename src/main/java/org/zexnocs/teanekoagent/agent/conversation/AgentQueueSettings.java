@@ -5,11 +5,13 @@ import java.util.Objects;
 
 /**
  * 单次入队的不可变策略，不包含运行控制或业务权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param maxWaiting 最多等待数量，不包含已占运行槽的请求；零表示不排队
  * @param waitTimeout 等待上限，出队后停止该计时
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentQueueSettings(int maxWaiting, Duration waitTimeout) {

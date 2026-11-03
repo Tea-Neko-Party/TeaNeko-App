@@ -12,13 +12,18 @@ import java.util.concurrent.CompletionStage;
  * 依赖本轮实际资源资料的注解工具，由明确 Feature 安装。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：修正媒体工具的显式能力归属，保持原资料与预算约束。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.6.2-l
+ * @version 4.7.0-l
  */
-@Component @TeaNekoAgentToolClass(value="sticker-selection",toolPackage="agent.sticker",managedByFeature=true)
-public final class StickerReplyTools{
+// 2026/11/04：直接引用宿主能力标识，避免工具声明指向不存在的能力。
+@Component
+@TeaNekoAgentToolClass(value = MediaReplyFeature.ID, toolPackage = "agent.sticker", managedByFeature = true)
+public final class StickerReplyTools {
     private final StickerReplyService service;
     /** @param service 当轮资源宿主 */ public StickerReplyTools(StickerReplyService service){this.service=service;}
     /**

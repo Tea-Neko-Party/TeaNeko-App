@@ -30,6 +30,14 @@ capture(id) 固定插件及传递依赖版本，check(token) 拒绝禁用或换�
 
 事件监听器禁用后不参与新通知；命令在启动及其返回 Stage 完成时复核；TaskStage 在同步进入与退出时复核；模型服务等待实际模型 Future 后复核。禁用不会自动中断所有外部 IO，也不销毁 Bean。IO 适配器响应借用 ExecutionControl 的终止，自有连接等由 Bean 销毁回调关闭，共享执行器不由插件关闭。
 
+## 管理来源命令
+
+4.7.0-l 在原命令链新增 `CommandOrigin`，旧调用默认 NATIVE。管理调用明确为 MANAGEMENT，方法必须声明 `@ManagementCommand` 且使用具体 `CommandData<T>`，其中 T 实现 `IManagedCommandSource`。扫描时校验签名，分发与实际排队启动时复核能力；原权限、客户端范围、事件、参数绑定及 `CompletionStage<?>` 仍然生效。管理登录不自动获得 OWNER 或 DEBUG，也不能构造平台成员。
+
+App 的 `ConsoleInvocation` 提供固定目标的 `print`、`send` 和 `checkActive`，由宿主生成；发送方法还须声明 `sendsMessages = true`。开发方式、白名单和真实完成合同见[客户端指令台](../web-console-commands.md)。原生消息依赖方法须另行提取受限管理用例，不能仅添加注解后伪造原生数据。
+
+可撤销原生平台来源实现 `ICommandSourceGuard`，其 `checkCommandSource` 在原分发和实际排队启动时调用。网页客户端使用该接口复核会话、期限及成员变更；原生来源仍保留自身角色，不转成管理来源或绕过原权限。
+
 ## 原同步 TaskStageChain
 
 实现 ITaskStage 并标记 @TaskStage(value = {"业务命名空间"}, priority = 数值)，再声明 PluginOwned。优先级越大越先进入，同优先级按 Bean 名升序；退出顺序与进入相反。也可以通过 TaskConfig 显式阶段列表为单个任务选择步骤；不要无意将业务插件注册到所有 default 任务。

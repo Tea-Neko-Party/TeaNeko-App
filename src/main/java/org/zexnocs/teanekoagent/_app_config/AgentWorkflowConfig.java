@@ -14,9 +14,11 @@ import java.util.concurrent.Executor;
 
 /**
  * 为可信服务调用装配显式协作，不向模型或主聊天自动注册分派工具。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Configuration(proxyBeanMethods = false)

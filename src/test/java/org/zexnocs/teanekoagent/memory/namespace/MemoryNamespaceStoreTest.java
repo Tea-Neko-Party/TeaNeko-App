@@ -20,9 +20,11 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation.
 
 /**
  * 验证注册适配器的提交语义、并发配额、重放、代次仲裁和损坏数据隔离。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class MemoryNamespaceStoreTest {

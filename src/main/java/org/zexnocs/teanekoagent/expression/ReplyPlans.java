@@ -12,9 +12,11 @@ import java.util.UUID;
  * 协议和交付之间的不可变值，不持有服务、控制或权限。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class ReplyPlans {
@@ -24,11 +26,13 @@ public final class ReplyPlans {
      * 完整协议的精确键。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 协议 ID
      * @param version 版本
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record ProtocolKey(String id, int version) {
@@ -44,11 +48,13 @@ public final class ReplyPlans {
      * 协议内指令键。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param protocol 所属协议
      * @param name 指令名
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record DirectiveKey(ProtocolKey protocol, String name) {}
@@ -56,9 +62,11 @@ public final class ReplyPlans {
      * 允许插件实现的内容合同；实现及所有字段必须不可变。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public interface Content {}
@@ -66,10 +74,12 @@ public final class ReplyPlans {
      * 字面文本。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 正文
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Text(String value) implements Content {}
@@ -77,10 +87,12 @@ public final class ReplyPlans {
      * 普通图片引用。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param url 图片引用
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Image(String url) implements Content {}
@@ -88,12 +100,14 @@ public final class ReplyPlans {
      * 已切分的指令。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param name 指令名
      * @param fields 业务字段
      * @param body 字面正文
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Directive(String name, Map<String,String> fields, String body) {
@@ -109,18 +123,22 @@ public final class ReplyPlans {
      * 等待归一化前的草稿。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param content 不可变内容
      * @param mode 回复方式
      * @param waitMillis 建议等待，未声明时为空
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Draft(Content content, Mode mode, @Nullable Integer waitMillis) {}
     /**
      * 冻结的发送步骤。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param content 内容
      * @param mode 回复方式
@@ -131,7 +149,7 @@ public final class ReplyPlans {
      * @param digest 实际内容摘要
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Step(Content content, Mode mode, int waitMillis, String type, int version, String text, String digest) {}
@@ -139,9 +157,11 @@ public final class ReplyPlans {
      * 只由本包编译器创建的完整计划，语义答案和原文摘要共同冻结。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public static final class Approved {

@@ -7,9 +7,11 @@ import java.util.Objects;
 
 /**
  * 懒读个人记忆空间配额，错误仅影响本次创建，不删除既有空间。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

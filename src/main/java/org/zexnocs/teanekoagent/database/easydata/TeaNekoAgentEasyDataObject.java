@@ -10,9 +10,11 @@ import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
 /**
  * Agent 专用键值表，统一元数据、事实、人格、历史及执行账本，按业务域隔离。
  * <br>2026/11/03：增加固定域维护分页索引，避免跨目标维护按整个表排序。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 @Entity @NoArgsConstructor

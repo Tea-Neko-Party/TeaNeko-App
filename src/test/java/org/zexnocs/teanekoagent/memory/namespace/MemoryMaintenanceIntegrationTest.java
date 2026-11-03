@@ -32,9 +32,11 @@ import static org.mockito.Mockito.mock;
 
 /**
  * 复用事务夹具验证物理回收、持久水位、证据精简与遗忘保护，不运行外部数据库或模型。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @Timeout(30)
@@ -46,9 +48,11 @@ class MemoryMaintenanceIntegrationTest {
     private final LayeredMemorySettings settings = new LayeredMemorySettings(true, 6, 2, 4, 131072, Duration.ofSeconds(30), Duration.ofDays(90));
     /**
      * 组合专用入口的真实历史、分层和长期实现。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private final class Harness implements AutoCloseable {

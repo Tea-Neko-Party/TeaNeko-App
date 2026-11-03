@@ -8,9 +8,11 @@ import java.util.Objects;
 /**
  * 单事务内使用的版本 DTO，不公开数据库实体或仓库，不可放入业务组件或长期缓存。
  * 修改正文只更新本地值，须由所属事务 DTO 显式保存后才进入数据库。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class EasyDataRow {

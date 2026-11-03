@@ -7,6 +7,8 @@ import java.util.Objects;
 
 /**
  * 已解析的人格纯数据，基础设定与低信任补正分开；不保存服务或授权能力。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param identity 基础设定、绑定和应用开关共同决定的会话身份
  * @param baseId 基础人格标识
  * @param baseVersion 基础人格版本
@@ -17,7 +19,7 @@ import java.util.Objects;
  * @param expiresAt 本轮已采用补正的最早到期时刻
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentPersonalitySnapshot(String identity, String baseId, int baseVersion, String correctionKey,

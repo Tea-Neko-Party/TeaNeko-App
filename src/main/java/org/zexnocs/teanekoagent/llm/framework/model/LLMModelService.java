@@ -20,13 +20,34 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>只扫描带有 {@link LLMModel} 注解且实现 {@link ILLMModel} 的 Bean，并通过注解声明的 {@link LLMModelId} 路由。
  * <br>2026/11/02：模型插件调用接入归属及异步结果版本守卫。
  *
+ * 2026/11/03：同步构造模型请求时固定文件代次，拒绝旧参数使用新凭据。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.6.0-l
+ * @version 4.7.0-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
+    private org.zexnocs.teanekoagent.llm.file_config.@org.jspecify.annotations.Nullable LLMFileConfigurationEpoch fileEpoch;
+
+    /**
+     * 2026/11/03：参数预检与实际请求构造绑定原文件代次，独立宿主可不安装。
+     * @param epoch 文件快照边界
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installFileEpoch(org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigurationEpoch epoch) {
+        fileEpoch = epoch;
+    }
+
+    /**
+     * @param action 同步构造，不等待网络
+     * @param <T> 返回类型
+     * @return 同一文件代次内的结果
+     */
+    private <T> T fixed(java.util.function.Supplier<T> action) {
+        return fileEpoch == null ? action.get() : fileEpoch.fixed(action);
+    }
     // 2026/11/02：保持直接构造使用方式，Spring 装配时启用归属守卫。
     private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
     /**
@@ -174,7 +195,8 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     @Override
     public TaskFuture<ILLMResult> call(ILLMPrompt prompt, ExecutionPolicy execution) {
         java.util.Objects.requireNonNull(execution, "execution").checkActive();
-        return callInternal(resolveModelId(prompt), prompt, execution);
+        // 2026/11/03：默认路由也与参数和凭据使用同一构造边界。
+        return fixed(() -> callInternal(resolveModelId(prompt), prompt, execution));
     }
 
     /**
@@ -185,8 +207,16 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * @throws LLMConfigurationException 当本地模型配置不可用时
      */
     @Override public LLMModelOptions resolveOptions(ILLMPrompt prompt) {
-        var id = resolveModelId(prompt);
-        return validateOptions(id, getModel(id), prompt);
+        // 2026/11/03：旧已解析参数先检查代次，不能通过重新标记掩盖变化。
+        return fixed(() -> {
+            var id = resolveModelId(prompt);
+            var options = validateOptions(id, getModel(id), prompt);
+            if (fileEpoch != null) {
+                fileEpoch.verify(options);
+                fileEpoch.stamp(options);
+            }
+            return options;
+        });
     }
 
     /**
@@ -222,9 +252,25 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * @return 承载实际任务完成信号及结果的 TaskFuture；本入口不阻塞等待
      * @throws IllegalArgumentException 当参数格式、范围或声明的类型约束不满足时
      */
-    private TaskFuture<ILLMResult> callInternal(LLMModelId modelId, ILLMPrompt prompt, ExecutionPolicy execution) {
+    private TaskFuture<ILLMResult> callInternal(LLMModelId modelId, ILLMPrompt prompt,
+            @org.jspecify.annotations.Nullable ExecutionPolicy execution) {
+        // 2026/11/03：只持锁至供应商同步构造完成，返回后的 HTTP 已持有自己的凭据快照。
+        return fixed(() -> callFixed(modelId, prompt, execution));
+    }
+
+    /**
+     * @param modelId 原路由
+     * @param prompt 原已解析输入
+     * @param execution 可选原策略
+     * @return 实际模型阶段
+     */
+    private TaskFuture<ILLMResult> callFixed(LLMModelId modelId, ILLMPrompt prompt,
+            @org.jspecify.annotations.Nullable ExecutionPolicy execution) {
         var model = getModel(modelId);
         var options = validateOptions(modelId, model, prompt);
+        if (fileEpoch != null) {
+            fileEpoch.verify(options);
+        }
         var effective = new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED);
         // 2026/11/02：等待供应商实际完成后再复核，不把禁用解释为已经撤销远端请求。
         var token = pluginToken(model);
@@ -246,7 +292,8 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public TaskFuture<ILLMResult> call(ILLMPrompt prompt) {
-        return call(resolveModelId(prompt), prompt);
+        // 2026/11/03：默认路由与同步请求构造互斥于文件发布。
+        return fixed(() -> call(resolveModelId(prompt), prompt));
     }
 
     /**

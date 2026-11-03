@@ -9,9 +9,11 @@ import java.util.function.ToIntFunction;
 
 /**
  * 专用数据域的循环维护页，进度和变更同事务提交，倒序轮转不被持续新增数据拖住。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class EasyDataMaintenancePage {

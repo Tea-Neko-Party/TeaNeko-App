@@ -2,6 +2,10 @@
 
 `actuator` 是 TeaNeko Core 的异步执行与定时调度模块，主要负责把业务逻辑包装成可追踪、可重试、可串联的任务。
 
+4.7.0-l 的原 TaskService、TaskExecuteService 和 TimerService 接入 RuntimeMonitor、TimerDirectory，记录真实排队、同步阶段、外部结果等待与原回执。观测不改变 TaskStageChain 的单线程推进；Core 回执不能代替外层业务 Stage 终态。计时器暂停门禁只影响未来触发，不取消在途任务。
+
+ITimer.observation() 可由原计时器扩展提供规则和预计时间，未提供则保持未知。运行与日志为有界进程窗口，重启清空。管理资源继续使用原网关，详见[任务与日志](../../../../../../../docs/development/web-console-runtime.md)。
+
 | 模块 | 作用 |
 |:---:|---|
 | `task` | 异步任务模型。提供 `TaskConfig`、`TaskService`、`TaskFuture`、任务阶段链和重试策略。 |

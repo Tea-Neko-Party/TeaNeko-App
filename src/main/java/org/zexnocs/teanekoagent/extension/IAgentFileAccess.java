@@ -7,9 +7,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 受控文件后端扩展，默认应用不提供宿主文件实现。
  * 实现负责根目录/链接边界、实际授权、原版本写入及 requestId+callId 防重；同键改参数须拒绝，不自动重试写入。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentFileAccess {
@@ -32,23 +34,27 @@ public interface IAgentFileAccess {
     CompletionStage<WriteResult> write(String path, String text, String expectedRevision, AgentExtensionContext context);
     /**
      * 有来源版本的文件正文，内容由后端先完成脱敏和范围限制。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param exists 是否已确认目标存在；不存在时正文为空、版本为空且 complete 为 true
      * @param revision 实际源版本
      * @param text 正文
      * @param complete 是否已完整读取
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record ReadResult(boolean exists, @Nullable String revision, String text, boolean complete) {}
     /**
      * 文件修改的业务回执，不返回任意后端对象。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param status 实际状态
      * @param revision 已确认的新版本，未知或拒绝时可为空
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record WriteResult(AgentExtensionStatus status, @Nullable String revision) {}

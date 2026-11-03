@@ -5,6 +5,8 @@ import java.util.Set;
 
 /**
  * 插件静态元数据；实现版本与宿主 SPI 版本分别声明。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 全局稳定标识
  * @param version 插件实现版本
  * @param apiVersion 宿主 SPI 版本，当前为一
@@ -12,7 +14,7 @@ import java.util.Set;
  * @param mandatory 是否为不可通过逻辑开关关闭的宿主基础模块
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public record PluginDescriptor(String id, String version, int apiVersion, Set<String> dependencies, boolean mandatory) {

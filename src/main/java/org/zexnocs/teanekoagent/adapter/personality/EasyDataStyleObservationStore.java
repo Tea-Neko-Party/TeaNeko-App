@@ -26,9 +26,11 @@ import java.util.function.Supplier;
 /**
  * 保存真实表达样本并渐进采用，观察、补正与原长期进度共享同一数据库事务。
  * <br>2026/11/03：按域循环清理过期原话，保留采用时间以防旧证据自动续期。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class EasyDataStyleObservationStore implements IStyleObservationStore, IMemoryMaintenance {
@@ -214,6 +216,8 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
     private static String sequence(long value) { return String.format(Locale.ROOT, "%020d", value); }
     /**
      * 有来源的独立表达样本，真实平台来源参与防重。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param key 来源摘要
      * @param source 原作者
      * @param segment 原中期片段
@@ -221,12 +225,14 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
      * @param at 事件时刻
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record Sample(String key, AgentActorContext source, UUID segment, String quote, Instant at) { }
     /**
      * 已保存的表达模式及支持样本，采用不会丢弃观察依据。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 稳定模式标识
      * @param field 表达字段
      * @param text 模式摘要
@@ -236,17 +242,19 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
      * @param adoptedUntil 原补正实际到期时刻，不随配置修改伪造续期
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record Pattern(String id, String field, String text, StyleObservations.Context context, List<Sample> samples, @Nullable Instant adoptedAt, @Nullable Instant adoptedUntil) { }
     /**
      * 已回收模式的无正文采用水位，避免旧样本重新导入后自动续期。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param at 原采用时间
      * @param until 原实际到期
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record Adoption(Instant at, @Nullable Instant until) { }

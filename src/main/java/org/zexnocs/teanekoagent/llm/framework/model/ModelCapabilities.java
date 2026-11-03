@@ -8,11 +8,13 @@ import java.util.Set;
 /**
  * 某一具体模型在当前适配器中的输入能力，不代表整个供应商的能力。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param imageInputRoles 允许图片输入的消息角色集合
  * @param imageDetails 具体模型已验证的细节级别集合
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record ModelCapabilities(Set<LLMMessageRole> imageInputRoles, Set<LLMImageDetail> imageDetails) {

@@ -7,11 +7,13 @@ import java.util.UUID;
 
 /**
  * 按稳定记录 ID 扫描的有界页面，包含过期证据，不冒充相关性检索结果。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param records 不可变原记录
  * @param nextCursor 存在后续页时的最后已返回 ID；扫描结束为空
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactPage(List<MemoryFactRecord> records, @Nullable UUID nextCursor) {

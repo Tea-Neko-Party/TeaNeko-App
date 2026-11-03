@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 历史存储端口，所有写入 Stage 均等待事务提交；不承担业务授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IHistoryStore {

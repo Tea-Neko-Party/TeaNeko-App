@@ -16,9 +16,11 @@ import java.util.concurrent.CompletionStage;
  * 精确客户端路由和插件代次；未知客户端不推测媒体能力。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class ExpressionClientRegistry{
@@ -83,13 +85,15 @@ public final class ExpressionClientRegistry{
      * 可固定到计划的数据，没有容器对象。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param clientId 客户端
      * @param images 图片能力
      * @param faces 原生目录
      * @param tokens 原插件代次
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record View(String clientId,boolean images,Map<String,String> faces,List<PluginRegistry.Token> tokens){

@@ -12,9 +12,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 可信宿主的绑定事务服务；上层先校验启用状态及 OWNER/私聊管理权限，提交后再协调会话。
  * 不复制 ConfigData 权威绑定，不注册聊天指令，也不把持久化回执当成当前运行授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryNamespaceBindings {

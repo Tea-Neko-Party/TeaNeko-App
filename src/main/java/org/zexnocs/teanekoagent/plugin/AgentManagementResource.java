@@ -16,9 +16,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 提供已注册实例及能力的脱敏全局管理视图，不反射导出组件值、记忆或运行控制。
  * 全局实例查看需要宿主明确授予 agent.inspect 权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Component
@@ -56,11 +58,13 @@ public final class AgentManagementResource implements ManagementResource<AgentMa
     }
     /**
      * 有界实例查询。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param after 原排序游标，首屏为空
      * @param limit 页大小，一至一百
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record Query(String after, int limit) {
@@ -73,6 +77,8 @@ public final class AgentManagementResource implements ManagementResource<AgentMa
     }
     /**
      * 实例基础视图，已声明能力与全局可安装目录分别展示。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 实例 ID
      * @param definitionId 定义 ID
      * @param declaredFeatures 实例显式声明
@@ -80,7 +86,7 @@ public final class AgentManagementResource implements ManagementResource<AgentMa
      * @param closed 实例关闭标记
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record View(EntityId id, String definitionId, Set<String> declaredFeatures, Set<String> availableFeatures, boolean closed) {

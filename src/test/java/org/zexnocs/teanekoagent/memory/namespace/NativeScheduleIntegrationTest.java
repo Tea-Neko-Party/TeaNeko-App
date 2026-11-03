@@ -50,18 +50,22 @@ import static org.zexnocs.teanekoagent.schedule.AgentScheduledTask.Status.*;
 
 /**
  * 实际原生任务入口到专用数据库及发送适配的必要闭环，不连接真实平台。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)
 class NativeScheduleIntegrationTest {
     /**
      * 复用事务夹具，平台仅模拟当前身份与实际发送回执。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Fixture implements AutoCloseable {

@@ -19,9 +19,11 @@ import java.util.concurrent.ExecutorService;
  * 提供内置记忆、历史和命令工具能力，与第三方贡献共同组合。
  * <br>2026/11/02：内置工具改为普通能力贡献，不再因新增总来源 Bean 退让。
  * <br>2026/11/02：注解工具提供者注册为独立 Bean，保留原能力 ID。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

@@ -9,7 +9,10 @@ import java.util.UUID;
 
 /**
  * 宿主固定的记忆管理操作，保留真实操作者、原始预期版本和完整业务参数用于事务防重。
- * DEBUG 权限由可信入口检查，记录不能通过模型参数构造来源身份。
+ * 原命令检查 DEBUG，独立管理入口检查宿主授权，均不接受模型构造来源身份。
+ * <br>2026/11/03：允许独立管理来源，权限仍由可信管理网关与事务守卫复核。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param operationId 宿主固定操作 ID
  * @param actor 已认证操作者
  * @param namespace 目标或克隆源空间
@@ -21,15 +24,15 @@ import java.util.UUID;
  * @param locked 可选锁定状态
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public record MemoryManagementCommand(UUID operationId, AgentActorContext actor, MemoryNamespaceId namespace,
         long generation, long revision, Action action, @Nullable UUID recordId, @Nullable String text, @Nullable Boolean locked) {
     /**
      * 拒绝不完整、跨动作混合或无真实用户的管理请求。
      * @param operationId 操作 ID
-     * @param actor 真实用户来源
+     * @param actor 真实用户或独立管理来源
      * @param namespace 空间
      * @param generation 代次
      * @param revision 预期版本
@@ -43,7 +46,8 @@ public record MemoryManagementCommand(UUID operationId, AgentActorContext actor,
     public MemoryManagementCommand {
         Objects.requireNonNull(operationId, "管理操作 ID 不能为空。"); Objects.requireNonNull(actor, "管理来源不能为空。");
         Objects.requireNonNull(namespace, "管理空间不能为空。"); Objects.requireNonNull(action, "管理动作不能为空。");
-        if (actor.origin() != AgentActorContext.Origin.USER || generation < 0 || revision < 0
+        // 2026/11/03：不将管理操作伪装成平台用户消息。
+        if (actor.origin() == AgentActorContext.Origin.SYSTEM || generation < 0 || revision < 0
                 || (action == Action.EDIT ? recordId == null || text == null && locked == null : recordId != null || text != null || locked != null)
                 || text != null && (text.isBlank() || text.length() > 4096)) {
             throw new IllegalArgumentException("记忆管理来源、版本或动作参数不合法。");
@@ -51,9 +55,11 @@ public record MemoryManagementCommand(UUID operationId, AgentActorContext actor,
     }
     /**
      * 管理动作不包含画像或人格修改，克隆只复制当前空间的事实证据快照。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Action { EDIT, CLONE, CLEAR }

@@ -14,11 +14,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 不可变异步环绕链，借用原控制及插件目录，不提交第二套调度或自动重试。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <I> 输入类型
  * @param <O> 输出类型
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public final class OperationPipeline<I, O> {
@@ -121,6 +123,8 @@ public final class OperationPipeline<I, O> {
     }
     /**
      * 插件所属的有序类型化节点。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param pluginId 所属插件
      * @param id 插件内局部标识
      * @param order 进入顺序，越大越先
@@ -129,7 +133,7 @@ public final class OperationPipeline<I, O> {
      * @param <O> 输出类型
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record Binding<I, O>(String pluginId, String id, int order, AsyncInterceptor<I, O> interceptor) {

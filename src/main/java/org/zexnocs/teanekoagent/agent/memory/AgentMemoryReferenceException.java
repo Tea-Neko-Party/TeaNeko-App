@@ -5,9 +5,11 @@ import java.util.Objects;
 
 /**
  * 空间引用失效的非敏感类型化原因，不携带配置值、存储正文或原始异常链。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentMemoryReferenceException extends RuntimeException {
@@ -37,9 +39,11 @@ public final class AgentMemoryReferenceException extends RuntimeException {
 
     /**
      * 分开表达引用已变更、scope 已停用与基础设施不可用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Reason { CHANGED, DISABLED, UNAVAILABLE }

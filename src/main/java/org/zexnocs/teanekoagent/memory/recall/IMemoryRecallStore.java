@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 有界稳定候选读取端口；在一次存储边界仲裁 generation，不能拼接不一致分页后宣称完整。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

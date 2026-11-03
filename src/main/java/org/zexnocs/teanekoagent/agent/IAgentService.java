@@ -9,9 +9,11 @@ import java.util.concurrent.CompletionStage;
  * 默认 Agent 会话入口，同 client/scope/实例进入同一顺序邮箱，群内不按用户拆分。
  * 提交完整成功轮次的内存窗口，不发送平台消息，不将请求身份解释为永久授权。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentService {
@@ -68,9 +70,11 @@ public interface IAgentService {
 
     /**
      * 取消请求的接收结果，不表示已经回滚外部动作。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     enum CancelResult { REQUESTED, NOT_FOUND, NOT_OWNER }

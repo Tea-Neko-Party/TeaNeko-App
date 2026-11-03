@@ -6,6 +6,8 @@ import java.util.UUID;
 
 /**
  * 可信宿主固定的空间绑定命令，scope 来自真实 actor，不接收第二份可替换的目标作用域。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 宿主固定的操作 ID；重试须保留全部参数
  * @param actor 已在上层验证权限的真实操作者和来源
  * @param target 目标业务空间
@@ -13,7 +15,7 @@ import java.util.UUID;
  * @param mode 创建并绑定或绑定已有空间
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryNamespaceBindingRequest(UUID requestId, AgentActorContext actor, MemoryNamespaceId target,
@@ -40,9 +42,11 @@ public record MemoryNamespaceBindingRequest(UUID requestId, AgentActorContext ac
 
     /**
      * 分离创建新空间与绑定已有空间；绑定他人创建的空间不自动要求 DEBUG 或所有权。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Mode { CREATE_AND_BIND, BIND_EXISTING }

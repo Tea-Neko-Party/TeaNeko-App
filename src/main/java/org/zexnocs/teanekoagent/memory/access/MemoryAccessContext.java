@@ -11,12 +11,14 @@ import java.util.UUID;
 
 /**
  * 宿主固定的记忆访问身份，不接受模型参数中的空间、操作者或授权声明。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 原始宿主请求标识
  * @param actor 真实发起者及来源消息
  * @param reference 本轮已经固定的完整空间引用
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType

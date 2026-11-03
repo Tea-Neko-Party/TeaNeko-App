@@ -7,6 +7,8 @@ import java.util.UUID;
 
 /**
  * 一次稳定的追加意图，空间和来源由可信宿主固定，不授予写入或 DEBUG 管理权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param operationId 单次事实动作的幂等 ID，重试不可重新生成
  * @param reference 固定空间及数据代次
  * @param subjectId 事实主体的 TeaNeko UUID
@@ -14,7 +16,7 @@ import java.util.UUID;
  * @param source 来源和真实发起者
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactAppend(UUID operationId, MemoryNamespaceReference reference, UUID subjectId,

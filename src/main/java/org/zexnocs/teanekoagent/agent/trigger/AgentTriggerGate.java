@@ -15,9 +15,11 @@ import java.util.function.Function;
  * 自动触发的有界准入与交付记账；只保存纯状态，不调用模型、Timer 或平台发送器。
  * 每个 scope 同时只借出一个六十秒票据，副作用前须 verify，结束后须 finish。
  * <br>2026/11/02：原生私聊作为直接对话信号，不依赖无法产生的提及。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class AgentTriggerGate {
@@ -135,9 +137,11 @@ public final class AgentTriggerGate {
 
     /**
      * scope 的进程内瞬态记账，不保存客户端、模型状态或原文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class State {
@@ -158,6 +162,8 @@ public final class AgentTriggerGate {
 
     /**
      * 与平台无关的当前触发设置，mode 继续沿用原 Agent scope 策略。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param scope 当前登记、启用与级别
      * @param zone 静默规则的明确时区
      * @param cooldownSeconds 主动发言冷却，一秒至一天
@@ -165,7 +171,7 @@ public final class AgentTriggerGate {
      * @param quietEndHour 静默终点小时
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Settings(AgentScopePolicy scope, String zone, long cooldownSeconds, int quietStartHour, int quietEndHour) {
@@ -188,6 +194,8 @@ public final class AgentTriggerGate {
     /**
      * 原生适配器确定的信号，不从 LLM 工具参数推导。
      * <br>2026/11/02：增加私聊直接触发标记，旧宿主默认按群聊信号处理。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param actor 实际来源，定时信号可使用无用户身份的 SYSTEM
      * @param kind 消息、定时或接话候选
      * @param mentionsBot 原生提及机器人
@@ -197,7 +205,7 @@ public final class AgentTriggerGate {
      * @param privateConversation 宿主确认的原生私聊，不能从正文推导
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.6.0-l
      */
     public record Signal(AgentActorContext actor, Kind kind, boolean mentionsBot, boolean repliesToBot, boolean namesBot, boolean botAuthored, boolean privateConversation) {
@@ -228,22 +236,26 @@ public final class AgentTriggerGate {
 
     /**
      * 有界纯数据票据，不包含控制句柄或服务引用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 唯一占用标识
      * @param signal 原生信号
      * @param settings 当时的固定配置
      * @param expiresAt 最后有效时刻
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Ticket(UUID id, Signal signal, Settings settings, Instant expiresAt) { }
 
     /**
      * 触发来源与具体要执行的 Agent 活动分离，不为候选直接启动模型。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Kind { MESSAGE, TIMER, INTERJECTION }

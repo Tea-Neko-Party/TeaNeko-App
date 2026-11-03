@@ -14,10 +14,12 @@ import java.util.UUID;
 
 /**
  * 当前会话代次内的有界完成记录；失败诊断与正常历史分离，正文丢弃后仍保留状态。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param entries 从旧到新的完成记录
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentRequestJournal(List<Completed> entries) {
@@ -72,18 +74,22 @@ public record AgentRequestJournal(List<Completed> entries) {
 
     /**
      * 不含可执行对象的请求身份，防止同 ID 不同操作者或参数取得原结果。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param actor 完整可信身份与来源
      * @param activity 原始活动
      * @param messagesSha256 原消息协议及可选原始用户文本凭据的完整输入指纹
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Identity(AgentActorContext actor, AgentActivity activity, String messagesSha256) {}
 
     /**
      * 完成状态与可选结果；正文为空表示已知完成但不再保留可重放结果。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param requestId 请求 ID
      * @param identity 可信请求身份
      * @param status 实际结束状态
@@ -92,7 +98,7 @@ public record AgentRequestJournal(List<Completed> entries) {
      * @param bytes 结果正文的序列化度量
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Completed(UUID requestId, Identity identity, AgentRunResult.Status status, Instant completedAt,

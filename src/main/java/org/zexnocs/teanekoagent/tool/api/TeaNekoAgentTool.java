@@ -1,12 +1,17 @@
 package org.zexnocs.teanekoagent.tool.api;
 
-import java.lang.annotation.*;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
 /**
  * 将公开实例方法暴露为 Agent 工具，方法和参数描述使用现有 Description。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.METHOD)

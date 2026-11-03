@@ -30,9 +30,11 @@ import java.util.concurrent.Executor;
  * 将固定目录投影为低信任 Prompt，并经原工具循环按需加载正文；不创建模型循环或额外权限。
  * Prompt 和工具以内容指纹对齐，预算省略目录时不注册隐藏工具，重载和停用使旧快照失效。
  * <br>2026/11/02：组合资料时保留插件版本，避免 Skill 过滤使重放守卫失效。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Service
@@ -162,22 +164,26 @@ public final class AgentSkills {
     }
     /**
      * 一轮选择使用的纯数据，不含目录服务、执行器或权限句柄。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param snapshot 完整不可变目录
      * @param skills 当前允许项
      * @param fragment 实际目录投影
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Selection(SkillCatalogSnapshot snapshot, List<SkillDefinition> skills, AgentPromptFragment fragment) {}
     /**
      * 将目录解析和复核接入原 Prompt 生命周期，不持有轮次全局缓存。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param delegate 原资料源
      * @param owner 当前 Skill 能力
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record PromptSource(IAgentPromptSource delegate, AgentSkills owner) implements IAgentPromptSource {
@@ -222,11 +228,13 @@ public final class AgentSkills {
     }
     /**
      * 工具源装饰器，只从已保留目录取得固定技能，保持原工具能力和执行器。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param delegate 原工具源
      * @param owner 当前 Skill 能力
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record ToolSource(IAgentToolSource delegate, AgentSkills owner) implements IAgentToolSource {

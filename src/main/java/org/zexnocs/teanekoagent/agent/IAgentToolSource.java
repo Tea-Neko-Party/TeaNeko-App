@@ -9,9 +9,11 @@ import java.util.List;
 /**
  * 为一轮选择明确的工具绑定，不默认回退到全局全部工具；执行仍须遵守本轮及业务权限。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

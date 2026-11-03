@@ -24,9 +24,11 @@ import static org.mockito.Mockito.*;
 /**
  * 经真实存储适配器验证有界多页快照、代次竞争、原证据共享及业务层组合。
  * 事务替身的独占锁比实际共享锁更严格，不代替 MySQL 隔离及读并发性能验收。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)

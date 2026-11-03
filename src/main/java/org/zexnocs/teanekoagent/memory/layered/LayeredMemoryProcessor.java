@@ -25,9 +25,11 @@ import java.util.function.Supplier;
  * 单个处理器最多一个在途模型任务，关闭只结束自有控制，不关闭共享资源。
  * <br>2026/11/02：同一调度与预算按需整理中期为长期，不创建第二套后台模型队列。
  * <br>2026/11/03：同次整理可观察人格表达，事实学习与人格学习使用各自开关。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class LayeredMemoryProcessor implements AutoCloseable {
@@ -213,11 +215,13 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
     private boolean learningEnabled(AgentScope scope) { return Boolean.TRUE.equals(learning.apply(scope)) || observations != null && observations.enabled(scope); }
     /**
      * 生成结果与宿主原目标一起交回，模型不能替换目标身份。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param basis 原目标
      * @param analysis 模型候选
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record Generated(StyleObservations.@Nullable Target basis, StyleObservations.Analysis analysis) { }

@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.database.configdata;
 
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigFieldChecker;
@@ -10,20 +11,23 @@ import org.zexnocs.teanekocore.database.configdata.exception.ConfigFieldCheckerF
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataGetService;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataSetService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.util.concurrent.CompletionStage;
 
 /**
  * 配置数据修改服务实现类，提供修改配置数据的方法。
  * <br>4.3.4: 支持 checker 检测域设置，并自定义失败语言。
+ * <br>2026/11/03：字段提交持锁读取当前值，与网页版本更新合并仲裁并保留未知字段。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -106,10 +110,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
         // 获取 checker 检测设置的值是否准确
         checkField(configManager, fieldName, value);
 
-        // 更新数据库
-        return configDataRegisterService.getDto(configManager)
-                .getTaskConfig("更新群管理规则配置: " + configManager.value())
-                .set(key, ObjectFieldUtil.Instance.setFieldValue(objectMapper, config, fieldName, value));
+        // 2026/11/03：预检保留原同步异常，实际提交重新读取当前行，不覆盖并发字段。
+        ObjectFieldUtil.Instance.setFieldValue(objectMapper, config, fieldName, value);
+        return currentMutation(configManager, key, fieldName, null,
+                current -> ObjectFieldUtil.Instance.setFieldValue(objectMapper, current, fieldName, value));
     }
 
     /**
@@ -190,10 +194,10 @@ public class ConfigDataSetService implements IConfigDataSetService {
         // 获取 checker 检测设置的值是否准确
         checkField(configManager, fieldName, value);
 
-        // 更新数据库
-        return configDataRegisterService.getDto(configManager)
-                .getTaskConfig("更新群管理规则配置: " + configManager.value())
-                .set(key, ObjectFieldUtil.Instance.addToListField(objectMapper, config, fieldName, value));
+        // 2026/11/03：列表追加在当前行上执行，不回写准备任务时的旧快照。
+        ObjectFieldUtil.Instance.addToListField(objectMapper, config, fieldName, value);
+        return currentMutation(configManager, key, fieldName, null,
+                current -> ObjectFieldUtil.Instance.addToListField(objectMapper, current, fieldName, value));
     }
 
     /**
@@ -274,10 +278,11 @@ public class ConfigDataSetService implements IConfigDataSetService {
             ObjectFieldUtil.FieldNotListException {
         var config = requireConfig(configManager, key);
 
-        // 更新数据库
-        return configDataRegisterService.getDto(configManager)
-                .getTaskConfig("更新群管理规则配置: " + configManager.value())
-                .set(key, ObjectFieldUtil.Instance.removeFromListField(config, fieldName, index));
+        // 2026/11/03：索引删除必须仍对应原确认列表，避免并发编辑后删除其他项。
+        String expected = objectMapper.writeValueAsString(config);
+        ObjectFieldUtil.Instance.removeFromListField(config, fieldName, index);
+        return currentMutation(configManager, key, fieldName, expected,
+                current -> ObjectFieldUtil.Instance.removeFromListField(current, fieldName, index));
     }
 
     /**
@@ -340,10 +345,59 @@ public class ConfigDataSetService implements IConfigDataSetService {
             ObjectFieldUtil.FieldNotListException {
         var config = requireConfig(configManager, key);
 
-        // 更新数据库
-        return configDataRegisterService.getDto(configManager)
-                .getTaskConfig("更新群管理规则配置: " + configManager.value())
-                .set(key, ObjectFieldUtil.Instance.clearListField(config, fieldName));
+        // 2026/11/03：明确清空当前列表，不覆盖其他并发字段。
+        ObjectFieldUtil.Instance.clearListField(config, fieldName);
+        return currentMutation(configManager, key, fieldName, null,
+                current -> ObjectFieldUtil.Instance.clearListField(current, fieldName));
+    }
+
+    /**
+     * 2026/11/03：与版本编辑器使用同一原始记录写锁，提交后由 DTO 失效缓存。
+     * @param manager 本地管理声明
+     * @param key 原配置键
+     * @param field 仅合并的字段
+     * @param expected 索引操作所需的原完整已知快照，其余操作为空
+     * @param mutation 对当前对象的短变更
+     * @return 尚未提交的原数据库任务
+     */
+    private IDatabaseTaskConfig currentMutation(ConfigManager manager, String key, String field,
+                                                @Nullable String expected, CurrentMutation mutation) {
+        var dto = configDataRegisterService.getDto(manager);
+        return dto.getTaskConfig("更新群管理规则配置: " + manager.value()).addTransactionTask(() -> {
+            var atomic = dto.atomic();
+            var row = atomic.find(key, EasyDataLock.WRITE);
+            if (row == null) {
+                throw new ConfigDataNotFoundException("配置数据已被注销。");
+            }
+            Object current = objectMapper.readValue(row.getValue(), manager.configType());
+            if (expected != null && !expected.equals(objectMapper.writeValueAsString(current))) {
+                throw new ConfigEditConflictException();
+            }
+            var original = (ObjectNode) objectMapper.readTree(row.getValue());
+            Object changed = mutation.apply(current);
+            original.set(field, objectMapper.valueToTree(changed).get(field));
+            row.setValue(objectMapper.writeValueAsString(original));
+            atomic.save(row);
+        });
+    }
+
+    /**
+     * 原检查通过后的字段变更，反射错误继续作为事务失败传播。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
+     * @author zExNocs
+     * @date 2026/11/03
+     * @since 4.7.0-l
+     * @version 4.7.0-l
+     */
+    @FunctionalInterface
+    private interface CurrentMutation {
+        /**
+         * @param current 持锁读取的新对象
+         * @return 修改后的对象
+         * @throws Exception 当反射或列表操作失败时
+         */
+        Object apply(Object current) throws Exception;
     }
 
     /**

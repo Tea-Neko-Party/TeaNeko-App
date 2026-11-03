@@ -5,20 +5,24 @@ import org.jspecify.annotations.Nullable;
 /**
  * 分发终态。COMPLETED 只表示处理链结束，value 才可能包含具体业务结果。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 本次处理的终止状态
  * @param value 待处理的值
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record CommandResult(Status status, @Nullable Object value) {
     /**
      * 命令分发与执行的终止状态，不把正常 Void 完成解释为具体业务成功。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status {

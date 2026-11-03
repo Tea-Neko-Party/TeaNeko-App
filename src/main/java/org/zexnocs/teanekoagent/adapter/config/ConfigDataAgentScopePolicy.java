@@ -12,9 +12,11 @@ import java.util.Objects;
  * 从真实 /cfg 记录读取新 Agent 的开关；缺失时不创建默认记录、不自动开启。
  * 私聊 scopeId 沿用宿主 UUID 规则，clientId 继续保留于身份和后续会话边界。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

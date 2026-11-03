@@ -16,9 +16,11 @@ import java.util.*;
 /**
  * 统一消息的确定性 JSON 度量和指纹，显式包含图像、工具协议和供应商透明状态。
  * 只在内存流中计数和摘要，不保存额外完整正文；字节数不代表模型 token 或费用。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMMessageCodec {
@@ -114,20 +116,24 @@ public final class LLMMessageCodec {
 
     /**
      * 只保存计量及单向指纹的数据值。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param bytes UTF-8 字节数
      * @param sha256 规范化 JSON 的 SHA-256
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Signature(long bytes, String sha256) {}
 
     /**
      * 不保留正文的输出端，长度饱和累加，摘要器只由当前线程使用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class DigestOutput extends OutputStream {

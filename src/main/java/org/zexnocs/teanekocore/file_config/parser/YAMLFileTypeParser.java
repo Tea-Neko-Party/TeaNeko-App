@@ -8,7 +8,7 @@ import org.zexnocs.teanekocore.file_config.api.FileConfig;
 import org.zexnocs.teanekocore.file_config.api.FileConfigType;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.interfaces.FileTypeParser;
-import org.zexnocs.teanekocore.file_config.interfaces.IFileTypeParser;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileDocumentParser;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -28,14 +28,15 @@ import java.nio.file.Path;
 /**
  * 在 YAML 节点解析后展开环境占位符，避免环境值被当作额外 YAML 结构注入。
  * 支持字符串、嵌套对象及数组值，不改写属性名；缺失必需变量时拒绝本次加载。
+ * <br>2026/11/03：提供不展开环境值的原文档编辑能力，拒绝重复键。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.1
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @FileTypeParser(FileConfigType.YAML)
-public class YAMLFileTypeParser implements IFileTypeParser {
+public class YAMLFileTypeParser implements IFileDocumentParser {
     private final Environment environment;
 
     /** 使用标准系统属性及环境变量，供无 Spring 宿主直接调用。 */
@@ -49,6 +50,8 @@ public class YAMLFileTypeParser implements IFileTypeParser {
     @Autowired public YAMLFileTypeParser(Environment environment) { this.environment = java.util.Objects.requireNonNull(environment, "YAML 环境配置来源不能为空。"); }
 
     private final ObjectMapper objectMapper = YAMLMapper.builder()
+            // 2026/11/03：同一键只能有一个来源，避免编辑视图与运行绑定产生歧义。
+            .enable(tools.jackson.core.StreamReadFeature.STRICT_DUPLICATE_DETECTION)
             .propertyNamingStrategy(PropertyNamingStrategies.KEBAB_CASE)
             .disable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES)
             .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
@@ -57,6 +60,38 @@ public class YAMLFileTypeParser implements IFileTypeParser {
             .build();
 
     private final ObjectMapper localWriter = objectMapper.rebuild().annotationIntrospector(new LocalFileIntrospector()).build();
+
+    /**
+     * 2026/11/03：原文档读取不展开环境变量，也不恢复只写字段的普通导出。
+     * @param bytes 原始 YAML
+     * @return 原节点树
+     */
+    @Override
+    public JsonNode readDocument(byte[] bytes) {
+        return objectMapper.readTree(bytes);
+    }
+
+    /**
+     * @param document 未展开的原节点树
+     * @return 保留值与未知节点的 YAML，注释与排版会规范化
+     */
+    @Override
+    public byte[] writeDocument(JsonNode document) {
+        return objectMapper.writeValueAsBytes(document);
+    }
+
+    /**
+     * @param type 已声明类型
+     * @return 仅供本地文档能力使用的默认树
+     */
+    @Override
+    public JsonNode defaultDocument(Class<? extends IFileConfigData> type) {
+        try {
+            return localWriter.valueToTree(type.getDeclaredConstructor().newInstance());
+        } catch (ReflectiveOperationException failure) {
+            throw new IllegalArgumentException("配置缺少可用默认构造器。");
+        }
+    }
 
     /**
      * 根据输入流解析成相应的 {@link IFileConfigData}
@@ -123,9 +158,11 @@ public class YAMLFileTypeParser implements IFileTypeParser {
 
     /**
      * 仅供敏感配置的本地写回使用，保留只写属性及其他注解，不作用于通用导出 Mapper。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.5.0-l
      */
     private static final class LocalFileIntrospector extends JacksonAnnotationIntrospector {

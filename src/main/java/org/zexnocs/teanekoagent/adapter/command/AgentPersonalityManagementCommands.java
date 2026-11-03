@@ -25,9 +25,11 @@ import java.util.function.Function;
 /**
  * 原生 DEBUG 的人格管理边界，权限、操作者和本地基础配置不由模型参数提供。
  * 提交与会话协调分别报告，原消息重放读取持久回执，不重复修改共享补正。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

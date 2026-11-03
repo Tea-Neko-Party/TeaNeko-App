@@ -7,12 +7,14 @@ import java.util.Objects;
 
 /**
  * 可信宿主显式安排的协作步骤，借用实例，不作为组件、持久化 DTO 或模型参数。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param name 有界步骤名称
  * @param agent 借用的独立实例，由调用方拥有和关闭
  * @param instruction 本步骤目标，按用户数据交接，不提升为运行规则
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType

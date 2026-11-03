@@ -7,18 +7,22 @@ import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoagent.plugin.AgentFeature;
 import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
-import org.zexnocs.teanekocore.plugin.*;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginModule;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
 import tools.jackson.databind.ObjectMapper;
+
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 
 /**
  * 将既有用户资料服务接入 Agent 插件能力，默认安装只读工具，不自动读取或注入用户资料。
  * <br>2026/11/02：独立注册注解提供者，保留插件能力与停用边界。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

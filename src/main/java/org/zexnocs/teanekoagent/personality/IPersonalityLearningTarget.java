@@ -8,9 +8,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 人格候选的可替换业务端口，与只读人格源及模型生成策略分开。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IPersonalityLearningTarget {

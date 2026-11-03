@@ -8,13 +8,15 @@ import java.util.Objects;
 
 /**
  * 已结束管理事务的结果，原操作重放返回相同结果，不表示当前空间仍处于原版本。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 提交或拒绝状态
  * @param namespace 已提交目标或冲突观察，空间不存在时为空
  * @param records 克隆记录数量
  * @param record 编辑后的记录，其他动作为空
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryManagementResult(Status status, @Nullable MemoryNamespace namespace, int records, @Nullable MemoryFactRecord record) {
@@ -32,9 +34,11 @@ public record MemoryManagementResult(Status status, @Nullable MemoryNamespace na
     }
     /**
      * 配额、版本冲突和规模限制均为未执行，不能伪装成部分成功。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { APPLIED, CONFLICT, NOT_FOUND, QUOTA_EXCEEDED, TOO_LARGE }

@@ -32,9 +32,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证 OneBot 管理动作等待真实回执，不把失败或空响应报告为成功。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @SuppressWarnings({"rawtypes", "unchecked"})

@@ -71,6 +71,8 @@
 
 # 六. 注意事项
 
+4.7.0-l 的发送等待任务名称仅记录协议类型与 echo，不把完整消息正文复制到任务观测。指令台的 OneBot 发送仍经过原事件和实际响应解析，但固定唯一已确认连接，不调用遍历会话的广播发送；断线和换号后拒绝，不重试未知结果。
+
 | 项 | 说明 |
 |---|---|
 | `echo` 唯一性 | `ResponseService.register` 会拒绝重复 echo，并抛出 `ResponseEchoDuplicateException`。 |

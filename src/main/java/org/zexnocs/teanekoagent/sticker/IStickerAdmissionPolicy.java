@@ -4,9 +4,11 @@ import java.time.Instant;
  * 可解释的准入与淘汰评分；宿主另行约束视觉类型、配额与固定保护。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public interface IStickerAdmissionPolicy {

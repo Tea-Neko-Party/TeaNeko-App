@@ -40,9 +40,11 @@ import java.util.stream.Collectors;
  * <br>2026/11/03：来源租约改用确定赋值，明确同步失败与异步完成的释放边界并整理排版。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @Service
@@ -363,12 +365,14 @@ public final class AgentCommandGateway implements AutoCloseable {
     }
     /**
      * 当前显式聊天的入口拥有关系，阶段包含最终发送，不进入 ECS 或持久化。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param actor 原真实来源
      * @param textDigest 原正文摘要
      * @param completion 整个聊天与发送的单次完成信号
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Chat(AgentActorContext actor, String textDigest, CompletableFuture<Void> completion) {}

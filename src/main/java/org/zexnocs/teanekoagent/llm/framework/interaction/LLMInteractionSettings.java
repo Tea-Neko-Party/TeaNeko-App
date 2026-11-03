@@ -6,13 +6,15 @@ import java.util.Objects;
 /**
  * 一次交互固定的限额与时限，不读取 Agent、平台或凭据配置。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param limits 本次交互局部限额，仍受宿主共享预算约束
  * @param modelTimeout 模型阶段上限，包含执行器排队
  * @param toolTimeout 单个工具阶段上限，包含执行器排队
  * @param turnTimeout 从创建交互执行开始计算的总时限
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record LLMInteractionSettings(LLMCallLimits limits, Duration modelTimeout,

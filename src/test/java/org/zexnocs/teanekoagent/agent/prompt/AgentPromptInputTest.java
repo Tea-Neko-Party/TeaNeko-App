@@ -15,9 +15,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 验证临时资料布局、完整协议字节预算和不可伪造的历史投影，不通过位置删除绕过前缀校验。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentPromptInputTest {

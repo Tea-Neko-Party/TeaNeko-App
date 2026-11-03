@@ -11,6 +11,8 @@ import java.util.UUID;
 
 /**
  * 轮次结束后的脱敏计数快照，不携带原文、答案、参数、异常链或凭据。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 实际请求标识
  * @param agentId 实际执行实例，用于分别聚合监控与告警
  * @param scope 原作用域
@@ -24,7 +26,7 @@ import java.util.UUID;
  * @param unknownUsageAttempts 无可用用量的尝试数
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentTurnReport(UUID requestId, EntityId agentId, AgentScope scope, AgentActivity activity, AgentRunResult.Status status,

@@ -49,9 +49,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 经真实独立 Agent/LLM 管线验证引用固定、异步守卫、预算、取消与迟到结果隔离。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)

@@ -15,9 +15,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 验证最终任务结果展开、失败传播及只读阶段视图。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class TaskStagesTest {

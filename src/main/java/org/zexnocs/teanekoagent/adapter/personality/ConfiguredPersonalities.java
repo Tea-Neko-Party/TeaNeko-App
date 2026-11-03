@@ -20,10 +20,14 @@ import java.util.Objects;
 
 /**
  * 从现有文件与真实作用域登记读取人格，缺失/损坏配置不会静默选择其他角色。
+ * 2026/11/03：抽出基础人格候选校验，网页预检复用同一规则。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 public final class ConfiguredPersonalities implements IPersonalityConfiguration {
@@ -59,6 +63,17 @@ public final class ConfiguredPersonalities implements IPersonalityConfiguration 
      */
     @Override public BasePersonality base(PersonalitySettings settings) {
         var file = Objects.requireNonNull(files.get(AgentPersonalityFileConfig.class), "人格文件未加载。");
+        // 2026/11/03：预检候选与实际读取共享同一冻结逻辑。
+        return fromFile(file, settings);
+    }
+
+    /**
+     * 2026/11/03：只冻结传入候选，不读取或发布全局缓存。
+     * @param file 原文件候选
+     * @param settings 明确人格选择
+     * @return 有界基础人格
+     */
+    public static BasePersonality fromFile(AgentPersonalityFileConfig file, PersonalitySettings settings) {
         var defaultId = Objects.requireNonNull(file.getDefaultAgentId(), "默认人格 ID 不能为空。").strip();
         var id = settings.personalityId().isBlank() ? defaultId : settings.personalityId().strip();
         var characters = List.copyOf(Objects.requireNonNull(file.getCharacters(), "人格列表不能为空。"));
@@ -81,7 +96,7 @@ public final class ConfiguredPersonalities implements IPersonalityConfiguration 
                 rules.add("核心特质："); rules.addAll(definition.getCoreTraits()); rules.add("基础表达风格："); rules.addAll(definition.getSpeakingStyle());
                 rules.add("可调整的软偏好："); rules.addAll(definition.getBoundaries().getSoft());
             }
-            mutable.addAll(definition.getLearningPolicy().getMutableFields()); mutable.removeAll(definition.getLearningPolicy().getImmutableFields());
+            mutable.addAll(definition.getLearningPolicy().getMutableFields()); definition.getLearningPolicy().getImmutableFields().forEach(mutable::remove);
         }
         if (settings.customEnabled()) {
             rules.add(settings.customPersonality()); if (!settings.customSpeakingStyle().isBlank()) { rules.add(settings.customSpeakingStyle()); }

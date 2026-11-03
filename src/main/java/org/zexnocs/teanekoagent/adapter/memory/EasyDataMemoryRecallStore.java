@@ -17,9 +17,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 在一个 namespace 共享锁事务中读取有界稳定前缀，逐页去掉原审计 JSON 后交给业务筛选。
  * 复用事实 schema 与 DatabaseTask，不将相互独立的分页事务冒充完整快照。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

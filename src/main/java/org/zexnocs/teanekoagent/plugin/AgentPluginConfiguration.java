@@ -9,9 +9,11 @@ import java.util.Set;
 
 /**
  * Agent 宿主模块声明，复用 Core 插件目录。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

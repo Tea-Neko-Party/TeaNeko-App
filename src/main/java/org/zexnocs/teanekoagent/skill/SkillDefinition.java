@@ -5,6 +5,8 @@ import java.util.List;
 
 /**
  * 从可信本地目录读取的不可变流程描述，工具依赖只收窄能力，不授予权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 稳定技能名称
  * @param description 有界选择说明
  * @param version 本地声明版本
@@ -13,7 +15,7 @@ import java.util.List;
  * @param instructions 按需加载的 Markdown 正文
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record SkillDefinition(String id, String description, int version, boolean enabled, List<String> requiredTools, String instructions) {

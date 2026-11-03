@@ -21,9 +21,11 @@ import static org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult.S
  * 本入口等待真实完成并响应 control；阶段计时、次数预算和重放记录由交互/业务层负责。
  * <br>2026/11/02：先执行显式结果投影再限制文本，视觉负载由独立容量合同校验。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class LLMToolSet {
@@ -262,13 +264,15 @@ public final class LLMToolSet {
     /**
      * 工具调用的不可变快照，防止原 DTO 修改破坏迟到结果的 ID 配对。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getId 原工具调用 ID
      * @param getType 原工具调用类型
      * @param getName 原工具调用名称
      * @param getArguments 模型提供的原始参数 JSON
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Call(String getId, String getType, String getName, String getArguments) implements ILLMToolCall {}

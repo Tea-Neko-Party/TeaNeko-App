@@ -1,14 +1,14 @@
 # Web 管理接口与控制台设计入口
 
-目标版本：v4.7.0-l；4.6.2-l 的表达与表情包仅提供可复用管理基础，本页 Web 功能仍为待实施设计。
+目标版本：v4.7.0-l；本期功能与约定离线验收已完成，见[归档记录](../plan/old/4.7.0-web-console.md)。下方仍包含后续资源的设计建议，实际已接通路径以对应操作说明为准，不代表已经正式发布或通过实机验收。
 
-设计日期：2026/11/02；2026/11/03 补充客户端导航、文件热更新、指令台、Web client 及公网令牌登录。本文及 [插件扩展设计](agent-plugin-extensibility.md) 属于待实施设计；接口名称、DTO 和 HTTP 路径均为建议，当前没有对应完整网页实现，不计入既有完成比例。
+设计日期：2026/11/02；2026/11/03 补充客户端导航、文件热更新、指令台、Web client 及公网令牌登录。本文及 [插件扩展设计](agent-plugin-extensibility.md) 保存总体合同；除下方已交付部分外，接口名称、DTO 和 HTTP 路径仍为建议，不能据此推断完整网页已实现。
 
 本页维护后端分层、资源和真实终态合同；[控制台体验与客户端设计](web-console-experience.md)维护用户需求、可理解的界面映射、前端候选及 Web client；[登录与公网安全设计](web-console-security.md)维护令牌生成、会话、入口鉴权与安全验收。只读本次涉及的权威章节，不把这些建议接口视为已有运行能力。
 
 ## 目标与分层
 
-实施更新：已提供通用管理 SPI、默认拒绝授权路由、插件/实例查询以及目录、预览、写入、本人回执四项图库资源，实际合同见 [管理扩展指南](../development/plugins/management.md)。尚未实现 HTTP 认证、前端和其余业务资源；本次只构思，不开放任何网络入口。
+实施更新：已有通用管理 SPI、插件/实例查询及四项图库资源，见[管理扩展指南](../development/plugins/management.md)。Web 已接通基础控制台、聊天配置、六项聊天 Agent 资源、两项实例级运行/日志资源、[客户端指令台](../development/web-console-commands.md)和[独立网页聊天](../development/web-console-chat.md)；实际路径与限制见各操作说明。插件/实例/图库资源尚未直接发布网页路由。
 
 覆盖 Agent 记忆检查、群组及其他 scope 配置、任务/定时器待执行与执行中状态、运行报告、日志，以及未来插件管理页面。接口应服务整个 TeaNeko App，Agent 是其中一个业务模块。
 
@@ -20,15 +20,15 @@
 
 | 当前基础 | 可复用内容 | 需要补充 |
 | --- | --- | --- |
-| 记忆管理命令、管理存储端口及 namespace/事实模型 | DEBUG、generation/revision、分页、编辑/锁定/克隆/清空及幂等回执 | 将命令适配中的编排下沉为可复用管理用例；增加结构化视图及可信 Web 身份适配 |
-| ConfigData、字段检查器及 Agent scope 绑定端口 | 异步持久化、字段约束和权威 namespace 绑定 | 字段描述/可见性、结构化查询；并发更新所需的原子预期版本校验，不能只在 Controller 先读后写 |
+| 记忆管理命令、管理存储端口及 namespace/事实模型 | 原代次/版本、分页、管理动作与幂等回执 | 已接入三层查询、独立 Web 管理、证据画像和人格补正；当前事实克隆不等于完整三层备份 |
+| ConfigData、字段检查器及 Agent scope 绑定端口 | 异步持久化、字段约束和权威 namespace 绑定 | 已接入中文字段、事务内版本比较与审计；特殊绑定继续走专用管理 |
 | AgentScheduleService | create/detail/list/cancel，以及持久化状态、revision、nextFire | 执行实例明细、当前阶段、运行取消状态和受限全局查询；暂停/恢复尚不能根据状态枚举推定为已有操作 |
 | Core ITimerService、任务状态与 TaskStageChain | 原调度器、执行域及任务生命周期 | 通用定时器目录、可查询运行快照和阶段观测，不能让 Web 反射遍历内部线程或 Future |
-| AgentRuntimeMonitor 与报告事件 | 有界近期报告、用量及交付语义 | 可查询的结构化快照；现有 describe 返回中文字符串，不能让前端解析字符串来取指标 |
+| AgentRuntimeMonitor、报告与 AgentActivityTimeline | 原轮次用量、生命周期和真实逐段回执 | 已有有界结构化时间线；逐工具细节、全部后台节点和持久活动账本尚未提供 |
 | Core 事件及应用日志 | 内部事件分发、原日志来源 | 对外事件映射、订阅授权、有界缓冲；历史日志查询及保留策略需单独实现，内部总线不等于历史数据库 |
-| TeaNekoClient scanner、平台适配与 OneBot 连接 | client 注册、真实消息入口、群/私聊定位及原命令 Stage | 管理适配器、中文目标目录、连接/账号就绪快照及定向执行；OneBot 生命周期状态或旧 ID 不能证明可操作 |
+| TeaNekoClient scanner、平台适配与 OneBot 连接 | client 注册、真实消息入口、群/私聊定位及原命令 Stage | 指令台已接通；OneBot 要求唯一已确认账号并锁定原连接，多账号定向仍待扩展 |
 | FileConfig 与 Core YAML 环境解析 | 已注册配置、字段解析、缓存和重载 | 原文档版本/局部编辑、原子替换、应用方确认、脱敏与占位符保留；现有 write/reload 不等于跨模块热更事务 |
-| FakeClient 测试夹具与现有通用消息接口 | 可借鉴消息、用户、群和工具箱职责 | 独立生产级 Web client、持久消息/重连、受控模拟身份和媒体；不依赖测试类或复用 OneBot 身份 |
+| 通用消息接口与独立 WebTeaNekoClient | 原消息、命令、工具箱、Agent 和逐段回执 | 已接通持久私聊/模拟群、成员权限、认证图片与游标补读，不依赖测试类或复用 OneBot 身份 |
 
 源码依据：[记忆管理](../../src/main/java/org/zexnocs/teanekoagent/memory/admin/README.md)、[配置写入端口](../../src/main/java/org/zexnocs/teanekocore/database/configdata/interfaces/IConfigDataSetService.java)、[任务服务](../../src/main/java/org/zexnocs/teanekoagent/schedule/AgentScheduleService.java)、[任务状态](../../src/main/java/org/zexnocs/teanekoagent/schedule/AgentScheduledTask.java)、[定时器端口](../../src/main/java/org/zexnocs/teanekocore/actuator/timer/interfaces/ITimerService.java)、[运行监控](../../src/main/java/org/zexnocs/teanekoagent/agent/monitor/AgentRuntimeMonitor.java)。
 
@@ -62,7 +62,7 @@
 - 预期版本检查与写入必须在同一业务提交边界仲裁；缺少能力时先补 EasyData/领域服务，不在 Web 内缓存或直接操作 Repository。
 - 保留现有 OWNER/DEBUG 边界，Web 登录本身不授予记忆查看/导出或维护资格。跨群、跨空间全局查询单独授权，不把页面可见性当作授权。
 - 群组配置字段提供类型、说明、默认值、约束、是否敏感、能否编辑及重启要求。namespace、人格 key 等特殊字段仍走明确管理用例，不通过通用反射 PATCH 绕过规则。
-- 普通视图不返回密钥；前端需要显示凭据状态时只返回“已配置”等描述。模型仍以 model.yml 为唯一配置来源；将来开放文件编辑需另外定义模板保留与原子加载，不能把环境变量展开值自动写回。
+- 普通视图不返回密钥；前端只显示是否声明，不证明远端凭据有效。模型仍以 model.yml 为唯一配置来源；[文件编辑](../development/web-console-files.md)保留未修改的原模板，磁盘保存与运行应用分别确认，不把环境变量展开值自动写回。
 - 长操作返回可查询的 operationId，分别记录已受理、执行中、成功、失败、结果不明及请求取消。HTTP 已受理不是成功，连接断开不是回滚；用操作查询确认真实结果。
 - 管理审计记录操作者、目标、动作、预期版本、结果及关联 ID，不记录凭据和完整敏感正文。需要可靠追溯的审计使用持久化记录，不依赖可能丢弃的监控通知。
 
@@ -89,6 +89,7 @@ Core 为现有 Timer/Task 增加只读观测端口，使用明确生命周期节
 | GET/PATCH /api/v1/targets/{targetRef}/config | 经适配器映射与授权的聊天配置和普通字段版本更新，不接受原始 scope 拼接 |
 | GET /api/v1/file-configs；GET /api/v1/file-configs/{configRef} | 已注册文件的受控可编辑视图、字段与生效能力，敏感文件不提供原文下载 |
 | POST /api/v1/file-configs/{configRef}/actions/validate；POST /api/v1/file-configs/{configRef}/actions/save | 局部配置预检、版本保存及应用回执，不接受任意路径 |
+| POST /api/v1/file-configs/{configRef}/actions/apply；GET /api/v1/file-configs/{configRef}/operations/{operationId} | 独立应用固定磁盘版本，查询私有持久回执；保存不自动发布缓存 |
 | GET /api/v1/agents；GET /api/v1/agents/{agentId}/features | 实例及其安装能力、阶段描述与允许展示的组件信息 |
 | GET /api/v1/agent/namespaces/{id}/facts | 固定 generation 的记忆分页检查 |
 | POST /api/v1/agent/namespaces/{id}/actions/{action} | 明确注册的编辑、锁定、克隆、清空等管理操作，使用独立类型化请求 |
@@ -98,8 +99,10 @@ Core 为现有 Timer/Task 增加只读观测端口，使用明确生命周期节
 | GET /api/v1/runtime/runs/{id}；POST /api/v1/runtime/runs/{id}/actions/cancel | 运行详情和取消请求 |
 | GET /api/v1/runtime/reports；GET /api/v1/logs | 运行报告与日志筛选 |
 | GET /api/v1/operations/{id} | 管理操作真实终态及安全结果 |
-| POST /api/v1/client-commands；GET /api/v1/client-commands/{operationId} | 可信管理来源在已就绪客户端执行明确支持的命令并查询真实结果 |
-| GET/POST /api/v1/chat/rooms；GET/POST /api/v1/chat/rooms/{roomRef}/messages | 新 Web client 群/私聊与真实消息，服务端检查档案及成员关系 |
+| GET/POST /api/v1/clients/{client}/accounts/{account}/targets/{target}/console；GET .../console/operations/{operationId} | 已交付：明确管理来源、固定账号/聊天及连接，读取目录、提交原命令并查询持久事实 |
+| GET/POST /api/v1/chat/rooms；GET/POST /api/v1/chat/rooms/{roomRef}/messages | 已交付：网页私聊/模拟群与持久消息，服务端检查档案、成员与原操作编号 |
+| POST /api/v1/chat/profiles；POST /api/v1/chat/rooms/{roomRef}/members | 已交付：原 TeaUser 映射与专用版本化成员管理，消息不能自报 UUID 或角色 |
+| GET /api/v1/chat/rooms/{roomRef}/operations/{operationId}；GET/POST .../media；GET/DELETE .../media/{id} | 已交付：入站事实、认证媒体和未引用图片清理；写入/删除要求原 CSRF |
 | GET /api/v1/events | 已授权增量通知；首选 SSE，未来需要双向交互再增加 WebSocket 适配 |
 | /api/v1/plugins/{pluginId}/resources/... | 经宿主显式注册的插件管理资源，不接受任意类名或方法名调用 |
 
@@ -128,4 +131,4 @@ Core 为现有 Timer/Task 增加只读观测端口，使用明确生命周期节
 5. 客户端连接/身份快照及就绪守卫、可信管理来源、明确支持的指令台；OneBot 唯一账号可操作后才开放，真正多账号先补定向路由。
 6. 独立 Web client 的私聊/群聊、受控模拟身份、媒体、分段回执和重连；与现有 Agent、记忆、权限和 client 工具范围接通。插件继续通过明确管理贡献扩展，不先执行任意前端脚本。
 
-测试仅覆盖重要风险：认证及默认拒绝、目标/命令授权、版本冲突与重复操作、换代分页、真实异步终态与取消、订阅撤权/断流、配置应用与占位符保留、客户端断线/换号、模拟身份及秘密脱敏。复用现有业务夹具，不为每个 DTO、机械映射或表格字段建立重复测试。本次仅形成设计合同，尚未实现新应用端口、HTTP 路由、前端或实机验收；后续实施计划按完整功能闭环安排，不以设计篇幅计完成度。
+测试覆盖重要风险：认证及默认拒绝、目标/命令授权、版本冲突与重复操作、换代分页、真实异步终态与取消、订阅撤权/断流、配置应用与占位符保留、客户端断线/换号、模拟身份及秘密脱敏。复用现有业务夹具，不为每个 DTO、机械映射或表格字段建立重复测试。本期离线验收结果以归档记录为准，真实数据库、平台、模型及公网仍按部署清单验证，不以设计篇幅计完成度。

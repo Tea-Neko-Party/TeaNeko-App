@@ -6,9 +6,11 @@ import java.util.*;
 
 /**
  * 原子发布的完整 Skill 目录，内容指纹覆盖正文，修改正文而忘记改版本也会换代。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class SkillCatalogSnapshot {

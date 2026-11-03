@@ -30,9 +30,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证 /cfg 只读适配、字段校验、全局配置懒加载及组合装配，不启动 Spring 或数据库。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentConfigAdapterTest {

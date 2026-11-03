@@ -18,9 +18,11 @@ import java.util.function.Function;
 
 /**
  * 以普通注解工具查看当前 scope 的表达学习进展，不输出原话或跨群样本。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @TeaNekoAgentToolClass(value = "style-observations", toolPackage = "agent.personality")

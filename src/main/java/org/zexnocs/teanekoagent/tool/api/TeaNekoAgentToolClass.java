@@ -4,9 +4,11 @@ import java.lang.annotation.*;
 
 /**
  * 标记已有 Spring Bean 的 Agent 工具方法，不要求实现工具接口或额外手写能力包。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @Inherited @Retention(RetentionPolicy.RUNTIME) @Target(ElementType.TYPE)

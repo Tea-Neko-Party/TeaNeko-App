@@ -35,11 +35,14 @@ import java.util.function.Supplier;
  * <br>2026/11/03：回收旧代次与失效索引，精简过期原话并保留当前遗忘保护。
  * <br>2026/11/03：明确保存接入同一长期领域，保留原文和完整附加信息。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ * <br>2026/11/03：独立管理员与本人维护复用同一版本、索引、墓碑和回执事务。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.6.1-l
+ * @version 4.7.0-l
  */
 public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
@@ -312,8 +315,80 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      */
     @Override public CompletionStage<LongMemories.Item> change(MemoryNamespaceReference reference, UUID actorId, UUID id, long revision,
             @Nullable String text, UUID operationId, String sourceId, Instant now) {
+        // 2026/11/03：原用户入口继续核对记忆主体，不获得管理旁路。
+        return changeGuarded(reference, actorId, id, revision, text, operationId, sourceId, now, false, () -> {});
+    }
+
+    /**
+     * @param reference 原空间
+     * @param actor 独立管理来源
+     * @param id 原记录
+     * @param revision 原版本
+     * @param text 新正文或遗忘
+     * @param operation 原操作
+     * @param now 固定时刻
+     * @param guard 当前授权
+     * @return 原领域持久化结果
+     */
+    @Override
+    public CompletionStage<LongMemories.Item> manage(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, UUID id, long revision, @Nullable String text,
+            UUID operation, Instant now, Runnable guard) {
+        if (actor.origin() != org.zexnocs.teanekoagent.agent.AgentActorContext.Origin.MANAGEMENT
+                || !actor.scope().equals(reference.scope())) {
+            throw new SecurityException("长期管理来源或目标无效。");
+        }
+        return changeGuarded(reference, actor.userId().orElseThrow(), id, revision, text, operation,
+                mapper.writeValueAsString(actor), now, true, guard);
+    }
+
+    /**
+     * @param reference 原空间代次
+     * @param actor 原管理来源
+     * @param operation 原编号
+     * @param guard 当前授权
+     * @return 原结果，允许查询已经失效代次的已提交操作
+     */
+    @Override
+    public CompletionStage<LongMemories.Item> managementOperation(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, UUID operation, Runnable guard) {
+        return data.transaction("查询长期记忆管理回执", () -> {
+            guard.run();
+            var row = dto("changes:" + space(reference)).find(operation.toString(), EasyDataLock.READ);
+            if (row == null) {
+                throw new NoSuchElementException("长期记忆管理回执不存在。");
+            }
+            var receipt = read(row, ChangeReceipt.class);
+            if (actor.origin() != org.zexnocs.teanekoagent.agent.AgentActorContext.Origin.MANAGEMENT
+                    || !actor.scope().equals(reference.scope()) || !receipt.actorId().equals(actor.userId().orElseThrow())
+                    || !receipt.sourceId().equals(mapper.writeValueAsString(actor))) {
+                throw new SecurityException("长期记忆操作不属于当前管理主体或目标。");
+            }
+            guard.run();
+            return receipt.item();
+        });
+    }
+
+    /**
+     * 2026/11/03：复用原维护事务，管理与本人维护使用不同来源并保留原指纹。
+     * @param reference 原空间
+     * @param actorId 实际主体
+     * @param id 原记录
+     * @param revision 原版本
+     * @param text 正文或遗忘
+     * @param operationId 原操作
+     * @param sourceId 稳定来源
+     * @param now 固定时刻
+     * @param management 是否已在管理入口核对独立来源
+     * @param guard 当前授权
+     * @return 提交后的公开投影
+     */
+    private CompletionStage<LongMemories.Item> changeGuarded(MemoryNamespaceReference reference, UUID actorId,
+            UUID id, long revision, @Nullable String text, UUID operationId, String sourceId, Instant now,
+            boolean management, Runnable guard) {
         if (text != null && (text.isBlank() || text.length() > 512)) { throw new IllegalArgumentException("长期记忆纠正正文无效。"); }
         return data.transaction("纠正或遗忘本人长期记忆", () -> {
+            guard.run();
             requireGeneration(reference); String space = space(reference); var entries = dto("entries:" + space);
             // 2026/11/03：回执与修改同事务提交；重复执行不再次修改版本，原调用不能换参。
             String fingerprint = StableDigest.sha256(mapper.writeValueAsString(Arrays.asList(reference, actorId, id, revision, text, sourceId)));
@@ -321,12 +396,15 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             if (receiptRow != null) {
                 var receipt = read(receiptRow, ChangeReceipt.class);
                 if (!receipt.fingerprint().equals(fingerprint)) { throw new IllegalArgumentException("记忆维护操作标识不能用于不同参数。"); }
+                guard.run();
                 return receipt.item();
             }
             var row = entries.find(id.toString(), EasyDataLock.WRITE);
             if (row == null) { throw new IllegalArgumentException("长期记忆不存在。"); }
             var old = read(row, LongMemories.Entry.class);
-            if (!actorId.equals(old.subjectId()) || old.revision() != revision) { throw new IllegalArgumentException("长期记忆主体或版本不匹配。"); }
+            if (!management && !actorId.equals(old.subjectId()) || old.revision() != revision) {
+                throw new IllegalArgumentException("长期记忆主体或版本不匹配。");
+            }
             var changed = new LongMemories.Entry(old.id(), old.kind(), old.subjectId(), old.attribute(), text == null ? old.text() : text,
                     text == null ? LongMemories.Status.FORGOTTEN : LongMemories.Status.ACTIVE, old.revision() + 1, true,
                     old.quotes(), old.sourceKeys(), old.segments(), old.observedAt(), now, text == null ? old.timeHint() : "");
@@ -334,7 +412,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             // 2026/11/03：按原片段登记派生抑制，改写正文或属性也不能复活同一旧证据。
             for (var segment : old.segments()) {
                 var blocks = dto("blocked:" + space);
-                for (var key : List.of(actorId + ":" + segment, "episode:" + segment)) {
+                for (var key : List.of(old.subjectId() + ":" + segment, "episode:" + segment)) {
                     if (blocks.find(key, EasyDataLock.NONE) == null) { save(blocks, null, key, operationId); }
                 }
             }
@@ -343,6 +421,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 if (blocks.find(key, EasyDataLock.NONE) == null) { save(blocks, null, key, operationId); }
             }
             save(receipts, null, operationId.toString(), new ChangeReceipt(fingerprint, actorId, sourceId, now, changed.item()));
+            guard.run();
             return changed.item();
         });
     }
@@ -576,11 +655,13 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * 明确保存的原操作回执，不因后台合并而更换原请求结果。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param fingerprint 原始命令摘要
      * @param result 实际回执
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private record ExplicitReceipt(String fingerprint, MemoryAddResult result) { }
@@ -680,6 +761,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * 本人维护的幂等回执与来源审计，不进入模型普通查询。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param fingerprint 原调用参数指纹
      * @param actorId 真实操作者
      * @param sourceId 原消息标识
@@ -687,13 +770,15 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @param item 已提交公开投影
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.2-l
      */
     private record ChangeReceipt(String fingerprint, UUID actorId, String sourceId, Instant at, LongMemories.Item item) { }
     /**
      * 整理租约与已完成覆盖，零候选提交也推进原水位，避免反复学习闲聊。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param through 已整理覆盖
      * @param lease 当前租约
@@ -704,7 +789,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @param fingerprint 本次输入指纹
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.2-l
      */
     private record Job(long through, @Nullable UUID lease, Instant until, Instant retryAt, int failures, long claimedThrough, String fingerprint) {

@@ -11,9 +11,11 @@ import java.util.*;
 
 /**
  * 长期整理、证据和公开召回的数据契约，内部原话不随普通召回导出。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class LongMemories {
@@ -21,46 +23,56 @@ public final class LongMemories {
     private LongMemories() { }
     /**
      * 区分用户事实、偏好和事件摘要。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public enum Kind { FACT, PREFERENCE, EPISODE }
     /**
      * 模型只提出合并建议，实际主体、版本和覆盖由事务校验。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public enum Mode { ADD, REPLACE, CONFLICT }
     /**
      * 失效和遗忘记录保留墓碑，普通召回只选择有效或明确冲突项。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public enum Status { ACTIVE, SUPERSEDED, CONFLICT, FORGOTTEN }
     /**
      * 提供给抽取器的真实人类发言，身份由宿主产生。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 批次内稳定证据标识
      * @param sequence 原短期序号
      * @param message 真实用户消息
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Evidence(String id, long sequence, HistoryMessage message) { }
     /**
      * 模型提出的原话引用，必须在事务中与对应原消息逐字核对。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param evidenceId 宿主提供的证据标识
      * @param text 原始消息中的连续片段
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Quote(String evidenceId, String text) {
@@ -78,6 +90,8 @@ public final class LongMemories {
     }
     /**
      * 结构化长期候选；重要时间保留原话表达，不由模型补造精确时间点。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param kind 事实、偏好或事件
      * @param subjectId 事实主体，事件可为空
      * @param attribute 语义属性
@@ -88,7 +102,7 @@ public final class LongMemories {
      * @param timeHint 可选的重要时间原表达，空字符串表示普通概略时间
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Candidate(Kind kind, @Nullable UUID subjectId, String attribute, String text, Mode mode,
@@ -117,6 +131,8 @@ public final class LongMemories {
     }
     /**
      * 已领取的中期整理输入，原范围和证据由宿主固定。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param stream 原分区
      * @param leaseId 原领取令牌
      * @param segments 连续中期片段
@@ -124,7 +140,7 @@ public final class LongMemories {
      * @param fingerprint 整理输入指纹
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Batch(MemoryLayers.Stream stream, UUID leaseId, List<MemoryLayers.Segment> segments,
@@ -147,6 +163,8 @@ public final class LongMemories {
     }
     /**
      * 权威长期记录，包含内部证据及人工锁定，不直接作为工具结果输出。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 稳定记录标识
      * @param kind 记忆类型
      * @param subjectId 用户主体或空
@@ -163,7 +181,7 @@ public final class LongMemories {
      * @param timeHint 重要时间原表达
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Entry(UUID id, Kind kind, @Nullable UUID subjectId, String attribute, String text, Status status, long revision,
@@ -194,6 +212,8 @@ public final class LongMemories {
     }
     /**
      * 普通召回投影，明确分歧和版本，不跨 scope 导出原聊天证据。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 记录标识
      * @param kind 记录类型
      * @param subjectId 用户主体
@@ -204,18 +224,20 @@ public final class LongMemories {
      * @param time 时间概念，不冒充事情发生时刻
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Item(UUID id, Kind kind, @Nullable UUID subjectId, String attribute, String text, Status status, long revision, String time) { }
     /**
      * 受检索候选和结果预算限制的读取视图。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param items 公开结果
      * @param scanned 实际检查条数
      * @param limited 是否受候选或结果预算限制
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Result(List<Item> items, int scanned, boolean limited) {

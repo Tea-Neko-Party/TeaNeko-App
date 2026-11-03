@@ -13,9 +13,11 @@ import java.util.concurrent.TimeUnit;
 /**
  * 测试时钟/任务队列，不创建线程，不使用真实等待。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class ManualScheduler implements Scheduler {
@@ -174,9 +176,11 @@ final class ManualScheduler implements Scheduler {
     /**
      * 手动调度队列中的可取消任务，保留到期时间和稳定排序序号。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Entry implements Disposable {

@@ -23,9 +23,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证共享证据筛选、确定性排序、完整性及实际 JSON 预算，不依赖数据库或模型。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)

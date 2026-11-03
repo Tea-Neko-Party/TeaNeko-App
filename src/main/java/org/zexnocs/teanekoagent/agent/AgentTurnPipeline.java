@@ -40,14 +40,19 @@ import java.util.function.Function;
  *
  * <br>2026/11/03：在持久历史之前编译完整表达计划，避免控制符进入会话。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ * <br>2026/11/03：在实际步骤调用和异步返回处记录有界脱敏节点。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;
+    // 2026/11/03：观察器只消费固定定位，不进入 ECS 组件或插件可写数据。
+    org.zexnocs.teanekoagent.agent.monitor.@Nullable AgentActivityTimeline timeline;
     // 2026/11/03：只允许宿主在服务启动前安装，不把服务写入 ECS。
     org.zexnocs.teanekoagent.expression.@Nullable ExpressionRuntime expressions;
     // 2026/11/02：插件仅在服务开始接受轮次前安装，运行期目录及步骤不再变化。
@@ -101,28 +106,53 @@ final class AgentTurnPipeline {
 
     /**
      * 编译稳定宿主步骤及插件数据写入范围。
+     * 2026/11/03：原步骤统一经过不改变提交语义的观察包装。
      * @return 已校验顺序的管线
      */
     private SystemPipeline compile() {
         var steps = new java.util.ArrayList<IEntitySystem>();
         if (plugins != null) {
             var writes = new java.util.HashSet<>(plugins.componentKeys()); writes.add(org.zexnocs.teanekoagent.plugin.AgentPluginRuntime.SELECTION);
-            steps.add(new Step(new SystemDescriptor("agent.plugins.prepare", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
+            steps.add(step(new SystemDescriptor("agent.plugins.prepare", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
                     writes, Set.of("agent.admit")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_PROMPT)));
-            steps.add(new Step(new SystemDescriptor("agent.plugins.review", Set.of(AgentComponents.INTERACTION),
+            steps.add(step(new SystemDescriptor("agent.plugins.review", Set.of(AgentComponents.INTERACTION),
                     writes, Set.of("agent.interact")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.AFTER_INTERACTION)));
         }
         steps.addAll(List.of(
-                new Step(new SystemDescriptor("agent.admit", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
+                step(new SystemDescriptor("agent.admit", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.SCOPE_POLICY), Set.of(), Set.of()), this::admit),
-                new Step(new SystemDescriptor("agent.prompt", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
+                step(new SystemDescriptor("agent.prompt", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
                         Set.of(AgentComponents.PROMPT_INPUT), Set.of(plugins == null ? "agent.admit" : "agent.plugins.prepare")), this::preparePrompt),
-                new Step(new SystemDescriptor("agent.interact", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
+                step(new SystemDescriptor("agent.interact", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME,
                         AgentComponents.ACTOR, AgentComponents.ACTIVITY, AgentComponents.INSTANCE, AgentComponents.DEFINITION, AgentComponents.PROMPT_INPUT),
                         Set.of(AgentComponents.INTERACTION, AgentComponents.PROMPT_TRANSCRIPT), Set.of("agent.prompt")), this::interact),
-                new Step(new SystemDescriptor("agent.complete", Set.of(AgentComponents.INTERACTION),
+                step(new SystemDescriptor("agent.complete", Set.of(AgentComponents.INTERACTION),
                         Set.of(AgentComponents.OUTCOME), Set.of(plugins == null ? "agent.interact" : "agent.plugins.review")), this::complete)));
         return SystemPipeline.compile(steps);
+    }
+
+    /**
+     * 2026/11/03：只围绕原异步步骤观测，不改变原补丁提交或失败语义。
+     * @param descriptor 原数据依赖声明
+     * @param action 原步骤
+     * @return 保留实际阶段的可等待步骤
+     */
+    private Step step(SystemDescriptor descriptor, Function<SystemContext, CompletionStage<SystemResult>> action) {
+        return new Step(descriptor, context -> {
+            var observer = timeline;
+            if (observer == null) {
+                return action.apply(context);
+            }
+            var request = turns.apply(context.snapshot().id()).request;
+            observer.mark(request, descriptor.id(), "STARTED");
+            try {
+                return action.apply(context).whenComplete((result, failure) ->
+                        observer.mark(request, descriptor.id(), failure == null ? "RETURNED" : "FAILED"));
+            } catch (RuntimeException failure) {
+                observer.mark(request, descriptor.id(), "FAILED");
+                throw failure;
+            }
+        });
     }
 
     /**
@@ -361,11 +391,13 @@ final class AgentTurnPipeline {
 
     /**
      * 固定步骤声明和显式操作，执行依赖仍由组合根构造。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param descriptor 数据依赖和写入范围
      * @param action 单个可等待步骤
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Step(SystemDescriptor descriptor, Function<SystemContext, CompletionStage<SystemResult>> action)

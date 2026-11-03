@@ -9,9 +9,11 @@ import java.util.Objects;
 
 /**
  * 从 Spring 内存环境懒读会话容量和空闲有效期，配置故障不阻断 Bean 创建。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

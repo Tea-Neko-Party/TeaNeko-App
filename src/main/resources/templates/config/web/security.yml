@@ -1,0 +1,29 @@
+# 默认关闭 Web 控制面。启用前配置 HTTPS 代理和以下唯一外部来源。
+enabled: true
+public-origin: 'https://localhost:5173'
+# 空值时每次启动生成一次，保存在受限 data/web/runtime-admin-token，不写入日志。
+admin-token: '${TEANEKO_WEB_ADMIN_TOKEN:}'
+idle-minutes: 30
+absolute-hours: 8
+# 仅信任明确代理，代理必须覆盖转发协议/主机头；不要填任意来源。
+trusted-proxies: []
+# 开启 Web 后，机器 /ws/{client} 入口要求独立 Bearer 凭据，不能复用管理员令牌。
+# machine-tokens:
+#   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
+machine-tokens: {}
+# 2026/11/03：新插件贡献的编辑区必须在本地明确加入，不能仅因扫描到 Bean 自动开放。
+settings-sections: ['agent']
+# 只开放声明管理来源的注册方法；旧配置需本机明确补充后重载。
+console-prefixes: ['/console']
+# 2026/11/03：只公开这些已注册文件表单，不开放认证根配置或任意路径。
+file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'onebot.main', 'web.chat']
+# 2026/11/03：只向当前管理员开放列出的类型化管理资源。
+management-resources:
+  - 'teaneko.agent:activity'
+  - 'teaneko.agent:memory'
+  - 'teaneko.agent:profiles'
+  - 'teaneko.agent:personality'
+  - 'teaneko.agent:layers'
+  - 'teaneko.agent:schedules'
+  - 'teaneko.core:runtime'
+  - 'teaneko.core:logs'

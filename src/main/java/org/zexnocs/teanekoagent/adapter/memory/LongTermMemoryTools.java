@@ -14,9 +14,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 注解式长期记忆查询和本人维护工具，权限与实际事务由访问服务负责。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @TeaNekoAgentToolClass(value = "long-memory", toolPackage = "agent.memory", managedByFeature = true)

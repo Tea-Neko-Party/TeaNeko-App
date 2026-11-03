@@ -55,10 +55,13 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * <br>2026/11/02：验证管线失败记录可关联的安全诊断，日志失败仍不改变终态。
  *
  * <br>2026/11/02：验证 client 工具白名单经过环绕后仍控制可见和实际执行。
+ * <br>2026/11/03：复用冷轮次用例验证实际活动节点，不把模型结果当作平台发送。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.6.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 class AgentServiceTest {
     /** 验证冷句柄准备不读取配置，启动前取消会释放资源并阻止迟到启动。 */
@@ -71,11 +74,19 @@ class AgentServiceTest {
 
     /** 验证重复启动只执行一次，句柄能识别模型阶段的多级控制链。 */
     @Test void coldExecutionStartsOnceAndRecognizesActualModelControl() {
-        var execution = service.prepare(agent(), request(AgentActivity.SERVICE));
+        // 2026/11/03：观察原管线而不增加第二套运行夹具。
+        var timeline = new org.zexnocs.teanekoagent.agent.monitor.AgentActivityTimeline();
+        service.installTimeline(timeline);
+        var request = request(AgentActivity.SERVICE);
+        var execution = service.prepare(agent(), request);
         execution.start(); execution.start(); runtime.runAll(); assertEquals(1, prompts.size());
         assertTrue(execution.contains(modelPolicies.getFirst().control()));
         try (var unrelated = ExecutionControl.create()) { assertFalse(execution.contains(unrelated)); }
         reply(response()); assertEquals(SUCCESS, execution.result().toCompletableFuture().join().status()); assertFalse(execution.cancel());
+        var nodes = timeline.page(request.actor().scope(), 0, 100).events();
+        assertTrue(nodes.stream().anyMatch(node -> node.stage().equals("agent.prompt") && node.state().equals("STARTED")));
+        assertEquals("SUCCESS", nodes.getLast().state());
+        assertTrue(nodes.stream().noneMatch(node -> node.state().equals("SENT")));
     }
 
     /** 验证服务关闭也回收尚未 start 的冷轮次，不遗留实例关闭监听。 */

@@ -12,16 +12,21 @@ import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
 
 /**
  * 指令的数据类
+ * <br>2026/11/03：管理调用显式标记来源，历史原生构造保留默认行为。
  *
  * @param <T> 指令被解析前的数据类型
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Getter
 @Builder
 public class CommandData<T> {
+    // 2026/11/03：来源不能从浏览器参数或原生角色字段反推。
+    @Builder.Default
+    private final org.zexnocs.teanekocore.command.api.CommandOrigin origin =
+            org.zexnocs.teanekocore.command.api.CommandOrigin.NATIVE;
     /// 宿主借用的父控制，用于派生执行的取消与防重入；不参与序列化或权限判断。
     @JsonIgnore
     private final @Nullable ExecutionControl parentExecution;

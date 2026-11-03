@@ -6,9 +6,11 @@ import java.util.HexFormat;
 
 /**
  * 为人格内容和物理存储键生成无拼接歧义的摘要，不把摘要解释为权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class PersonalityKeys {

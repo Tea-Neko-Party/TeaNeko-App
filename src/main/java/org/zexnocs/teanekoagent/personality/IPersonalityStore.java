@@ -7,9 +7,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 人格引用、补正和备份的事务端口；仅供可信业务调用，聊天管理权限由独立入口校验。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IPersonalityStore {
@@ -62,11 +64,13 @@ public interface IPersonalityStore {
 
     /**
      * 一次事务读取的绑定和补正，不暴露 JPA 对象。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param binding 当前引用
      * @param state 对应补正
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Selection(PersonalityBinding binding, PersonalityState state) {}

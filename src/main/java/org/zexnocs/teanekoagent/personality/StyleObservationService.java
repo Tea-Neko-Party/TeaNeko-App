@@ -15,9 +15,11 @@ import java.util.function.Function;
 
 /**
  * 固定观察所用人格和当前配置，将生成目标与事务内的采用守卫分开。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class StyleObservationService {

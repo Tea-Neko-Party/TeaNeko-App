@@ -20,10 +20,25 @@ import java.util.concurrent.atomic.AtomicReference;
  * 注意：如果任务没有提交会导致定时器永久无法执行。
  *
  * @param <T> 任务返回值类型
+ * 2026/11/03：提供原规则的只读预计触发与等待状态。
+ *
  * @author zExNocs
  * @date 2026/02/14
+ * @since 4.0.0
+ * @version 4.7.0-l
  */
 public class FixedDelayTimer<T> implements ITimer<T> {
+    /**
+     * 2026/11/03：返回实际规则，等待上次完成时不编造预计时间。
+     * @return 本计时器的近时观测
+     */
+    @Override
+    public TimerObservation observation() {
+        boolean waiting = executing.get();
+        return new TimerObservation("FIXED_DELAY", "原任务完成后等待：" + delay,
+                waiting ? null : lastExecutionTime.get().plus(delay), waiting, "UTC");
+    }
+
     /// 任务配置
     private final ITimerTaskConfig<T> timerTaskConfig;
 
@@ -45,6 +60,7 @@ public class FixedDelayTimer<T> implements ITimer<T> {
      *
      * @param config 任务配置
      * @param delay 任务 delay
+     * @param resultType 任务结果类型
      */
     public FixedDelayTimer(@NonNull ITimerTaskConfig<T> config,
                            @NonNull Duration delay,

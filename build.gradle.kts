@@ -55,6 +55,8 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-websocket")
     implementation("org.springframework.boot:spring-boot-starter-webclient")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    // 2026/11/03：Web 控制台复用框架认证、会话与 CSRF，不维护平行鉴权框架。
+    implementation("org.springframework.boot:spring-boot-starter-security")
     annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
     compileOnly("org.projectlombok:lombok")
     annotationProcessor("org.projectlombok:lombok")
@@ -73,12 +75,43 @@ dependencies {
     // ====== test ======
     // testImplementation("org.springframework.boot:spring-boot-starter-data-redis-test")
     testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     testCompileOnly("org.projectlombok:lombok")
     testAnnotationProcessor("org.projectlombok:lombok")
 }
 
 // ========= 主类配置 =========
+// 2026/11/03：前端锁文件确保可复现安装，静态产物与 Java 一起进入同源发布包。
+val webInstall = tasks.register<Exec>("webInstall") {
+    group = "web"
+    description = "根据锁文件安装控制台依赖"
+    workingDir(layout.projectDirectory.dir("frontend"))
+    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm",
+        "ci", "--no-audit", "--no-fund")
+    inputs.files("frontend/package.json", "frontend/package-lock.json")
+    outputs.dir("frontend/node_modules")
+}
+
+val webBuild = tasks.register<Exec>("webBuild") {
+    group = "web"
+    description = "检查 TypeScript 并构建控制台静态资源"
+    dependsOn(webInstall)
+    workingDir(layout.projectDirectory.dir("frontend"))
+    commandLine(if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm", "run", "build")
+    inputs.dir("frontend/src")
+    inputs.files("frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts", "frontend/package-lock.json")
+    outputs.dir(layout.buildDirectory.dir("generated/web/console"))
+}
+
+tasks.named<ProcessResources>("processResources") {
+    dependsOn(webBuild)
+    from(layout.buildDirectory.dir("generated/web")) {
+        into("static")
+    }
+}
+
 springBoot {
     mainClass.set("org.zexnocs.teanekoapp.TeaNekoAppApplication")
 }

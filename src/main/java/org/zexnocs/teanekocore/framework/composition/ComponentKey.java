@@ -5,12 +5,14 @@ import java.util.Objects;
 /**
  * 稳定标识与运行时类型组成的组件键；组件值应当不可变。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 稳定标识
  * @param type 运行时类型
  * @param <T> 组件值类型
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record ComponentKey<T>(String id, Class<T> type) {

@@ -63,13 +63,15 @@ public class InfoService {
 
     /**
      * 按 UUID 读取的纯公开资料，不携带平台客户端或可执行资源。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param uuid 用户 TeaNeko UUID
      * @param personalInfo 当前个人简介
      * @param coinCount 当前猫猫币数量
      * @param randomMessage 一条随机公开留言，无留言时为空
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record GeneralInfo(UUID uuid, String personalInfo, int coinCount, @org.jspecify.annotations.Nullable String randomMessage) { }

@@ -13,9 +13,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 在原扫描器及数据库就绪后恢复一次任务；启动失败关闭调度并保留明确不可用状态。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

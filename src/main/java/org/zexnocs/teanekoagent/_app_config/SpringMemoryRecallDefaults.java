@@ -10,9 +10,11 @@ import java.util.Objects;
 
 /**
  * 懒读并验证整份检索策略，非法配置只使本次查询失败，修复后下一次恢复。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -43,7 +45,6 @@ public final class SpringMemoryRecallDefaults implements IMemoryRecallDefaults {
      * @throws IllegalStateException 当配置来源返回空整数时
      */
     private int value(String key, int fallback) {
-        var value = environment.getProperty("tea-neko.agent.memory.recall." + key, Integer.class, fallback);
-        if (value == null) { throw new IllegalStateException("记忆检索配置不能返回空整数。"); } return value;
+        return environment.getProperty("tea-neko.agent.memory.recall." + key, Integer.class, fallback);
     }
 }

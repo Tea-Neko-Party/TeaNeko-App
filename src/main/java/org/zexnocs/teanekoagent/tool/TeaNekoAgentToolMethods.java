@@ -1,32 +1,45 @@
 package org.zexnocs.teanekoagent.tool;
 
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.ReflectionUtils;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentActivity;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
-import org.zexnocs.teanekoagent.llm.framework.message.content.*;
+import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMImageDetail;
 import org.zexnocs.teanekoagent.llm.framework.tool.*;
-import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
-import org.zexnocs.teanekoagent.tool.api.*;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolParam;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
 import org.zexnocs.teanekocore.framework.description.Description;
 import tools.jackson.databind.ObjectMapper;
+
 import java.lang.reflect.*;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
 
 /**
  * 注解方法编译及执行入口，复用既有参数 schema 和工具绑定，不直接访问平台或数据库。
  * 元数据按真实类型缓存；每轮仍固定原请求，业务方法通过实际 Spring Bean 代理调用。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 public final class TeaNekoAgentToolMethods {
@@ -39,7 +52,7 @@ public final class TeaNekoAgentToolMethods {
          * @param type 真实声明类型
          * @return 稳定有序的方法规格
          */
-        @Override protected List<MethodSpec> computeValue(Class<?> type) { return compile(type); }
+        @Override protected List<MethodSpec> computeValue(@NonNull Class<?> type) { return compile(type); }
     };
 
     /**
@@ -173,7 +186,7 @@ public final class TeaNekoAgentToolMethods {
             if (type == TeaNekoAgentToolContext.class) { values[i] = context; continue; }
             if (type == ToolInvocationContext.class) { values[i] = context.requireInvocation(); continue; }
             if (type == ILLMToolCall.class) { values[i] = call; continue; }
-            var node = annotation != null && annotation.flatten() ? root : root.get(parameterName(parameter));
+            var node = annotation != null && annotation.flatten() ? root : Objects.requireNonNull(root).get(parameterName(parameter));
             var javaType = mapper.getTypeFactory().constructType(parameter.getParameterizedType());
             if (node == null) {
                 var fallback = parameter.getAnnotation(DefaultValue.class);
@@ -268,8 +281,8 @@ public final class TeaNekoAgentToolMethods {
     private static String serialize(Object result, boolean media, ObjectMapper mapper) {
         if (result instanceof CompletionStage<?>) { throw new IllegalStateException("工具返回了尚未展开的嵌套阶段。"); }
         if (media) {
-            if (!(result instanceof LLMToolOutput output)) { throw new IllegalStateException("结构化图像工具未返回 LLMToolOutput。"); }
-            return mapper.writeValueAsString(Map.of("text", output.text(), "images", output.images().stream()
+            if (!(result instanceof LLMToolOutput(String text, List<ImageLLMContentPart> images))) { throw new IllegalStateException("结构化图像工具未返回 LLMToolOutput。"); }
+            return mapper.writeValueAsString(Map.of("text", text, "images", images.stream()
                     .map(image -> Map.of("url", image.getUrl(), "detail", image.getDetail().name())).toList()));
         }
         if (result instanceof LLMToolOutput) { throw new IllegalStateException("图像工具必须明确声明 LLMToolOutput 返回类型。"); }
@@ -290,6 +303,8 @@ public final class TeaNekoAgentToolMethods {
 
     /**
      * 不可变方法元数据，不保存请求、Bean 或执行控制。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param method 原业务方法
      * @param condition 可选纯条件方法
      * @param tool 模型工具定义
@@ -297,7 +312,7 @@ public final class TeaNekoAgentToolMethods {
      * @param media 是否声明结构化图像
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.0-l
      */
     private record MethodSpec(Method method, @Nullable Method condition, LLMTool tool, Set<String> clients, boolean media) { }

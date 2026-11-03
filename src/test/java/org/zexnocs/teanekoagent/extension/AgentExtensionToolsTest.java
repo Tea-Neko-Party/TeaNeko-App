@@ -38,18 +38,22 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * 用内存后端示例验证实际 LLM 工具契约、可信来源、授权撤销和业务回执，不访问宿主文件或执行代码。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)
 class AgentExtensionToolsTest {
     /**
      * 复用原工具集、组件和手动执行器，后端只作可运行的内存示例。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Harness implements AutoCloseable {

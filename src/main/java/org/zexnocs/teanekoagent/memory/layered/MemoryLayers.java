@@ -10,9 +10,11 @@ import java.util.UUID;
 
 /**
  * 分层记忆的不可变数据契约，来源和处理覆盖与生成正文分开保存。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class MemoryLayers {
@@ -29,13 +31,15 @@ public final class MemoryLayers {
     }
     /**
      * 已提交的短期消息，序号表示接收顺序，事件时间表示实际发生时间。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param sequence 分区内递增序号
      * @param message 原始文本及真实来源
      * @param personality 采集时人格身份，仅供追溯
      * @param expiresAt 原保留期，不因重投延长
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Message(long sequence, HistoryMessage message, String personality, Instant expiresAt) {
@@ -54,11 +58,13 @@ public final class MemoryLayers {
     }
     /**
      * 可恢复目录项，实际读取仍核对当前空间及配置。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 稳定分区
      * @param reference 原始引用
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Stream(String id, MemoryNamespaceReference reference) {
@@ -75,6 +81,8 @@ public final class MemoryLayers {
     }
     /**
      * 已取得租约的连续压缩输入，模型无权指定源范围。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param stream 原分区
      * @param leaseId 此次领取令牌
      * @param through 已固定的覆盖上界
@@ -82,7 +90,7 @@ public final class MemoryLayers {
      * @param messages 不可变消息前缀
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Batch(Stream stream, UUID leaseId, long through, String fingerprint, List<Message> messages) {
@@ -109,11 +117,13 @@ public final class MemoryLayers {
     }
     /**
      * 模型只生成有界内容，来源、时间和水位由宿主确定。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param brief 简短摘要
      * @param details 完整片段摘要，保留决定、纠正、重要日期及待办
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Digest(String brief, String details) {
@@ -131,6 +141,8 @@ public final class MemoryLayers {
     }
     /**
      * 持久中期片段，事件范围与生成时刻分开，普通召回使用模糊时间提示。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 稳定片段标识
      * @param stream 固定来源
      * @param from 覆盖起始序号
@@ -142,7 +154,7 @@ public final class MemoryLayers {
      * @param createdAt 实际提交处理时刻
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Segment(UUID id, Stream stream, long from, long through, String fingerprint, Digest digest,
@@ -168,12 +180,14 @@ public final class MemoryLayers {
     }
     /**
      * 本次有界近期读取，水位不代表整个分区已经读完。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param recent 最近原始消息
      * @param segments 已提交中期片段
      * @param compressedThrough 已提交的压缩水位
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record View(List<Message> recent, List<Segment> segments, long compressedThrough) {

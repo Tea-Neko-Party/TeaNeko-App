@@ -13,9 +13,11 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
 /**
  * Agent 底座的类型化数据键；组件仅保存不可变定义、状态和可信身份，不保存服务。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentComponents {

@@ -8,10 +8,12 @@ import java.util.UUID;
 
 /**
  * Tea Neko 发送者接口，用于获取发送者的信息。
+ * <br>2026/11/03：允许客户端对私聊采用更严格角色，不以网页管理权限推导原生角色。
  *
  * @author zExNocs
  * @date 2026/02/21
  * @since 4.0.8
+ * @version 4.7.0-l
  */
 public interface ITeaNekoUserData {
     /**
@@ -47,7 +49,7 @@ public interface ITeaNekoUserData {
      * 如果是群主，则返回 "owner"；
      * 如果是群管理员，则返回 "admin"；
      * 否则返回 "member"。
-     * 如果是私聊，则始终为 "owner"。
+     * 2026/11/03：私聊通常为 "owner"，客户端可采用更严格角色；网页管理权限不作为聊天角色来源。
      *
      * @return {@link CommandPermission}
      */

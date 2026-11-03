@@ -18,6 +18,8 @@ import java.util.*;
  * 一轮已结束的只读结果。被拒绝或终止时仍保留已观察交互，不自动提交历史或发送平台消息。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param agentId 实际执行的实例标识
  * @param requestId 宿主请求标识
  * @param status 最终业务状态
@@ -30,7 +32,7 @@ import java.util.*;
  * <br>2026/11/03：公开已验证语义答案及固定表达计划，不改变原构造入口。
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
@@ -150,9 +152,11 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
     }
     /**
      * 稳定业务状态，配置拒绝和执行取消与供应商终止分开表达。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { SUCCESS, SKIPPED, CONFIGURATION_ERROR, CANCELLED, TIMED_OUT, BUDGET_EXCEEDED,

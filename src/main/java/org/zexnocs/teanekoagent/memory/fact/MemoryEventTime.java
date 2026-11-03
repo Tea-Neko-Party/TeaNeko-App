@@ -6,13 +6,15 @@ import java.util.Objects;
 
 /**
  * 事实的事件时间及原始表达，记录时间只作为显式允许的估算回退。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param start 可选事件起点
  * @param end 可选事件终点，单侧端点表示时间点
  * @param precision 来源提供的精度
  * @param expression 原始时间表达
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryEventTime(@Nullable Instant start, @Nullable Instant end, Precision precision, String expression) {
@@ -60,9 +62,11 @@ public record MemoryEventTime(@Nullable Instant start, @Nullable Instant end, Pr
 
     /**
      * 事件时间精度，不以记录时间冒充已知事件时间。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Precision { UNKNOWN, EXACT, MINUTE, HOUR, DAY, WEEK, MONTH, YEAR, APPROXIMATE }

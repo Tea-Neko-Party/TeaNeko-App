@@ -5,6 +5,8 @@ import java.util.Objects;
 
 /**
  * 独立后台学习预算，应用补正的开关仍由人格配置决定。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param enabled 是否允许自动生成
  * @param cooldown 同会话尝试冷却
  * @param timeout 整个生成及提交观察时限
@@ -14,7 +16,7 @@ import java.util.Objects;
  * @param retention 候选有效期
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record PersonalityLearningSettings(boolean enabled, Duration cooldown, Duration timeout, int maxModelCalls,

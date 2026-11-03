@@ -2,9 +2,11 @@ package org.zexnocs.teanekocore.plugin;
 
 /**
  * 限定内部事件只通知本轮实际安装的插件，避免全局 Bean 自动介入所有实例。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public interface PluginScopedEvent {

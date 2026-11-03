@@ -20,13 +20,15 @@ import java.time.Instant;
  * <br>2026/11/03：显式提供当前机器人平台 ID 和提及自身标记，避免将机器人识别为未知用户。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param text 当前消息字面文本
  * @param message 冻结的有序图文消息
  * @param occurredAt 原生平台时刻
  * @param digest 完整图文的防重摘要，不只比较文字
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 public record NativeMessageInput(String text, ILLMMessage message, Instant occurredAt, String digest) {

@@ -5,9 +5,11 @@ import java.util.List;
 
 /**
  * 资料解析结束、预算裁剪之前的可修改事件；业务项始终为低信任参考资料。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public final class AgentPromptPreparingEvent extends AgentDecisionEvent<AgentPromptFragment> {

@@ -11,6 +11,8 @@ import java.util.UUID;
 
 /**
  * 宿主固定的扩展调用上下文，不进入模型参数、组件或数据库，后端不得关闭借用控制。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 原轮次标识，与 callId 共同用于后端防重
  * @param callId 原工具调用标识，资料复核使用固定观察标识
  * @param actor 真实身份、作用域及来源
@@ -19,7 +21,7 @@ import java.util.UUID;
  * @param control 借用预算、取消及截止时间
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType
@@ -43,9 +45,11 @@ public record AgentExtensionContext(UUID requestId, String callId, AgentActorCon
     }
     /**
      * 真实执行与只读资料检查分开，模型不能用特殊调用 ID 伪装复核阶段。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Phase { EXECUTION, REFERENCE_CHECK }

@@ -18,10 +18,12 @@ import java.util.function.Consumer;
 /**
  * 单次订阅的完成/终止仲裁。结果、定时器、监听与 HTTP 订阅共用一个生命周期。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <T> 组件值类型
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class APIRequestExecution<T> {

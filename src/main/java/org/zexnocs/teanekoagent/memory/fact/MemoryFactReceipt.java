@@ -5,11 +5,13 @@ import java.util.Objects;
 
 /**
  * 提交后才公开的追加结果，重复不覆盖原记录或遗失新增来源审计。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 已存储、完全重复或操作冲突
  * @param record 已接受的原记录，冲突时为空
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactReceipt(Status status, @Nullable MemoryFactRecord record) {
@@ -27,9 +29,11 @@ public record MemoryFactReceipt(Status status, @Nullable MemoryFactRecord record
 
     /**
      * 追加结果类别，基础设施失败或旧代次通过异常阶段表达。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { STORED, DUPLICATE, CONFLICT }

@@ -13,9 +13,11 @@ import java.util.UUID;
  * 管理 SPI 的明确请求与脱敏视图，不向客户端开放任意对象或文件路径。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class StickerManagement {
@@ -24,9 +26,11 @@ public final class StickerManagement {
      * 有界查询的明确类型。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public enum QueryKind{CATALOG, JOBS}
@@ -34,15 +38,19 @@ public final class StickerManagement {
      * 版本管理动作，删除与显式重新允许采集分开。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public enum Action{PIN, UNPIN, DISABLE, ENABLE, DELETE, RESTORE, PATCH, REFRESH}
     /**
      * 目录或作业查询。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param kind 查询类型
      * @param after 原末项 ID，首屏为空
@@ -51,7 +59,7 @@ public final class StickerManagement {
      * @param state 可选条目状态
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Query(QueryKind kind,String after,int limit,String category,Stickers.@Nullable EntryStatus state){
@@ -68,13 +76,15 @@ public final class StickerManagement {
      * 人工修正描述及类别，不提升图片类型或模型置信度。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param category 受控主类别
      * @param visualDescription 客观画面
      * @param usageDescription 完整用途
      * @param tags 至多四项标签
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Details(String category,String visualDescription,String usageDescription,List<String> tags){
@@ -90,6 +100,8 @@ public final class StickerManagement {
      * 管理写入携带明确版本和持久幂等标识。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param operationId 幂等标识
      * @param id 素材 ID
      * @param expectedRevision 预期条目版本
@@ -98,7 +110,7 @@ public final class StickerManagement {
      * @param analysisScope 仅 REFRESH 使用的已登记分析区域
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Change(UUID operationId,String id,long expectedRevision,Action action,@Nullable Details details,@Nullable AgentScope analysisScope){
@@ -116,11 +128,13 @@ public final class StickerManagement {
      * 按固定版本请求受控预览。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 素材 ID
      * @param expectedRevision 预期版本
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Preview(String id,long expectedRevision){
@@ -134,10 +148,12 @@ public final class StickerManagement {
      * 查询本人原操作的真实提交回执。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param operationId 原幂等标识
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record OperationQuery(UUID operationId){
@@ -149,6 +165,8 @@ public final class StickerManagement {
     /**
      * 不包含路径、作者或原始链接的管理条目。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param id 稳定 ID
      * @param revision 条目版本
@@ -168,13 +186,15 @@ public final class StickerManagement {
      * @param lastRobot 最近机器人确认
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record ItemView(String id,long revision,Stickers.EntryStatus state,boolean pinned,String category,String visualDescription,String usageDescription,double quality,long bytes,int width,int height,int frames,long humanObservations,long robotShows,@Nullable Instant lastHuman,@Nullable Instant lastRobot){}
     /**
      * 作业诊断不导出图片引用和来源原话。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param id 作业 ID
      * @param status 实际状态
@@ -185,13 +205,15 @@ public final class StickerManagement {
      * @param created 创建时间
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record JobView(UUID id,Stickers.JobStatus status,String reason,String stickerId,AgentScope scope,boolean refresh,Instant created){}
     /**
      * 实例级容量快照，含预约和待删字节。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param active 有效项
      * @param disabled 人工停用项
@@ -202,7 +224,7 @@ public final class StickerManagement {
      * @param categories 各主类别有效数
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Capacity(int active,int disabled,int pending,int maxActive,long accountedBytes,long maxBytes,Map<String,Long> categories){
@@ -221,6 +243,8 @@ public final class StickerManagement {
      * 管理分页及容量共用同一目录快照。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param catalogRevision 目录版本
      * @param items 条目页
      * @param jobs 作业页
@@ -228,7 +252,7 @@ public final class StickerManagement {
      * @param capacity 实例统计
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Page(long catalogRevision,List<ItemView> items,List<JobView> jobs,String next,Capacity capacity){
@@ -245,19 +269,23 @@ public final class StickerManagement {
      * 单幅有界 PNG 预览，不是原文件下载地址。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param id 素材 ID
      * @param revision 原版本
      * @param image 首幅合成预览 data URI
      * @param note 动画采样说明
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record PreviewView(String id,long revision,String image,String note){}
     /**
      * 提交后的管理回执；后台重新分析与本次请求提交分开。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param operationId 幂等标识
      * @param id 素材
@@ -268,7 +296,7 @@ public final class StickerManagement {
      * @param replayed 是否返回既有回执
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record ChangeResult(UUID operationId,String id,long revision,Stickers.EntryStatus state,long catalogRevision,@Nullable UUID jobId,boolean replayed){}
@@ -276,13 +304,15 @@ public final class StickerManagement {
      * 有界持久幂等记录，主体只存摘要。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param subject 管理主体摘要
      * @param digest 全部请求摘要
      * @param at 提交时间
      * @param result 原真实回执
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     public record Operation(String subject,String digest,Instant at,ChangeResult result){}

@@ -46,9 +46,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用事务夹具检验从真实发言到长期画像、召回和本人维护的完整闭环。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @Timeout(25)
@@ -60,9 +62,11 @@ class LongTermMemoryIntegrationTest {
     private final LayeredMemorySettings settings = new LayeredMemorySettings(true, 6, 2, 4, 131072, Duration.ofSeconds(30), Duration.ofDays(90));
     /**
      * 持有真实适配器，所有证据均经原历史事务进入分层存储。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private final class Harness implements AutoCloseable {

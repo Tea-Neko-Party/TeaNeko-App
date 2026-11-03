@@ -24,9 +24,11 @@ import java.util.function.Supplier;
  * 通过专用 EasyData 保存历史及到期索引，不依赖独立 JPA 历史表或业务仓库。
  * 两个目标同事务提交，行序号支持重启分页，到期索引支持有界回收。
  * <br>2026/11/02：短期分层消息和可恢复目录加入原历史事务，不依赖事后内存通知。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 @Service
@@ -185,6 +187,8 @@ public final class EasyDataHistoryStore implements IHistoryStore {
     }
     /**
      * 一个消息的显式存储结构，过期时间与正文同事务保存。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 结构版本
      * @param reference 真实边界
      * @param personality 人格身份
@@ -192,7 +196,7 @@ public final class EasyDataHistoryStore implements IHistoryStore {
      * @param expiresAt 到期时刻
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Stored(int schemaVersion, MemoryNamespaceReference reference, String personality, HistoryMessage message, Instant expiresAt) {
@@ -212,12 +216,14 @@ public final class EasyDataHistoryStore implements IHistoryStore {
     }
     /**
      * 独立到期目标的不可变引用，不复制整条历史正文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param partition 历史分区
      * @param key 消息键
      * @param expiresAt 到期时刻
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Expiry(String partition, String key, Instant expiresAt) {}

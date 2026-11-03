@@ -29,9 +29,11 @@ import java.util.function.Function;
 /**
  * 真实 DEBUG 来源的记忆管理边界，模型只提供业务参数，不能替换操作者或提升权限。
  * 逻辑清空提交、会话同步与后续物理回收分别报告，不伪装成分布式原子操作。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

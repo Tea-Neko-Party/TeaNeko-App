@@ -2,33 +2,48 @@ package org.zexnocs.teanekoplugin.general.info;
 
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentActivity;
+import org.zexnocs.teanekoagent.agent.AgentComponents;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.tool.*;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
-import org.zexnocs.teanekoapp.message.*;
+import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
+import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
+import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
-import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.utils.RandomUtil;
-import org.zexnocs.teanekoplugin.general.info.messageboard.*;
+import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoData;
+import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
 import org.zexnocs.teanekoplugin.general.info.personal.PersonalInfoService;
-import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
 import java.time.Instant;
-import java.util.*;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
  * 覆盖实际工具集中的 UUID 查询、留言分页及权限撤销，不访问平台或数据库。
  * <br>2026/11/02：注解绑定提前拒绝类型溢出，权限撤销停止交互。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 class InfoAgentToolsTest {

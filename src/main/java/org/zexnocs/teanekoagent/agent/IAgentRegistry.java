@@ -9,9 +9,11 @@ import java.util.Optional;
 /**
  * Agent 实例拥有关系的边界，不负责 scope 注册、权限或持久化。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentRegistry extends AutoCloseable {

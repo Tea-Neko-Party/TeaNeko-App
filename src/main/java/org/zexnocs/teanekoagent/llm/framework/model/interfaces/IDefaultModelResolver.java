@@ -7,9 +7,11 @@ import java.util.Optional;
 /**
  * 默认模型路由端口；配置布局由装配适配器决定。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

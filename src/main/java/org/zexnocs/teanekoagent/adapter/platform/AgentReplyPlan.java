@@ -19,10 +19,12 @@ import java.util.Optional;
  * <br>2026/11/03：为注解式兼容解析器提供独立正式答案入口。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param parts 完整有序文本段和图片，每段文本不超过两千字符
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 public record AgentReplyPlan(List<Part> parts) {
@@ -127,9 +129,11 @@ public record AgentReplyPlan(List<Part> parts) {
 
     /**
      * 可支持的明确输出类型，不接收任意平台操作或命令。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public sealed interface Part {
@@ -142,20 +146,24 @@ public record AgentReplyPlan(List<Part> parts) {
 
     /**
      * 仅针对当前原生来源的回复形式。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Mode { REPLY, AT, PLAIN }
 
     /**
      * 字面文本段，正文 URL 不获得图片发送能力。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 文本
      * @param mode 宿主验证的当前来源回复形式
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Text(String value, Mode mode) implements Part {
@@ -174,10 +182,12 @@ public record AgentReplyPlan(List<Part> parts) {
 
     /**
      * 已显式声明的图片引用，不读取文件或下载内容。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param url 标准 HTTP(S)/data 图片引用
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Image(String url) implements Part {

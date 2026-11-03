@@ -22,9 +22,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证窗口配置优先级、旧记录兼容和非法配置恢复，不访问实际数据库。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentConversationPolicyTest {

@@ -26,9 +26,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 只向已授权且具有原生来源的请求暴露命令文本工具，不接受身份、空间或权限参数。
  * <br>2026/11/02：命令参数改为注解签名，原生权限和反馈归属继续由原桥接负责。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Service

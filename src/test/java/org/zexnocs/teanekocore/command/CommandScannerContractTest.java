@@ -24,18 +24,22 @@ import static org.mockito.Mockito.mock;
 /**
  * 验证扫描与执行使用同一异步方法契约，并核对实际生产命令。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public class CommandScannerContractTest {
     /**
      * 故意返回 void 的非法命令夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command("/invalid-void") public class VoidHandler {
@@ -47,9 +51,11 @@ public class CommandScannerContractTest {
     /**
      * 故意直接返回业务字符串的非法命令夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command("/invalid-string") public class StringHandler {
@@ -63,9 +69,11 @@ public class CommandScannerContractTest {
     /**
      * 故意声明为私有方法的非法命令夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command("/invalid-private") public class PrivateHandler {

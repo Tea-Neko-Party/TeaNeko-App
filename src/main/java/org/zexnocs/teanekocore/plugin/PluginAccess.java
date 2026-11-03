@@ -7,9 +7,11 @@ import java.lang.reflect.Method;
 
 /**
  * 将既有扫描式命令、事件和任务阶段接入插件归属，不改变未声明归属的旧扩展。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Component

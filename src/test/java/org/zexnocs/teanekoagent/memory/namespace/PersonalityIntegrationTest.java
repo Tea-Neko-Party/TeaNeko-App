@@ -55,9 +55,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用既有事务夹具验证人格实际生效、共享补正、切换回滚和旧轮失效，不增加数据结构镜像测试。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)
@@ -87,9 +89,11 @@ class PersonalityIntegrationTest {
 
     /**
      * 组合实际配置适配、事务存储、人格源与 Agent/LLM；仅替换文件/模型传输。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private final class Harness implements AutoCloseable {

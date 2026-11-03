@@ -8,9 +8,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 记忆空间元数据的事务端口；调用者是可信业务服务，聊天权限由其上层边界检查。
  * 创建记录和个人配额索引必须在同一事务提交，不允许无保护的整列表覆盖。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IMemoryNamespaceStore {

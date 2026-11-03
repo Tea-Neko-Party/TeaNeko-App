@@ -10,9 +10,11 @@ import tools.jackson.databind.ObjectMapper;
 
 /**
  * 保存无正文的空间及分区定位，清理原目录后仍能判定旧代次作业与索引的归属。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class EasyDataMemoryLifecycle {

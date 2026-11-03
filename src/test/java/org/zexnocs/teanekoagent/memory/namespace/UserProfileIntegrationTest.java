@@ -21,9 +21,11 @@ import static org.mockito.Mockito.*;
 /**
  * 经真实 namespace、事实、兼容导入和 Recall 适配验证画像重建，不连接真实数据库或模型。
  * 复用原事务替身的锁与回滚合同，仍需 MySQL/JPA 实机验收。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)

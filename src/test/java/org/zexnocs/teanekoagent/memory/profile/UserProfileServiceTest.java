@@ -23,9 +23,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证画像的主体、证据版本、覆盖程度和异步边界，不将检索结果再写成新的个人事实。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)

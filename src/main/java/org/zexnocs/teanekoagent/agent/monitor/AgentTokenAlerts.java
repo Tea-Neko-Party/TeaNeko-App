@@ -12,9 +12,11 @@ import java.util.Map;
 
 /**
  * 在原异步监控链中处理有界用量阈值和冷却，不让告警成为主业务依赖。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @EventListener
@@ -62,11 +64,13 @@ public final class AgentTokenAlerts {
     }
     /**
      * 不保存 Prompt 的进程内冷却状态。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param until 下次可告警时刻
      * @param suppressed 当前合并次数
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record State(Instant until, long suppressed) { }

@@ -2,12 +2,14 @@ package org.zexnocs.teanekoagent.memory.recall;
 
 /**
  * 一次查询的有界工作量与证据输出预算；字符按实际证据数组 JSON 计量。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param maxResults 最大结果数
  * @param maxCharacters 最大证据数组字符数，包含数组括号与逗号
  * @param maxScanned 最大检查记录数
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallLimits(int maxResults, int maxCharacters, int maxScanned) {

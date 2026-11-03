@@ -26,9 +26,11 @@ import java.util.concurrent.*;
  * 没有显式授权实现时默认拒绝；Web 身份不转为聊天 USER，刷新始终通过 SYSTEM 视觉活动。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Component
@@ -287,12 +289,14 @@ public final class StickerManagementService {
      * 临时管理选择，不导出服务或权限能力。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param settings 原设置
      * @param storage 原存储
      * @param token 原宿主插件版本
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType private record Session(StickerSettings settings,StickerExtensionRegistry.Storage storage,PluginRegistry.Token token){}
@@ -300,11 +304,13 @@ public final class StickerManagementService {
      * 写入前观察，不提前返回未提交结果。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param previous 已提交幂等回执
      * @param blob 当前文件
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType private record Preparation(StickerManagement.@Nullable ChangeResult previous,Stickers.@Nullable Blob blob){}
@@ -312,12 +318,14 @@ public final class StickerManagementService {
      * 预览真实占用，仅由宿主释放。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param session 原端口
      * @param token 占用 ID
      * @param blob 原文件
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType private record PreviewLease(Session session,UUID token,Stickers.Blob blob){}
@@ -325,12 +333,14 @@ public final class StickerManagementService {
      * 保留物理阶段结果以完成资源清理。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 实际值
      * @param failure 原失败
      * @param <T> 结果类型
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private record PreviewOutcome<T>(@Nullable T value,@Nullable Throwable failure){}

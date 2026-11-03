@@ -6,6 +6,8 @@ import java.util.Set;
 /**
  * System 的稳定标识、必需输入、允许写入及显式前置依赖。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 稳定标识
  * @param required 步骤执行所必需的组件键
  * @param writes 步骤允许写入的组件键
@@ -13,7 +15,7 @@ import java.util.Set;
  * @param optional 缺少必需输入时是否允许跳过
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record SystemDescriptor(

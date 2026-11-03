@@ -10,9 +10,11 @@ import java.util.Objects;
 
 /**
  * 从同一份真实 Agent 登记读取记忆开关，不为缺失记录构造默认启用配置。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

@@ -4,12 +4,13 @@
 
 ## 进行中
 
-当前没有进行中的实施计划；真实环境待验收项继续按部署清单执行。
+暂无进行中的实施计划。4.7.0-l 的功能与约定离线验收已完成，实机部署检查继续维护在对应部署说明。
 
 ## 已完成
 
 | 计划 | 完成范围 | 发布说明 |
 | --- | --- | --- |
+| [4.7.0 Web 控制台](old/4.7.0-web-console.md) | 登录安全、配置/Agent/任务/日志、客户端指令台、独立网页聊天、模拟成员、受控媒体及离线验收，100% | [v4.7.0-l（待发布）](../changelog/4.7.0-l.md) |
 | [4.6.2 拟人表达与表情包](old/agent-expression-stickers.md) | 拟人分段、共享图库、类别选图、独立发送与原生表情、全局管理 SPI、受限事件及离线验收，100% | [v4.6.2-l](../changelog/4.6.2-l.md) |
 | [4.6.1 三层自动记忆与观察式人格](old/4.6.1-layered-memory.md) | 短中长期持久化、自动画像、表达观察、明确保存、逐段送达及维护，已完成离线验收 | 尚未确认发布 |
 | [4.6.0 注解工具](old/4.6.0-annotated-tools.md) | Spring 自动注册、参数 schema、client、可信上下文、异步图像及十项工具迁移 | [v4.6.0-l](../changelog/4.6.0-l.md) |
@@ -23,5 +24,5 @@
 - [记忆与人格重设计规格归档](old/4.6.1-memory-specification.md)：保留自动三层记忆、观察式人格、持久化契约及采用边界；当前实现及离线验收见同目录实施记录，操作与配置查阅模块说明，项目对照记录仅放在 temp/docs。
 
 - 真实 MySQL、OneBot、模型、完整启动与性能检查继续维护在 [部署验收清单](../development/agent-deployment.md#实机验收清单)，不计入已完成计划的实机通过结论。
-- [Web 管理设计](../design/web-management-api.md) 的目标版本为 v4.7.0-l，保留客户端分类、配置热更新、指令台、Web 聊天、HTTP 和实时订阅范围；实际已有能力以 [管理扩展指南](../development/plugins/management.md) 为准。当前只有设计，不将整套 Web 标记为已经开工或完成。
+- [Web 管理设计](../design/web-management-api.md) 的 v4.7.0-l 实施已完成离线验收，记录见[已归档计划](old/4.7.0-web-console.md)。当前入口及仍需执行的 HTTPS、代理、数据库和平台检查见[部署开发说明](../development/web-console.md)，管理 SPI 见[管理扩展指南](../development/plugins/management.md)。不把后续目标接口或实机检查标为已通过。
 - 历史计划中的“当前版本”“下一步”和阶段百分比表示归档时状态；最新版本与操作方式查阅 [发布日志](../changelog/README.md) 及对应模块文档。

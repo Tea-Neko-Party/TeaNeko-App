@@ -31,9 +31,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * 组件写入由准备阶段或有序管线完成；取消后的诊断只观察，不提交迟到数据。
  * <br>2026/11/02：轮次复制实例的不可变插件组件，后续写入互相隔离。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 final class AgentTurn implements AutoCloseable {

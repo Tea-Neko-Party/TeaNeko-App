@@ -16,10 +16,12 @@ import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
  * OpenAI Chat Completions 兼容模型的抽象适配器。
  * <br>子类只需声明 provider、默认模型、endpoint 和供应商参数限制，即可复用消息、工具、JSON 输出及 usage 映射。
  *
+ * 2026/11/03：获取凭据时核对已解析参数的配置代次。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel {
     /** API 响应服务。 */
@@ -141,7 +143,9 @@ public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel
             execution.checkActive();
         }
         var chatOptions = prepareOptions(options);
-        var access = credentialResolver.require(getProvider());
+        // 2026/11/03：兼容供应商同样拒绝旧参数与新凭据混用。
+        // 2026/11/03：原参数与认证配置必须属于同一文件代次。
+        var access = credentialResolver.require(getProvider(), options);
         var request = OpenAIChatCompletionMapper.toRequest(prompt, chatOptions, access.apiKey());
         request.setBaseUrl(access.baseUrlOr(defaultBaseUrl()));
         request.setApiPath(access.apiPathOr(defaultApiPath()));

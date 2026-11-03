@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 持久记忆维护端口，每次有界推进，清理关闭不改变数据的逻辑有效期。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public interface IMemoryMaintenance {

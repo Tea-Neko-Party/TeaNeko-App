@@ -4,11 +4,13 @@ import java.util.Objects;
 
 /**
  * 保留客户端来源的作用域定位；scopeId 沿用宿主的现有格式，不自行解析平台编号。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param clientId 宿主客户端标识
  * @param scopeId 宿主作用域标识
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentScope(String clientId, String scopeId) {

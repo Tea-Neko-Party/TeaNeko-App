@@ -6,9 +6,11 @@ import java.util.Comparator;
 
 /**
  * 面向聊天的普通文本任务卡片和分页列表，不依赖平台客户端。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class TaskPresentation {

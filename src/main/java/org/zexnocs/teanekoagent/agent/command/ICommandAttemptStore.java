@@ -8,9 +8,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 命令副作用的持久化防重端口，先提交占用再执行；未知在途记录不得自动重新执行。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface ICommandAttemptStore {
@@ -29,6 +31,8 @@ public interface ICommandAttemptStore {
     CompletionStage<CommandInvocationReceipt> finish(Attempt attempt, CommandInvocationReceipt receipt);
     /**
      * 不保存命令正文、密钥或原生客户端，摘要只用于检测同 ID 不同内容。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param requestId 原宿主请求
      * @param callId 原工具调用 ID
      * @param actor 原真实发起者
@@ -37,7 +41,7 @@ public interface ICommandAttemptStore {
      * @param kind 原生聊天准入或具体工具动作，二者使用不同幂等空间
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Attempt(UUID requestId, String callId, AgentActorContext actor, MemoryNamespaceReference reference, String commandDigest, Kind kind) {
@@ -74,19 +78,23 @@ public interface ICommandAttemptStore {
     }
     /**
      * 当前动作的唯一执行权，未取得时只返回原状态或冲突。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param acquired 是否允许本次真正执行
      * @param receipt 已有回执或明确在途状态
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Claim(boolean acquired, CommandInvocationReceipt receipt) {}
     /**
      * 分离原生消息的单次模型准入、采集和工具调用，避免重启或换代后重放旧来源。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     enum Kind { CHAT_ENTRY, TOOL, COLLECT_ENTRY, PROACTIVE_ENTRY, CLIENT_ENTRY }

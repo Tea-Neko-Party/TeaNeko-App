@@ -31,9 +31,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 
 /**
  * 验证懒读本地配置、失效后恢复及真实装配的 JSON 度量，不启动完整应用。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)

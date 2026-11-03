@@ -4,9 +4,11 @@ import java.lang.annotation.*;
 
 /**
  * 声明命令、事件监听器及任务阶段 Bean 的插件归属；不代替业务权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Inherited

@@ -1,27 +1,36 @@
 package org.zexnocs.teanekoplugin.general.info;
 
 import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentActorContext;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
+import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolContext;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.command.api.DefaultValue;
+import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoData;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
 import tools.jackson.databind.ObjectMapper;
-import org.zexnocs.teanekoagent.tool.*;
-import org.zexnocs.teanekoagent.tool.api.*;
-import org.zexnocs.teanekocore.command.api.DefaultValue;
-import org.zexnocs.teanekocore.framework.description.Description;
+
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.Executor;
 
 /**
  * 通过现有业务服务按 TeaNeko UUID 读取公开资料及留言板，不读取聊天历史或 Agent 记忆。
  * 完整留言列表复用既有 DEBUG 边界，身份只取自宿主原生来源，执行及返回前均重新检查。
  * <br>2026/11/02：采用自动注解参数与条件复核，保留公开资料和 DEBUG 留言边界。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @TeaNekoAgentToolClass(value = "user-info", pluginId = InfoAgentPlugin.ID, toolPackage = "general.info", managedByFeature = true)

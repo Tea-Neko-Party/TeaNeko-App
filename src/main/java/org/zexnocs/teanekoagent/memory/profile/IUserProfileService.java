@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 按共享 namespace、generation 和主体 UUID 重建证据画像的独立读取端口。
  * 启用、当前绑定和读权限由可信宿主检查；不创建事实、人格补正或管理操作。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

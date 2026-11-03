@@ -15,9 +15,11 @@ import java.util.concurrent.ExecutorService;
 /**
  * 默认接入真实记忆资料能力，与自定义贡献共同组合，构造不执行记忆访问。
  * <br>2026/11/02：资料改为默认能力，不再用缺少总来源 Bean 作为装配条件。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

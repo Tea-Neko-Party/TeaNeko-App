@@ -26,9 +26,11 @@ import java.util.concurrent.ScheduledExecutorService;
  * /agent 与 /cfg 共用的空间切换边界，保持同一事务、身份及会话同步合同。
  * 不依赖命令分发器或默认 Agent 实例，配置读取不会因此创建模型入口。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

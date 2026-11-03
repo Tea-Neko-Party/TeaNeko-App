@@ -11,9 +11,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 表达观察的持久化与采用端口，与模型提取和人格配置解耦。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public interface IStyleObservationStore {

@@ -8,9 +8,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 分层记忆事务端口，目录、压缩租约与水位均来自持久状态。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public interface ILayeredMemoryStore {

@@ -14,9 +14,11 @@ import java.util.function.BooleanSupplier;
 
 /**
  * 在原业务域串行维护各记忆端口，不调用模型，不关闭借用执行器，不重叠启动新批次。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class MemoryMaintenanceService implements AutoCloseable {

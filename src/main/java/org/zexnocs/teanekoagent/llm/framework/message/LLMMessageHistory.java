@@ -12,9 +12,11 @@ import java.util.Set;
 
 /**
  * 统一完整历史与工具调用校验，供交互循环和上层窗口提交复用，不执行工具。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMMessageHistory {

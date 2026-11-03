@@ -18,9 +18,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证清理失败在不同完成路径中有明确归属，不丢弃异常或重复完成根任务。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class APIRequestCleanupTest {

@@ -15,9 +15,11 @@ import java.util.concurrent.ExecutorService;
 /**
  * 通过普通能力包安装 OneBot 资料和工具，平台来源不放入 Agent 组件或全局工具目录。
  * <br>2026/11/02：将注解提供者注册为 Bean，原能力保留资料所有权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

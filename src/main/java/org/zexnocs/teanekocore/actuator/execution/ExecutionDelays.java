@@ -6,9 +6,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * 借用调度器的可取消等待，不阻塞执行线，也不关闭原控制。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class ExecutionDelays {

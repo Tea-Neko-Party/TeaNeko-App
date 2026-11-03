@@ -2,34 +2,50 @@ package org.zexnocs.teanekoagent.adapter.onebot;
 
 import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.adapter.platform.NativeMessageInput;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
+import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.agent.prompt.*;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
+import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolOutput;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolContext;
+import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolParam;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.sender.group.GetGroupInfoSender;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import tools.jackson.databind.ObjectMapper;
-
-import org.zexnocs.teanekoagent.tool.*;
-import org.zexnocs.teanekoagent.tool.api.*;
-import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
 import org.zexnocs.teanekocore.framework.description.Description;
+import tools.jackson.databind.ObjectMapper;
+
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 通过有效原生来源租约提供 OneBot 只读工具和当前群上下文，不从模型参数取得客户端或 scope。
  * 昵称、名片和群名属于参考数据；所有查询仍使用宿主来源及轮次控制，消息不得跨 scope 读取。
  * <br>2026/11/02：消息图片显式投影为真实模型视觉输入，不仅返回 JSON 中的 URL。
  * <br>2026/11/02：公开注解业务方法并直接返回图文结果，移除重复 schema 与图像协议解析。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @TeaNekoAgentToolClass(value = "onebot", toolPackage = "agent.onebot", client = OnebotTeaNekoClient.ID, managedByFeature = true)
@@ -133,7 +149,7 @@ public final class OnebotAgentTools implements IAgentToolSource, IAgentPromptSou
             TeaNekoAgentToolContext context) {
         return context.requireInvocation().control().guard(message(requireSource(context.request()), messageId)).thenApply(value -> {
             var input = NativeMessageInput.from(value);
-            var images = input.message().getContents().stream().map(content -> content.getContentPart())
+            var images = input.message().getContents().stream().map(ILLMContent::getContentPart)
                     .filter(ImageLLMContentPart.class::isInstance).map(ImageLLMContentPart.class::cast).toList();
             var text = mapper.writeValueAsString(Map.of("context", NativeMessageInput.contextText(value), "text", input.text(), "imageCount", images.size()));
             if (text.length() > LLMToolSet.DEFAULT_RESULT_CHARACTER_LIMIT) {
@@ -158,7 +174,7 @@ public final class OnebotAgentTools implements IAgentToolSource, IAgentPromptSou
         var data = requireSource(context.request());
         CompletionStage<Map<String, Object>> reading;
         if ("replied".equals(target)) {
-            var ids = data.getMessages().stream().map(value -> value.getContentPart()).filter(IReplyTeaNekoContentPart.class::isInstance)
+            var ids = data.getMessages().stream().map(ITeaNekoContent::getContentPart).filter(IReplyTeaNekoContentPart.class::isInstance)
                     .map(IReplyTeaNekoContentPart.class::cast).map(IReplyTeaNekoContentPart::getId).distinct().toList();
             if (ids.size() != 1) { return CompletableFuture.completedStage(error()); }
             reading = message(data, ids.getFirst()).thenCompose(this::sender);
@@ -230,12 +246,12 @@ public final class OnebotAgentTools implements IAgentToolSource, IAgentPromptSou
         if (data.getMessageType() != TeaNekoMessageType.GROUP) { return CompletableFuture.completedStage(info); }
         return toolbox.getGroupMemberInfoSender().get(user.getGroupId(), user.getUserIdInPlatform()).asStage().toCompletableFuture().orTimeout(8, TimeUnit.SECONDS)
                 .thenCombine(group(data), (member, group) -> {
-                    if (member == null || !user.getUserIdInPlatform().equals(member.getUserId()) || !user.getGroupId().equals(Long.toString(member.getGroupId()))) {
+                    if (member == null || !user.getUserIdInPlatform().equals(member.getUserId()) || !Objects.equals(user.getGroupId(), Long.toString(member.getGroupId()))) {
                         throw new IllegalStateException("OneBot 群成员资料不匹配。");
                     }
                     info.put("nickname", member.getNickname()); info.put("groupNickname", member.getCard()); info.put("groupId", user.getGroupId());
                     info.put("groupName", group.get("groupName"));
-                    return (Map<String, Object>) info;
+                    return info;
                 });
     }
 

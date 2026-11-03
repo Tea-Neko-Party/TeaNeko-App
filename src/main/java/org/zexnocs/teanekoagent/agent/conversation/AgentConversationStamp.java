@@ -5,11 +5,13 @@ import java.util.UUID;
 
 /**
  * 宿主绑定的会话代次，缓存淘汰后重建也生成不同标识，不携带运行控制或权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param key client/scope/实例边界
  * @param epoch 当前内存会话代次
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationStamp(AgentConversationKey key, UUID epoch) {

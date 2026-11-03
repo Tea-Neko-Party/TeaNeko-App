@@ -10,9 +10,11 @@ import java.util.concurrent.CompletionStage;
  * 为配置命令提供由独立业务服务持有的字段，不将外部权威值复制进 ConfigData。
  * 原命令仍负责 OWNER 权限，适配器须复核真实来源、注册状态及业务提交条件。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IConfigCommandFields {

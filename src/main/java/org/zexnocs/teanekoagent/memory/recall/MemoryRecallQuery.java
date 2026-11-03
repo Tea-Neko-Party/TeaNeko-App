@@ -9,6 +9,8 @@ import java.util.*;
 
 /**
  * 确定性查询条件；空集合表示不限，不隐式按调用者或来源 scope 隔离共享空间。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param subjectId 可选主体筛选
  * @param sourceScope 可选明确来源筛选
  * @param kinds 允许的内容类别
@@ -20,7 +22,7 @@ import java.util.*;
  * @param excludedSubjects 明确排除的主体，用于组合本人画像和其他主体证据而不重复占预算
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallQuery(@Nullable UUID subjectId, @Nullable AgentScope sourceScope, Set<MemoryFactValue.Kind> kinds,

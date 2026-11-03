@@ -5,10 +5,12 @@ import java.util.UUID;
 
 /**
  * 业务记忆空间标识，与 EasyData 的物理 namespace 分离，不拼入用户或 scope 隔离规则。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param value 区分明确且适合稳定存储的标识
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryNamespaceId(String value) {

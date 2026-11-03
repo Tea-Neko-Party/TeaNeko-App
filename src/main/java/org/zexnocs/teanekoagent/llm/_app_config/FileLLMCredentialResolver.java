@@ -10,14 +10,44 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 
 /**
  * 只在请求边界读取当前 model.yml 凭据与连接配置，环境占位符由 Core YAML 解析器处理。
+ * <br>2026/11/03：核对原参数代次后原子取得凭据，热应用后拒绝旧参数拼接新连接。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.6.0-l
+ * @version 4.7.0-l
  */
 @Service
 public class FileLLMCredentialResolver implements ICredentialResolver {
+    private org.zexnocs.teanekoagent.llm.file_config.@org.jspecify.annotations.Nullable LLMFileConfigurationEpoch epoch;
+
+    /**
+     * 2026/11/03：Spring 宿主安装原文件换代边界。
+     * @param epoch 原文件代次
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installEpoch(org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigurationEpoch epoch) {
+        this.epoch = epoch;
+    }
+
+    /**
+     * @param provider 原供应商
+     * @param options 原已解析参数
+     * @return 同代次可信连接，不持锁等待网络
+     */
+    @Override
+    public LLMProviderAccess require(String provider,
+            org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions options) {
+        if (epoch == null) {
+            return require(provider);
+        }
+        return epoch.fixed(() -> {
+            epoch.verify(options);
+            return require(provider);
+        });
+    }
     private final IFileConfigService files;
 
     /**

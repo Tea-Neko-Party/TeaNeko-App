@@ -5,6 +5,8 @@ import java.time.Instant;
 
 /**
  * 以持久行序号倒序分页，时间边界与字面关键词不接受任意查询表达式。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param before 上页末行序号，首次使用 Long.MAX_VALUE
  * @param keyword 字面子串，空字符串表示不限
  * @param start 可选发生时间起点
@@ -13,7 +15,7 @@ import java.time.Instant;
  * @param maxCharacters 完整结果消息数组的字符预算，最多六千
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record HistoryQuery(long before, String keyword, @Nullable Instant start, @Nullable Instant end, int limit, int maxCharacters) {

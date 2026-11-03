@@ -6,11 +6,13 @@ import java.util.Objects;
 
 /**
  * Conversation 实体的不可变生命周期组件，运行句柄、监听和排队容器保留在邮箱拥有者中。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param stamp 当前可信会话代次
  * @param lastActivity 最近接收或完成请求的时刻；运行期间不据此淘汰
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationState(AgentConversationStamp stamp, Instant lastActivity) {

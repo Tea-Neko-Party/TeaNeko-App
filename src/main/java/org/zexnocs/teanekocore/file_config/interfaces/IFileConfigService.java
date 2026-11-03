@@ -11,14 +11,28 @@ import java.io.IOException;
  * 使用 {@link IFileConfigData} 的类来获取实例。
  * <br>如果要在构造器里寻找 config，需要依赖类 {@link org.zexnocs.teanekocore.reload.interfaces.IReloadService}
  * <br>或者使用 {@code @EventListener(ApplicationReadyEvent.class)}
+ * <br>2026/11/03：文档编辑、原写入和重载共用类型锁，运行发布与磁盘保存分开。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.2.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  * @see IFileConfigData
  */
 public interface IFileConfigService extends IReloadable {
+    /**
+     * 2026/11/03：只接受本地已注册类型，不接受浏览器文件路径。
+     * 回调不能保留文档能力或等待其他线程再次获取同一类型锁。
+     * @param type 已注册配置类型
+     * @param action 短文件编辑或缓存发布回调，不执行网络请求
+     * @param <T> 返回类型
+     * @return 原类型锁内的实际结果
+     * @throws UnsupportedOperationException 当替换实现未支持受限文档时
+     */
+    default <T> T withDocument(Class<? extends IFileConfigData> type,
+            java.util.function.Function<org.zexnocs.teanekocore.file_config.FileConfigDocument, T> action) {
+        throw new UnsupportedOperationException("文件配置实现尚未提供受限文档能力。");
+    }
     /**
      * 获取 config 实例
      *

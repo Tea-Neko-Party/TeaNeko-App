@@ -2,6 +2,8 @@ package org.zexnocs.teanekoagent.memory.recall;
 
 /**
  * 每次查询固定的本地策略，不在查询中途重新读取配置。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param injectionLimit 默认注入条数
  * @param toolLimit 默认工具查询条数
  * @param hardLimit 可显式请求的条数硬上限
@@ -9,7 +11,7 @@ package org.zexnocs.teanekoagent.memory.recall;
  * @param maxScanned 原记录检查上限
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallSettings(int injectionLimit, int toolLimit, int hardLimit, int maxCharacters, int maxScanned) {

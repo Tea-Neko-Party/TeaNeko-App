@@ -11,9 +11,11 @@ import java.util.stream.Collectors;
  * null 不作为组件值；删除必须显式调用 remove。
  * <br>2026/11/02：增加组合补丁和复制只读组件的构建入口。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class ComponentPatch {
@@ -78,11 +80,13 @@ public final class ComponentPatch {
     /**
      * 单项类型化组件变更；空值仅在内部表示显式删除。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param key 定位目标数据的键
      * @param value 待处理的值
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Change(ComponentKey<?> key, Object value) {}
@@ -91,9 +95,11 @@ public final class ComponentPatch {
      * 在提交前收集类型安全变更，构建出的补丁与后续修改独立。
      * <br>2026/11/02：支持组合补丁和按类型从快照复制组件。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.6.0-l
      */
     public static final class Builder {

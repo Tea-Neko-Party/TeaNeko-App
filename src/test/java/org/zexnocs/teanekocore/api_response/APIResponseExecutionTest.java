@@ -38,19 +38,23 @@ import static org.mockito.Mockito.when;
 /**
  * 用真实 WebClient 链和受控传输验证 HTTP 生命周期、取消、时限与资源释放。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class APIResponseExecutionTest {
     /**
      * 含固定查询参数和请求头的 GET 测试请求。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 待处理的值
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @APIRequestData(baseUrl = "https://offline.test", path = "/lookup", timeoutInMillis = 10000, retryCount = 0)
@@ -67,10 +71,12 @@ class APIResponseExecutionTest {
     /**
      * 用于验证 JSON 正文传递的 POST 测试请求。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 待处理的值
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @APIRequestData(baseUrl = "https://offline.test", path = "/post", method = "POST", timeoutInMillis = 10000, retryCount = 0)
@@ -79,9 +85,11 @@ class APIResponseExecutionTest {
     /**
      * 用于验证既有重试次数及阶段总时限的请求夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @APIRequestData(baseUrl = "https://offline.test", path = "/retry", timeoutInMillis = 10000, retryCount = 2, retryDelayInMillis = 1000)
@@ -90,10 +98,12 @@ class APIResponseExecutionTest {
     /**
      * 用于实际响应反序列化的最小测试数据。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param value 待处理的值
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Reply(String value) implements IAPIResponseData {}
@@ -472,9 +482,11 @@ class APIResponseExecutionTest {
     /**
      * 组合真实 HTTP 服务、手动调度器与受控交换函数的离线夹具。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static final class Fixture {

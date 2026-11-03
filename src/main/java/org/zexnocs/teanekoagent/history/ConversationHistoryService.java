@@ -32,9 +32,11 @@ import java.util.stream.Collectors;
  * <br>2026/11/03：默认轮次前先等待用户明确原文保存，关闭历史采集不关闭明确保存。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 public final class ConversationHistoryService implements IConversationHistory, IAgentHistoryRecorder {
@@ -195,12 +197,14 @@ public final class ConversationHistoryService implements IConversationHistory, I
     }
     /**
      * 启用、采集和查询分开，不控制长期记忆或人格学习。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param enabled 真实登记且启用
      * @param capture 是否采集
      * @param read 是否允许查询
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Policy(boolean enabled, boolean capture, boolean read) {}

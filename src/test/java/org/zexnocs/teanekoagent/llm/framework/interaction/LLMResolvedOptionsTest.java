@@ -40,9 +40,11 @@ import static org.mockito.Mockito.*;
 /**
  * 使用真实模型服务、抽象适配器和交互循环验证已解析参数跨阶段固定，不发起 HTTP。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMResolvedOptionsTest {
@@ -251,9 +253,11 @@ class LLMResolvedOptionsTest {
     /**
      * 通过真正的抽象适配器准备参数，仅将网络边界替换为可手动完成的任务。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class CapturingModel extends AbstractLLMModel {

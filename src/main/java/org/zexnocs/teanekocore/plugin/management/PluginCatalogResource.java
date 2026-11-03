@@ -9,9 +9,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * Core 的插件目录管理资源，只有明确的全局查看权限才能读取。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Component
@@ -37,9 +39,11 @@ public final class PluginCatalogResource implements ManagementResource<PluginCat
     }
     /**
      * 无额外过滤参数的目录请求。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record Query() {}

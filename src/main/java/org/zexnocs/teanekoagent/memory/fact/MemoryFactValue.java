@@ -9,6 +9,8 @@ import java.util.TreeSet;
 
 /**
  * 可独立演进的事实/偏好内容，来源、空间与主语由追加命令单独固定。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param kind 内容类别
  * @param text 短文本正文，保留原文以避免隐式语义改写
  * @param tags 有界检索标签
@@ -18,7 +20,7 @@ import java.util.TreeSet;
  * @param expiresAt 可选有效期
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactValue(Kind kind, String text, List<String> tags, double confidence,
@@ -50,18 +52,22 @@ public record MemoryFactValue(Kind kind, String text, List<String> tags, double 
 
     /**
      * 当前可追加的明确事实类别，人格补正和自动摘要由独立能力管理。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Kind { FACT, PREFERENCE }
 
     /**
      * 独立于置信度的内容重要度，检索排序可另行选择策略。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Importance { LOW, NORMAL, HIGH, CRITICAL }

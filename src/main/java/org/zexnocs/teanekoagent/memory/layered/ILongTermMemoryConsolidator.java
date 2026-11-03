@@ -9,9 +9,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 可替换的中期到长期语义选择端口，不自行写库或生成授权身份。
  * <br>2026/11/03：增加联合观察入口，旧函数式实现继续只生成长期事实。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @FunctionalInterface

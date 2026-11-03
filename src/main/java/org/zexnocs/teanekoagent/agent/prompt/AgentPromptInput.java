@@ -19,6 +19,8 @@ import java.util.List;
  * 原始消息、本轮人格及临时资料的不可变布局；补正/资料只作为 USER 数据，不改写原系统规则。
  * <br>2026/11/02：固定实际安装能力的调用版本，供执行及完成重放复核。
  * <br>2026/11/02：仅接受与真实工具结果严格对应的视觉参考消息，提交历史时移除临时图像。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param original 宿主冻结的原消息，包含邮箱已经认可的历史
  * @param fragments 按原优先级保留的完整资料
  * @param omittedFragments 因输入预算省略的完整片段数，不表示来源确定无资料
@@ -27,7 +29,7 @@ import java.util.List;
  * @param plugins 本轮能力及插件依赖版本，不进入模型消息
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public record AgentPromptInput(List<ILLMMessage> original, List<AgentPromptFragment> fragments, int omittedFragments,

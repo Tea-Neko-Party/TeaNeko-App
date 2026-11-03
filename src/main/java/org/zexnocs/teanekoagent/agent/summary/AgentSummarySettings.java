@@ -4,6 +4,8 @@ import java.time.Duration;
 
 /**
  * 独立摘要预算与触发规则，构造校验在实际读取时进行，不阻止非 Agent 功能启动。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param enabled 真实登记且允许自动摘要
  * @param triggerTurns 触发轮次数
  * @param keepTurns 保留最近完整轮次数
@@ -16,7 +18,7 @@ import java.time.Duration;
  * @param cooldown 同会话生成冷却
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentSummarySettings(boolean enabled, int triggerTurns, int keepTurns, long triggerBytes, long maxInputBytes,

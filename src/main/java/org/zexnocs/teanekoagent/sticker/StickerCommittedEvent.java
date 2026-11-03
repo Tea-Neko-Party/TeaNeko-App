@@ -9,9 +9,11 @@ import java.util.Set;
  * 事务提交后的只读观察事件，监听失败不改变已提交结果。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class StickerCommittedEvent extends AbstractEvent<IStickerLifecycle.Notice> implements PluginScopedEvent {

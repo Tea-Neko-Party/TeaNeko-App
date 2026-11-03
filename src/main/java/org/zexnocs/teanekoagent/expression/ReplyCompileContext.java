@@ -8,6 +8,8 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
  * <br>2026/11/03：同时提供当前实际交互的工具回执，拒绝历史目录授权。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param request 原请求及真实 client/scope
  * @param input 本轮实际输入和来源
  * @param control 借用控制，扩展不得关闭
@@ -15,7 +17,7 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
  * @param drafts 完整草稿，用于资源数量及重复约束
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @JsonIgnoreType

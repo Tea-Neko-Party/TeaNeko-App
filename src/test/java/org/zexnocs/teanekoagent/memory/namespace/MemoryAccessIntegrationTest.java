@@ -27,9 +27,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 将可信访问边界与真实绑定、事实、Recall 事务适配组合，验证提交、重放和切换竞争。
  * 使用既有事务替身，不把模拟锁或离线结果当作 MySQL 实机验收。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)

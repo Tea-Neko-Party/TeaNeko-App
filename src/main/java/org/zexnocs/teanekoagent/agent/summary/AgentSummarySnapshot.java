@@ -17,9 +17,11 @@ import java.util.UUID;
 
 /**
  * 摘要服务生成的只读压缩状态，扩展实现经显式工厂构造；数据自身不授予业务授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Getter @Accessors(fluent = true) @JsonIgnoreType
@@ -79,11 +81,13 @@ public final class AgentSummarySnapshot {
     }
     /**
      * 一个已覆盖完整轮次的身份，不保存工具、原文或任何执行资源。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param requestId 原始请求
      * @param signature 完整协议指纹
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Coverage(UUID requestId, LLMMessageCodec.Signature signature) {}

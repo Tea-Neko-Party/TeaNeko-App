@@ -13,9 +13,11 @@ import java.util.concurrent.CompletionStage;
  * 为单轮提供可等待的低信任参考资料；身份、引用和权限仍由宿主请求拥有。
  * 不负责历史提交、模型往返或发送；实现不得关闭借用控制和执行器。
  * <br>2026/11/02：明确静态空来源不阻止其他贡献者独立验证重放。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @FunctionalInterface

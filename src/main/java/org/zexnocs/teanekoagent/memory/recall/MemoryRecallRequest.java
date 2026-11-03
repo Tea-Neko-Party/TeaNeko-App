@@ -6,13 +6,15 @@ import java.util.Objects;
 
 /**
  * 可信宿主固定的空间引用、查询用途和可选单次预算；自身不授予读取权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reference 当前轮次固定引用
  * @param query 业务筛选
  * @param use 查询用途
  * @param limits 可选显式预算，不能提高本地硬上限或扫描/字符上限
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallRequest(MemoryNamespaceReference reference, MemoryRecallQuery query, Use use, @Nullable MemoryRecallLimits limits) {
@@ -30,9 +32,11 @@ public record MemoryRecallRequest(MemoryNamespaceReference reference, MemoryReca
     }
     /**
      * 用途只选择默认预算，不自动注入 Prompt 或开放工具。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Use { INJECTION, TOOL }

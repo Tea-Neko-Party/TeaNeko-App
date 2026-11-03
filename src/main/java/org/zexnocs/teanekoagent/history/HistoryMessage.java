@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /**
  * 可检索的文本历史，角色与触发来源分开；不包含模型内部状态或运行资源。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param messageId 稳定来源标识，角色一起参与幂等
  * @param source 真实来源或答案的触发来源，不将答案归为该用户发言
  * @param role 消息角色
@@ -15,7 +17,7 @@ import java.util.Objects;
  * @param truncated 是否因历史正文硬上限省略尾部
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record HistoryMessage(String messageId, AgentActorContext source, Role role, String text, Instant occurredAt,
@@ -51,9 +53,11 @@ public record HistoryMessage(String messageId, AgentActorContext source, Role ro
     }
     /**
      * 区分用户原文与尚未确认平台发送的 Agent 答案。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Role { USER, ASSISTANT }

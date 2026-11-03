@@ -30,9 +30,11 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * 原生旁观文本采集，独立于触发和模型，固定引用后不刷新成新空间或新人格重试。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -96,11 +98,13 @@ public final class PlatformHistoryCapture {
 
     /**
      * 采集后可供自动轮次复核的纯边界，不携带客户端或执行控制。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param context 已固定上下文，采集关闭或纯图片时为空
      * @param accepted 是否允许该消息首次继续处理
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Capture(@Nullable HistoryContext context, boolean accepted) { }

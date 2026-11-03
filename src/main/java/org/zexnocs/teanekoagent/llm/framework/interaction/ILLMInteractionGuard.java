@@ -10,9 +10,11 @@ import java.util.function.Function;
  * 每次实际模型准入前的宿主守卫；运行策略不属于可导出模型选项或组件。
  * 工具副作用通过工具绑定的守卫独立检查，不从模型参数推导授权。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

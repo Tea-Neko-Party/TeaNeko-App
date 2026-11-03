@@ -11,9 +11,11 @@ import java.util.Map;
 
 /**
  * 将自动触发票据接入原 Agent 门控，租约仅存在宿主边界，不进入组件或 Prompt。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -71,11 +73,13 @@ public final class AgentAutomaticAccess implements IAgentActivityPolicy {
 
     /**
      * 宿主短暂拥有的运行边界，不序列化、不进入组件或 Prompt。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param ticket 原票据
      * @param guard 当前宿主约束
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Lease(AgentTriggerGate.Ticket ticket, Runnable guard) { }

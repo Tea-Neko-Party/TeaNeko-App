@@ -15,7 +15,7 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * 提供文本重复工具。
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Service

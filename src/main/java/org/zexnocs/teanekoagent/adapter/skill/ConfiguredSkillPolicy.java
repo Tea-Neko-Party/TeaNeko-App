@@ -13,9 +13,11 @@ import java.util.List;
 
 /**
  * 合并本地总开关和原作用域配置；目录路径仅取本地配置，不经聊天写入。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

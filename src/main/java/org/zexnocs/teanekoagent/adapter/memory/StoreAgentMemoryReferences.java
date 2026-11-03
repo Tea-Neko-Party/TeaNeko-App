@@ -20,9 +20,11 @@ import static org.zexnocs.teanekoagent.agent.memory.AgentMemoryReferenceExceptio
 /**
  * 在借用业务执行域检查 scope，再经事务端口解析或复核引用；不阻塞等待数据库 Future。
  * 构造无副作用，默认共享空间只在已启用作用域的显式解析中按需登记。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

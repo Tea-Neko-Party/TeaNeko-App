@@ -20,10 +20,13 @@ import java.util.function.Supplier;
 
 /**
  * 组合人格选择、独立补正和持久化引用；不生成用户画像、不调用模型或自动提升学习文本。
+ * <br>2026/11/03：自动学习只接收原用户来源，独立管理来源经专用管理事务处理。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public final class PersonalityService implements IAgentPersonalitySource, IPersonalityLearningTarget {
     private final IPersonalityConfiguration configuration;
@@ -114,7 +117,9 @@ public final class PersonalityService implements IAgentPersonalitySource, IPerso
         return controlled(control, () -> {
             var settings = configuration.settings(scope); var base = configuration.base(settings);
             if (!settings.learningEnabled()) { throw new AgentPromptException(AgentPromptException.Reason.DISABLED); }
-            if (!scope.equals(candidate.source().scope()) || !base.id().equals(candidate.baseId()) || base.version() != candidate.baseVersion()
+            // 2026/11/03：扩大管理来源后保持原自动学习入口的用户边界。
+            if (candidate.source().origin() != org.zexnocs.teanekoagent.agent.AgentActorContext.Origin.USER
+                    || !scope.equals(candidate.source().scope()) || !base.id().equals(candidate.baseId()) || base.version() != candidate.baseVersion()
                     || !base.mutableFields().contains(candidate.field()) || candidate.confidence() < 0.2 || candidate.locked() || !candidate.activeAt(clock.instant())) {
                 throw new IllegalArgumentException("人格补正来源、版本、字段或置信度不被接受。");
             }

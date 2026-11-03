@@ -34,18 +34,22 @@ import static org.zexnocs.teanekocore.command.CommandPermissionManager.ENABLE_NA
 /**
  * 验证权限读写键布局、异步提交与历史记录优先级。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class CommandPermissionAsyncTest {
     /**
      * 声明顶级、继承、独立与 DEBUG 权限的测试命令集合。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static class Commands {
@@ -249,20 +253,24 @@ class CommandPermissionAsyncTest {
     /**
      * 模拟提交后才更新 DTO 缓存，不启动 Spring 或替换 EasyData 的全局服务。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static class PermissionStorage implements AutoCloseable {
         /**
          * 测试存储的不可变 namespace 与 target 定位。
          *
+         * <br>2026/11/04：校正 @since 为首次引入版本。
+         *
          * @param namespace 原存储协议使用的命名空间
          * @param target 原存储协议使用的数据目标
          * @author zExNocs
          * @date 2026/10/28
-         * @since 4.0.0
+         * @since 4.5.0-l
          * @version 4.5.0-l
          */
         private record Address(String namespace, String target) {}
@@ -342,9 +350,11 @@ class CommandPermissionAsyncTest {
     /**
      * 暂存提交前的权限写入，等待用例确认事务结果。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static class PendingWrite {

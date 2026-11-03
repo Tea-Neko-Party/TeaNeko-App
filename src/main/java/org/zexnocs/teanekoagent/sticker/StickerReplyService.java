@@ -42,9 +42,11 @@ import java.util.concurrent.*;
  * 查询缓存、轮次和展示窗口有界；文件占用持续到真实在途工作收尾，取消不提前释放原文件。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Component
@@ -437,6 +439,8 @@ public final class StickerReplyService implements AutoCloseable {
      * 当前受控宿主，只在方法链中传递。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param data 原目标
      * @param scope 当前区域限制
      * @param settings 素材预算
@@ -446,7 +450,7 @@ public final class StickerReplyService implements AutoCloseable {
      * @param storage 原文件与目录
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType private record Access(ITeaNekoMessageData data,AgentScopeConfigData scope,StickerSettings settings,MediaReplySettings media,ExpressionSettings expression,ExpressionClientRegistry.View client,StickerExtensionRegistry.Storage storage){}
@@ -454,13 +458,15 @@ public final class StickerReplyService implements AutoCloseable {
      * 实际文件在途占用，不进入计划或模型。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param access 原后端
      * @param token 原占用
      * @param blob 原文件
      * @param permit 原许可
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType private record Lease(Access access,UUID token,Stickers.Blob blob,MediaReplies.Permit permit){}
@@ -468,9 +474,11 @@ public final class StickerReplyService implements AutoCloseable {
      * 有界请求内类别缓存，不保存聊天或执行控制。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private static final class Query{

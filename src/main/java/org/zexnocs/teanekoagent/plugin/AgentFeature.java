@@ -16,9 +16,11 @@ import java.util.Set;
 /**
  * Agent 的可组合能力包；按需提供数据、System、工具、资料及异步准备拦截。
  * 默认不安装，注册 Bean 本身不授予实例或 scope 权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public interface AgentFeature {
@@ -64,20 +66,24 @@ public interface AgentFeature {
 
     /**
      * 宿主允许扩展的阶段，不包含准入、模型循环及最终历史提交的替换。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     enum Phase { BEFORE_PROMPT, AFTER_INTERACTION }
 
     /**
      * 将普通 Core System 安排到明确业务阶段。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param phase 执行阶段
      * @param system 声明输入、写入及依赖的无状态 System
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     record SystemContribution(Phase phase, IEntitySystem system) {

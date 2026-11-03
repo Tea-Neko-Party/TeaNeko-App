@@ -7,9 +7,11 @@ import java.util.stream.Collectors;
  * 不可变实体快照。容器不会深拷贝业务值，调用方须使用不可变组件。
  * 已删除组件仍保留类型绑定，避免同一个稳定 id 被重新解释为另一种类型。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class EntitySnapshot implements ComponentView {

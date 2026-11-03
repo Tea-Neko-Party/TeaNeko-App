@@ -11,9 +11,11 @@ import java.util.function.ToIntFunction;
 /**
  * 组合有界候选、确定性筛选排序与证据预算；存储和 JSON 度量通过明确依赖替换。
  * 配置、时钟、筛选和度量均在借用的业务执行域运行，不占数据库完成线程或拥有线程池。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryRecallService implements IMemoryRecallService {

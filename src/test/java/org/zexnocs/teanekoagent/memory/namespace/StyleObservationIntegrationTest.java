@@ -38,9 +38,11 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：核对默认送达账本与分层资料的联合装配。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.2-l
  */
 @Timeout(25)
@@ -53,9 +55,11 @@ class StyleObservationIntegrationTest {
      * 原人格、历史、短中期与表达域共享现有事务基础设施。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.2-l
      */
     private final class Harness implements AutoCloseable {

@@ -23,14 +23,36 @@ import java.util.concurrent.TimeUnit;
  * 任务执行服务。
  * v4.0.8: 新增 AOP 处理 TaskStage namespace
  * <br>2026/11/02：同步任务阶段接入插件启停检查，原调用栈保持单线程。
+ * <br>2026/11/03：观测排队、同步阶段和外部结果等待，不改变阶段推进线程。
  *
  * @author zExNocs
  * @date 2026/02/11
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.7.0-l
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {
+    private org.zexnocs.teanekocore.actuator.runtime.@org.jspecify.annotations.Nullable RuntimeMonitor monitor;
+
+    /**
+     * 2026/11/03：安装只读任务阶段观测。
+     * @param monitor 有界进程窗口
+     */
+    @Autowired
+    public void installMonitor(org.zexnocs.teanekocore.actuator.runtime.RuntimeMonitor monitor) {
+        this.monitor = monitor;
+    }
+
+    /**
+     * @param task 原任务
+     * @param state 原执行状态
+     * @param stage 当前阶段
+     */
+    private void observed(ITask<?> task, String state, String stage) {
+        if (monitor != null) {
+            monitor.phase(task.getKey(), state, stage);
+        }
+    }
     // 2026/11/02：插件只包装阶段调用，不在异步回调中推进同步游标。
     private org.zexnocs.teanekocore.plugin.PluginAccess pluginAccess;
 
@@ -106,6 +128,8 @@ public class TaskExecuteService implements ITaskExecuteService {
                             task.getCurrentState().getClass(), TaskCreatedState.class));
             return;
         }
+        // 2026/11/03：排队与真正开始分开观测。
+        observed(task, "QUEUED", "等待首次执行");
         // 执行任务，间隔是 delayDuration
         var future = CompletableFuture.runAsync(
                 () -> _executeTask(task, _getTaskStageChain(task)),
@@ -142,6 +166,8 @@ public class TaskExecuteService implements ITaskExecuteService {
                             task.getCurrentState().getClass(), TaskCreatedState.class));
             return;
         }
+        // 2026/11/03：重试仍属于同一个原任务回执。
+        observed(task, "QUEUED", "等待重试");
         // 执行任务，间隔是 retryInterval
         var future = CompletableFuture.runAsync(
                 () -> _executeTask(task, _getTaskStageChain(task)),
@@ -173,7 +199,9 @@ public class TaskExecuteService implements ITaskExecuteService {
             config.setTaskStages(taskStages);
         }
         // 2026/11/02：每次任务使用独立包装，不把启停快照写回共享配置。
-        return new TaskStageChain(task, taskStages.stream().map(this::guardedStage).toList());
+        // 2026/11/03：观测仅同步通知，不改变阶段链单线程游标。
+        return new TaskStageChain(task, taskStages.stream().map(this::guardedStage).toList(),
+                stage -> observed(task, "RUNNING", stage));
     }
 
     /**
@@ -182,11 +210,14 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @param taskStageChain 本次独立链
      */
     private void _executeTask(ITask<?> task, TaskStageChain taskStageChain) {
+        // 2026/11/03：Callable 返回空值时仍等待外部实际结果，不能展示为完成。
+        observed(task, "RUNNING", "进入同步阶段链");
         try {
             // 执行任务。
             var result = taskStageChain.next();
             // 成功获取到 result，将 task 设置为 Executed
             task.switchState(new TaskExecutedState());
+            observed(task, "WAITING_RESULT", "等待原任务结果");
             if(result != null) {
                 try {
                     iTaskService.complete(task.getKey(), result);

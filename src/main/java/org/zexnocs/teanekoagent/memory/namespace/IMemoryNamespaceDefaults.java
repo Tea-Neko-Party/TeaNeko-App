@@ -2,9 +2,11 @@ package org.zexnocs.teanekoagent.memory.namespace;
 
 /**
  * 从本地策略解析个人空间配额，不把业务配额规则放进 Core。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

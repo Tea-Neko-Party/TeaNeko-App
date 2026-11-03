@@ -10,9 +10,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * 多线程可共享的显式资源预算。未声明维度会报错，不静默当成无限额度。
  * 读数包含未结算预留，快照逐项采集，不表示多维度事务；结算可退还未使用额度。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class ResourceBudget {
@@ -156,13 +158,15 @@ public final class ResourceBudget {
     /**
      * 单个资源维度的不可变用量快照。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param limit 允许使用的最大额度
      * @param used 已结算消耗与未结算预留的合计，溢出时为饱和值
      * @param exceeded 是否曾因实际结算超额而封锁此维度
      * @param overflow 实际累计量是否发生饱和溢出
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Usage(long limit, long used, boolean exceeded, boolean overflow) {
@@ -177,9 +181,11 @@ public final class ResourceBudget {
     /**
      * 预留的一次性结算句柄；超额结算保留事实并永久封锁该维度，后续退还不能解除封锁。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static final class Reservation implements AutoCloseable {
@@ -235,12 +241,14 @@ public final class ResourceBudget {
 
     /**
      * 原子资源状态，读数包含在途预留，超额封锁不会被后续退款取消。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param used 当前占用量
      * @param exceeded 超额封锁标记
      * @param overflow 饱和溢出标记
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record State(long used, boolean exceeded, boolean overflow) {}
@@ -248,9 +256,11 @@ public final class ResourceBudget {
     /**
      * 共享预算内部的原子用量计数器，上限在创建时固定。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Counter {

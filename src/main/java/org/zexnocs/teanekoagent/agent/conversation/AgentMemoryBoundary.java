@@ -27,9 +27,11 @@ import java.util.function.Supplier;
 
 /**
  * 管理邮箱引用及资料观察的执行域、截止时间与关闭，不拥有会话窗口或持久化事务。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class AgentMemoryBoundary implements AutoCloseable {
@@ -203,9 +205,11 @@ final class AgentMemoryBoundary implements AutoCloseable {
 
     /**
      * 保存非敏感准入结果，避免以异常文本跨执行域传递原因。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Rejected extends RuntimeException {

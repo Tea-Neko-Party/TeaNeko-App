@@ -10,9 +10,11 @@ import org.zexnocs.teanekoagent.expression.TeaNekoReplyDirective;
  * 客户端原生表情指令，只产生草稿，资源证明由处理器异步验证。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Component @TeaNekoReplyDirective("FACE")

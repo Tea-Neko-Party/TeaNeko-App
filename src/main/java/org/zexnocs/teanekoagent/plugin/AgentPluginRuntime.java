@@ -34,9 +34,11 @@ import java.util.function.Supplier;
  * Agent 能力目录与宿主组合器；固定版本、保护核心组件并复用原执行控制。
  * 不读取存储、不启动模型循环、不创建线程池，Spring 拥有来源和插件 Bean。
  * <br>2026/11/02：合并注解工具自动能力，原能力拥有的工具不重复装配。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Service
@@ -382,9 +384,11 @@ public final class AgentPluginRuntime {
 
     /**
      * 原 System 的调用适配，不改变描述和业务状态。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     private final class GuardedSystem implements IEntitySystem {
@@ -407,9 +411,11 @@ public final class AgentPluginRuntime {
 
     /**
      * 工具来源组合；没有布局时只用于旧入口的明确选择。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     private final class CombinedTools implements IAgentToolSource {
@@ -456,9 +462,11 @@ public final class AgentPluginRuntime {
 
     /**
      * 资料来源组合，版本与业务校验同时保留。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     private final class CombinedPrompts implements IAgentPromptSource {

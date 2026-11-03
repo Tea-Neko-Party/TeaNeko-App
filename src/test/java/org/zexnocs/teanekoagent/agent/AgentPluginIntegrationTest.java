@@ -64,9 +64,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 使用真实 Agent、Core 管线及 LLM 交互验证多能力组合与迟到结果隔离。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 class AgentPluginIntegrationTest {
@@ -136,9 +138,11 @@ class AgentPluginIntegrationTest {
 
     /**
      * 故意违反决策等待合同的插件监听器，用于验证实际总线防护。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     @org.zexnocs.teanekocore.event.core.EventListener @PluginOwned("example.clock")
@@ -152,9 +156,11 @@ class AgentPluginIntegrationTest {
 
     /**
      * 复用可控交互执行器，不启动 Spring、数据库或真实模型。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     private static final class Harness implements AutoCloseable {

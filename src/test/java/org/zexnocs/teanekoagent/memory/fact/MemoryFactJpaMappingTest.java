@@ -21,9 +21,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 离线验证 Agent 专用 JPA 映射与其他入口实体共存，以及当前 Hibernate 对实际锁查询的解析。
  * 不建立 JDBC 连接，不执行 DDL 或宣称已完成 MySQL 行锁实机验收。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class MemoryFactJpaMappingTest {

@@ -9,9 +9,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 将任务的执行状态展开为可组合的完成阶段，不安装终端日志，也不启动额外重试。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class TaskStages {

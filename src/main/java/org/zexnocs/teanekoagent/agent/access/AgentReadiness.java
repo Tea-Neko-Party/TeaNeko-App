@@ -5,11 +5,13 @@ import java.util.Optional;
 
 /**
  * 不含原始异常或配置值的就绪检查结果。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 当前就绪状态
  * @param snapshot 就绪时才存在的不可变运行数据
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentReadiness(Status status, Optional<AgentRuntimeSnapshot> snapshot) {
@@ -27,9 +29,11 @@ public record AgentReadiness(Status status, Optional<AgentRuntimeSnapshot> snaps
 
     /**
      * 可向管理入口解释的固定原因，不回显环境变量、配置值或异常链。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status {

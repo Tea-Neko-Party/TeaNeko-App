@@ -27,9 +27,11 @@ import static org.mockito.Mockito.*;
 /**
  * 不启动应用或数据库，验证配置懒加载、脱敏错误、显式覆盖及借用资源装配。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMInteractionDefaultsTest {

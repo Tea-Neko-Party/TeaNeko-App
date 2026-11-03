@@ -21,9 +21,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证事实内容冻结、主语/来源边界、事件时间估算与持久化完成语义。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class MemoryFactContractTest {

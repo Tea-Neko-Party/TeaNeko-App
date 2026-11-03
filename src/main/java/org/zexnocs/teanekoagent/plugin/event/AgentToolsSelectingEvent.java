@@ -5,9 +5,11 @@ import java.util.List;
 
 /**
  * 工具候选固定前的筛选事件，允许移除或重排；增加工具应通过能力包贡献。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public final class AgentToolsSelectingEvent extends AgentDecisionEvent<LLMToolBinding> {

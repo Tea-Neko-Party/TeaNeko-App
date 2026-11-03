@@ -41,9 +41,11 @@ import static org.mockito.Mockito.when;
  * 模拟事务隔离、唯一键、Version 仲裁和提交回滚，用于离线验证真实适配器的事务合同。
  * 不替代 MySQL/JPA 实机测试；仓库访问由实际 EasyData 基础层发起。
  * <br>2026/11/03：复用固定域维护分页，保持真实事务、版本与回滚夹具。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 final class NamespaceDatabaseFixture implements AutoCloseable {
@@ -414,13 +416,15 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
 
     /**
      * 一次尝试的数据副本及原始版本，不暴露给业务组件。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param rows 当前事务视图
      * @param versions 初始版本
      * @param writes 实际写入键
      * @param locks 持有至事务结束的测试行锁
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Transaction(Map<String, BaseEasyDataObject> rows, Map<String, Long> versions, Set<String> writes, List<ReentrantLock> locks) {}

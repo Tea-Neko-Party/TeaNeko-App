@@ -9,6 +9,9 @@ import java.util.UUID;
 
 /**
  * 具有真实来源的表达补正，不是个人画像事实，也不承载权限或身份规则。
+ * <br>2026/11/03：管理员补正保留独立来源，不伪造聊天用户。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 稳定候选标识及幂等键
  * @param baseId 所属基础人格
  * @param baseVersion 候选依据的基础版本
@@ -21,8 +24,8 @@ import java.util.UUID;
  * @param locked 锁定来源，自动候选不能覆盖已锁定字段
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public record PersonalityCorrection(UUID requestId, String baseId, int baseVersion, String field, String text, double confidence,
         AgentActorContext source, Instant occurredAt, @Nullable Instant expiresAt, boolean locked) {
@@ -44,7 +47,8 @@ public record PersonalityCorrection(UUID requestId, String baseId, int baseVersi
         Objects.requireNonNull(requestId, "补正请求标识不能为空。"); Objects.requireNonNull(source, "补正来源不能为空。"); Objects.requireNonNull(occurredAt, "补正来源时刻不能为空。");
         if (baseId == null || baseId.isBlank() || baseId.length() > 128 || baseVersion < 1 || !BasePersonality.STYLE_FIELDS.contains(field)
                 || text == null || text.isBlank() || text.length() > 512 || !Double.isFinite(confidence) || confidence < 0 || confidence > 1
-                || source.origin() != AgentActorContext.Origin.USER || source.userId().isEmpty()
+                // 2026/11/03：系统任务不能直接成为人格补正来源。
+                || source.origin() == AgentActorContext.Origin.SYSTEM || source.userId().isEmpty()
                 || expiresAt != null && !expiresAt.isAfter(occurredAt)) { throw new IllegalArgumentException("人格补正字段、来源或范围无效。"); }
     }
     /**

@@ -7,6 +7,8 @@ import java.util.Objects;
 
 /**
  * 当前 client/scope 的权威空间引用，不以用户或 Agent 实例再次隔离共享空间。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param scope 真实 client/scope
  * @param namespaceId 当前空间 ID
  * @param revision 单调递增的引用版本，隐式默认引用为零
@@ -14,7 +16,7 @@ import java.util.Objects;
  * @param lastChange 最近实际变更命令，隐式默认引用为空
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryNamespaceBinding(AgentScope scope, MemoryNamespaceId namespaceId, long revision,

@@ -10,9 +10,11 @@ import java.net.URI;
  * 一次请求使用的可信连接配置。只由凭据端口返回，不是可导出的模型选项。
  * 日志和 JSON 只显示脱敏标记；认证值只交给 HTTP 请求对象。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMProviderAccess {

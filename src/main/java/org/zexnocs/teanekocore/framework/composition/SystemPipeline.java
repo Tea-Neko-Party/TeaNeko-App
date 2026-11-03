@@ -10,9 +10,11 @@ import java.util.concurrent.CompletionStage;
  * 预编译、按请求运行的异步组件管线；不创建线程池，不等待 Stage。
  * 每个步骤按 revision 提交自己的 patch，失败不回滚已完成步骤或外部副作用。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class SystemPipeline {
@@ -239,11 +241,13 @@ public final class SystemPipeline {
     /**
      * 编译时固定的 System 与其声明，避免运行期间重新解释依赖。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param system 需要检查依赖的步骤标识
      * @param descriptor 用于本次处理的 {@code descriptor} 数据
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Step(IEntitySystem system, SystemDescriptor descriptor) {}
@@ -251,9 +255,11 @@ public final class SystemPipeline {
     /**
      * 单次管线独有的执行进度，只沿串行步骤链更新。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class RunState {

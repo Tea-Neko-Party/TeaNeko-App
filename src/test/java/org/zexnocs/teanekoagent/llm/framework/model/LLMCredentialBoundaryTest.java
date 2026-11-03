@@ -25,9 +25,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证 Core YAML 环境解析、统一文件凭据、连接校验与认证信息不外泄。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMCredentialBoundaryTest {

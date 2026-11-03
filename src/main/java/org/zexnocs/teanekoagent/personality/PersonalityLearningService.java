@@ -46,9 +46,11 @@ import java.util.stream.Collectors;
 /**
  * 从已提交的真实互动生成一条表达候选，独立于画像、摘要及前台回答。
  * 同会话只运行一个、全局最多两个；容量不足不排队，所有来源由宿主固定。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class PersonalityLearningService implements IAgentPersonalityLearning, AutoCloseable {
@@ -269,9 +271,11 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     }
     /**
      * 冷却和运行槽位，仅由服务锁保护，不作为实体组件持久化。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Slot {
@@ -286,14 +290,18 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     }
     /**
      * 已观察结果，拒绝不等于数据库已开始的副作用回滚。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Outcome { APPLIED, DUPLICATE, SKIPPED, REJECTED, FAILED }
     /**
      * 不含原文的独立后台用量，可供统一监控消费。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param requestId 原互动请求
      * @param executionId 独立执行标识
      * @param outcome 已观察结果
@@ -302,7 +310,7 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
      * @param tokenUsage 实际逐次报告或估算
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Report(UUID requestId, UUID executionId, Outcome outcome, LLMInteractionResult.@Nullable Status modelStatus,

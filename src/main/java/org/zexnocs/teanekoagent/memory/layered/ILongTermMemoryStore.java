@@ -17,13 +17,48 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：联合提交风格观察，未支持的替换存储明确拒绝观察写入。
  * <br>2026/11/03：明确保存与后台整理共用长期记录及索引。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ * <br>2026/11/03：提供独立管理主体的纠正、遗忘与原回执查询，不借用记忆主体身份。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.6.1-l
+ * @version 4.7.0-l
  */
 public interface ILongTermMemoryStore {
+    /**
+     * 2026/11/03：显式管理入口保留独立来源和事务内权限。
+     * @param reference 固定空间代次
+     * @param actor 独立管理主体
+     * @param id 记录
+     * @param revision 原版本
+     * @param text 修正正文，空值为遗忘
+     * @param operation 原操作编号
+     * @param now 固定时刻
+     * @param guard 事务内授权复核
+     * @return 同事务保存的公开结果
+     * @throws UnsupportedOperationException 当自定义存储未支持管理时
+     */
+    default CompletionStage<LongMemories.Item> manage(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, UUID id, long revision, @Nullable String text,
+            UUID operation, Instant now, Runnable guard) {
+        throw new UnsupportedOperationException("当前长期存储未实现独立管理。");
+    }
+
+    /**
+     * 2026/11/03：回执查询不执行修改。
+     * @param reference 原空间代次
+     * @param actor 原管理主体及目标
+     * @param operation 原操作
+     * @param guard 当前授权
+     * @return 原回执，不重复修改
+     * @throws UnsupportedOperationException 当自定义存储未支持查询时
+     */
+    default CompletionStage<LongMemories.Item> managementOperation(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, UUID operation, Runnable guard) {
+        throw new UnsupportedOperationException("当前长期存储未实现管理回执查询。");
+    }
     /**
      * 2026/11/03：保存已经过可信原文意图验证的本人事实，不调用模型。
      * @param command 固定身份、空间、原文及操作 ID

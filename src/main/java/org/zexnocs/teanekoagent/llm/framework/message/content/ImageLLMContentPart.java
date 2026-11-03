@@ -11,9 +11,11 @@ import java.util.Set;
 /**
  * 不可变图像引用。只保存 HTTP(S)/data URL，不读取文件、不下载远程资源。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Getter

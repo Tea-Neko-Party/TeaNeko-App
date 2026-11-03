@@ -10,9 +10,11 @@ import java.util.function.Supplier;
 /**
  * 校验插件目录并提供逻辑启停；版本令牌拒绝禁用前调用的迟到结果。
  * 不卸载 Bean，不关闭借用资源，也不把禁用解释为副作用回滚。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Service
@@ -155,10 +157,12 @@ public final class PluginRegistry {
 
     /**
      * 调用采用的插件与依赖版本，只包含不可变业务数据。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param revisions 固定修订号
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record Token(Map<String, Long> revisions) {
@@ -171,12 +175,14 @@ public final class PluginRegistry {
 
     /**
      * 脱离运行句柄的插件管理视图。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param descriptor 静态声明
      * @param enabled 包含依赖的有效状态
      * @param revision 当前逻辑路由修订号
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     public record View(PluginDescriptor descriptor, boolean enabled, long revision) {}

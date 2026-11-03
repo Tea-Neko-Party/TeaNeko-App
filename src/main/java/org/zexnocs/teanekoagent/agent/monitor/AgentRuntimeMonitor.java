@@ -14,9 +14,11 @@ import java.util.concurrent.atomic.LongAdder;
 
 /**
  * 有界进程统计与异步监控发布，监听失败、拥塞及执行器关闭均与主链隔离。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -96,9 +98,11 @@ public final class AgentRuntimeMonitor {
 
     /**
      * 自主业务的真实终态，与模型轮次状态分开。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Delivery { SENT, ABSTAINED, SKIPPED, FAILED }

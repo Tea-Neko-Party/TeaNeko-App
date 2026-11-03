@@ -10,10 +10,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * 同步事件监听器可登记业务完成链；EventService 仍只负责原有事件通知。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <T> 组件值类型
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Getter

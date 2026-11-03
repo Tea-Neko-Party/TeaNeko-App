@@ -12,9 +12,11 @@ import java.util.Map;
 
 /**
  * 将检索与画像投影为完整有界 JSON 信封，保留覆盖和来源，不输出管理审计原文。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class MemoryToolReplies {

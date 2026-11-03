@@ -3,9 +3,11 @@ package org.zexnocs.teanekocore.actuator.execution;
 /**
  * 资源准入被拒绝或实际结算超额；失败预占不扣减额度，已经发生的消耗仍须保留。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class BudgetExceededException extends IllegalStateException {

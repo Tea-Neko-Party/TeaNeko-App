@@ -4,6 +4,8 @@ import java.util.List;
 
 /**
  * 有版本且有容量上限的补正集合；写入依赖存储事务的行锁和 Version，不进行无保护覆盖。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param key 补正或备份定位
  * @param revision 集合版本
  * @param corrections 有界来源记录
@@ -11,7 +13,7 @@ import java.util.List;
  * @param managementRevision 管理换代，普通候选追加保持不变
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record PersonalityState(String key, long revision, List<PersonalityCorrection> corrections, boolean backup, long managementRevision) {

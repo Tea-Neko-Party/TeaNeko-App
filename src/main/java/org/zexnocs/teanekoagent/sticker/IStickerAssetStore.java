@@ -11,9 +11,11 @@ import java.util.List;
  * <br>2026/11/03：预览和重新分析共用已有文件的有界解码。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public interface IStickerAssetStore {
@@ -72,12 +74,14 @@ public interface IStickerAssetStore {
      * 只在受控任务中存活的视觉输入，不持久保存大块 base64。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param blob 原内容元数据
      * @param previews 同一请求中的采样画面
      * @param note 动画采样说明
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType record Prepared(Stickers.Blob blob,List<String> previews,String note){ }

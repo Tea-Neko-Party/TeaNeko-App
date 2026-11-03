@@ -14,9 +14,11 @@ import java.util.concurrent.ScheduledExecutorService;
  * 将纯交互服务接入已有 Core 执行资源，不建立额外线程池或 Agent 运行依赖。
  * <br>2026/11/02：安装安全失败日志，在异常转为业务状态前保留可诊断结构。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

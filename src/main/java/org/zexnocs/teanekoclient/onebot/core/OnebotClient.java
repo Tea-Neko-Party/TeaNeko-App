@@ -23,23 +23,86 @@ import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
+import java.util.Map;
 import java.util.concurrent.*;
 
 /**
  * OneBot 连接管理与异步消息收发，停机时先关闭连接并释放自有执行器。
  * <br>2026/11/03：加入容器生命周期，区分停机关闭握手与运行期传输故障。
+ * <br>2026/11/03：为 Web 只读观测提供真实开放连接数，不导出连接句柄。
+ * <br>2026/11/03：按原连接绑定自身账号和连接代次，旧缓存不参与平台联系人查询许可。
+ * <br>2026/11/03：指令台发送锁定原唯一连接，实际写入前重新校验，不回退广播。
  *
  * @author zExNocs
  * @date 2026/02/28
  * @since 4.0.12
- * @version 4.6.1-l
+ * @version 4.7.0-l
  */
 @Component
 public class OnebotClient extends AbstractWebsocketClient implements IClient, SmartLifecycle, DisposableBean {
     private static final String TAG = "Onebot WebSocket Server";
 
+    /**
+     * 2026/11/03：连接数只表达传输事实，不代表身份、健康度或账号路由就绪。
+     * @return 此刻仍开放的传输连接数量
+     */
+    public int getOpenConnectionCount() {
+        return stopping ? 0 : (int) sessions.values().stream().filter(WebSocketSession::isOpen).count();
+    }
+
     /// 存储所有连接的会话。注意：现在存的是被装饰过的、线程安全的 Session
     private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    // 2026/11/03：仅在当前实例锁内修改，连接变化使等待中的平台查询失效。
+    private final Map<String, Long> connectionSelfIds = new java.util.HashMap<>();
+    private long connectionEpoch;
+
+    /**
+     * 2026/11/03：只有唯一开放连接且该连接已提供真实自身 ID 时才可查询账号联系人。
+     * @return 当前一致身份快照，不包含 session
+     */
+    public synchronized ConnectionIdentity connectionIdentity() {
+        var open = sessions.values().stream().filter(WebSocketSession::isOpen).toList();
+        long self = open.size() == 1 ? connectionSelfIds.getOrDefault(open.getFirst().getId(), 0L) : 0;
+        return new ConnectionIdentity(connectionEpoch, open.size(), self > 0 ? Long.toString(self) : "",
+                !stopping && open.size() == 1 && self > 0);
+    }
+
+    /**
+     * 2026/11/03：在原连接身份锁内核对并写入固定会话，不遍历其他连接，不重试。
+     * @param expected 宿主原来捕获的唯一账号与连接代次
+     * @param message 原发送链生成的协议正文
+     * @param guard 实际传输副作用前的当前管理授权
+     * @throws IllegalStateException 当连接换代、不唯一或写入失败时
+     */
+    public synchronized void sendPinned(ConnectionIdentity expected, String message, Runnable guard) {
+        if (!expected.ready() || !expected.equals(connectionIdentity())) {
+            throw new IllegalStateException("OneBot 原连接已失效或账号不再唯一，不会改投其他连接。");
+        }
+        var session = sessions.values().stream().filter(WebSocketSession::isOpen).findFirst().orElseThrow();
+        guard.run();
+        try {
+            session.sendMessage(new TextMessage(message));
+        } catch (IOException failure) {
+            reportTransportFailure(session, failure);
+            removeSession(session);
+            throw new IllegalStateException("OneBot 固定连接写入未确认，不会自动重发。");
+        }
+    }
+
+    /**
+     * 当前连接定位，不替代发送前再次复核。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
+     * @param epoch 连接或身份变化代次
+     * @param connections 开放连接数
+     * @param selfId 唯一连接确认的账号
+     * @param ready 是否可在原广播发送器上安全进行只读查询
+     * @author zExNocs
+     * @date 2026/11/03
+     * @since 4.7.0-l
+     * @version 4.7.0-l
+     */
+    public record ConnectionIdentity(long epoch, int connections, String selfId, boolean ready) {}
 
     /// 用于异步发送消息的线程池
     private final ExecutorService sendExecutor = Executors.newVirtualThreadPerTaskExecutor();
@@ -92,6 +155,9 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
                 session, 10000, 5 * 1024 * 1024);
 
         sessions.put(safeSession.getId(), safeSession);
+        // 2026/11/03：新连接不继承先前连接的机器人号。
+        connectionSelfIds.remove(safeSession.getId());
+        connectionEpoch++;
         eventService.pushEvent(new OnebotConnectEvent(safeSession.getId()));
         logger.info(TAG, "连接新的 session: %s。总连接个数: %d".formatted(safeSession.getId(), sessions.size()));
     }
@@ -107,7 +173,46 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
         logger.debug(TAG, "收到会话 %s 的消息: %s".formatted(session.getId(), payload));
 
         // 异步处理接收到的消息，防止阻塞 WebSocket 的 IO 接收线程
-        executeAsync(() -> _handle(payload));
+        // 2026/11/03：原帧中的自身账号必须固定在此连接，换号不能复用旧查询。
+        executeAsync(() -> {
+            if (observeIdentity(session, payload)) {
+                _handle(payload);
+            }
+        });
+    }
+
+    /**
+     * @param session 原连接
+     * @param payload 已接收原协议正文
+     * @return 是否可继续原处理
+     */
+    private boolean observeIdentity(WebSocketSession session, String payload) {
+        try {
+            var root = onebotEventShareComponent.objectMapper.readTree(payload);
+            if (!root.has("self_id") || root.get("self_id").asLong() <= 0) {
+                return true;
+            }
+            long self = root.get("self_id").asLong();
+            synchronized (this) {
+                if (!sessions.containsKey(session.getId())) {
+                    return false;
+                }
+                Long previous = connectionSelfIds.get(session.getId());
+                if (previous == null) {
+                    connectionSelfIds.put(session.getId(), self);
+                    connectionEpoch++;
+                    return true;
+                }
+                if (previous == self) {
+                    return true;
+                }
+            }
+            removeSession(session);
+            return false;
+        } catch (RuntimeException failure) {
+            logger.warn(TAG, "连接元数据无法解析，已跳过当前协议帧。");
+            return false;
+        }
     }
 
     /**
@@ -265,7 +370,13 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
      * @param session 待移除连接
      */
     private void removeSession(WebSocketSession session) {
-        sessions.remove(session.getId());
+        // 2026/11/03：身份与连接同代撤销，网络关闭不持身份快照锁。
+        synchronized (this) {
+            if (sessions.remove(session.getId()) != null) {
+                connectionSelfIds.remove(session.getId());
+                connectionEpoch++;
+            }
+        }
         if (session.isOpen()) {
             try {
                 session.close(stopping ? CloseStatus.SERVICE_RESTARTED : CloseStatus.NORMAL);

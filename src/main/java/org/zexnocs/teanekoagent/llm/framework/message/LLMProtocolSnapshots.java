@@ -21,9 +21,11 @@ import java.util.*;
  * 冻结交互边界的协议数据；透明状态只接受有限深度的 JSON 值，不保留任意运行句柄。
  * 不通过序列化猜测消息角色，因而保留工具配对及供应商回放所需的接口类型。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMProtocolSnapshots {
@@ -222,9 +224,11 @@ public final class LLMProtocolSnapshots {
     /**
      * 兼容既有文本 mapper 的只读文本，禁止通过 Lombok 生成的父类 setter 修改快照。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class FrozenText extends TextLLMContentPart {
@@ -244,23 +248,27 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变正文项。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getType 内容类型
      * @param getContentPart 只读内容数据
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Content(String getType, ILLMContentPart getContentPart) implements ILLMContent {}
 
     /**
      * 不可变系统消息。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getName 消息名称
      * @param getContents 正文
      * @param getProviderMetadata 透明状态
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record SystemMessage(String getName, List<ILLMContent> getContents,
@@ -268,12 +276,14 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变用户消息。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getName 消息名称
      * @param getContents 正文
      * @param getProviderMetadata 透明状态
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record UserMessage(String getName, List<ILLMContent> getContents,
@@ -281,13 +291,15 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变模型消息，保留原始工具顺序和供应商推理回放状态。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getName 消息名称
      * @param getContents 正文
      * @param getProviderMetadata 透明状态
      * @param getToolCalls 模型请求的工具调用
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record AssistantMessage(String getName, List<ILLMContent> getContents,
@@ -296,13 +308,15 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变工具回填。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getName 工具名称
      * @param getContents 工具输出
      * @param getProviderMetadata 透明状态
      * @param getToolCallId 对应的模型调用 ID
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record ToolMessage(String getName, List<ILLMContent> getContents,
@@ -310,19 +324,23 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变工具调用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getId 调用 ID
      * @param getType 调用类型
      * @param getName 工具名称
      * @param getArguments 业务参数 JSON
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Call(String getId, String getType, String getName, String getArguments) implements ILLMToolCall {}
 
     /**
      * 不可变供应商用量；零值不推断为缺失，也不推断为精确计费信息。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getCompletionTokens 输出 token
      * @param getPromptTokens 输入 token
      * @param getTotalTokens 总 token
@@ -331,7 +349,7 @@ public final class LLMProtocolSnapshots {
      * @param getReasoningTokens 推理 token
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Usage(int getCompletionTokens, int getPromptTokens, int getTotalTokens,
@@ -339,13 +357,15 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变候选，不把 logprobs 或推理状态拼入可见正文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getFinishReason 统一终止标识
      * @param getIndex 候选序号
      * @param getMessage 模型消息，缺失时由编排拒绝
      * @param getLogprobs 供应商概率数据
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Choice(String getFinishReason, int getIndex, ILLMAssistantMessage getMessage,
@@ -353,6 +373,8 @@ public final class LLMProtocolSnapshots {
 
     /**
      * 不可变单次响应，保留完整候选与供应商 usage。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getId 响应 ID
      * @param getChoices 候选列表
      * @param getObject 响应对象类型
@@ -361,7 +383,7 @@ public final class LLMProtocolSnapshots {
      * @param getUsage 供应商用量，可为空
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Result(String getId, List<ILLMChoice> getChoices, String getObject, Instant getCreated,

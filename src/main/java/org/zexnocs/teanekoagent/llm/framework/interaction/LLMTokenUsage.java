@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /**
  * 一次模型尝试的 token 记账依据；供应商报告与未知时的保守预留估算明确区分。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param tokens 供应商报告或保守估算的总量，不等同精确费用
  * @param source 记账依据
  * @param reservedTokens 请求前预留总量，未启用 token 预算时为零
@@ -13,7 +15,7 @@ import java.util.Objects;
  * @param exceeded 结算后局部或父预算是否处于超额封锁状态
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record LLMTokenUsage(long tokens, Source source, long reservedTokens, String estimator, boolean exceeded) {
@@ -51,9 +53,11 @@ public record LLMTokenUsage(long tokens, Source source, long reservedTokens, Str
 
     /**
      * 记账来源，估算只用于保守准入，不声称供应商已产生相同计费。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Source { REPORTED, ESTIMATED }

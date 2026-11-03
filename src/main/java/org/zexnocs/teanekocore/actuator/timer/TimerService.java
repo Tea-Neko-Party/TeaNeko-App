@@ -22,16 +22,31 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 管理定时器的服务。
+ * <br>2026/11/03：注册真实目录，触发与管理暂停共用门禁。
  *
  * @author zExNocs
  * @date 2026/02/14
+ * @since 4.0.0
+ * @version 4.7.0-l
  */
 @Service
 public class TimerService implements ITimerService {
+    private @org.jspecify.annotations.Nullable TimerDirectory directory;
+
+    /**
+     * 2026/11/03：安装原计时器的观测及触发门禁，不启动第二套调度器。
+     * @param directory 当前进程目录
+     */
+    @Autowired
+    public void installDirectory(TimerDirectory directory) {
+        this.directory = directory;
+        timers.forEach(directory::register);
+    }
     /// 定时器集合
     private final Set<ITimer<?>> timers;
     private final ITaskService iTaskService;
 
+    /** @param iTaskService 原任务服务 */
     @Lazy
     @Autowired
     public TimerService(ITaskService iTaskService) {
@@ -48,9 +63,14 @@ public class TimerService implements ITimerService {
     @Override
     public void register(ITimer<?> timer) {
         timers.add(timer);
+        // 2026/11/03：只登记原调度器实际持有的计时器。
+        if (directory != null) {
+            directory.register(timer);
+        }
     }
 
     // --------------- 计时器循环 -----------------
+    /** 2026/11/03：原循环使用管理门禁，暂停不会撤销已经提交的任务。 */
     @Async("timerScheduler")
     @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}")
     public void timerLoop() {
@@ -62,29 +82,33 @@ public class TimerService implements ITimerService {
         List<ITimer<?>> toRemove = new ArrayList<>();
 
         for (var timer: copy) {
-            // 如果定时器已经销毁，则删除。
-            var livable = timer.getTimerTaskConfig().getLivable();
-            if (livable != null && !livable.isAlive()) {
-                toRemove.add(timer);
-                continue;
+            // 2026/11/03：所有时间和生命周期判定均在门禁内重新执行。
+            Runnable update = () -> {
+                var livable = timer.getTimerTaskConfig().getLivable();
+                if (livable != null && !livable.isAlive()) {
+                    toRemove.add(timer);
+                    return;
+                }
+                var pausable = timer.getTimerTaskConfig().getPausable();
+                if (pausable != null && pausable.isPaused() || !timer.isTime(now)) {
+                    return;
+                }
+                timer.update(now);
+                timer.execute(iTaskService);
+            };
+            if (directory == null) {
+                update.run();
+            } else {
+                directory.visit(timer, update);
             }
-            // 如果定时器已经暂停，则跳过。
-            var pausable = timer.getTimerTaskConfig().getPausable();
-            if (pausable != null && pausable.isPaused()) {
-                continue;
-            }
-            // 如果定时器没有到达执行时间，则跳过。
-            if (!timer.isTime(now)) {
-                continue;
-            }
-            // ----- 已通过定时器属性判断执行 ------
-            timer.update(now);
-            timer.execute(iTaskService);
         }
 
         // 删除已经销毁的定时器。
         for (var key: toRemove) {
             timers.remove(key);
+            if (directory != null) {
+                directory.remove(key);
+            }
         }
     }
 
@@ -101,8 +125,9 @@ public class TimerService implements ITimerService {
      * @param taskStage  任务阶段
      * @param callable   任务执行的 Callable
      * @param rate       定时器的周期
+     * @param <T> 原任务结果类型
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return 定时器任务配置，用于设置 Future 执行链与生命周期
      */
     @Override
     public <T> ITimerTaskConfig<T> registerByRate(String taskName,
@@ -136,8 +161,9 @@ public class TimerService implements ITimerService {
      * @param taskStage  任务阶段
      * @param callable   任务执行的 Callable
      * @param delay      定时器的周期
+     * @param <T> 原任务结果类型
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return 定时器任务配置，用于设置 Future 执行链与生命周期
      */
     @Override
     public <T> ITimerTaskConfig<T> registerByDelay(String taskName,
@@ -171,8 +197,9 @@ public class TimerService implements ITimerService {
      * @param taskStage  任务阶段
      * @param callable   任务执行的 Callable
      * @param rate       定时器的周期
+     * @param <T> 原任务结果类型
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return 定时器任务配置，用于设置 Future 执行链与生命周期
      */
     @Override
     public <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
@@ -200,8 +227,9 @@ public class TimerService implements ITimerService {
      * @param taskStage      任务阶段
      * @param callable       任务执行的 Callable
      * @param cronExpression 定时器的 cron 表达式
+     * @param <T> 原任务结果类型
      * @param resultType     任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return 定时器任务配置，用于设置 Future 执行链与生命周期
      * @see CronTimer
      */
     @Override

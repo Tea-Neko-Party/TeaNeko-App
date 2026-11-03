@@ -5,9 +5,11 @@ import java.util.Objects;
 
 /**
  * 记忆访问的固定中文失败，不携带原始消息、配置或基础设施异常链。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryAccessException extends RuntimeException {
@@ -42,9 +44,11 @@ public final class MemoryAccessException extends RuntimeException {
 
     /**
      * 分开表达功能关闭、明确意图缺失、停止和基础设施故障。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Reason { DISABLED, READ_DISABLED, ADD_DISABLED, INTENT_REQUIRED, CONFIGURATION_ERROR, STOPPED, TIMED_OUT, UNAVAILABLE }

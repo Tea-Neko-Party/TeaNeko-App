@@ -28,11 +28,14 @@ import static org.mockito.Mockito.*;
 
 /**
  * 用受控 HTTP 服务验证各供应商认证与连接参数的可信边界。
+ * <br>2026/11/03：凭据替身同步采用带参数代次的请求边界。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 class LLMProviderRequestBoundaryTest {
     private static final String SECRET = "test-only-provider-secret";
@@ -49,7 +52,8 @@ class LLMProviderRequestBoundaryTest {
             var api = mock(IAPIResponseService.class);
             var credentials = mock(ICredentialResolver.class);
             var model = factory.apply(api, credentials);
-            when(credentials.require(model.getProvider())).thenReturn(new LLMProviderAccess(SECRET,
+            // 2026/11/03：验证实际调用的新凭据入口，继续保持原有请求隔离断言。
+            when(credentials.require(eq(model.getProvider()), any())).thenReturn(new LLMProviderAccess(SECRET,
                     "https://trusted-gateway.test/v1", "/trusted-call"));
             var pending = new CompletableFuture<>();
             doAnswer(_ -> new TaskFuture<>(mock(ILogger.class), "fake-http", pending))
@@ -64,7 +68,7 @@ class LLMProviderRequestBoundaryTest {
             assertFalse(result.asStage().toCompletableFuture().isDone());
             var capture = org.mockito.ArgumentCaptor.forClass(IAPIRequestData.class);
             verify(api).addTask(capture.capture(), any(), eq(true), eq(true));
-            verify(credentials).require(model.getProvider());
+            verify(credentials).require(eq(model.getProvider()), any());
             var request = capture.getValue();
             assertEquals("https://trusted-gateway.test/v1", request.getBaseUrlOverride());
             assertEquals("/trusted-call", request.getPathOverride());
@@ -116,7 +120,8 @@ class LLMProviderRequestBoundaryTest {
             var api = mock(IAPIResponseService.class);
             var credentials = mock(ICredentialResolver.class);
             var model = factory.apply(api, credentials);
-            when(credentials.require(model.getProvider())).thenThrow(new LLMConfigurationException("Missing Spring credential."));
+            // 2026/11/03：缺失凭据也经带参数版本的入口失败，HTTP 仍不得启动。
+            when(credentials.require(eq(model.getProvider()), any())).thenThrow(new LLMConfigurationException("测试凭据缺失。"));
             assertThrows(LLMConfigurationException.class, () -> model.call(prompt(null)));
             verifyNoInteractions(api);
         }

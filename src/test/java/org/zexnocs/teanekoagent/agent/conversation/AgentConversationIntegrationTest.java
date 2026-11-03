@@ -48,9 +48,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 从默认会话服务经过真实轮次和交互管线验证完成等待、防重入及诊断保留。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentConversationIntegrationTest {

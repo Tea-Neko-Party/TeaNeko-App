@@ -13,15 +13,26 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 /**
  * 大语言模型文件配置服务。
  * <br>负责把 {@link LLMModelFileConfig} 中的配置项合并为框架统一的 {@link LLMModelOptions}。
+ * <br>2026/11/03：文件默认参数记录发布代次，支持安全热应用。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 @RequiredArgsConstructor
 public class LLMFileConfigService implements ILLMFileConfigService {
+    private @org.jspecify.annotations.Nullable LLMFileConfigurationEpoch epoch;
+
+    /**
+     * 2026/11/03：Spring 宿主安装文件代次，独立旧构造保持可用。
+     * @param epoch 原文件锁与版本边界
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installEpoch(LLMFileConfigurationEpoch epoch) {
+        this.epoch = epoch;
+    }
     /**
      * TeaNeko Core 文件配置服务。
      */
@@ -54,6 +65,17 @@ public class LLMFileConfigService implements ILLMFileConfigService {
      */
     @Override
     public LLMModelOptions getDefaultOptions(LLMModelId modelId, ILLMModelOptions baseOptions) {
+        // 2026/11/03：参数和标记来自同一缓存代次，不把凭据放入 Options。
+        return epoch == null ? defaults(modelId, baseOptions)
+                : epoch.fixed(() -> epoch.stamp(defaults(modelId, baseOptions)));
+    }
+
+    /**
+     * @param modelId 原供应商
+     * @param baseOptions 原内建参数
+     * @return 文件默认参数
+     */
+    private LLMModelOptions defaults(LLMModelId modelId, ILLMModelOptions baseOptions) {
         var base = LLMModelOptions.merge(
                 baseOptions,
                 LLMModelOptions.builder()

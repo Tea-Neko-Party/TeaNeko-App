@@ -198,12 +198,14 @@ public class GroupActivityCommand {
      * 获取主群聊 ID。
      * <br>如果为 null，说明失败。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param groupId 目标群组标识
      * @param scopeId 本次操作所属作用域
      * @param config 用于本次处理的 {@code config} 数据
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record GroupContext(String groupId, String scopeId, GroupActivityConfigData config) {}

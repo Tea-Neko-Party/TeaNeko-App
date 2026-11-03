@@ -18,9 +18,11 @@ import java.util.concurrent.Executor;
 
 /**
  * 将当前用户画像和本轮相关长期记忆注入独立资料块，不加载其他 scope 的原话。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class LongTermMemoryPromptSource implements IAgentPromptSource {

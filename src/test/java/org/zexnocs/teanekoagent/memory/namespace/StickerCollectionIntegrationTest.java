@@ -36,9 +36,11 @@ import static org.mockito.Mockito.mock;
  * <br>2026/11/03：管理收尾复用同一夹具，避免建立第二套事务替身。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Timeout(20)
@@ -48,9 +50,11 @@ class StickerCollectionIntegrationTest {
      * 仅替换视觉网络请求，文件及数据库走真实默认实现。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @TeaNekoStickerAnalyzer("test") public static final class Analyzer implements IStickerAnalyzer {
@@ -78,9 +82,11 @@ class StickerCollectionIntegrationTest {
      * 局部容器只发现素材端口，不启动应用或外部数据库。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     static final class Harness implements AutoCloseable {

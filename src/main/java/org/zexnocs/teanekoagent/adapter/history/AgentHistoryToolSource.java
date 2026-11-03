@@ -29,9 +29,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 历史查询工具的显式能力源，模型只提交筛选条件，身份与分区来自实际组件。
  * <br>2026/11/02：注解生成历史参数和绑定，授权仍使用实际轮次组件。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.history", managedByFeature = true)

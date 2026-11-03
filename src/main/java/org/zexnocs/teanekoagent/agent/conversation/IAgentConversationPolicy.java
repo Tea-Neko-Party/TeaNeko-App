@@ -5,9 +5,11 @@ import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 
 /**
  * 为实际出队轮次解析历史和重放策略；配置访问在业务执行域、邮箱锁外进行。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

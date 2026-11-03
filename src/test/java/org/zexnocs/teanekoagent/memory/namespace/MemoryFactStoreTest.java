@@ -18,9 +18,11 @@ import static org.mockito.Mockito.*;
 /**
  * 经真实事实适配器验证原子提交、来源/主语共享、幂等、损坏处理及换代提交竞争。
  * 事务替身在 Agent 专用表内共享 namespace 与事实状态，不连接真实 MySQL。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(15)

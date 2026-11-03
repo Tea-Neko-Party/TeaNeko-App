@@ -10,13 +10,15 @@ import java.util.UUID;
 
 /**
  * 可信宿主明确指定的画像主体及空间；用途和预算只控制读取，不授予管理或学习权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reference 本次固定空间引用
  * @param subjectId 画像主体的 TeaNeko UUID，与调用操作者独立
  * @param use 用于选择本地默认条数的用途
  * @param limits 可选单次预算，受 Recall 本地硬上限约束
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record UserProfileRequest(MemoryNamespaceReference reference, UUID subjectId,

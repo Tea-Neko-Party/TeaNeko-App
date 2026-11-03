@@ -9,20 +9,24 @@ import org.springframework.util.ClassUtils;
 import org.zexnocs.teanekoagent.agent.IAgentToolSource;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
-import org.zexnocs.teanekoagent.plugin.*;
+import org.zexnocs.teanekoagent.plugin.AgentFeature;
+import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
 import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
+
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 
 /**
  * 从已注册 Spring Bean 的类型元数据发现注解工具，延迟取得提供者，避免启动扫描产生构造环。
  * 已由原 AgentFeature 拥有的能力不重复安装，新工具自动生成同一套普通能力贡献。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @Component

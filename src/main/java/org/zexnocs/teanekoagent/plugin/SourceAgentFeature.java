@@ -6,6 +6,8 @@ import java.util.Objects;
 
 /**
  * 将既有工具和资料适配为普通能力包，内置能力与插件使用同一路径。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param pluginId 所属插件
  * @param id 局部能力 ID
  * @param defaultEnabled 是否默认安装
@@ -14,7 +16,7 @@ import java.util.Objects;
  * @param promptNames 来源拥有的资料名称
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public record SourceAgentFeature(String pluginId, String id, boolean defaultEnabled,

@@ -6,11 +6,13 @@ import java.util.Objects;
 
 /**
  * 本地 Agent 总开关及一次交互设置，不包含平台引用或凭据。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param enabled 本地全局开关
  * @param interaction 模型/工具次数、时限和可选 token 限额
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentRuntimeConfig(boolean enabled, LLMInteractionSettings interaction) {

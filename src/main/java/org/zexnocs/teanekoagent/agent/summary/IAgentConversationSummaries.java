@@ -13,9 +13,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 会话压缩端口，选择已生成结果与启动后台工作分开，前台不等待摘要模型。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentConversationSummaries {
@@ -48,11 +50,13 @@ public interface IAgentConversationSummaries {
     CompletionStage<Void> verify(AgentRunRequest request, AgentSummarySnapshot summary, ExecutionControl control);
     /**
      * 一次纯数据选择，摘要与被压缩窗口保持对应。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param window 仍须保留的完整轮次
      * @param summary 当前采用摘要，未启用时为空
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Selection(AgentConversationWindow window, @Nullable AgentSummarySnapshot summary) {}

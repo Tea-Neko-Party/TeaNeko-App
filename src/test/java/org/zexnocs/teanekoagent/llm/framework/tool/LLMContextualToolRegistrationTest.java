@@ -24,9 +24,11 @@ import static org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult.S
 /**
  * 从注解扫描到实际异步完成/回填的离线使用方，不启动容器、数据库或模型。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMContextualToolRegistrationTest {
@@ -35,9 +37,11 @@ class LLMContextualToolRegistrationTest {
     /**
      * 提供同步、异步及非法返回值等工具夹具，用受控阶段验证真实扫描与执行链。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static class Provider implements ILLMToolProvider {

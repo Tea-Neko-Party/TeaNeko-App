@@ -31,9 +31,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用真实 EasyData 事务夹具验证短期采集、中期租约、恢复与迟到提交，外部模型不启动。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @Timeout(20)
@@ -44,9 +46,11 @@ class LayeredMemoryIntegrationTest {
     private final LayeredMemorySettings settings = new LayeredMemorySettings(true, 6, 2, 4, 131072, Duration.ofSeconds(30), Duration.ofDays(90));
     /**
      * 装配同一事务中原历史及新分层存储，不创建新仓库替身。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private final class Harness implements AutoCloseable {

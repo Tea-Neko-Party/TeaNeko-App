@@ -5,20 +5,24 @@ import java.util.Objects;
 /**
  * 失败通过异常传播；跳过不允许附带组件变更。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param outcome 继续、跳过或停止的步骤决定
  * @param patch 本步骤声明的不可变组件补丁
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record SystemResult(Outcome outcome, ComponentPatch patch) {
     /**
      * 单步骤的继续、跳过或停止决定，由管线统一应用。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Outcome { CONTINUE, SKIP, STOP }

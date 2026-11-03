@@ -16,9 +16,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 不创建线程池、父调用预算或后台任务，也不在组件中放置运行控制。
  * <br>2026/11/02：接收工厂已校验的实例插件组件。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @JsonIgnoreType

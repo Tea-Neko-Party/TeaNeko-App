@@ -1,16 +1,19 @@
 package org.zexnocs.teanekocore.logger;
 
+import lombok.NonNull;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import java.util.*;
 
 /**
  * 可安全记录的异常结构，不读取异常消息、请求、响应正文、请求头或抑制异常。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param types 有界原因链中的异常类型，按外层到内层排列
  * @param location 最深可观察异常的代码位置
  * @param httpStatus 原因链中可直接取得的 HTTP 状态码，非 HTTP 失败为空
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public record FailureDiagnostic(List<String> types, String location, Integer httpStatus) {
@@ -48,7 +51,8 @@ public record FailureDiagnostic(List<String> types, String location, Integer htt
     }
 
     /** @return 不包含原异常文本的中文诊断摘要 */
-    @Override public String toString() {
+    @Override @NonNull
+    public String toString() {
         return "异常类型=" + String.join(" → ", types) + "，代码位置=" + location + "，HTTP状态=" + (httpStatus == null ? "未取得" : httpStatus);
     }
 }

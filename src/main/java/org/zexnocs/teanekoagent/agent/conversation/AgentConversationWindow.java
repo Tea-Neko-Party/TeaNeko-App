@@ -13,12 +13,14 @@ import java.util.UUID;
 
 /**
  * 仅含完整成功轮次的不可变窗口；丢弃按整轮进行，不能把截断伪装成摘要。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param turns 从旧到新的完整轮次
  * @param discardedTurns 因窗口或输入限制丢弃的轮次数
  * @param lastTurnDiscarded 最近完成轮次是否未能保留
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationWindow(List<Turn> turns, long discardedTurns, boolean lastTurnDiscarded) {
@@ -100,13 +102,15 @@ public record AgentConversationWindow(List<Turn> turns, long discardedTurns, boo
 
     /**
      * 一个成功请求新增的完整消息链，包含真实发起者，消息使用统一协议。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param requestId 宿主请求 ID
      * @param actor 该轮真实发起者和来源
      * @param messages 本轮新增输入及完整响应，不包含已有历史前缀
      * @param signature 消息的规范化度量
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Turn(UUID requestId, AgentActorContext actor, List<ILLMMessage> messages, LLMMessageCodec.Signature signature) {

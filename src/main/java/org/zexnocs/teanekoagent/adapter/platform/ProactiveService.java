@@ -44,9 +44,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>2026/11/03：自主文本沿用原控制并加入同目标顺序。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @Service
@@ -314,12 +316,14 @@ public final class ProactiveService implements AutoCloseable {
 
     /**
      * 当前自主策略的纯快照，不保存配置 Bean。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param readHistory 是否读取历史
      * @param backoff 尝试退避秒数
      * @param interval 定时间隔，变化也使旧候选失效
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Policy(boolean readHistory, int backoff, int interval) { }

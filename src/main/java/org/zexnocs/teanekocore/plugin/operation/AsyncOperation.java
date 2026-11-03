@@ -4,11 +4,13 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 类型化异步操作或下一节点，不携带同步任务链游标。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <I> 输入类型
  * @param <O> 结果类型
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @FunctionalInterface

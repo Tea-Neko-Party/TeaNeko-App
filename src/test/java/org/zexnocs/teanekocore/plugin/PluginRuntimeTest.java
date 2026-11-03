@@ -24,9 +24,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 覆盖目录冲突、依赖换代与异步环绕的真实完成边界。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 class PluginRuntimeTest {
@@ -112,9 +114,11 @@ class PluginRuntimeTest {
 
     /**
      * 明确声明插件归属的异步命令。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     @PluginOwned("a") public static final class TestCommand {

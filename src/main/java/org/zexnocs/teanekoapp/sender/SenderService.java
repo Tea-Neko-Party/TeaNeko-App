@@ -19,11 +19,12 @@ import java.util.UUID;
 
 /**
  * 用于统一推送发送给客户端事件的服务。
+ * <br>2026/11/03：任务观测使用类型与 echo，不将发送正文写入任务名称。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.8
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 public class SenderService implements ISenderService {
@@ -85,7 +86,8 @@ public class SenderService implements ISenderService {
 
         // 注册 task
         var config = TaskConfig.<List<R>>builder()
-                .name("注册 sendData 的响应 future: %s".formatted(sendData.toSendString()))
+                // 2026/11/03：正文只进入原发送链，不作为任务观测或日志的元数据。
+                .name("发送响应等待：%s %s".formatted(sendData.getClass().getSimpleName(), echo))
                 .callable(() -> {
                     // 推送事件
                     iEventService.pushEventWithFuture(event).asStage().whenComplete((sent, failure) -> {

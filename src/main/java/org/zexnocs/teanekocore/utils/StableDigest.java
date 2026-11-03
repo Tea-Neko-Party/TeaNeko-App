@@ -6,9 +6,11 @@ import java.util.HexFormat;
 
 /**
  * 按有序字符串及长度计算稳定摘要，保留分隔和不成对代理项差异，不表达授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class StableDigest {

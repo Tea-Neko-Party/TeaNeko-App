@@ -11,9 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * 防止 Agent 实例与业务边界反向依赖 App、旧实现或具体配置/数据库适配器。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentLayerBoundaryTest {

@@ -7,10 +7,12 @@ import java.util.List;
 
 /**
  * 同步有序的 Agent 决策草稿；宿主冻结后不可再修改，拒绝决定不可撤销。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <T> 允许编辑的业务项类型
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public abstract class AgentDecisionEvent<T> extends AbstractEvent<AgentEventContext> implements PluginScopedEvent {

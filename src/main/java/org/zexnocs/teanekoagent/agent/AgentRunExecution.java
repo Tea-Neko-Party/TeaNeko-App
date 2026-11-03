@@ -14,9 +14,11 @@ import java.util.function.Predicate;
  * 尚未启动或正在执行的独立轮次句柄，运行引用不进入组件或 JSON。
  * 拥有者先登记取消/观察关系，再显式启动；不能通过取消结果视图停止根执行。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType

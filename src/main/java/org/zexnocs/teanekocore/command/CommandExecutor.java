@@ -16,11 +16,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * 在原任务阶段中调用命令，再非阻塞地等待命令返回的 Stage。
  * <br>2026/11/02：插件命令在实际启动与异步完成时复核插件版本。
+ * <br>2026/11/03：管理来源排队后再次复核声明、会话与连接能力。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.7.0-l
  */
 @Service("commandExecutor")
 public class CommandExecutor implements ICommandExecutor {
@@ -48,10 +49,12 @@ public class CommandExecutor implements ICommandExecutor {
     /**
      * 反射方法启动后的完成阶段封装，用于展开异步业务结果。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param stage 需要观察或组合的完成阶段
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Invocation(CompletionStage<?> stage) {}
@@ -85,6 +88,12 @@ public class CommandExecutor implements ICommandExecutor {
                     ? DEFAULT_TASK_NAMESPACE : taskNamespace;
             var task = taskService.subscribeWithFuture("指令执行", namespace, () -> {
                 if (parent != null) { parent.checkActive(); }
+                // 2026/11/03：方法必须携带受信上下文，排队间隙的撤权不能绕过检查。
+                for (var argument : args) {
+                    if (argument instanceof CommandData<?> data) {
+                        ManagementCommandPolicy.check(data, method);
+                    }
+                }
                 // 2026/11/02：捕获实际调用时的归属版本，异步结果也必须复核。
                 var token = pluginAccess == null ? null : pluginAccess.capture(object, method);
                 final Object returned;

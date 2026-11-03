@@ -32,9 +32,11 @@ import java.util.function.Supplier;
  * 将当前真实用户画像及同 namespace 的共享事实接入实际 Prompt，不从历史推导授权。
  * 两次读取共享条数、字符和扫描预算，各自保留读取时刻与覆盖，不冒充同一数据库快照。
  * <br>2026/11/02：共享事实不再要求整句原文匹配，并为跨主体记忆预留读取预算。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class AgentMemoryPromptSource implements IAgentPromptSource {

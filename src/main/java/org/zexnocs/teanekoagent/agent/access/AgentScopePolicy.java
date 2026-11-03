@@ -6,12 +6,14 @@ import java.util.Objects;
 
 /**
  * 本次读取的作用域开关快照；未登记不使用默认启用值，触发判定仍由独立策略完成。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param registered 是否存在真实配置登记
  * @param enabled 是否启用本作用域 Agent
  * @param mode 主动或被动级别
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentScopePolicy(boolean registered, boolean enabled, Mode mode) {
@@ -45,9 +47,11 @@ public record AgentScopePolicy(boolean registered, boolean enabled, Mode mode) {
 
     /**
      * 触发策略使用的三级模式，门控只决定是否允许，不自动判定消息是否应回复。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Mode { PASSIVE_BASIC, PASSIVE_CONTEXTUAL, ACTIVE }

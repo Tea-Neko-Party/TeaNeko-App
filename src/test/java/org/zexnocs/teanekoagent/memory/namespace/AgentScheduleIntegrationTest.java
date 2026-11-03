@@ -32,13 +32,40 @@ import static org.zexnocs.teanekoagent.schedule.AgentScheduledTask.Status.*;
 
 /**
  * 复用真实 EasyData 事务夹具，验证调度幂等、取消竞争和重启不补跑。
+ * <br>2026/11/03：覆盖独立管理取消的权限、版本、回执及撤权事务回滚。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 @Timeout(15)
 class AgentScheduleIntegrationTest {
+    /** 2026/11/03：不伪造原生来源，管理取消与原计划状态同事务提交并保留原回执。 */
+    @Test
+    void managementCancelIsScopedVersionedIdempotentAndRollsBackRevocation() {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var store = new EasyDataScheduleStore(db.data, db.mapper);
+            var task = new AgentScheduledTask(UUID.randomUUID(), spec("管理取消", NOW.plusSeconds(60), 0),
+                    NOW.plusSeconds(60), ACTIVE, 1, "等待");
+            store.create(task).toCompletableFuture().join();
+            var query = new org.zexnocs.teanekoagent.schedule.ScheduleManagement.Query("CANCEL", "", task.id(), 1, UUID.randomUUID());
+            var checks = new AtomicInteger();
+            assertThrows(CompletionException.class, () -> store.manage(ACTOR.scope(), "web.local-admin", query, () -> {
+                if (checks.incrementAndGet() == 2) throw new SecurityException("测试事务内撤权。");
+            }).toCompletableFuture().join());
+            assertEquals(ACTIVE, store.find(task.id()).toCompletableFuture().join().orElseThrow().status());
+            assertThrows(CompletionException.class, () -> store.manage(new AgentScope("other", "scope"), "web.local-admin", query, () -> {}).toCompletableFuture().join());
+            var receipt = store.manage(ACTOR.scope(), "web.local-admin", query, () -> {}).toCompletableFuture().join();
+            assertEquals("APPLIED", receipt.status());
+            assertEquals(CANCELLED, store.find(task.id()).toCompletableFuture().join().orElseThrow().status());
+            assertEquals(receipt, store.manage(ACTOR.scope(), "web.local-admin", query, () -> {}).toCompletableFuture().join());
+            var lookup = new org.zexnocs.teanekoagent.schedule.ScheduleManagement.Query("OPERATION", "", task.id(), 1, query.operationId());
+            assertEquals(receipt, store.manage(ACTOR.scope(), "web.local-admin", lookup, () -> {}).toCompletableFuture().join());
+            assertThrows(CompletionException.class, () -> store.manage(ACTOR.scope(), "another-admin", lookup, () -> {}).toCompletableFuture().join());
+        }
+    }
     private static final Instant NOW = Instant.parse("2026-11-01T00:00:00Z");
     private static final AgentActorContext ACTOR = new AgentActorContext(new AgentScope("client", "scope"),
             AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "native-user", "message", "target");

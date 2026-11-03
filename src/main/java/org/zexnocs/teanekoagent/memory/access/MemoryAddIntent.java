@@ -14,9 +14,11 @@ import java.util.Optional;
  * <br>2026/11/03：允许自然省略冒号，仍拒绝“记住了吗”等回顾询问。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @JsonIgnoreType

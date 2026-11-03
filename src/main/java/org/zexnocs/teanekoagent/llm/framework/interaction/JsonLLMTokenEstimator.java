@@ -12,9 +12,11 @@ import java.util.Objects;
  * 按消息、工具定义及透明状态的 UTF-8 JSON 字节数加固定开销进行保守本地估算。
  * 这不是具体模型的 tokenizer，图片计费和供应商隐藏开销尤其不能据此保证精确上界。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class JsonLLMTokenEstimator implements ILLMTokenEstimator {
@@ -46,9 +48,11 @@ public final class JsonLLMTokenEstimator implements ILLMTokenEstimator {
 
     /**
      * 只统计序列化长度的内存输出端，不持有任何正文副本。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class CountingOutput extends OutputStream {

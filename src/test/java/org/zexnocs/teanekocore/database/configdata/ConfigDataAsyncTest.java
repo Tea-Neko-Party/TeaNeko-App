@@ -33,18 +33,25 @@ import static org.mockito.Mockito.*;
 /**
  * 验证配置注册、注销和字段写入的真实完成链及提交前校验。
  *
+ * 修改记录：<br>
+ * 2026/11/03：字段更新改为提交时当前读，保留原有完成与失败合同验证。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 class ConfigDataAsyncTest {
     /**
      * 供字段和列表写入测试使用的最小配置数据。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class Settings implements IConfigData {
@@ -55,9 +62,11 @@ class ConfigDataAsyncTest {
     /**
      * 没有默认构造器的非法配置夹具，用于提交前拒绝验证。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static class NoDefaultConstructor implements IConfigData {
@@ -137,15 +146,8 @@ class ConfigDataAsyncTest {
         assertFalse(stage.toCompletableFuture().isDone());
         assertTrue(continued.isEmpty());
         verify(task, never()).push();
-        var value = org.mockito.ArgumentCaptor.forClass(Object.class);
-        verify(task).set(eq("scope"), value.capture());
-        var settings = assertInstanceOf(Settings.class, value.getValue());
-        switch (action) {
-            case "set" -> assertEquals(7, settings.limit);
-            case "add" -> assertEquals(List.of("first", "second", "third"), settings.names);
-            case "remove" -> assertEquals(List.of("second"), settings.names);
-            case "clear" -> assertTrue(settings.names.isEmpty());
-        }
+        // 2026/11/03：数据合并由真实事务集成用例覆盖，此处只验证提交与完成边界。
+        verify(task).addTransactionTask(any());
 
         result.complete(EmptyTaskResult.INSTANCE);
 

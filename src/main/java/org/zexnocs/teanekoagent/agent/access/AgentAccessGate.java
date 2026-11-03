@@ -15,11 +15,14 @@ import static org.zexnocs.teanekoagent.agent.access.AgentAccessDecision.Reason.*
 /**
  * 新 Agent 所有活动的统一准入检查，先验证实例和 scope，再读取运行配置或凭据。
  * 管理注册、注销与诊断入口不通过本门控执行，从而允许未注册作用域开通功能。
+ * <br>2026/11/03：明确拒绝管理主体直接进入聊天或模型活动。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public final class AgentAccessGate {
     private final IAgentRegistry registry;
@@ -68,6 +71,10 @@ public final class AgentAccessGate {
         Objects.requireNonNull(handle, "Agent 实例不能为空。");
         Objects.requireNonNull(actor, "请求身份不能为空。");
         Objects.requireNonNull(activity, "Agent 活动不能为空。");
+        // 2026/11/03：管理授权不等于聊天或系统活动授权。
+        if (actor.origin() == AgentActorContext.Origin.MANAGEMENT) {
+            return denied(INVALID_ORIGIN);
+        }
         if (handle.isClosed()) { return denied(INSTANCE_CLOSED); }
         if (registry.find(handle.id()).filter(registered -> registered == handle).isEmpty()) { return denied(INSTANCE_NOT_REGISTERED); }
         if (!handle.definition().activities().contains(activity)) { return denied(ACTIVITY_DISABLED); }

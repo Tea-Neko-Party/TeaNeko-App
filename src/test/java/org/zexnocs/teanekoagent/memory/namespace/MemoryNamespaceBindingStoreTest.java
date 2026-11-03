@@ -20,9 +20,11 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceBindingOu
 
 /**
  * 验证真实绑定适配器的原子创建、持久化回执、版本竞争和来源隔离。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class MemoryNamespaceBindingStoreTest {

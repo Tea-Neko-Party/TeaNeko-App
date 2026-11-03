@@ -31,9 +31,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证应用配置、权限和拒绝反馈均等待真实异步完成。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AppCommandCompletionTest {

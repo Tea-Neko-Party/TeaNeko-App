@@ -21,9 +21,11 @@ import java.util.stream.Collectors;
 /**
  * 新 Agent 的显式聊天、状态、本人停止及空间管理入口，统一等待业务和反馈。
  * <br>2026/11/02：为全部子命令提供 subhelp 可读取的用途和参数说明。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Command(value = "/agent", permission = CommandPermission.ALL, scope = CommandScope.ALL)

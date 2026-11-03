@@ -5,9 +5,11 @@ import java.util.Objects;
 
 /**
  * Prompt 资料端口的固定失败类别，不导出源正文、权限数据或原异常链。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentPromptException extends RuntimeException {
@@ -38,9 +40,11 @@ public final class AgentPromptException extends RuntimeException {
 
     /**
      * 分离功能关闭、绑定变化、来源故障及原始输入超限。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Reason { DISABLED, CHANGED, UNAVAILABLE, INPUT_TOO_LARGE }

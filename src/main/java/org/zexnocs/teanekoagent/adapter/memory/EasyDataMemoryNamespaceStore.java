@@ -23,9 +23,11 @@ import static org.zexnocs.teanekoagent.memory.namespace.MemoryNamespaceMutation.
  * 通过 Agent 专用 EasyData DTO 保存空间元数据，不直接接触仓库或数据库实体。
  * 每次重试在 DatabaseTask 的新事务中重读行，以唯一键和已有 Version 仲裁创建及配额索引。
  * 不使用 EasyData DTO 缓存或无版本批量更新，提交成功后才公开业务结果。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -280,11 +282,13 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
 
     /**
      * 明确版本的空间存储外壳，不序列化整个 ECS 实体或 Java 类名。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储结构版本
      * @param value 业务元数据
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record NamespaceData(int schemaVersion, MemoryNamespace value) {
@@ -301,12 +305,14 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
 
     /**
      * 单个创建者的活动空间索引；受该行 Version 保护，空间记录与索引同事务提交。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储版本
      * @param creator TeaNeko UUID
      * @param ids 按登记顺序排列的活动空间
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record CreatorIndex(int schemaVersion, UUID creator, List<MemoryNamespaceId> ids) {

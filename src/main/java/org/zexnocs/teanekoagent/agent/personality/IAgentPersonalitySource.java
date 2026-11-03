@@ -6,9 +6,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 人格解析及当前身份复核端口，Agent 不依赖文件、数据库或补正存储实现。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentPersonalitySource {

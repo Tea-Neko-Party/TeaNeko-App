@@ -4,9 +4,11 @@ package org.zexnocs.teanekoagent.llm.framework.interaction;
  * 调用时解析本地默认设置的端口，独立于 Agent、Prompt 和供应商凭据。
  * 实现不得在构造阶段因可修复的本地配置错误阻断应用启动。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface

@@ -147,9 +147,11 @@ public class FakeMessageSenderTools implements IMessageSenderTools {
     /**
      * 在测试客户端内组合转发节点和分段发送参数，不访问真实平台。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private class ForwardBuilder implements IForwardMessageSenderBuilder {

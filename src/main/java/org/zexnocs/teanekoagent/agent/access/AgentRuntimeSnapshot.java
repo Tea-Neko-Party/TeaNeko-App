@@ -8,12 +8,14 @@ import java.util.Objects;
 
 /**
  * 可供后续轮次组件使用的就绪数据，凭据解析结果始终留在检查边界之外。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param modelOptions 已解析的模型参数
  * @param capabilities 具体模型的能力快照
  * @param interaction 本次交互设置
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentRuntimeSnapshot(LLMModelOptionsSnapshot modelOptions, ModelCapabilities capabilities,

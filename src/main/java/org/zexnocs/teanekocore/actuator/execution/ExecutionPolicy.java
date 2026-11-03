@@ -6,11 +6,13 @@ import java.util.Objects;
 /**
  * 阶段时限及借用的执行控制；作为独立调用参数传递，不属于业务数据或模型选项。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param timeout 阶段时限；按接口约定可为空
  * @param control 借用的取消、截止时间和预算控制
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record ExecutionPolicy(Duration timeout, ExecutionControl control) {

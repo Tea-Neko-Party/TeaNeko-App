@@ -30,9 +30,11 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*
  * 拥有者须关闭本实例；注入的执行器、调度器和父控制均不归本实例所有。
  * 此类型不自动循环、不提交业务历史，模型响应与工具调用的关联由上层编排验证。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  * @see LLMCallLimits
  */
@@ -480,9 +482,11 @@ public final class LLMInteractionExecution implements AutoCloseable {
     /**
      * 响应违反工具开放策略的专用信号，避免把执行器故障误判为非法模型响应。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static final class ToolRoundUnavailableException extends IllegalStateException {
@@ -492,9 +496,11 @@ public final class LLMInteractionExecution implements AutoCloseable {
 
     /**
      * 无法安全冻结模型响应的协议错误，不持有原始供应商异常。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     static final class InvalidModelResponseException extends IllegalStateException {
@@ -505,13 +511,15 @@ public final class LLMInteractionExecution implements AutoCloseable {
     /**
      * 本批工具请求的不可变协议快照。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param getId 工具调用 ID
      * @param getType 调用类型
      * @param getName 工具名称
      * @param getArguments 模型业务参数 JSON
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Call(String getId, String getType, String getName, String getArguments) implements ILLMToolCall {}

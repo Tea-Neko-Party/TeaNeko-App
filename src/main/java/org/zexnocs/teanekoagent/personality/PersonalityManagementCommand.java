@@ -7,7 +7,10 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * 可信管理入口固定的补正操作，身份来自原生消息，版本来自显式查询结果。
+ * 可信管理入口固定的补正操作，身份来自原生或独立管理入口，版本来自显式查询结果。
+ * <br>2026/11/03：接受显式授权的管理主体，不继承原生用户身份。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param operationId 原消息稳定操作标识
  * @param actor 真实 DEBUG 操作者，由调用边界校验权限
  * @param action 管理动作
@@ -20,8 +23,8 @@ import java.util.UUID;
  * @param locked 明确锁定值
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public record PersonalityManagementCommand(UUID operationId, AgentActorContext actor, Action action, String key,
         long bindingRevision, long stateRevision, @Nullable UUID correctionId, @Nullable String field,
@@ -51,7 +54,8 @@ public record PersonalityManagementCommand(UUID operationId, AgentActorContext a
             case REMOVE -> correctionId != null && field == null && text == null && locked == null;
             case BIND, CLONE, BACKUP -> correctionId == null && field == null && text == null && locked == null;
         };
-        if (actor.origin() != AgentActorContext.Origin.USER || actor.userId().isEmpty() || key == null || key.isBlank() || key.length() > 256
+        // 2026/11/03：系统学习与管理员补正保持不同来源。
+        if (actor.origin() == AgentActorContext.Origin.SYSTEM || actor.userId().isEmpty() || key == null || key.isBlank() || key.length() > 256
                 || bindingRevision < 1 || stateRevision < (action == Action.BIND ? -1 : 0)
                 || !validArguments
                 || text != null && (text.isBlank() || text.length() > 512)
@@ -62,9 +66,11 @@ public record PersonalityManagementCommand(UUID operationId, AgentActorContext a
 
     /**
      * 补正管理的独立动作，不作为模型自动学习协议。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Action { BIND, CLONE, BACKUP, ADD, EDIT, LOCK, REMOVE }

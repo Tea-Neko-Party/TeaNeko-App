@@ -18,9 +18,11 @@ import static org.zexnocs.teanekoagent.schedule.AgentScheduledTask.Status.*;
 /**
  * 显式装配的单宿主任务调度服务；原 Timer 驱动分页扫描，数据库仲裁每次发生的执行权。
  * 不默认安装动作或权限实现，不以保存的创建者信息代替当前权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentScheduleService implements AutoCloseable {
@@ -281,9 +283,11 @@ public final class AgentScheduleService implements AutoCloseable {
     /**
      * 当前真实权限检查；CREATE/EXECUTE 必须检查 scope 注册、启用、动作能力和创建者当前权限，
      * READ/CANCEL 必须检查归属或 scope 管理权限；查询失败应拒绝，不能从保存记录推导 DEBUG。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @FunctionalInterface public interface Policy {
@@ -300,9 +304,11 @@ public final class AgentScheduleService implements AutoCloseable {
     /**
      * 宿主注册的动作执行器，必须在每个副作用前等待 guard，并使用任务 ID 加 nextFire 作为幂等键。
      * 不盲目重试，也不能把保存的创建者直接转换为高权限命令来源。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @FunctionalInterface public interface Action {
@@ -317,29 +323,35 @@ public final class AgentScheduleService implements AutoCloseable {
 
     /**
      * 区分管理和执行权限。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Operation { CREATE, READ, CANCEL, EXECUTE }
 
     /**
      * 执行器返回的业务结果，不透传敏感异常。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Outcome { COMPLETED, REJECTED, INDETERMINATE }
 
     /**
      * 可过滤的有界列表；后续页不根据展示数量推断。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param tasks 当前可见任务
      * @param nextCursor 继续游标
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Page(List<AgentScheduledTask> tasks, String nextCursor) {

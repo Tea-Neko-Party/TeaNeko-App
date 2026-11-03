@@ -5,11 +5,13 @@ import java.util.Objects;
 
 /**
  * 内存会话保留策略，空闲到期与长期记忆、历史落库互不替代。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param maxConversations 当前服务允许保留的会话数，包含运行与排队中的会话
  * @param idleTtl 无在途请求后的空闲有效期
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationSettings(int maxConversations, Duration idleTtl) {

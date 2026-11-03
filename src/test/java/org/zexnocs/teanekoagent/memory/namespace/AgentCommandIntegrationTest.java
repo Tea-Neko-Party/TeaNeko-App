@@ -109,18 +109,22 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：覆盖拟人编译、语义历史及双原生入口交付。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
     /**
      * 受控原生命令，业务由用例完成；非静态测试类不参与应用自动扫描。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Command(value = "/agent-test", permission = CommandPermission.OWNER, scope = CommandScope.ALL)
@@ -141,9 +145,11 @@ class AgentCommandIntegrationTest {
      * <br>2026/11/03：加入真实专用数据发送账本，复用原发送、失败和取消用例。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.6.2-l
      */
     private final class Harness implements AutoCloseable {
@@ -167,9 +173,11 @@ class AgentCommandIntegrationTest {
          * 当前测试拥有的局部表达容器与队列，不引入新的数据库替身。
          * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
          *
+         * <br>2026/11/04：校正 @since 为首次引入版本。
+         *
          * @author zExNocs
          * @date 2026/11/03
-         * @since 4.0.0
+         * @since 4.6.2-l
          * @version 4.6.2-l
          */
         private final class ExpressionHarness implements AutoCloseable {

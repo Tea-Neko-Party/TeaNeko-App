@@ -40,12 +40,14 @@ public record AgentConversationResponse(@Nullable UUID requestId, String status,
     }
     /**
      * 可序列化的明确内容，接收方不能将正文 URL 自动转成图片。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param type text 或 image
      * @param value 字面正文或明确图片引用
      * @param mode REPLY、AT 或 PLAIN；目标始终是原生来源
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Content(String type, String value, String mode) { }

@@ -38,9 +38,11 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*
 /**
  * 用真实 Core 控制和工具集验证阶段时限、局部与父共享预算、末次关闭工具和顺序等待。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class LLMInteractionExecutionTest {

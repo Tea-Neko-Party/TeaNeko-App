@@ -6,11 +6,13 @@ import org.zexnocs.teanekoclient.onebot.data.send.ISendParamsData;
 
 /**
  * 单群资料查询参数，复用协议中与群列表相同的响应结构。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param groupId 当前宿主确认的群号
  * @param noCache 是否要求供应商绕过缓存
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 public record GetGroupInfoParamsData(@JsonProperty("group_id") long groupId,

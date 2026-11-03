@@ -10,9 +10,11 @@ import org.zexnocs.teanekocore.plugin.PluginOwned;
 /**
  * 展示可修改事件的有序同步监听，仅对安装示例能力的实例生效。
  * 与示例配置使用同一启用条件，避免配置关闭后监听器仍进入扫描。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @PluginOwned("example.clock")

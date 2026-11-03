@@ -2,9 +2,11 @@ package org.zexnocs.teanekoagent.agent.monitor;
 import org.zexnocs.teanekocore.event.AbstractEvent;
 /**
  * 本地阈值触发的脱敏用量告警，仅供监控消费，不产生聊天通知或执行权限。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentTokenAlertEvent extends AbstractEvent<AgentTokenAlertEvent.Alert> {
@@ -15,12 +17,14 @@ public final class AgentTokenAlertEvent extends AbstractEvent<AgentTokenAlertEve
     public AgentTokenAlertEvent(Alert alert) { super(alert); }
     /**
      * 同 scope/实例冷却内只聚合次数，不保留业务正文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param report 当前轮次脱敏统计
      * @param threshold 本次本地阈值
      * @param suppressed 上个冷却期合并的告警数
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Alert(AgentTurnReport report, long threshold, long suppressed) { }

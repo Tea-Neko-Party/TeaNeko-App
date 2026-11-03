@@ -27,9 +27,11 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * 宿主显式的顺序协作，复用独立轮次及父预算，不自动分派聊天或共享可变会话。
  * 服务借用实例、执行器和父控制，只关闭本次创建的子控制；不自动重试副作用。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentWorkflowService {
@@ -191,12 +193,14 @@ public final class AgentWorkflowService {
     }
     /**
      * 当前调用内的只读步骤观察，借用实例仅用于只读复核，不进入组件。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param step 原计划步骤
      * @param request 实际派生请求
      * @param result 已观察结果
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Completed(AgentWorkflowStep step, AgentRunRequest request, AgentRunResult result) {}

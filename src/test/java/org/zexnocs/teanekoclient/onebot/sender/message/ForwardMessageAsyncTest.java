@@ -34,9 +34,11 @@ import static org.mockito.Mockito.*;
 /**
  * 离线验证群聊与私聊转发的分段完成链及任务参数保持。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class ForwardMessageAsyncTest {
@@ -48,6 +50,8 @@ class ForwardMessageAsyncTest {
     /**
      * 保存一个由测试主动确认的转发分段回执。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param event 用于本次测试的 {@code event} 数据
      * @param delay 提交任务前的延迟
      * @param retries 用于本次测试的 {@code retries} 数据
@@ -55,7 +59,7 @@ class ForwardMessageAsyncTest {
      * @param result 已经形成的处理结果
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record PendingSend(IEvent<?> event, Duration delay, int retries, Duration retryInterval,

@@ -25,9 +25,11 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * 默认观察式人格装配，独立只读宿主没有事务人格实现时保留原行为。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @Configuration(proxyBeanMethods = false)

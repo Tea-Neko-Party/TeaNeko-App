@@ -28,9 +28,11 @@ import java.util.concurrent.ScheduledExecutorService;
  * <br>2026/11/02：组合内置和插件来源并安装受控 System、决策事件及异步拦截。
  * <br>2026/11/02：注解提供者只经其能力贡献一次，不作为宿主额外来源重复聚合。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

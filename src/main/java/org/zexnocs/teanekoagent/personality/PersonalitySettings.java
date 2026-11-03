@@ -2,6 +2,8 @@ package org.zexnocs.teanekoagent.personality;
 
 /**
  * 本轮固定的人格选择与独立应用/学习开关，不包含可由普通配置修改的补正 key。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param personalityId 基础人格，空值使用本地默认
  * @param customEnabled 是否替换人格描述层
  * @param customPersonality 作用域自定义描述
@@ -10,7 +12,7 @@ package org.zexnocs.teanekoagent.personality;
  * @param learningEnabled 是否允许候选新增，不自动触发模型学习
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record PersonalitySettings(String personalityId, boolean customEnabled, String customPersonality, String customSpeakingStyle,

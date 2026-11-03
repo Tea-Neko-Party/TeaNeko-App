@@ -30,9 +30,11 @@ import java.util.Map;
  * <br>2026/11/03：会话提交核验一次编译的表达语义投影。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 public final class AgentConversationEngine {
@@ -246,6 +248,8 @@ public final class AgentConversationEngine {
 
     /**
      * 本轮实际输入及提交数据，不包含运行服务或控制。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param request 固定历史和新输入组成的请求
      * @param window 实际采用的完整历史窗口
      * @param options 本轮固定策略
@@ -253,7 +257,7 @@ public final class AgentConversationEngine {
      * @param signature 实际完整输入的协议指纹
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Prepared(AgentRunRequest request, AgentConversationWindow window, AgentConversationOptions options,
@@ -261,9 +265,11 @@ public final class AgentConversationEngine {
 
     /**
      * 新增输入自身超过本轮上限，不能靠移除历史继续调用模型。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public static final class InputTooLargeException extends RuntimeException {

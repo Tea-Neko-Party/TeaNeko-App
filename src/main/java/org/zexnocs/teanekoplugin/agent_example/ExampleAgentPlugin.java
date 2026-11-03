@@ -12,9 +12,11 @@ import java.util.Set;
 
 /**
  * 默认不装配的可编译插件示例；配置启用后仍需实例显式选择能力。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

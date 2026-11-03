@@ -18,9 +18,11 @@ import static org.mockito.Mockito.when;
 
 /**
  * 只覆盖分级、并发占用、实际交付窗口及主动静默冷却等行为边界。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentTriggerGateTest {

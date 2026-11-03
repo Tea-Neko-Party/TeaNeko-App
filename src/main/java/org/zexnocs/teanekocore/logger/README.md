@@ -2,6 +2,8 @@
 
 `logger` 提供 TeaNeko Core 内部统一日志接口。其它模块依赖 `ILogger`，从而避免直接绑定具体日志实现。
 
+4.7.0-l 的 Web 运行窗口在应用就绪后旁路采集实际 Logback 事件，不改变 ILogger 接口或其他输出器。默认只记录元数据，正文须在本机明确启用；不保留参数数组和异常链。容量、保留与脱敏限制见[任务与日志](../../../../../../../docs/development/web-console-runtime.md)。
+
 | 类或接口 | 作用 |
 |:---:|---|
 | `ILogger` | 日志接口，定义 `info`、`error`、`warn`、`debug` 和 `errorWithReport`。 |

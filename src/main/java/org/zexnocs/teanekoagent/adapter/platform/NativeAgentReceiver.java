@@ -33,9 +33,11 @@ import java.util.stream.Collectors;
  * 不取消其他插件事件，不接收内部 Agent 消息，不因文本里的身份声明授予触发权限。
  * <br>2026/11/02：私聊普通图文使用独立原生信号直接触发。
  * <br>2026/11/03：入站失败补充不含原文和密钥的异常类型及代码位置。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.1-l
  */
 @EventListener
@@ -207,13 +209,15 @@ public final class NativeAgentReceiver {
 
     /**
      * 当前原文和原生信号的短暂解析，不包含平台句柄或引用正文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param payload 当前冻结图文与平台时间
      * @param self 可信机器人平台 ID
      * @param mention 原生提及
      * @param named 显式配置称呼
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Input(NativeMessageInput payload, String self, boolean mention, boolean named) { }

@@ -14,6 +14,8 @@ import java.util.UUID;
 /**
  * 从当前空间内已接受证据重建的不可变用户画像，不单独持久化一份推断结论。
  * 投影规则版本及各证据的 ID/revision 用于追溯，不冒充全空间的单调版本。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reference 本次读取的固定引用
  * @param subjectId 唯一画像主体
  * @param projectionVersion 构建规则版本
@@ -25,7 +27,7 @@ import java.util.UUID;
  * @param characters 紧凑证据数组字符数，不含画像外层信封
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record UserProfileView(MemoryNamespaceReference reference, UUID subjectId, int projectionVersion, Instant observedAt,

@@ -5,9 +5,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 可替换的中期生成端口，模型只提供摘要，不决定身份、覆盖范围或提交水位。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 @FunctionalInterface

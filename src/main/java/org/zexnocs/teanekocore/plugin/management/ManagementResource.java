@@ -7,11 +7,13 @@ import java.util.concurrent.CompletionStage;
 /**
  * 插件可贡献的具名类型化管理用例，供未来 Web 和命令适配复用。
  * 写用例自行通过领域服务完成预期版本、幂等及审计，不直接访问 Repository。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <Q> 明确请求 DTO 类型
  * @param <R> 明确返回 View 类型
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public interface ManagementResource<Q, R> {
@@ -29,6 +31,8 @@ public interface ManagementResource<Q, R> {
 
     /**
      * 资源能力及表单字段声明，不包含任何配置实际值。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param pluginId 所属插件
      * @param id 插件内资源 ID
      * @param schemaVersion DTO 协议版本
@@ -37,7 +41,7 @@ public interface ManagementResource<Q, R> {
      * @param fields 可渲染的请求字段
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     record Descriptor(String pluginId, String id, int schemaVersion, String permission, boolean mutation, List<Field> fields) {
@@ -63,6 +67,8 @@ public interface ManagementResource<Q, R> {
 
     /**
      * 最小通用表单字段，不自动读取 Java 对象或展开敏感值。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param name 稳定字段名
      * @param type string、integer、boolean 等显式展示类型
      * @param description 中文用途说明
@@ -71,7 +77,7 @@ public interface ManagementResource<Q, R> {
      * @param choices 有限枚举候选
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     record Field(String name, String type, String description, boolean required, boolean sensitive, List<String> choices) {

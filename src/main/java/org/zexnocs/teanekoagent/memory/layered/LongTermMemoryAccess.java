@@ -20,9 +20,11 @@ import java.util.function.Function;
 
 /**
  * 长期记忆的可信读写边界，模型不能指定 namespace 或以工具参数自报操作者。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class LongTermMemoryAccess {
@@ -125,13 +127,15 @@ public final class LongTermMemoryAccess {
     }
     /**
      * 真实作用域配置，不由模型的声明产生。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param enabled 已登记且启用
      * @param read 允许读取
      * @param learn 允许自动学习
      * @param write 允许本人明确维护
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     public record Policy(boolean enabled, boolean read, boolean learn, boolean write) { }

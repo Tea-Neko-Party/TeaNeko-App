@@ -112,6 +112,10 @@ public class HelloCommand {
 
 # 六. 注意事项
 
+4.7.0-l 新增 `CommandOrigin` 与显式管理方法声明。旧调用默认 NATIVE，管理入口必须为 MANAGEMENT，并声明 `@ManagementCommand`、具体 `CommandData<T>` 与 `IManagedCommandSource`；分发和实际排队启动均复核来源，其他权限及事件继续走原链。签名声明不能将网页登录变成平台成员身份。App 上下文、插件示例与回执边界见[客户端指令台](../../../../../../../docs/development/web-console-commands.md)。
+
+可撤销原生来源额外实现 `ICommandSourceGuard`，同样在分发和排队启动复核，继续使用 NATIVE 原角色。网页客户端以此阻止退出或成员变更后的迟到命令，原 OneBot 等未声明此守卫的调用保持既有行为。
+
 | 场景 | 建议 |
 |---|---|
 | `DEFAULT` 权限或作用域 | `DEFAULT` 用于子命令继承父命令。不要把顶层 `@Command` 直接设置为 `DEFAULT`，否则通常不可用。 |

@@ -7,6 +7,8 @@ import java.util.Objects;
 
 /**
  * 作用域的人格持久化绑定，独立于记忆空间；revision 变化要求短期会话换代。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param scope 真实作用域
  * @param baseFingerprint 基础内容标识
  * @param correctionKey 当前补正空间
@@ -14,7 +16,7 @@ import java.util.Objects;
  * @param backupKey 最近基础人格切换保存的不可变备份，首次初始化时为空
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record PersonalityBinding(AgentScope scope, String baseFingerprint, String correctionKey, long revision, @Nullable String backupKey) {

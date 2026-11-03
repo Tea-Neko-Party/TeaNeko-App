@@ -6,9 +6,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 为独立轮次提供当前持久化空间引用及异步复核，不把存储资源或权限对象交给 LLM。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentMemoryReferences {

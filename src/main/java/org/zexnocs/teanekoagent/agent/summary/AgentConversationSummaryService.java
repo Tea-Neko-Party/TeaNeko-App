@@ -47,9 +47,11 @@ import java.util.stream.Collectors;
 /**
  * 在借用业务域生成可重建的会话压缩状态，最多两个在途任务、无等待队列。
  * 失败不修改窗口，成功结果仍须由邮箱核对覆盖指纹后采用，不写长期事实或用户画像。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentConversationSummaryService implements IAgentConversationSummaries, AutoCloseable {
@@ -327,9 +329,11 @@ public final class AgentConversationSummaryService implements IAgentConversation
     }
     /**
      * 有界缓存与运行标识，所有字段由本服务锁保护。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Slot {
@@ -347,6 +351,8 @@ public final class AgentConversationSummaryService implements IAgentConversation
     }
     /**
      * 与前台共享预算维度的非敏感后台用量，不保存 Prompt 或正文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param executionId 后台执行 ID
      * @param stamp 原会话代次
      * @param status 实际交互状态
@@ -355,7 +361,7 @@ public final class AgentConversationSummaryService implements IAgentConversation
      * @param tokenUsage 实际逐次 token 记账，保留报告/估算及未知区别
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Usage(UUID executionId, AgentConversationStamp stamp, LLMInteractionResult.Status status, boolean accepted,

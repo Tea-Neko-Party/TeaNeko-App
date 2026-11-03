@@ -31,9 +31,11 @@ import static org.zexnocs.teanekoagent.extension.AgentExtensionCapability.*;
  * 将显式后端接入原工具和资料生命周期，不自动注册文件、代码或知识能力。
  * 工具只在实际保留能力声明时加入；每次执行、模型使用及重放均复核可信策略。
  * <br>2026/11/02：移除自有资料片段时保留插件固定版本，兼容多能力组合。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class AgentExtensionTools {
@@ -316,11 +318,13 @@ public final class AgentExtensionTools {
     }
     /**
      * 原工具策略的显式扩展，构造时不执行后端。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param delegate 原策略
      * @param bindings 显式绑定
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record ToolSource(IAgentToolSource delegate, List<LLMToolBinding> bindings) implements IAgentToolSource {
@@ -347,12 +351,14 @@ public final class AgentExtensionTools {
     }
     /**
      * 扩展资料生命周期与原来源组合，使用前和重放前都必须再次授权。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param delegate 原来源
      * @param capabilities 明确能力
      * @param owner 当前适配器
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record PromptSource(IAgentPromptSource delegate, Set<AgentExtensionCapability> capabilities, AgentExtensionTools owner) implements IAgentPromptSource {

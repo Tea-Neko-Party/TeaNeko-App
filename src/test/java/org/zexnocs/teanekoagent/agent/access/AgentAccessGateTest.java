@@ -21,9 +21,11 @@ import static org.zexnocs.teanekoagent.agent.access.AgentAccessDecision.Reason.*
 /**
  * 验证每类活动都遵守统一登记边界，前置拒绝不读取配置或凭据，也不执行任何业务。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentAccessGateTest {

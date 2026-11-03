@@ -5,6 +5,8 @@ import java.util.Set;
 
 /**
  * 外部证据的不可变原文及转换说明，仅用于可信审计，不直接注入 Prompt。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param system 来源系统及格式
  * @param target 外部物理目标
  * @param key 外部物理键
@@ -14,7 +16,7 @@ import java.util.Set;
  * @param adjustments 已明确执行的兼容调整
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactProvenance(String system, String target, String key, String externalId,

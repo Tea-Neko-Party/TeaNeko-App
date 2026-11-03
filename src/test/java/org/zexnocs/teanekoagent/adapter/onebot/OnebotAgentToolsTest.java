@@ -73,9 +73,11 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：验证机器人原生身份和自身提及，不污染用户原文。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.2-l
  */
 class OnebotAgentToolsTest {

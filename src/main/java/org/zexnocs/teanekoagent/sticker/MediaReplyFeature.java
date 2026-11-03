@@ -24,13 +24,19 @@ import java.util.concurrent.Executor;
  * 明确拥有媒体资料和目录工具，预算省略资料后不会暗中保留选图权限。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：统一媒体能力和注解工具的归属标识，修复启动注册失败。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.6.2-l
+ * @version 4.7.0-l
  */
 @Component
-public final class MediaReplyFeature implements AgentFeature{
+public final class MediaReplyFeature implements AgentFeature {
+    /** 2026/11/04：媒体能力与所属注解工具共用的稳定标识。 */
+    public static final String ID = "media-replies";
+
     private final StickerReplyService service;private final StickerReplyTools tools;private final ObjectMapper mapper;private final Executor executor;
     /**
      * @param service 原资源宿主
@@ -40,7 +46,15 @@ public final class MediaReplyFeature implements AgentFeature{
      */
     public MediaReplyFeature(StickerReplyService service,StickerReplyTools tools,ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){this.service=service;this.tools=tools;this.mapper=mapper;this.executor=executor;}
     /** @return 宿主插件 */ @Override public String pluginId(){return "teaneko.agent";}
-    /** @return 能力标识 */ @Override public String id(){return "media-replies";}
+    /**
+     * 2026/11/04：与所属工具注解共享标识，防止注册声明与实际能力不一致。
+     *
+     * @return 稳定的媒体能力标识
+     */
+    @Override
+    public String id() {
+        return ID;
+    }
     /** @return 默认安装 */ @Override public boolean defaultEnabled(){return true;}
     /** @return 同时安装完整表达合同，显式选择媒体能力也能解析最终指令 */
     @Override public Set<String> dependencies(){return Set.of("teaneko.agent:expression");}

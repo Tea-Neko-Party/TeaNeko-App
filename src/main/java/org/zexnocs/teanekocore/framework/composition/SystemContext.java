@@ -7,11 +7,13 @@ import java.util.Objects;
 /**
  * 不含可变实体句柄或服务定位器的单步骤上下文。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param snapshot 本步骤读取的不可变实体快照
  * @param control 借用的取消、截止时间和预算控制
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record SystemContext(EntitySnapshot snapshot, ExecutionControl control) {

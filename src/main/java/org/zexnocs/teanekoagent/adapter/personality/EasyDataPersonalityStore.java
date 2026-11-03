@@ -24,13 +24,40 @@ import java.util.function.Supplier;
  * 不接触画像或 memory namespace，不沿用旧无保护 JSON 整列表写回。
  * <br>2026/11/03：允许表达观察在原事务中按固定人格和管理代次渐进采用。
  * <br>2026/11/03：释放到期补正占用的容量，保持备份不可变与管理代次稳定。
+ * <br>2026/11/03：按原编号查询同管理主体及目标的持久化回执。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.6.1-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 public final class EasyDataPersonalityStore implements IPersonalityStore, IPersonalityManagementStore, IMemoryMaintenance {
+    /**
+     * 2026/11/03：按原编号查询同管理主体结果，不重放修改。
+     * @param operationId 原操作
+     * @param actor 原主体及目标
+     * @param guard 当前授权
+     * @return 实际原回执
+     */
+    @Override
+    public CompletionStage<PersonalityManagementResult> operation(java.util.UUID operationId,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, Runnable guard) {
+        return submit(() -> {
+            guard.run();
+            var row = dto("management-operation").find(operationId.toString(), EasyDataLock.READ);
+            if (row == null) {
+                throw new java.util.NoSuchElementException("人格管理回执不存在。");
+            }
+            var receipt = read(row, ManagementReceipt.class);
+            if (!receipt.command().actor().equals(actor)) {
+                throw new SecurityException("人格操作不属于当前管理主体或目标。");
+            }
+            guard.run();
+            return receipt.result();
+        });
+    }
     private static final String DOMAIN = "agent.personality.v1";
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
@@ -413,22 +440,26 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
 
     /**
      * 显式管理账本，不保存权限布尔值或运行控制。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param command 固定命令
      * @param result 原结果
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record ManagementReceipt(PersonalityManagementCommand command, PersonalityManagementResult result) {}
 
     /**
      * 每个源 key 的有界备份列表，正文保存在独立不可变状态中。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param key 原 key
      * @param keys 从新到旧的备份引用
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record BackupIndex(String key, List<String> keys) {

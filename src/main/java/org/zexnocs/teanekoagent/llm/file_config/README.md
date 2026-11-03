@@ -1,5 +1,7 @@
 # LLM 本地配置与凭据边界
 
+4.7.0-l 的网页配置管理支持原模板局部保存和独立应用，见[文件配置说明](../../../../../../../../docs/development/web-console-files.md)。Spring 宿主通过 `LLMFileConfigurationEpoch` 在同步参数及请求构造期间固定文件发布代次；旧已解析参数在换代后拒绝使用新凭据。内部 metadata 标记只含非秘密代次，不是供应商请求体字段。已构造请求继续使用原凭据，不持锁等待网络；应用不发起远端密钥有效性检查。
+
 `config/agent/model.yml` 统一保存默认路由、模型参数、api-key、base-url、api-path 和 metadata。Core YAML 解析器统一展开环境变量；LLMFileConfigService 只把非敏感字段转为 Options，FileLLMCredentialResolver 只在真实请求边界取得凭据与连接。LLM 不再为默认路由依赖 Agent 主配置，也不再读取 application 的第二份供应商配置。
 
 自动往返的次数和时限由 LLM 自己的 `tea-neko.llm.interaction` Spring 配置提供，字段、默认值和显式覆盖方式见 [交互说明](../framework/interaction/README.md)。这些限制不写入模型 metadata，也不依赖 Agent 文件配置；错误配置在调用时返回明确状态。

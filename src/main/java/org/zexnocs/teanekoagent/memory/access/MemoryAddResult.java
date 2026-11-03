@@ -8,11 +8,13 @@ import java.util.UUID;
 
 /**
  * 普通新增的最小提交回执，不返回重复旧记录中的管理审计原文。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param status 原追加结果
  * @param recordId 已接受事实的稳定标识，冲突时为空
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryAddResult(MemoryFactReceipt.Status status, @Nullable UUID recordId) {

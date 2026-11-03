@@ -17,9 +17,11 @@ import java.util.Optional;
  * 调用时检查运行设置、路由/能力与凭据，失败只关闭受影响 Agent 的准入，不阻断 App。
  * 不发送探测请求，检查成功也不表示远端模型或数据库已通过实机联调。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentReadinessService implements IAgentReadiness {

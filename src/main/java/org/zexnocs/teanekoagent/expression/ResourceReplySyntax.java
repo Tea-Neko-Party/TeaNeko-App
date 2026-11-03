@@ -10,9 +10,11 @@ import java.util.function.Function;
  * 独立资源指令共用的字段边界，不承担按内容类型分派。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class ResourceReplySyntax{

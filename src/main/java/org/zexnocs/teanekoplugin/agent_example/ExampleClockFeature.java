@@ -20,9 +20,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 完整示例能力：实例时区组件、轮次时间组件、System、工具及异步资料环绕。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 public final class ExampleClockFeature implements AgentFeature {
@@ -76,10 +78,12 @@ public final class ExampleClockFeature implements AgentFeature {
 
     /**
      * 无状态 System；每个轮次单独写入不可变时间，单例不保存用户状态。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param clock 借用时钟
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     private record ClockSystem(Clock clock) implements IEntitySystem {

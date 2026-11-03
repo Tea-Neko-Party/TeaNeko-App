@@ -46,9 +46,11 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * 用真实阶段执行器验证自动往返、协议配对、深层快照和所有主要终止路径。
  * <br>2026/11/02：验证 HTTP 失败保留结构化诊断且不泄漏响应正文和原异常文本。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 class LLMInteractionServiceTest {

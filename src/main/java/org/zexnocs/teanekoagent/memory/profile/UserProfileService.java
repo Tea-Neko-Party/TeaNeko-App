@@ -15,9 +15,11 @@ import java.util.concurrent.*;
 /**
  * 用一次明确主体的 Recall 重建画像，复用稳定读取和预算，不维护第二套存储或缓存。
  * 初始调用与视图校验均在借用业务域进行，不直接访问 Repository、模型或聊天历史。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class UserProfileService implements IUserProfileService {

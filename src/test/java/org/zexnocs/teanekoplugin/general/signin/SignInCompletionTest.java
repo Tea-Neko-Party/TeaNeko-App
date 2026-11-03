@@ -34,9 +34,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证签到合并事务与反馈发送的先后顺序和异常传播。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class SignInCompletionTest {
@@ -48,9 +50,11 @@ class SignInCompletionTest {
     /**
      * 提供受控签到存储与静态工厂作用域，关闭后不影响其他用例。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private final class Storage implements AutoCloseable {

@@ -31,9 +31,11 @@ import java.util.function.Function;
 
 /**
  * 原生提醒任务入口，身份和幂等 ID 均由真实消息产生；模型不能覆盖目的地。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

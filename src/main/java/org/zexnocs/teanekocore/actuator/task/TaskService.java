@@ -25,14 +25,25 @@ import java.util.concurrent.CompletableFuture;
 /**
  * 任务服务。
  * 用于注册任务、提交任务结果。
+ * <br>2026/11/03：注册真实任务回执的有界观测，不将提交当作业务完成。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 public class TaskService implements ITaskService {
+    private org.zexnocs.teanekocore.actuator.runtime.@org.jspecify.annotations.Nullable RuntimeMonitor monitor;
+
+    /**
+     * 2026/11/03：复用原任务服务，独立宿主不安装观测时行为保持不变。
+     * @param monitor 当前进程的有界观测
+     */
+    @Autowired
+    public void installMonitor(org.zexnocs.teanekocore.actuator.runtime.RuntimeMonitor monitor) {
+        this.monitor = monitor;
+    }
     private final ConcurrentMapCacheContainer<UUID, ITask<?>> taskMap;
     private final ILogger logger;
     private final ITaskExecuteService iTaskExecuteService;
@@ -84,6 +95,10 @@ public class TaskService implements ITaskService {
         // 原子注册，避免多个区域同时提交相同键时覆盖彼此的任务。
         if (taskMap.putIfAbsent(key, task) != null) {
             throw new TaskDuplicateKeyException(key.toString());
+        }
+        // 2026/11/03：先关联原回执，随后才进入原执行域，避免快速任务丢失终态。
+        if (monitor != null) {
+            monitor.observe(task);
         }
         // 执行任务
         iTaskExecuteService.__executeTask(task);

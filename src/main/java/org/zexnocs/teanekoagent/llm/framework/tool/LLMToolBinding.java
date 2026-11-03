@@ -20,9 +20,11 @@ import java.util.function.BiFunction;
  * <br>2026/11/02：增加不可变 client 白名单，所有环绕和守卫保留该限制。
  * <br>2026/11/02：提供显式结构化结果投影，工具及插件保持字符串接口，图像独立回填。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class LLMToolBinding {
@@ -165,9 +167,11 @@ public final class LLMToolBinding {
 
     /**
      * 工具的类型化异步环绕；宿主参数校验与预算在此边界之外执行。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     @FunctionalInterface
@@ -327,9 +331,11 @@ public final class LLMToolBinding {
     /**
      * 本轮模型可见的不可执行工具定义，与实际执行器引用分离。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Getter
@@ -372,9 +378,11 @@ public final class LLMToolBinding {
     /**
      * 递归冻结的参数 schema，防止工具重载改变已暴露的定义。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Getter

@@ -36,9 +36,11 @@ import java.util.stream.Collectors;
  * 通过统一 LEARNING 活动将中期片段筛选为长期候选，保留严格原话引用和固定输入。
  * 生成器可替换，最终证据、主体和版本仍由事务端口验证。
  * <br>2026/11/03：同次模型交互提取真实表达模式，目标和证据白名单由宿主固定。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class LLMLongTermMemoryConsolidator implements ILongTermMemoryConsolidator, AutoCloseable {

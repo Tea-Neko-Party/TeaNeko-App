@@ -15,18 +15,22 @@ import java.util.function.Supplier;
  * 单次执行的取消、截止时间及共享资源预算，不持有平台或业务身份。
  * 拥有者在执行结束后 close；传入的 scheduler 始终由调用方管理。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class ExecutionControl implements AutoCloseable {
     /**
      * 首次生效的执行停止原因，用于区分取消、截止时间和拥有者关闭。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum StopReason { CANCELLED, DEADLINE_EXCEEDED, CLOSED }
@@ -47,9 +51,11 @@ public final class ExecutionControl implements AutoCloseable {
     /**
      * 可解除的轻量终止监听。close 后释放回调引用；不等待已经开始执行的回调。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public final class TerminationRegistration implements AutoCloseable {

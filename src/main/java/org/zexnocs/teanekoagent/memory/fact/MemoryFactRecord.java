@@ -9,6 +9,8 @@ import java.util.UUID;
 
 /**
  * 不可变的长期事实记录，主语和来源独立保留，画像由这些证据另行构建。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 稳定记录 ID
  * @param namespaceId 共享业务空间
  * @param generation 数据代次
@@ -22,7 +24,7 @@ import java.util.UUID;
  * @param provenance 可选外部原始证据，不作为可信操作者
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactRecord(UUID id, MemoryNamespaceId namespaceId, long generation, long revision, UUID subjectId,

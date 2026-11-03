@@ -42,18 +42,22 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用手动执行夹具验证真实协作、总预算、身份及独立资源，不启动真实模型或线程池。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)
 class AgentWorkflowIntegrationTest {
     /**
      * 真实 Agent/LLM 组合，只替换模型传输，不复制执行和预算实现。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Harness implements AutoCloseable {

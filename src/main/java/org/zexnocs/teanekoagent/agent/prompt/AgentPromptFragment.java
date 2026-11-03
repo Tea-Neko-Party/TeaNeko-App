@@ -7,13 +7,15 @@ import java.util.Set;
 
 /**
  * 本轮临时参考资料；一个片段必须是可独立移除的完整证据或查询结果，不承载运行规则和授权。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param name 稳定来源名称，只用于追溯，不解释为用户身份
  * @param text 完整数据正文，不能包含执行资源或凭据
  * @param expiresAt 可选最早证据到期时间，动态来源在使用/重放时必须复核
  * @param transientToolResults 只供原轮次使用的工具结果，历史投影保留配对并用占位文本替换正文
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentPromptFragment(String name, String text, @Nullable Instant expiresAt, Set<String> transientToolResults) {

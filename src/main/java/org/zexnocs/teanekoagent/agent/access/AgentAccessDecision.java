@@ -5,12 +5,14 @@ import java.util.Optional;
 
 /**
  * 一次门控检查的数据结果，不是可以永久复用或提升权限的令牌。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reason 允许或拒绝原因
  * @param scope 已读取的作用域策略，尚未读取时为空
  * @param readiness 已完成的就绪检查，前置拒绝时为空
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentAccessDecision(Reason reason, Optional<AgentScopePolicy> scope, Optional<AgentReadiness> readiness) {
@@ -47,9 +49,11 @@ public record AgentAccessDecision(Reason reason, Optional<AgentScopePolicy> scop
 
     /**
      * 统一门控的稳定原因，不含模型输出、配置值或异常链。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Reason {

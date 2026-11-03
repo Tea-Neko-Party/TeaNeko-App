@@ -67,9 +67,11 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/02：验证内置资料能力不再被新增总来源替换。
  * <br>2026/11/02：验证同 namespace 的共享记忆跨 scope 和用户进入实际模型输入。
  * <br>2026/11/02：注解条件撤销直接停止交互，不产生下一次模型请求。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Timeout(20)
@@ -113,9 +115,11 @@ class AgentMemoryToolIntegrationTest {
 
     /**
      * 独立拥有离线测试资源和真实组合服务，借用关系与生产装配一致。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private final class Harness implements AutoCloseable {

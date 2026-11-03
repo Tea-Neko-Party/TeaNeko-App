@@ -25,9 +25,11 @@ import static org.mockito.Mockito.*;
 /**
  * 验证骰子业务事件与替代通知均纳入命令完成链。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class DiceCompletionTest {

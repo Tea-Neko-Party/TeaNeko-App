@@ -24,9 +24,11 @@ import java.util.*;
 /**
  * 从本地受控根目录加载一层 SKILL.md，完整验证后原子发布，不执行文件中的代码。
  * 构造无 I/O；首次使用惰性加载，失败重载保留上一完整快照。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

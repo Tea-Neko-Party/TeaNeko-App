@@ -6,11 +6,13 @@ import java.util.Objects;
 
 /**
  * 默认共享会话键，不加入发起用户，避免把同群拆成多个并行邮箱。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param agentId Agent 实例标识，不以共享定义 ID 代替
  * @param scope 原始 client/scope 边界
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationKey(EntityId agentId, AgentScope scope) {

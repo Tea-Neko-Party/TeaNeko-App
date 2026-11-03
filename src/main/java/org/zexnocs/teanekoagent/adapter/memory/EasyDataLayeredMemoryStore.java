@@ -28,9 +28,11 @@ import java.util.function.Supplier;
  * 专用 EasyData 中的短期消息、中期片段和压缩水位，使用空间锁与租约拒绝迟到覆盖。
  * 短期采集可加入现有历史事务，重启后目录和未处理序号仍在，不依赖内存通知。
  * <br>2026/11/03：有界清理过期与旧代次内容，保留当前分区序号和未处理连续性。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.1-l
  */
 public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IMemoryMaintenance {
@@ -276,11 +278,13 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
     }
     /**
      * 分区内的独立有界扫描位置，不与成功压缩水位混用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param shortAfter 短期排除下界
      * @param mediumAfter 中期排除下界
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record Sweep(String shortAfter, String mediumAfter) { }
@@ -348,6 +352,8 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
     private <T> T decode(EasyDataRow row, Class<T> type) { return mapper.readValue(row.getValue(), type); }
     /**
      * 持久作业状态；过期源跳过水位与成功压缩水位分开，不能声称已经记住已过期原文。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param last 最新消息序号
      * @param covered 已提交摘要覆盖
      * @param discarded 已过期源跳过位置
@@ -359,7 +365,7 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
      * @param fingerprint 原领取指纹
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.1-l
      */
     private record State(long last, long covered, long discarded, @Nullable UUID lease, Instant until, Instant notBefore,

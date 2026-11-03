@@ -53,9 +53,11 @@ import static org.zexnocs.teanekoagent.memory.namespace.StickerCollectionIntegra
  * 复用真实 DTO 与文件夹具，仅检查全局管理、删除保护及刷新与人工写入的仲裁。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Timeout(30)
@@ -65,9 +67,11 @@ class StickerManagementIntegrationTest {
      * 测试监听器仍由真实 Core scanner、插件校验与事件分发器调用。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @org.zexnocs.teanekocore.event.core.EventListener
@@ -85,9 +89,11 @@ class StickerManagementIntegrationTest {
      * 待容器装配完成后绑定真实事件适配器，不替换业务行为。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private static final class Hook implements IStickerLifecycle {
@@ -105,9 +111,11 @@ class StickerManagementIntegrationTest {
      * 共用既有存储，新增真实资源注册与显式授权；不启动 HTTP 或真实模型。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     private static final class Fixture implements AutoCloseable {

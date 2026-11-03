@@ -11,9 +11,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 宿主会话生命周期端口；管理调用者负责权限，不能直接作为开放的模型工具。
  * 引用同步可按需登记缺失的默认共享空间；不删除持久化数据，也不替代 namespace 绑定事务。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentConversationControl {

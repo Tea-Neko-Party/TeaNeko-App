@@ -18,9 +18,11 @@ import static org.mockito.Mockito.*;
 /**
  * 手动推进业务队列、时钟及截止时间回调的离线夹具，供 LLM 和上层服务复用，不创建真实线程池。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class InteractionRuntime implements Executor {
@@ -127,12 +129,14 @@ public final class InteractionRuntime implements Executor {
     /**
      * 保存一个不可变到期定位与其独立取消标记。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param due 计时回调的触发时刻
      * @param callback 实际 Core 登记的终止回调
      * @param done 回调是否已执行或取消
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Entry(Instant due, Callable<?> callback, AtomicBoolean done) {}

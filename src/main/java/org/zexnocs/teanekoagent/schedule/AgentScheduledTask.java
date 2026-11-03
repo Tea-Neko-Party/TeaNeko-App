@@ -10,6 +10,8 @@ import java.util.UUID;
 
 /**
  * 可持久化的任务快照；身份、目标及首次时间固定，revision 隔离旧回调。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param id 幂等创建请求标识
  * @param spec 原始任务规格
  * @param nextFire 下一次计划时刻
@@ -18,7 +20,7 @@ import java.util.UUID;
  * @param lastOutcome 最近结果，不保存执行器异常原文
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentScheduledTask(UUID id, Spec spec, Instant nextFire, Status status,
@@ -40,6 +42,8 @@ public record AgentScheduledTask(UUID id, Spec spec, Instant nextFire, Status st
 
     /**
      * 固定秒数间隔不等于本地日历每日；日历规则留给后续独立策略。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param title 标题
      * @param creator 可信原生创建者及目标，不从模型参数构建
      * @param action 已注册动作名
@@ -49,7 +53,7 @@ public record AgentScheduledTask(UUID id, Spec spec, Instant nextFire, Status st
      * @param intervalSeconds 零表示单次，否则至少六十秒
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public record Spec(String title, AgentActorContext creator, String action, Map<String, String> arguments,
@@ -86,9 +90,11 @@ public record AgentScheduledTask(UUID id, Spec spec, Instant nextFire, Status st
 
     /**
      * 不确定结果停止调度，避免重启或重试再次产生副作用。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { ACTIVE, RUNNING, COMPLETED, CANCELLED, EXPIRED, PAUSED, INDETERMINATE }

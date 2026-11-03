@@ -8,13 +8,15 @@ import java.util.HashMap;
 /**
  * 单次交互的请求与工具限额；同请求的多个交互执行还必须继承宿主总预算。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param maxModelCalls 最多预占的模型请求次数，至少为一
  * @param maxToolRounds 最多工具批次数，零表示禁用工具
  * @param maxToolCalls 最多工具执行次数，零表示禁用工具
  * @param maxTotalTokens 可选总 token 额度；null 表示不设局部 token 限额，零表示不允许模型请求
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record LLMCallLimits(int maxModelCalls, int maxToolRounds, int maxToolCalls, Long maxTotalTokens) {

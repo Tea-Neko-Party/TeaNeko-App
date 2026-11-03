@@ -11,9 +11,11 @@ import java.util.concurrent.CompletionStage;
  * 独立轮次执行端口，供会话层组合；准备只登记资源，显式 start 后才开始业务。
  * 默认聊天调用应使用经过邮箱的 IAgentService。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentTurnService {

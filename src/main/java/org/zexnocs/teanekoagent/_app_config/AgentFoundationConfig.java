@@ -16,9 +16,11 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * 装配 Agent 实例底座和检查端口，不创建默认 Agent、注册 scope 或启动后台工作。
  * <br>2026/11/02：默认实例工厂接入插件能力装配。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Configuration(proxyBeanMethods = false)

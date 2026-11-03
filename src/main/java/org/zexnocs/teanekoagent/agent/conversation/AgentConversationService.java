@@ -36,9 +36,11 @@ import java.util.concurrent.atomic.AtomicReference;
  * 锁只保护拥有关系和状态，不执行配置、启动、取消、资源关闭或用户 Future 回调。
  * 空闲会话按 TTL 和容量惰性淘汰；切换代次不移除仍占运行槽的旧邮箱。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
@@ -1399,18 +1401,22 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 单请求状态；FINISHED 已完成业务仲裁，交付结束前保留请求索引以阻止重复执行。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private enum Phase { NEW, WAITING, SELECTED, PREPARING, RUNNING, FINISHED }
 
     /**
      * 邮箱运行拥有者；实体只保留不可变数据，控制和监听不进入组件。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Mailbox {
@@ -1462,9 +1468,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 单个请求的受控拥有者，不存入实体组件；状态变更由邮箱锁仲裁。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class Entry {

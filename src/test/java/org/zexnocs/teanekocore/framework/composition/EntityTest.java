@@ -14,9 +14,11 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * 验证组件快照、稳定类型绑定及实体版本的原子提交。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class EntityTest {

@@ -6,13 +6,15 @@ import java.util.Objects;
 /**
  * 顺序管线正常完成或被步骤主动停止的结果；异常/取消保持异常完成。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param snapshot 本步骤读取的不可变实体快照
  * @param stopped 是否由步骤主动停止后续执行
  * @param executedSystems 已经执行的步骤标识
  * @param skippedSystems 已经跳过的步骤标识
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record PipelineResult(

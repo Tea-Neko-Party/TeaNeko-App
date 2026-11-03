@@ -8,9 +8,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 知识源/分块/检索扩展，不内置 PDF、网页、embedding 或向量数据库。
  * 后端根据真实上下文过滤范围并标记完整性，模型不能另传数据库或任意物理路径。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @FunctionalInterface
@@ -24,12 +26,14 @@ public interface IKnowledgeSource {
     CompletionStage<Page> search(Query query, AgentExtensionContext context);
     /**
      * 独立于后端索引实现的检索预算。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param text 查询原文
      * @param maxChunks 最大分块数
      * @param maxCharacters 正文总字符上限
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Query(String text, int maxChunks, int maxCharacters) {
@@ -48,11 +52,13 @@ public interface IKnowledgeSource {
     }
     /**
      * 不可变知识证据页，不完整的空页不能解释为确定无资料。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param chunks 原始证据
      * @param complete 本次查询是否完整覆盖其声明范围
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Page(List<KnowledgeChunk> chunks, boolean complete) {

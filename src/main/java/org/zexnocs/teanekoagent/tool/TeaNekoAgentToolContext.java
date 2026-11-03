@@ -2,15 +2,20 @@ package org.zexnocs.teanekoagent.tool;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.agent.AgentComponents;
+import org.zexnocs.teanekoagent.agent.AgentDefinition;
+import org.zexnocs.teanekoagent.agent.AgentRunRequest;
 import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+
 import java.util.Objects;
 
 /**
  * 注解工具的宿主上下文；不进入模型 schema、组件或序列化，执行控制只借用不关闭。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param definition 当前实例定义
  * @param request 当前固定请求
  * @param runtime 可选运行快照，独立宿主可以不提供
@@ -19,7 +24,7 @@ import java.util.Objects;
  * @param invocation 实际执行控制和组件，选择阶段为空
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.1-l
  * @version 4.6.0-l
  */
 @JsonIgnoreType

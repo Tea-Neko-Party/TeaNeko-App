@@ -3,9 +3,11 @@ package org.zexnocs.teanekoapp.sender;
 /**
  * 发送任务结束却没有发送回执，无法确认消息已发送。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public class MessageSendFailedException extends IllegalStateException {

@@ -12,9 +12,11 @@ import java.time.Clock;
 
 /**
  * 将三级触发和现有 /cfg 配置组合，不在配置装配期间创建主动发言任务。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Configuration(proxyBeanMethods = false)

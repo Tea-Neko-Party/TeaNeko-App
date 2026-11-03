@@ -55,9 +55,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 通过真实 Agent 邮箱和 LLM 管线验证异步资料、历史隔离、资源停止和重放边界。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentPromptIntegrationTest {
@@ -346,9 +348,11 @@ class AgentPromptIntegrationTest {
 
     /**
      * 可控制资料等待和动态校验的端口替身，不替换真实执行/提交/资源拥有者。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private static final class SwitchableSource implements IAgentPromptSource {

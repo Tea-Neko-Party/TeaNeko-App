@@ -6,11 +6,13 @@ import java.util.Objects;
 
 /**
  * 当前历史访问的持久化边界；内存窗口过期或进程重启不会修改它。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reference 当前完整空间引用，包含 client/scope、绑定版本和 generation
  * @param personality 当前实际人格，用于身份及到期复核，不将人格正文写入历史
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record HistoryContext(MemoryNamespaceReference reference, AgentPersonalitySnapshot personality) {

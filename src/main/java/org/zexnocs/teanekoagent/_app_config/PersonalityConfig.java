@@ -15,9 +15,11 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * 默认人格组合根，不创建实例、读取人格或执行补正学习。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Configuration(proxyBeanMethods = false)

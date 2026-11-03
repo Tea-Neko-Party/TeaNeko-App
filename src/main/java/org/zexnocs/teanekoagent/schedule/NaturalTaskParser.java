@@ -9,9 +9,11 @@ import java.util.regex.Pattern;
 /**
  * 从完整当前原文识别有界任务表达，时间相对原生消息时刻计算，重试不会随服务器时钟漂移。
  * 不解释引文、历史或模型提供的时间，未识别的普通对话交回原 Agent。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class NaturalTaskParser {

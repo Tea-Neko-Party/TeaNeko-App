@@ -12,9 +12,11 @@ import java.util.Objects;
 /**
  * 统一消息结构与能力检查。未知内容明确拒绝，禁止静默丢弃或 toString 降级。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class LLMInputValidator {

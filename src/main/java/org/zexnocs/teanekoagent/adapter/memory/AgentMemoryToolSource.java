@@ -40,9 +40,11 @@ import java.util.concurrent.*;
  * <br>2026/11/03：说明统一长期保存后的查询与维护入口。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.2-l
  */
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.memory", managedByFeature = true)
@@ -190,6 +192,8 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
 
     /**
      * 查询业务参数，不包含宿主身份；省略字段沿用领域默认值。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param subjectId 可选事实主体
      * @param keywords 可选字面关键词
      * @param tags 可选精确标签
@@ -202,7 +206,7 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
      * @param maxScanned 可选扫描预算
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -220,13 +224,15 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
 
     /**
      * 画像业务参数，省略主体时读取真实用户，不包含空间或授权字段。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param subjectId 可选画像主体
      * @param limit 可选结果条数
      * @param maxCharacters 可选证据预算
      * @param maxScanned 可选扫描预算
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.0-l
      * @version 4.6.0-l
      */
     @JsonInclude(JsonInclude.Include.NON_NULL)

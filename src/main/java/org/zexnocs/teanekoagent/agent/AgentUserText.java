@@ -11,12 +11,14 @@ import java.util.Objects;
 /**
  * 宿主从当前原始用户消息提取的文本凭据，与包含历史、引用或模型内容的消息列表分开。
  * 只保存授权判定所需数据，不替代 App 原生消息；平台身份和原文真实性由可信入口保证。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param sourceId 当前原消息标识，必须与请求 actor 一致
  * @param text 当前原消息的未改写文本，不含转发或引用正文
  * @param occurredAt 平台原消息时刻，旧独立宿主未知时为空，不能由模型提供
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType

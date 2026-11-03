@@ -6,9 +6,11 @@ import java.util.Objects;
  * 只负责实例组合与拥有关系，不读取模型、人格或 scope 配置。
  * <br>2026/11/02：校验实例能力并创建插件不可变初始组件。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public final class AgentFactory implements IAgentFactory {

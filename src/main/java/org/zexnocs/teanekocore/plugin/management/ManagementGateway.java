@@ -11,9 +11,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 传输无关的插件管理路由；没有显式授权适配器时拒绝所有管理访问。
  * 不发布 HTTP，不根据客户端类型名反射调用，也不授予 Web 身份聊天来源资格。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.6.0-l
  * @version 4.6.0-l
  */
 @Service

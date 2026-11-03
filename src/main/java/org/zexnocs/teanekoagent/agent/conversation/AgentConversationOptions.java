@@ -2,13 +2,15 @@ package org.zexnocs.teanekoagent.agent.conversation;
 
 /**
  * 单轮固定的历史与重放策略，窗口和诊断缓存分别受限，不表示供应商 token 预算。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param maxHistoryMessages 最近完整成功轮次的消息上限，零关闭窗口
  * @param maxInputBytes 统一协议 JSON 的输入字节上限
  * @param maxCompletedRequests 最近完成记录数量上限
  * @param maxReplayBytes 可保留结果正文的序列化度量预算，零仅保留状态
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record AgentConversationOptions(int maxHistoryMessages, long maxInputBytes, int maxCompletedRequests, long maxReplayBytes) {

@@ -2,6 +2,8 @@ package org.zexnocs.teanekoagent.knowledge;
 
 /**
  * 知识检索的有界原始分块，来源、文档、分块和版本分别保留，不冒充用户个人事实。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param source 来源名称
  * @param documentId 文档定位
  * @param chunkId 文档内分块定位
@@ -9,7 +11,7 @@ package org.zexnocs.teanekoagent.knowledge;
  * @param text 明确证据正文
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record KnowledgeChunk(String source, String documentId, String chunkId, String revision, String text) {

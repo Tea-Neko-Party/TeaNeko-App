@@ -20,9 +20,11 @@ import java.util.concurrent.CompletionStage;
 /**
  * 在既有 DatabaseTask 事务中保存独立事实、内容去重索引和完整操作回执。
  * 写入先锁定 namespace 元数据再校验 generation，原子提交后才交付；不使用 EasyData 列表缓存。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
@@ -357,11 +359,13 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
 
     /**
      * 记录 schema，不序列化 Java 类型名或 ECS 容器。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 结构版本
      * @param record 原记录
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record FactData(int schemaVersion, MemoryFactRecord record) {
@@ -376,11 +380,13 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
 
     /**
      * 内容摘要的稳定记录定位，正文仍须验证以发现索引损坏。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 结构版本
      * @param id 首次接受的记录 ID
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record DuplicateData(int schemaVersion, UUID id) {
@@ -395,12 +401,14 @@ public final class EasyDataMemoryFactStore implements IMemoryFactStore {
 
     /**
      * 保留完整原命令及原回执，不让不同来源或内容重用同操作 ID。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 结构版本
      * @param command 原命令
      * @param result 原结果
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record OperationData(int schemaVersion, MemoryFactAppend command, MemoryFactReceipt result) {

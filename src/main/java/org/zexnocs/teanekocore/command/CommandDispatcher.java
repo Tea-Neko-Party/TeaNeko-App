@@ -23,11 +23,12 @@ import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
 
 /**
  * 复用原事件、参数、作用域和权限链，返回等待反馈及业务完成的分发结果。
+ * <br>2026/11/03：管理来源在原方法声明处默认拒绝，不转换成原生消息。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 @RequiredArgsConstructor
@@ -184,6 +185,8 @@ public class CommandDispatcher implements ICommandDispatcher {
      */
     private CompletionStage<CommandResult> execute(CommandData<?> data, CommandMapData map, Method method,
             SubCommand sub, Object[] args, ICommandErrorHandler errors) {
+        // 2026/11/03：声明与当前宿主能力先通过，随后继续原作用域和权限链。
+        ManagementCommandPolicy.check(data, method);
         var command = map.getCommandAnnotation();
         DefaultCommand defaults = map.getDefaultCommandAnnotation();
         boolean inScope = sub == null ? scopeManager.inScope(command, defaults, data)

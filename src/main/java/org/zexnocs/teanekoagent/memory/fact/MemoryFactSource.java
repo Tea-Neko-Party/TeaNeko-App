@@ -7,12 +7,14 @@ import java.util.UUID;
 
 /**
  * 宿主固定的记忆来源，保留请求、动作、真实发起者及 client/scope/消息信息。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 原始 Agent 或管理请求
  * @param actionId 同请求内稳定的工具调用或操作标识
  * @param actor 可信发起上下文，不由模型反序列化生成
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryFactSource(UUID requestId, String actionId, AgentActorContext actor) {

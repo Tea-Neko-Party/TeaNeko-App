@@ -9,9 +9,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 记录本轮原文和可交付答案的业务端口，不保存临时 Prompt、推理或工具诊断。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/30
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IAgentHistoryRecorder {

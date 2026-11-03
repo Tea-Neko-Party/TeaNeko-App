@@ -14,12 +14,14 @@ import java.util.UUID;
  * 组件值须为不可变数据，不能放凭据、Bean 或 Repository；此对象不进入 Prompt/快照。
  * control 由调用方拥有，工具不得 close；阶段控制可由交互层替换为共享预算的子控制。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param requestId 由宿主生成的请求标识
  * @param bindings 宿主固定的不可变业务绑定或本轮工具绑定集合
  * @param control 借用的取消、截止时间和预算控制
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @JsonIgnoreType

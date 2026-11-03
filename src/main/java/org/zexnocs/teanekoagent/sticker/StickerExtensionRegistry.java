@@ -16,9 +16,11 @@ import java.util.List;
  * <br>2026/11/03：图片发送只选择目录和文件后端，不依赖视觉分析器启用。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public final class StickerExtensionRegistry {
@@ -80,18 +82,22 @@ public final class StickerExtensionRegistry {
      * 发送任务临时持有的存储端口，不写入计划或组件。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param assets 文件后端
      * @param catalog 目录后端
      * @param tokens 插件代次
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType public record Storage(IStickerAssetStore assets,IStickerCatalog catalog,List<PluginRegistry.Token> tokens){}
     /**
      * 仅宿主任务持有的容器端口，不写入数据库或组件。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * @param analyzer 视觉服务
      * @param assets 文件服务
@@ -100,7 +106,7 @@ public final class StickerExtensionRegistry {
      * @param tokens 插件代次
      * @author zExNocs
      * @date 2026/11/03
-     * @since 4.0.0
+     * @since 4.6.2-l
      * @version 4.6.2-l
      */
     @JsonIgnoreType public record Selected(IStickerAnalyzer analyzer,IStickerAssetStore assets,IStickerAdmissionPolicy policy,IStickerCatalog catalog,List<PluginRegistry.Token> tokens){}

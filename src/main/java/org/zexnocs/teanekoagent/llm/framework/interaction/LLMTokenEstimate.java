@@ -2,11 +2,13 @@ package org.zexnocs.teanekoagent.llm.framework.interaction;
 
 /**
  * 可导出的估算说明，不包含原始输入或运行句柄，也不承诺精确供应商计费。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param inputTokens 输入 token 估算
  * @param method 稳定的估算算法标识
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record LLMTokenEstimate(long inputTokens, String method) {

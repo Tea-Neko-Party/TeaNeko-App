@@ -20,10 +20,12 @@ import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
  * <br>注册 ID 为 {@code deepseek}，默认模型名称为 {@code deepseek-v4-flash}。
  * <br>API key 及可选连接覆盖由凭据端口在请求边界解析，不进入 Options。
  *
+ * 2026/11/03：获取凭据时核对已解析参数的配置代次。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @LLMModel(id = DeepSeekChatModel.PROVIDER)
 public class DeepSeekChatModel extends AbstractLLMModel {
@@ -134,7 +136,9 @@ public class DeepSeekChatModel extends AbstractLLMModel {
             execution.checkActive();
         }
         var deepSeekOptions = DeepSeekModelOptions.copyOf(options);
-        var access = credentialResolver.require(PROVIDER);
+        // 2026/11/03：已解析参数不得跨文件代次取得新凭据。
+        // 2026/11/03：原参数与认证配置必须属于同一文件代次。
+        var access = credentialResolver.require(PROVIDER, options);
         var request = DeepSeekChatCompletionMapper.toRequest(prompt,
                 deepSeekOptions,
                 access.baseUrlOr(DeepSeekModelOptions.DEFAULT_BASE_URL),

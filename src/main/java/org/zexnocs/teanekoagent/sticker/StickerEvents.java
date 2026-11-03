@@ -25,9 +25,11 @@ import java.util.concurrent.atomic.AtomicLong;
  * 复用 Core 事件总线，决策与只读通知均有在途上限，后台插件参与须明确选择。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Component

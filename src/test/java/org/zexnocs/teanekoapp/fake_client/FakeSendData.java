@@ -26,9 +26,11 @@ public class FakeSendData implements ISendData<FakeMessageSendResponseData> {
     /**
      * 区分模拟发送的私聊、群聊等目标类型。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum TargetType {
@@ -41,9 +43,11 @@ public class FakeSendData implements ISendData<FakeMessageSendResponseData> {
     /**
      * 固定模拟转发节点的发言者及内容。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     @Getter

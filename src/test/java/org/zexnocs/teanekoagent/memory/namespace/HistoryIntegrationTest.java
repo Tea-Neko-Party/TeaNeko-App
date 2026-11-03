@@ -51,9 +51,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用原事务任务夹具，集中验证历史实际存储、重建读取、绑定隔离和真实模型工具往返。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(20)
@@ -62,9 +64,11 @@ class HistoryIntegrationTest {
     private final AgentScope scope = new AgentScope("客户端", "群甲");
     /**
      * 组合真实存储适配与业务服务，仅替换仓库传输；原数据库任务仍在提交后完成。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/30
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private final class Harness implements AutoCloseable {

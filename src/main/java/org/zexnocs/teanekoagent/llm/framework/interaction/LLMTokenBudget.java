@@ -13,9 +13,11 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
 /**
  * 将 LLM 的输入估算与输出上限适配到 Core 通用预留；局部预算不能扩大宿主总额度。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 final class LLMTokenBudget {
@@ -112,13 +114,15 @@ final class LLMTokenBudget {
 
     /**
      * 一次模型尝试拥有的两级预留，只有业务尚未发起时才可全部退还。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param parent 宿主预留
      * @param local 局部预留
      * @param units 预留总量
      * @param estimator 输入估算算法
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     record Held(ResourceBudget.Reservation parent, ResourceBudget.Reservation local,

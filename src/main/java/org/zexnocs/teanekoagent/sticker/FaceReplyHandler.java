@@ -16,9 +16,11 @@ import java.util.concurrent.CompletionStage;
  * 客户端原生表情的当轮解析、普通历史投影与独立发送，不重选资源或追加模型调用。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 @Component @TeaNekoReplyPartHandler("teaneko:face")

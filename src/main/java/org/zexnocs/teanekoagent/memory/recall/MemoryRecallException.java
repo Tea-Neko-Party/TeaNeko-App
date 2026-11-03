@@ -5,9 +5,11 @@ import java.util.Objects;
 /**
  * 固定原因的检索失败，不将配置、数据库或原始正文放进异常链。
  * namespace 缺失和代次变化沿用独立的 MemoryFactGenerationException。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryRecallException extends RuntimeException {
@@ -28,9 +30,11 @@ public final class MemoryRecallException extends RuntimeException {
     public Reason reason() { return reason; }
     /**
      * 正常无命中不属于失败，失败不能触发伪造的空结果降级。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Reason { CONFIGURATION_ERROR, UNAVAILABLE }

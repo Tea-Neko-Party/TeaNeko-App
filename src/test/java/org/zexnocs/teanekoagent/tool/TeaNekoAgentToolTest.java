@@ -6,30 +6,47 @@ import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.agent.*;
+import org.zexnocs.teanekoagent.expression.ExpressionFeature;
+import org.zexnocs.teanekoagent.expression.ExpressionRuntime;
 import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.tool.*;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
-import org.zexnocs.teanekoagent.tool.api.*;
+import org.zexnocs.teanekoagent.sticker.MediaReplyFeature;
+import org.zexnocs.teanekoagent.sticker.StickerReplyService;
+import org.zexnocs.teanekoagent.sticker.StickerReplyTools;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolParam;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
-import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.framework.description.Description;
-import org.zexnocs.teanekocore.plugin.*;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginModule;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import tools.jackson.databind.ObjectMapper;
+
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 /**
  * 覆盖自动发现、代理、可信参数及异步结果边界，业务授权继续复用各工具原有测试。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：覆盖媒体工具和显式能力在真实 Spring 注册链中的联合装配。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.6.0-l
+ * @since 4.6.1-l
+ * @version 4.7.0-l
  */
 class TeaNekoAgentToolTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -53,6 +70,30 @@ class TeaNekoAgentToolTest {
             var features = context.getBean(TeaNekoAgentToolRegistry.class).combine(List.of());
             assertEquals(3, features.getFirst().tools().select(definition, request, null).size());
             assertEquals(1, created.get());
+        }
+    }
+
+    /**
+     * 2026/11/04：验证真实媒体工具归属能够通过启动注册，且不会重复注册自动能力。
+     */
+    @Test
+    void startsWithMediaToolsOwnedByTheirExplicitFeature() {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor();
+             var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(ObjectMapper.class, () -> mapper);
+            context.registerBean("virtualExecutor", ExecutorService.class, () -> executor,
+                    value -> value.setDestroyMethodName(""));
+            context.registerBean(PluginModule.class,
+                    () -> () -> new PluginDescriptor("teaneko.agent", "4.7.0-l", 1, Set.of()));
+            context.registerBean(StickerReplyService.class, () -> mock(StickerReplyService.class));
+            context.registerBean(ExpressionRuntime.class, () -> mock(ExpressionRuntime.class));
+            context.register(StickerReplyTools.class, MediaReplyFeature.class, ExpressionFeature.class,
+                    TeaNekoAgentToolRegistry.class, AgentPluginRuntime.class, PluginRegistry.class);
+
+            context.refresh();
+
+            assertEquals(Set.of("teaneko.agent:expression", "teaneko.agent:media-replies"),
+                    context.getBean(AgentPluginRuntime.class).featureIds());
         }
     }
 
@@ -135,9 +176,11 @@ class TeaNekoAgentToolTest {
 
     /**
      * 普通 Spring 服务示例，不实现工具接口、不构造 schema 或 AgentFeature。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/11/02
-     * @since 4.0.0
+     * @since 4.6.1-l
      * @version 4.6.0-l
      */
     @Service @TeaNekoAgentToolClass("demo")

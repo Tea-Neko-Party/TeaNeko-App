@@ -14,6 +14,8 @@ import java.util.Optional;
  * 不包含原异常、可信绑定或执行器的回填结果；截断与业务完成分别表达。
  * <br>2026/11/02：图像使用独立视觉参考消息回填，保留原工具调用与结果配对。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param call 模型产生的工具调用，身份不从参数中取得
  * @param status 本次处理的终止状态
  * @param output 用于本次处理的 {@code output} 数据
@@ -21,7 +23,7 @@ import java.util.Optional;
  * @param images 显式工具图像，仅成功且未截断的结果可以携带
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 public record ToolInvocationResult(ILLMToolCall call, Status status, String output, boolean truncated, List<ImageLLMContentPart> images) {
@@ -62,9 +64,11 @@ public record ToolInvocationResult(ILLMToolCall call, Status status, String outp
     /**
      * 工具执行与拒绝的结构化状态，不包含底层敏感异常。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Status { SUCCESS, INVALID_CALL, NOT_ALLOWED, INVALID_ARGUMENTS, FAILED, CANCELLED, TIMED_OUT }

@@ -7,13 +7,15 @@ import java.util.Objects;
 
 /**
  * 存储在同一稳定读取边界生成的候选前缀，complete 仅表示该时点已扫描完本代次。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param namespaceId 原空间
  * @param generation 原代次
  * @param evidence 稳定 ID 升序的有界候选，尚未排除过期或无关记录
  * @param complete 是否已到达该读取边界的末尾
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallScan(MemoryNamespaceId namespaceId, long generation, List<MemoryRecallEvidence> evidence, boolean complete) {

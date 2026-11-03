@@ -7,9 +7,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 作用域绑定及操作回执的事务端口，与元数据存储同域协作，不依赖会话或 ConfigData 缓存。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public interface IMemoryNamespaceBindingStore {

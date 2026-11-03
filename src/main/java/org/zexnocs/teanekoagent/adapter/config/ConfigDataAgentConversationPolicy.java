@@ -12,9 +12,11 @@ import java.util.Objects;
 
 /**
  * 懒读本地默认值并应用已登记 scope 的窗口覆盖，不创建配置或承担读取之外的业务。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service

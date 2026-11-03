@@ -30,9 +30,11 @@ import static org.mockito.Mockito.*;
 
 /**
  * 验证持久化引用在默认邮箱队首、同步通知、结果提交与重放中的隔离和资源拥有关系。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Timeout(10)

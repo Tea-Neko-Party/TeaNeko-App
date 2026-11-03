@@ -21,10 +21,12 @@ import java.util.List;
  * OpenAI Responses API 模型适配器。
  * <br>注册 ID 为 {@code openai}，默认使用 {@code gpt-5.5} 和非流式 {@code /responses} 调用。
  *
+ * 2026/11/03：获取凭据时核对已解析参数的配置代次。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.5.0-l
+ * @version 4.7.0-l
  */
 @LLMModel(id = OpenAIResponsesModel.PROVIDER)
 public class OpenAIResponsesModel extends AbstractLLMModel {
@@ -119,7 +121,9 @@ public class OpenAIResponsesModel extends AbstractLLMModel {
             execution.checkActive();
         }
         var openAIOptions = OpenAIModelOptions.copyOf(options);
-        var access = credentialResolver.require(PROVIDER);
+        // 2026/11/03：凭据构造复核原文件参数代次。
+        // 2026/11/03：原参数与认证配置必须属于同一文件代次。
+        var access = credentialResolver.require(PROVIDER, options);
         var request = OpenAIResponsesMapper.toRequest(prompt, openAIOptions, access.apiKey());
         request.setBaseUrl(access.baseUrlOr(OpenAIModelOptions.DEFAULT_BASE_URL));
         request.setApiPath(access.apiPathOr(OpenAIModelOptions.DEFAULT_API_PATH));

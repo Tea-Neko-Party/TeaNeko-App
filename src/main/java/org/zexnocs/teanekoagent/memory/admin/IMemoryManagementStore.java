@@ -10,12 +10,27 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * DEBUG 记忆管理的持久化端口；事务内协调事实、索引、空间和操作回执，权限由宿主入口复核。
+ * <br>2026/11/03：新增同管理主体与目标的原操作查询。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public interface IMemoryManagementStore {
+    /**
+     * 2026/11/03：查询同主体原回执，不重放操作。
+     * @param operationId 原操作
+     * @param actor 原主体及目标
+     * @param guard 当前授权
+     * @return 持久化原结果
+     * @throws UnsupportedOperationException 当自定义存储未支持查询时
+     */
+    default CompletionStage<MemoryManagementResult> operation(UUID operationId,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, Runnable guard) {
+        throw new UnsupportedOperationException("当前记忆存储未实现管理回执查询。");
+    }
     /**
      * 在一个事务中完成修改、快照克隆或逻辑清空及持久化回执。
      * @param command 固定原操作

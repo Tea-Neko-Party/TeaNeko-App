@@ -6,6 +6,8 @@ import java.util.*;
 
 /**
  * 保留覆盖程度的检索证据，不将预算内无命中宣称为确定不存在。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param reference 查询固定引用，交付/注入前仍须复核
  * @param observedAt 本次过滤有效期的固定时刻
  * @param evidence 已筛选排序的证据
@@ -15,7 +17,7 @@ import java.util.*;
  * @param characters 实际证据数组 JSON 字符数，不含本结果诊断信封
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public record MemoryRecallResult(MemoryNamespaceReference reference, Instant observedAt, List<MemoryRecallEvidence> evidence,
@@ -51,9 +53,11 @@ public record MemoryRecallResult(MemoryNamespaceReference reference, Instant obs
     public boolean definitivelyEmpty() { return limits.isEmpty() && evidence.isEmpty(); }
     /**
      * 分开表达未检查全部、结果条数截断及完整证据无法装入字符预算。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @author zExNocs
      * @date 2026/10/29
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     public enum Limit { SCAN, RESULTS, CHARACTERS }

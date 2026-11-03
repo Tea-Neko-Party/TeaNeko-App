@@ -14,9 +14,11 @@ import java.util.function.Supplier;
 /**
  * Agent 唯一数据入口，沿用 of(namespace).get(target) 的 DTO 用法，并组合跨目标原子事务。
  * 注入入口可创建隔离视图，避免测试或宿主组合依赖全局静态状态；构造时无数据库访问。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @EasyData

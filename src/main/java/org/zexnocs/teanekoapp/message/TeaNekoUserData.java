@@ -14,10 +14,12 @@ import java.util.UUID;
 
 /**
  * Tea Neko 发送者数据类，实现了 ITeaNekoUserData 接口，用于存储发送者的信息。
+ * <br>2026/11/03：角色由真实客户端确定，网页私聊可以采用更严格的普通成员默认值。
  *
  * @author zExNocs
  * @date 2026/02/27
  * @since 4.0.9
+ * @version 4.7.0-l
  */
 @Getter
 @Setter
@@ -48,7 +50,7 @@ public class TeaNekoUserData implements ITeaNekoUserData {
      * 如果是群主，则返回 "owner"；
      * 如果是群管理员，则返回 "admin"；
      * 否则返回 "member"。
-     * 如果是私聊，则始终为 "owner"。
+     * 2026/11/03：私聊通常为 "owner"，客户端可采用更严格角色；网页管理权限不作为聊天角色来源。
      */
     protected @NonNull CommandPermission role;
 

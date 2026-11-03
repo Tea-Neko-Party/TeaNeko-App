@@ -13,9 +13,11 @@ import static org.mockito.Mockito.verifyNoInteractions;
 /**
  * 验证 TaskFuture 与任意 CompletionStage 的非阻塞桥接和根任务保护。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class TaskFutureStageTest {

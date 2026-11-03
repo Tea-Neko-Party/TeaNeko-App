@@ -11,10 +11,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：资源内容可借用原发送上下文，在异步解析后再次守卫。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <P> 不可变内容类型
  * @author zExNocs
  * @date 2026/11/03
- * @since 4.0.0
+ * @since 4.6.2-l
  * @version 4.6.2-l
  */
 public interface IReplyPartHandler<P extends ReplyPlans.Content> {

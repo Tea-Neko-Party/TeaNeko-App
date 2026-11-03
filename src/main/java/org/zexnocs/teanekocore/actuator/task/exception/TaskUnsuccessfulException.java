@@ -3,9 +3,11 @@ package org.zexnocs.teanekocore.actuator.task.exception;
 /**
  * 任务已结束，但最终结果显式报告失败；没有底层异常可供传播。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public class TaskUnsuccessfulException extends IllegalStateException {

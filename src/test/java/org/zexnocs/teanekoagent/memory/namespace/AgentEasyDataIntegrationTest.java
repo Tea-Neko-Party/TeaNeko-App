@@ -14,9 +14,11 @@ import static org.mockito.Mockito.mock;
 
 /**
  * 复用真实 EasyData 验证跨目标事务、普通缓存及专用配置表路由。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 class AgentEasyDataIntegrationTest {

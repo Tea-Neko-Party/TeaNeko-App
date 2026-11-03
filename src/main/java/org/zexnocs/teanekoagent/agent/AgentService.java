@@ -34,14 +34,35 @@ import java.util.function.Function;
  *
  * <br>2026/11/03：安装一次表达编译，并在重放时检查原内容扩展。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ * <br>2026/11/03：记录冷轮次、真实开始及结束的脱敏节点，观测不拥有业务资源。
+ *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
- * @version 4.6.2-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
+    // 2026/11/03：独立构造仍可不安装观测，Spring 宿主只在接收轮次之前装配。
+    private org.zexnocs.teanekoagent.agent.monitor.@Nullable AgentActivityTimeline timeline;
+
+    /**
+     * 2026/11/03：安装不含业务正文的进程观察窗口。
+     * @param timeline 实际宿主节点窗口
+     * @throws IllegalStateException 当已经开始接受业务时
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installTimeline(org.zexnocs.teanekoagent.agent.monitor.AgentActivityTimeline timeline) {
+        synchronized (lifecycleLock) {
+            if (started || closed) {
+                throw new IllegalStateException("开始运行后不能替换活动观察器。");
+            }
+            this.timeline = timeline;
+            executionPipeline.timeline = timeline;
+        }
+    }
 
     /**
      * 安装只消费脱敏报告的宿主观察器，观察故障不改变业务结果。
@@ -424,6 +445,10 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             return completed(result);
         }
         turn.own(handle.onClose(turn.lifetime::cancel));
+        // 2026/11/03：登记不表示业务已启动，冷轮次在显式 start 后才进入执行。
+        if (timeline != null) {
+            timeline.mark(request, "agent.turn", "PREPARED");
+        }
         var work = new CompletableFuture<>();
         var completion = turn.lifetime.guard(work).handle((ignored, failure) -> turn.settled().thenApply(done -> {
             var result = turn.result(failure);
@@ -431,6 +456,15 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             if (result.status() == AgentRunResult.Status.FAILED) { reportFailure(turn, result, failure); }
             try { observer.accept(AgentTurnReport.from(request, result, java.time.Duration.between(acceptedAt, clock.instant()).toMillis())); }
             catch (RuntimeException ignoredReportFailure) { /* 监控不能改写业务结果。 */ }
+            // 2026/11/03：模型终态与平台实际发送由不同节点报告。
+            if (timeline != null) {
+                try {
+                    timeline.finish(AgentTurnReport.from(request, result,
+                            java.time.Duration.between(acceptedAt, clock.instant()).toMillis()));
+                } catch (RuntimeException ignoredTimelineFailure) {
+                    // 2026/11/03：观测计数溢出等故障也不能改写业务终态。
+                }
+            }
             return result;
         })).thenCompose(Function.identity()).whenComplete((ignored, failure) -> {
             turns.remove(turn.entity.snapshot().id(), turn);
@@ -447,6 +481,10 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private void launch(AgentTurn turn, CompletableFuture<Object> work) {
         try {
             turn.lifetime.checkActive();
+            // 2026/11/03：只记录实际启动，不伪造排队或平台交付阶段。
+            if (timeline != null) {
+                timeline.mark(turn.request, "agent.turn", "STARTED");
+            }
             CompletableFuture.supplyAsync(() -> {
                 turn.lifetime.checkActive();
                 return turn.prepare(gate.evaluate(turn.handle, turn.request.actor(), turn.request.activity()), scheduler, clock);

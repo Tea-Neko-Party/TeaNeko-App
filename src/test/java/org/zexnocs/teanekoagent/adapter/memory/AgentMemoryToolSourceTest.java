@@ -42,9 +42,11 @@ import static org.mockito.Mockito.*;
  * 通过真实固定工具集校验记忆工具 schema、原始授权、逐动作身份、完整信封及默认装配。
  * <br>2026/11/02：默认装配验收改为内置能力与宿主工具源共存。
  * <br>2026/11/02：校验注解生成工具的行为，来源 Bean 与排列顺序不再作为业务假设。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 @Timeout(10)

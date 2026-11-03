@@ -31,9 +31,11 @@ import static org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult.S
  * 验证固定工具集的可见范围、参数校验、异步完成及取消回填契约。
  * <br>2026/11/02：验证图像必须由绑定显式声明，非法或超限投影不能形成视觉输入。
  *
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/28
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.6.0-l
  */
 class LLMToolSetTest {
@@ -60,11 +62,13 @@ class LLMToolSetTest {
     /**
      * 只由宿主创建的不可变测试身份，供工具上下文注入断言使用。
      *
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param user 原操作者标识
      * @param namespace 原存储协议使用的命名空间
      * @author zExNocs
      * @date 2026/10/28
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record Actor(String user, String namespace) {}

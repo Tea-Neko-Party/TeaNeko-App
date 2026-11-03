@@ -23,14 +23,41 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 在原数据库事务中完成 DEBUG 管理，空间行锁协调 clear、追加、编辑和一致快照克隆。
+ * <br>2026/11/03：提供同主体回执查询，网页管理复用原账本。
  * 回执与数据同事务保存；物理回收仅处理明确的旧代次事实域，不触碰全局防重记录。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
- * @version 4.5.0-l
+ * @since 4.5.0-l
+ * @version 4.7.0-l
  */
 @Service
 public final class EasyDataMemoryManagementStore implements IMemoryManagementStore {
+    /**
+     * 2026/11/03：按原编号查询同管理主体结果，不加载整个账本。
+     * @param operationId 原操作
+     * @param actor 原主体及目标
+     * @param guard 当前授权
+     * @return 实际原回执
+     */
+    @Override
+    public CompletionStage<MemoryManagementResult> operation(java.util.UUID operationId,
+            org.zexnocs.teanekoagent.agent.AgentActorContext actor, Runnable guard) {
+        return namespaces.submit("查询记忆管理回执", () -> {
+            guard.run();
+            var row = namespaces.dto("management-operation").find(operationId.toString(), EasyDataLock.READ);
+            if (row == null) {
+                throw new java.util.NoSuchElementException("管理操作回执不存在。");
+            }
+            var original = namespaces.read(row, OperationData.class);
+            if (!original.command().actor().equals(actor)) {
+                throw new SecurityException("管理操作不属于当前主体或目标。");
+            }
+            guard.run();
+            return original.result();
+        });
+    }
     private final EasyDataMemoryNamespaceStore namespaces;
     private final EasyDataMemoryFactStore facts;
     private final TeaNekoAgentEasyData data;
@@ -234,12 +261,14 @@ public final class EasyDataMemoryManagementStore implements IMemoryManagementSto
 
     /**
      * 防重结构保留原始预期版本和完整参数，跨命令重用同 ID 明确冲突。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
      * @param schemaVersion 存储版本
      * @param command 原请求
      * @param result 原提交结果
      * @author zExNocs
      * @date 2026/11/01
-     * @since 4.0.0
+     * @since 4.5.0-l
      * @version 4.5.0-l
      */
     private record OperationData(int schemaVersion, MemoryManagementCommand command, MemoryManagementResult result) {

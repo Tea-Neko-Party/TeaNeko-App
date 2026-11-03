@@ -14,10 +14,12 @@ import java.util.Objects;
 
 /**
  * 三类内部操作的进程内结构化数据；原生来源与父控制不进入 JSON 或任务名称。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @param <R> 明确响应类型
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Getter
@@ -49,9 +51,11 @@ public final class AgentSendData<R> extends AbstractJsonSendData<R> {
     public String toSendString() { return "{\"operation\":\"" + kind.name() + "\",\"echo\":\"" + getEcho() + "\"}"; }
     /**
  * 宿主固定的三类能力入口，不接收任意可执行回调。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/02
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
     public enum Kind { CONVERSATION, MEMORY_WRITE, PERSONALITY_CORRECTION }

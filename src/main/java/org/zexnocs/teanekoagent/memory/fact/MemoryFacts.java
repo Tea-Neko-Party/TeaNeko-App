@@ -6,9 +6,11 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 可信宿主的事实追加服务，固定记录时刻并等待存储提交，不承担聊天授权或画像生成。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/10/29
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 public final class MemoryFacts {

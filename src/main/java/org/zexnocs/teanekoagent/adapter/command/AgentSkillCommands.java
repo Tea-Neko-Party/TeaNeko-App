@@ -20,9 +20,11 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * 原生 Skill 查询和 DEBUG 重载边界，本地文件更新不会授予工具或执行任意代码。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
  * @author zExNocs
  * @date 2026/11/01
- * @since 4.0.0
+ * @since 4.5.0-l
  * @version 4.5.0-l
  */
 @Service
