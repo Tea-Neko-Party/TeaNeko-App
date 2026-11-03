@@ -6,6 +6,8 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 /**
  * 内容解析时借用的可信上下文，仅在调用链传递，不进入组件、计划或持久化。
  * <br>2026/11/03：同时提供当前实际交互的工具回执，拒绝历史目录授权。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param request 原请求及真实 client/scope
  * @param input 本轮实际输入和来源
  * @param control 借用控制，扩展不得关闭
@@ -14,7 +16,7 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @JsonIgnoreType
 public record ReplyCompileContext(AgentRunRequest request, AgentPromptInput input, ExecutionControl control,

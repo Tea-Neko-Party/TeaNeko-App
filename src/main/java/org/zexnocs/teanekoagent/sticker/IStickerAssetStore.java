@@ -9,10 +9,12 @@ import java.util.List;
  * 有界素材文件端口；阻塞实现由调用方放在借用的虚拟执行域。
  * <br>2026/11/03：发送租约内读取原始字节，不返回本地文件路径。
  * <br>2026/11/03：预览和重新分析共用已有文件的有界解码。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface IStickerAssetStore {
     /**
@@ -68,13 +70,15 @@ public interface IStickerAssetStore {
     Prepared preview(Stickers.Blob blob,StickerSettings settings,ExecutionControl control);
     /**
      * 只在受控任务中存活的视觉输入，不持久保存大块 base64。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param blob 原内容元数据
      * @param previews 同一请求中的采样画面
      * @param note 动画采样说明
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @JsonIgnoreType record Prepared(Stickers.Blob blob,List<String> previews,String note){ }
 }

@@ -18,10 +18,12 @@ import java.util.concurrent.ExecutorService;
 /**
  * 组合显式记忆访问边界，不自动注册模型工具、学习或管理权限。
  * <br>2026/11/03：明确保存默认进入同一长期领域，关闭新模块后保留原入口。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Configuration(proxyBeanMethods = false)
 public class MemoryAccessConfig {

@@ -71,10 +71,12 @@ import static org.mockito.Mockito.*;
  * 验证 OneBot 工具的真实工具集执行、跨 scope 拒绝及模型元数据与原文分离。
  * <br>2026/11/02：验证引用图片经真实工具往返成为供应商图像块，并从用户历史投影移除。
  * <br>2026/11/03：验证机器人原生身份和自身提及，不污染用户原文。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 class OnebotAgentToolsTest {
     private final ObjectMapper mapper = new ObjectMapper();

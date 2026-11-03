@@ -6,6 +6,8 @@ import java.util.TreeMap;
 
 /**
  * 素材选择与客户端表情的独立预算，不承载下载或模型凭据。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param enabled 总开关
  * @param maxPerReply 单轮表情包数量
  * @param maxCategories 单轮展开类别数
@@ -15,7 +17,7 @@ import java.util.TreeMap;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public record MediaReplySettings(boolean enabled,int maxPerReply,int maxCategories,int cooldownTurns,int maxCategoryCharacters,Map<String,Map<String,String>> nativeFaces){
     /**

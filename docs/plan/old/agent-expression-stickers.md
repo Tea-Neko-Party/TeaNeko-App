@@ -1,6 +1,6 @@
 # 拟人表达与表情包实施入口
 
-日期：2026/11/03。状态：四批约定实现与离线验收完成，整体 100%，随配套规格及记录归档；当前版本保持 4.6.1-l，功能版本待后续发布安排。本进度只统计本计划，不计入已经归档的三层记忆计划或未执行的真实环境验收。
+日期：2026/11/03。状态：四批约定实现与离线验收完成，整体 100%，随配套规格及记录归档；本功能版本归属调整为 4.6.2-l，版本说明见[发布日志](../../changelog/4.6.2-l.md)。本进度只统计本计划，不计入已经归档的三层记忆计划、后续 4.7.0-l Web 控制台或未执行的真实环境验收。
 
 ## 已确认规格
 
@@ -17,10 +17,10 @@
 | 本次工作 | 按需阅读 |
 | --- | --- |
 | 已交付功能、配置及扩展 API | [表达模块说明](../../../src/main/java/org/zexnocs/teanekoagent/expression/README.md) |
-| 协议、人格语气、等待及顺序 | [拟人表达设计](4.6.1-expression-specification.md) |
-| 注解、scanner、注册键及扩展选择 | [注解扩展设计](4.6.1-extension-specification.md) |
+| 协议、人格语气、等待及顺序 | [拟人表达设计](4.6.2-expression-specification.md) |
+| 注解、scanner、注册键及扩展选择 | [注解扩展设计](4.6.2-extension-specification.md) |
 | 当前素材配置、采集及后端扩展 | [素材模块说明](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md) |
-| 素材收集、视觉分析、分类、配额及管理目标 | [表情包设计](4.6.1-sticker-specification.md) |
+| 素材收集、视觉分析、分类、配额及管理目标 | [表情包设计](4.6.2-sticker-specification.md) |
 | 已有平台回复和原生消息 | [平台说明](../../../src/main/java/org/zexnocs/teanekoagent/adapter/platform/README.md) |
 | 真实发送状态与历史 | [持久历史](../../../src/main/java/org/zexnocs/teanekoagent/history/README.md) |
 | 人格与观察式表达 | [人格说明](../../../src/main/java/org/zexnocs/teanekoagent/personality/README.md#持久观察式人格) |

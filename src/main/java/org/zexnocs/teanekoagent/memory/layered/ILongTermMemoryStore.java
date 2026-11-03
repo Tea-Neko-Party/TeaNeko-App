@@ -16,10 +16,12 @@ import java.util.concurrent.CompletionStage;
  * 长期整理与召回事务端口，权威记录和索引同事务更新，不直接访问仓库。
  * <br>2026/11/03：联合提交风格观察，未支持的替换存储明确拒绝观察写入。
  * <br>2026/11/03：明确保存与后台整理共用长期记录及索引。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface ILongTermMemoryStore {
     /**

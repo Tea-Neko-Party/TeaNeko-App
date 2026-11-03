@@ -16,6 +16,8 @@ import java.util.*;
 
 /**
  * 一轮已结束的只读结果。被拒绝或终止时仍保留已观察交互，不自动提交历史或发送平台消息。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param agentId 实际执行的实例标识
  * @param requestId 宿主请求标识
  * @param status 最终业务状态
@@ -29,7 +31,7 @@ import java.util.*;
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                              Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,

@@ -18,10 +18,12 @@ import java.util.function.Supplier;
 /**
  * 原发送链的持久回执边界，先占用再调用宿主守卫和传输，失败保守记录不确定且不补发。
  * <br>2026/11/03：支持类型扩展提供的固定历史投影与实际内容摘要。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class AgentDeliveryService {
     private final IAgentDeliveryStore store;

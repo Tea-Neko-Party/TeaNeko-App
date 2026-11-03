@@ -33,10 +33,12 @@ import java.util.function.Function;
  * <br>2026/11/02：为未知失败增加请求关联、模型尝试次数及脱敏异常结构。
  *
  * <br>2026/11/03：安装一次表达编译，并在重放时检查原内容扩展。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };

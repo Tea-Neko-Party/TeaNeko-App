@@ -30,10 +30,12 @@ import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
  * 所有阻塞操作由采集宿主放在虚拟执行域，构造期不创建目录或网络客户端。
  * <br>2026/11/03：持有发送占用时按内容地址读取原图并验证完整性。
  * <br>2026/11/03：管理预览与视觉刷新复用相同解码预算。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoStickerAssets("local")
 public final class LocalStickerAssets implements IStickerAssetStore {

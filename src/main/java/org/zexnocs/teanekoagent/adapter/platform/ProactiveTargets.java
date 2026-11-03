@@ -14,10 +14,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * 自主发送的可信目标解析，不从模型输出接收客户端、群号或用户身份。
  * <br>2026/11/03：发送完成必须包含实际平台消息 ID。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Service
 public final class ProactiveTargets {

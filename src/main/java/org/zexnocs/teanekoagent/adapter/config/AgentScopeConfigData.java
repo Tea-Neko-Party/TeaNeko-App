@@ -15,10 +15,12 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * <br>2026/11/03：登记独立拟人表达开关。
  * <br>2026/11/03：登记独立素材采集开关，不绑定记忆学习。
  * <br>2026/11/03：分别控制共享图库回复和客户端原生表情。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Getter @Setter @NoArgsConstructor
 public class AgentScopeConfigData implements IConfigData {

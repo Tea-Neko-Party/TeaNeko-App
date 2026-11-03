@@ -9,10 +9,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 将明确图库用例注册到原管理网关，不发布 HTTP、默认角色或任意反射路由。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class StickerManagementResources {
     /** 禁止实例化资源命名空间。 */ private StickerManagementResources(){}
@@ -40,10 +42,12 @@ public final class StickerManagementResources {
             new ManagementResource.Field("operationId","string","本人原操作幂等 UUID",true,false,List.of())));
     /**
      * 有界目录与作业管理查询。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Component public static final class Catalog implements ManagementResource<StickerManagement.Query,StickerManagement.Page>{
         private final StickerManagementService service;
@@ -59,10 +63,12 @@ public final class StickerManagementResources {
     }
     /**
      * 受控缩略图管理资源。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Component public static final class Preview implements ManagementResource<StickerManagement.Preview,StickerManagement.PreviewView>{
         private final StickerManagementService service;
@@ -78,10 +84,12 @@ public final class StickerManagementResources {
     }
     /**
      * 带原子版本及幂等回执的管理动作。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Component public static final class Change implements ManagementResource<StickerManagement.Change,StickerManagement.ChangeResult>{
         private final StickerManagementService service;
@@ -97,10 +105,12 @@ public final class StickerManagementResources {
     }
     /**
      * 本人原管理操作结果查询。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Component public static final class Operation implements ManagementResource<StickerManagement.OperationQuery,StickerManagement.ChangeResult>{
         private final StickerManagementService service;

@@ -11,10 +11,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 逐段平台回执端口，区分发送前占用、真实平台确认和不确定结果，不承担自动补发。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface IAgentDeliveryStore {
     /**
@@ -41,6 +43,8 @@ public interface IAgentDeliveryStore {
     CompletionStage<Map<UUID, View>> read(MemoryNamespaceReference reference, Set<UUID> requests, Instant now);
     /**
      * 单段发送占用；text 是有界实际文本或图片占位，digest 校验完整内容。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param reference 固定空间
      * @param actor 真实发起或系统身份
      * @param requestId 原请求
@@ -53,7 +57,7 @@ public interface IAgentDeliveryStore {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     record Part(MemoryNamespaceReference reference, AgentActorContext actor, UUID requestId, int index, int total,
                 String digest, String text, Instant at, Instant expiresAt) {
@@ -77,6 +81,8 @@ public interface IAgentDeliveryStore {
     }
     /**
      * 平台回执摘要，确认不表示收件人已经阅读。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param state ACKNOWLEDGED、PARTIAL 或 UNKNOWN
      * @param confirmed 已确认段数
      * @param total 原总段数
@@ -84,7 +90,7 @@ public interface IAgentDeliveryStore {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     record View(String state, int confirmed, int total, String text) { }
 }

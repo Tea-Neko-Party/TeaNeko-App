@@ -36,10 +36,12 @@ import java.util.stream.Collectors;
  * 复用原交互服务生成有界中期候选，模型前后复核 SUMMARY 准入、策略和固定空间。
  * 模型不能提交覆盖序号、主体或持久化指令，业务实例到首次工作才创建。
  * <br>2026/11/03：压缩时读取实际平台回执，区分已确认、部分发送和原生成候选。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompressor, AutoCloseable {
     private final Supplier<IAgentFactory> factory;

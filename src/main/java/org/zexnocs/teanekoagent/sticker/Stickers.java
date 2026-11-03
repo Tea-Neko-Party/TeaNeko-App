@@ -12,24 +12,30 @@ import java.util.*;
  * 素材与作业的有界持久数据；来源仅用于审计，不投影为跨群对话资料。
  * <br>2026/11/03：记录独立的真实机器人展示、区域回避轮次和展示幂等摘要。
  * <br>2026/11/03：管理状态、删除墓碑及重新分析按原版本仲裁。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class Stickers {
     /** 不实例化数据命名空间。 */
     private Stickers(){}
     /**
      * 实际视觉类型，画风不等于聊天用途。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public enum Kind { STICKER, ILLUSTRATION, PHOTO, SCREENSHOT, OTHER, UNKNOWN }
     /**
      * 单次模型判定；宿主仍独立校验类型、类别和阈值。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param kind 视觉类型
      * @param confidence 类型置信度
      * @param worthKeeping 收藏建议
@@ -42,7 +48,7 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Analysis(Kind kind,double confidence,boolean worthKeeping,String visualDescription,String usageDescription,
                            String primaryCategory,List<String> secondaryTags,double quality,String reasons){
@@ -68,6 +74,8 @@ public final class Stickers {
     }
     /**
      * 入站固定身份与短期引用；不接受工具直接指定 URL。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param scope 真实作用域
      * @param author 真实作者 UUID
      * @param sender 平台作者
@@ -81,12 +89,14 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Source(AgentScope scope,UUID author,String sender,String self,String message,int image,Instant occurredAt,
                          boolean manual,UUID requester,String url){ }
     /**
      * 内容地址元数据；不持久保存模型预览或任意宿主路径。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param hash 原文件 SHA-256
      * @param format 真实解码格式
      * @param bytes 原文件大小
@@ -96,33 +106,39 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Blob(String hash,String format,long bytes,int width,int height,int frames){ }
     /**
      * 后台作业状态；分析不确定时不因普通重复图片自动再次计费。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public enum JobStatus { QUEUED, RUNNING, SAVED, DUPLICATE, REJECTED, FAILED }
     /**
      * 素材可选状态与文件回收状态；只有 ACTIVE 可以交给后续选择端口。
      * <br>2026/11/03：人工停用和删除不与可自动回收缓存混用。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public enum EntryStatus { CACHED, ACTIVE, DISABLED, DELETED, RETIRED, UNAVAILABLE, DELETING }
     /**
      * 单作业持久状态；清理文件前保留容量预约与来源，终态清理后移除私有引用。
      * <br>2026/11/03：重新分析绑定现有文件和固定条目版本，不重新下载。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Data @NoArgsConstructor public static class Job {
         private UUID id=UUID.randomUUID(), lease;
@@ -142,10 +158,12 @@ public final class Stickers {
      * 素材条目和有限人类使用窗口；机器人展示另计，不用于抬高人类热度。
      * <br>2026/11/03：持久保存真实确认次数，不加入人类评分。
      * <br>2026/11/03：管理删除在物理回收完成前禁止恢复。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Data @NoArgsConstructor public static class Entry {
         private String id, hash;
@@ -166,20 +184,24 @@ public final class Stickers {
     }
     /**
      * 有界小时计数，不是完整聊天历史。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Data @NoArgsConstructor public static class Quota {private long hour; private int downloads,analyses;}
     /**
      * 一行目录事务快照；有界集合避免全表扫描及跨行激活竞态。
      * <br>2026/11/03：按真实区域保存有限轮次与机器人展示回执摘要。
      * <br>2026/11/03：管理回执与条目变更原子提交。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Data @NoArgsConstructor public static class State {
         private long revision;
@@ -199,10 +221,12 @@ public final class Stickers {
     }
     /**
      * 当前表达区域的有限轮次与最近展示，失败轮次也属于已准入的对话尝试。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @Data @NoArgsConstructor public static class ScopeUsage {
         private long turn;
@@ -212,6 +236,8 @@ public final class Stickers {
     }
     /**
      * 工具可见的脱敏作业回执。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param jobId 作业标识
      * @param status 实际持久状态
      * @param reason 固定原因码
@@ -219,7 +245,7 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Receipt(UUID jobId,JobStatus status,String reason,String stickerId){ }
 }

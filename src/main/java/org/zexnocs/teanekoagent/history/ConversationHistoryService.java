@@ -30,10 +30,12 @@ import java.util.stream.Collectors;
 /**
  * 在业务域组合历史授权、时间保留与存储，并在默认轮次前等待可信明确保存。
  * <br>2026/11/03：默认轮次前先等待用户明确原文保存，关闭历史采集不关闭明确保存。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ConversationHistoryService implements IConversationHistory, IAgentHistoryRecorder {
     private final IHistoryStore store;

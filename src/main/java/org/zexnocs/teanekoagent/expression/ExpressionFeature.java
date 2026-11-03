@@ -18,10 +18,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 按实例安装表达合同，实际保留资料后才使用对应语法。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component
 public final class ExpressionFeature implements AgentFeature {

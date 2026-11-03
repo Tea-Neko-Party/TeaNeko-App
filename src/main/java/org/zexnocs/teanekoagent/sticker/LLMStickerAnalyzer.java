@@ -42,10 +42,12 @@ import java.util.stream.Collectors;
 
 /**
  * 通过统一门控进行一次零工具视觉任务，严格区分画作与聊天表情包。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoStickerAnalyzer("llm")
 public final class LLMStickerAnalyzer implements IStickerAnalyzer,AutoCloseable {

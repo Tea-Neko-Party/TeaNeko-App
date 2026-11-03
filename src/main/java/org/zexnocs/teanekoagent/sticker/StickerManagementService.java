@@ -24,10 +24,12 @@ import java.util.concurrent.*;
 /**
  * 全实例图库的授权管理用例，版本写入和幂等回执共用专用 DTO 根事务。
  * 没有显式授权实现时默认拒绝；Web 身份不转为聊天 USER，刷新始终通过 SYSTEM 视觉活动。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component
 public final class StickerManagementService {
@@ -283,45 +285,53 @@ public final class StickerManagementService {
     private void notifyCommitted(IStickerLifecycle.Notice notice){try{var observer=lifecycle.getIfAvailable();if(observer!=null){observer.committed(notice);}}catch(RuntimeException ignored){/* 通知不改变真实提交。 */}}
     /**
      * 临时管理选择，不导出服务或权限能力。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param settings 原设置
      * @param storage 原存储
      * @param token 原宿主插件版本
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @JsonIgnoreType private record Session(StickerSettings settings,StickerExtensionRegistry.Storage storage,PluginRegistry.Token token){}
     /**
      * 写入前观察，不提前返回未提交结果。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param previous 已提交幂等回执
      * @param blob 当前文件
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @JsonIgnoreType private record Preparation(StickerManagement.@Nullable ChangeResult previous,Stickers.@Nullable Blob blob){}
     /**
      * 预览真实占用，仅由宿主释放。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param session 原端口
      * @param token 占用 ID
      * @param blob 原文件
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @JsonIgnoreType private record PreviewLease(Session session,UUID token,Stickers.Blob blob){}
     /**
      * 保留物理阶段结果以完成资源清理。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param value 实际值
      * @param failure 原失败
      * @param <T> 结果类型
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record PreviewOutcome<T>(@Nullable T value,@Nullable Throwable failure){}
 }

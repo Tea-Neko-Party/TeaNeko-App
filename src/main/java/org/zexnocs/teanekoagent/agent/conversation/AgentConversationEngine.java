@@ -28,10 +28,12 @@ import java.util.Map;
  * 负责窗口装配、协议提交验证和缓存度量；不持有邮箱锁、执行控制或外部资源。
  * 所有深层冻结和 JSON 工作由邮箱拥有者在锁外调用。
  * <br>2026/11/03：会话提交核验一次编译的表达语义投影。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class AgentConversationEngine {
     private final LLMMessageCodec codec;

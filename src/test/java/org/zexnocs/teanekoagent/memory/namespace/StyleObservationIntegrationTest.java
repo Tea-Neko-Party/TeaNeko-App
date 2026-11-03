@@ -36,10 +36,12 @@ import static org.mockito.Mockito.*;
  * 复用真实事务夹具验证观察积累、渐进采用、原人格隔离与联合提交回滚。
  * <br>2026/11/03：补充观察原话和补正到期清理、容量释放及不可变备份保护。
  * <br>2026/11/03：核对默认送达账本与分层资料的联合装配。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Timeout(25)
 class StyleObservationIntegrationTest {
@@ -49,10 +51,12 @@ class StyleObservationIntegrationTest {
     private final LayeredMemorySettings settings = new LayeredMemorySettings(true, 6, 2, 4, 131072, Duration.ofSeconds(30), Duration.ofDays(90));
     /**
      * 原人格、历史、短中期与表达域共享现有事务基础设施。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();

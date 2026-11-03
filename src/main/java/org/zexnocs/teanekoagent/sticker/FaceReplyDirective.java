@@ -8,10 +8,12 @@ import org.zexnocs.teanekoagent.expression.TeaNekoReplyDirective;
 
 /**
  * 客户端原生表情指令，只产生草稿，资源证明由处理器异步验证。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoReplyDirective("FACE")
 public final class FaceReplyDirective implements IReplyDirectiveParser {

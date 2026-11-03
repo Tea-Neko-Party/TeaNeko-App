@@ -12,10 +12,12 @@ import java.util.function.Function;
 
 /**
  * 按独立控制行解析表达信封，代码围栏和转义内容保持字面语义。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoReplyProtocol("teaneko:expression")
 public final class ExpressionReplyProtocol implements IReplyProtocolParser {

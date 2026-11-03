@@ -15,10 +15,12 @@ import java.util.function.Supplier;
 /**
  * 将冻结计划交给原守卫、账本和类型发送器，不重新生成或解析。
  * <br>2026/11/03：异步资源交付继续携带原目标与守卫。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component
 public final class ExpressionDelivery {

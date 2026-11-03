@@ -18,10 +18,12 @@ import java.util.concurrent.Executor;
 /**
  * 按协议、指令和准确内容类型分派，保留容器代理与所属插件版本。
  * <br>2026/11/03：资源发送交接原请求和控制，不丢失异步后的守卫。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ReplyExtensionRegistry {
     private final AnnotatedBeanRegistry<ReplyPlans.ProtocolKey,IReplyProtocolParser> protocols;
@@ -242,6 +244,8 @@ public final class ReplyExtensionRegistry {
     }
     /**
      * 固定内容声明与泛型处理器代理。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param id 内容 ID
      * @param version 内容版本
      * @param ownerType 注解目标类
@@ -249,7 +253,7 @@ public final class ReplyExtensionRegistry {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record PartBinding(String id, int version, Class<?> ownerType, IReplyPartHandler<?> handler) {}
 }

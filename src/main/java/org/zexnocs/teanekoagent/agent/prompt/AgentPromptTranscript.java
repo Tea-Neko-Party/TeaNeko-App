@@ -12,10 +12,12 @@ import java.util.Objects;
  * 已经验证的实际交互与历史投影，只能由布局校验工厂生成，不用任意跳过条数充当证明。
  * 此值仅含不可变数据；通用序列化不重复导出整份交互和临时资料。
  * <br>2026/11/03：固定表达计划和语义投影，原模型链先完整核验。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @JsonIgnoreType
 public final class AgentPromptTranscript {

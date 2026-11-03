@@ -44,10 +44,12 @@ import static org.mockito.Mockito.*;
  * 验证宿主身份、明确原文、独立开关及取消/交付边界，不调用真实模型或数据库。
  * <br>2026/11/03：新建 scope 的学习默认开启，显式关闭仍独立保留。
  * <br>2026/11/03：默认明确保存可懒路由新长期存储。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Timeout(10)
 class MemoryAccessServiceTest {

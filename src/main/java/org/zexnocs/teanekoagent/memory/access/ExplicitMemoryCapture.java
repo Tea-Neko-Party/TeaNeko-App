@@ -14,10 +14,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 模型调用前保存用户明确要求的原文，普通聊天和原生入口共用同一可信访问边界。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ExplicitMemoryCapture {
     private final MemoryAccessService access;

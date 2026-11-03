@@ -7,10 +7,12 @@ import java.util.function.Function;
 
 /**
  * 完整回复的语法解析器，不发送消息或改变真实目标。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface IReplyProtocolParser {
     /**

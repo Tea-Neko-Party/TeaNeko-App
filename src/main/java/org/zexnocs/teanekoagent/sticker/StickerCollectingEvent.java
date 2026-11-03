@@ -10,10 +10,12 @@ import java.util.UUID;
 
 /**
  * 同步采集草稿，只允许拒绝或补充低信任识别提示，真实来源不可修改。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class StickerCollectingEvent extends AbstractEvent<StickerCollectingEvent.Candidate> implements PluginScopedEvent {
     private final Set<String> plugins;
@@ -54,6 +56,8 @@ public final class StickerCollectingEvent extends AbstractEvent<StickerCollectin
     @Override public boolean allowsAsyncListeners(){return false;}
     /**
      * 不含图片字节、URL、原话或作者信息的候选定位。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param proposalId 稳定候选 ID
      * @param scope 真实区域
      * @param manual 是否主动请求
@@ -62,7 +66,7 @@ public final class StickerCollectingEvent extends AbstractEvent<StickerCollectin
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Candidate(UUID proposalId,AgentScope scope,boolean manual,int image,Instant occurredAt){}
 }

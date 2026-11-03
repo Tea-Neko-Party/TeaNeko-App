@@ -65,20 +65,24 @@ import static org.mockito.Mockito.*;
 
 /**
  * 复用事务与平台夹具验证从完整目录到独立发送、回执、回避及实际文件占用的闭环。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Timeout(20)
 class MediaReplyIntegrationTest{
     @TempDir Path directory;
     /**
      * 测试客户端显式声明媒体能力，实际编码直接借用已注册 OneBot 适配器。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @TeaNekoExpressionClient(FakeTeaNekoClient.ID) public static final class ClientAdapter implements IExpressionClientAdapter {
         final OnebotExpressionClient delegate;volatile CompletableFuture<Void> pending;
@@ -109,10 +113,12 @@ class MediaReplyIntegrationTest{
     }
     /**
      * 局部默认装配，所有文件和目录仲裁真实执行，只有原生来源由受控租约替身提供。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private static final class Harness implements AutoCloseable{
         final NamespaceDatabaseFixture db=new NamespaceDatabaseFixture();final AnnotationConfigApplicationContext context=new AnnotationConfigApplicationContext();

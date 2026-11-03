@@ -18,6 +18,8 @@ import java.time.Instant;
  * 原生图文输入的不可变快照，引用和提及不伪装成用户原文或图片。
  * <br>2026/11/02：每条模型用户消息添加独立元数据前缀，原文及其授权凭据保持分离。
  * <br>2026/11/03：显式提供当前机器人平台 ID 和提及自身标记，避免将机器人识别为未知用户。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param text 当前消息字面文本
  * @param message 冻结的有序图文消息
  * @param occurredAt 原生平台时刻
@@ -25,7 +27,7 @@ import java.time.Instant;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public record NativeMessageInput(String text, ILLMMessage message, Instant occurredAt, String digest) {
     // 2026/11/02：复用只投影基础数据的转换器，不为每条平台消息重复创建转换器。

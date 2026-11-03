@@ -36,10 +36,12 @@ import java.util.stream.Collectors;
  * 参考数据有独立容量和有效期，不改变原始历史投影、工具权限或最终交付检查。
  * <br>2026/11/03：近期助手消息按实际平台回执投影，不把生成信封或部分发送冒充完整送达。
  * <br>2026/11/03：直接组合业务执行域中的异步恢复，显式约束回执映射类型并展开排版。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class LayeredMemoryPromptSource implements IAgentPromptSource {
     public static final Set<String> NAMES = Set.of("memory_recent", "memory_episodes");

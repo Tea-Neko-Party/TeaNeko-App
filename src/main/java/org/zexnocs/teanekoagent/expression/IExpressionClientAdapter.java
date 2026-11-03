@@ -8,10 +8,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 客户端明确声明可用能力；不能把本地路径交给远程机器人读取。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface IExpressionClientAdapter{
     /**

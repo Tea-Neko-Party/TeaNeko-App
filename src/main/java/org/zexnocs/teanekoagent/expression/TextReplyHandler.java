@@ -12,10 +12,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 普通文本的内容验证、历史投影和原发送器编码。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoReplyPartHandler("teaneko:text")
 public final class TextReplyHandler implements IReplyPartHandler<ReplyPlans.Text> {

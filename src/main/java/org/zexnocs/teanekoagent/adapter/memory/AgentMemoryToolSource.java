@@ -38,10 +38,12 @@ import java.util.concurrent.*;
  * <br>2026/11/02：业务方法和参数声明替代手写 schema，保留原文意图及访问边界。
  * 原始意图在模型调用前由独立原文凭据固定，正文、身份和操作标识均不成为模型业务参数。
  * <br>2026/11/03：说明统一长期保存后的查询与维护入口。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.memory", managedByFeature = true)
 public final class AgentMemoryToolSource implements IAgentToolSource {

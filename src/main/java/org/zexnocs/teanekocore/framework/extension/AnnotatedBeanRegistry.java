@@ -10,12 +10,14 @@ import java.util.function.Function;
 
 /**
  * 按声明键注册已有 Spring Bean，保留代理并拒绝重复声明。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param <K> 稳定路由键
  * @param <T> 扩展接口
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class AnnotatedBeanRegistry<K,T> {
     private final Map<K,Entry<T>> entries;
@@ -50,6 +52,8 @@ public final class AnnotatedBeanRegistry<K,T> {
     }
     /**
  * 声明来源及原容器代理。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param name Bean 名称
  * @param type 目标类型
  * @param bean 原 Bean
@@ -57,7 +61,7 @@ public final class AnnotatedBeanRegistry<K,T> {
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
     public record Entry<T>(String name, Class<?> type, T bean) {}
 }

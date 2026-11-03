@@ -23,10 +23,12 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 复用 Core 事件总线，决策与只读通知均有在途上限，后台插件参与须明确选择。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component
 public final class StickerEvents implements IStickerLifecycle {

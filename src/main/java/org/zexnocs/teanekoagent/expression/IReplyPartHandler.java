@@ -9,11 +9,13 @@ import java.util.concurrent.CompletionStage;
 /**
  * 有类型内容验证及编码，宿主在实际调用前统一守卫。
  * <br>2026/11/03：资源内容可借用原发送上下文，在异步解析后再次守卫。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param <P> 不可变内容类型
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public interface IReplyPartHandler<P extends ReplyPlans.Content> {
     /** @return 准确内容类型 */

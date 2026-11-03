@@ -12,10 +12,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 普通明确图片的兼容处理，不把链接文本变成图片。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoReplyPartHandler("teaneko:image")
 public final class ImageReplyHandler implements IReplyPartHandler<ReplyPlans.Image> {

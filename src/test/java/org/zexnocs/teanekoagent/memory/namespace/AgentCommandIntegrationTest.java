@@ -107,10 +107,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/02：验证无提及私聊和独立模型元数据，保留图文顺序与平台回复。
  * <br>2026/11/03：原命令、自动和自主发送集成逐段持久回执。
  * <br>2026/11/03：覆盖拟人编译、语义历史及双原生入口交付。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -137,10 +139,12 @@ class AgentCommandIntegrationTest {
     /**
      * 实际扫描、分发、权限、执行、事件和 Agent 管线；只替换任务调度、scope 覆盖存储和供应商传输。
      * <br>2026/11/03：加入真实专用数据发送账本，复用原发送、失败和取消用例。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
@@ -161,10 +165,12 @@ class AgentCommandIntegrationTest {
         final @org.jspecify.annotations.Nullable ExpressionHarness expression;
         /**
          * 当前测试拥有的局部表达容器与队列，不引入新的数据库替身。
+         * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+         *
          * @author zExNocs
          * @date 2026/11/03
          * @since 4.0.0
-         * @version 4.6.1-l
+         * @version 4.6.2-l
          */
         private final class ExpressionHarness implements AutoCloseable {
             final org.springframework.context.annotation.AnnotationConfigApplicationContext beans = new org.springframework.context.annotation.AnnotationConfigApplicationContext();

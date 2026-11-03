@@ -22,10 +22,12 @@ import java.util.function.Supplier;
  * 组合可信身份、动态开关、引用复核及事实业务，不授予模型记忆管理或其他主体写入能力。
  * 所有策略和业务调用回到借用业务域；动作前观察不替代原存储事务中的 generation 仲裁。
  * <br>2026/11/03：默认明确保存路由到新长期领域，独立旧宿主保留原事实端口。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class MemoryAccessService {
     private final IMemoryAccessPolicy policies;

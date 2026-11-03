@@ -6,6 +6,8 @@ import java.util.Map;
 
 /**
  * 一次作业固定使用的图库预算；模型路由仍引用原 model.yml。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param enabled 总开关
  * @param collectEnabled 主动及被动采集总开关
  * @param passiveEnabled 被动采集开关
@@ -40,7 +42,7 @@ import java.util.Map;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public record StickerSettings(boolean enabled, boolean collectEnabled, boolean passiveEnabled, String catalogId, String storageRoot,
         String analyzer, String assets, String admission, String catalog, String modelId, int analysisVersion,

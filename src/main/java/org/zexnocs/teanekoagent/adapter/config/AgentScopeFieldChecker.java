@@ -12,10 +12,12 @@ import java.util.Arrays;
  * <br>2026/11/03：沿用原 cfg 权限校验新的表达开关。
  * <br>2026/11/03：素材采集开关执行相同严格布尔校验。
  * <br>2026/11/03：共享图库和原生表情回复开关同样严格校验。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class AgentScopeFieldChecker implements IConfigFieldChecker {
     /**

@@ -39,10 +39,12 @@ import java.util.function.Function;
  * <br>2026/11/02：携带工具图像的交互强制使用历史投影，避免伪装成用户新消息。
  *
  * <br>2026/11/03：在持久历史之前编译完整表达计划，避免控制符进入会话。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;

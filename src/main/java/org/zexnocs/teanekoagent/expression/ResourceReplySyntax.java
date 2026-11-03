@@ -8,10 +8,12 @@ import java.util.function.Function;
 
 /**
  * 独立资源指令共用的字段边界，不承担按内容类型分派。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ResourceReplySyntax{
     /** 禁止实例化无状态语法工具。 */ private ResourceReplySyntax(){}

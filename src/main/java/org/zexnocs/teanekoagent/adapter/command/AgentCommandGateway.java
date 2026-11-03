@@ -38,10 +38,12 @@ import java.util.stream.Collectors;
  * <br>2026/11/03：显式聊天逐段记录平台回执，生成成功不再作为送达依据。
  * <br>2026/11/03：顺序协调生成与发送，停止本人等待，沿用原交付复核及账本。
  * <br>2026/11/03：来源租约改用确定赋值，明确同步失败与异步完成的释放边界并整理排版。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Service
 public final class AgentCommandGateway implements AutoCloseable {

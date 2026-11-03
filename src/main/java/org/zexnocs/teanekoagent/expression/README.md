@@ -1,6 +1,6 @@
 # 拟人表达与有序交付
 
-当前交付：4.6.1-l 已接通文字分段、发送节奏、类别选图及 STICKER/FACE 独立发送；命令和自动回复共用真实目标队列，自主文本保留原零工具合同。采集与选图配置见[素材模块](../sticker/README.md)，剩余工作见[实施计划](../../../../../../../docs/plan/old/agent-expression-stickers.md)。
+当前交付：4.6.2-l 已接通文字分段、发送节奏、类别选图及 STICKER/FACE 独立发送；命令和自动回复共用真实目标队列，自主文本保留原零工具合同。采集与选图配置见[素材模块](../sticker/README.md)，交付与验收见[实施计划](../../../../../../../docs/plan/old/agent-expression-stickers.md)。
 
 ## 使用与配置
 

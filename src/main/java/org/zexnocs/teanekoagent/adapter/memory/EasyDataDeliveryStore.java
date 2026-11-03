@@ -16,10 +16,12 @@ import java.util.stream.Collectors;
 
 /**
  * 专用 EasyData 逐段发送账本；任何未取得真实回执的占用都不宣称成功或自动重试。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class EasyDataDeliveryStore implements IAgentDeliveryStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
@@ -144,13 +146,15 @@ public final class EasyDataDeliveryStore implements IAgentDeliveryStore, IMemory
     }
     /**
      * 发送占用与真实观察状态，不保存传输对象、密钥或图片数据。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param part 原发送段
      * @param state SENDING、ACKNOWLEDGED 或 UNKNOWN
      * @param updatedAt 观察时间
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record Stored(Part part, String state, Instant updatedAt) { }
 }

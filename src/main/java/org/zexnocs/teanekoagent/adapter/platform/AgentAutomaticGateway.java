@@ -33,10 +33,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：逐段保存实际平台回执，失败不自动补发。
  * <br>2026/11/03：自动回复接入独立等待及精确类型发送，关闭停止未发送尾部。
  * <br>2026/11/03：来源租约改用确定赋值，明确同步失败与异步交付的释放边界并整理排版。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Service
 public final class AgentAutomaticGateway implements AutoCloseable {

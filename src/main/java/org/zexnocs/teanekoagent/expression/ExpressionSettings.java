@@ -1,6 +1,8 @@
 package org.zexnocs.teanekoagent.expression;
 /**
  * 每轮冻结的拟人数量与时序策略。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param enabled 总开关
  * @param maxMessages 新信封消息上限
  * @param maxStepDelay 单段等待上限
@@ -11,7 +13,7 @@ package org.zexnocs.teanekoagent.expression;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public record ExpressionSettings(boolean enabled, int maxMessages, int maxStepDelay, int maxTotalDelay, int defaultDelay, int timeoutSeconds, int maxQueued) {
     /**

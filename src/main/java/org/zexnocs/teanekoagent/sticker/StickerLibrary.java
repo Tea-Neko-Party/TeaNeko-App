@@ -19,10 +19,12 @@ import java.util.function.Supplier;
  * 宿主管理候选、指纹缓存、实际人类统计和容量仲裁；文件 I/O 不进入目录事务。
  * 每个实例只有一个持久后台租约，迟到结果不能越过原代次激活。
  * <br>2026/11/03：采集决策、管理墓碑、后台刷新及真实提交观察共用原事务，分析和字节回收推进公开版本。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class StickerLibrary {
     private final StickerExtensionRegistry registry;
@@ -449,13 +451,15 @@ public final class StickerLibrary {
     }
     /**
      * 固定后台代次，不进入组件、模型或持久状态。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param owner 根租约
      * @param job 已提交作业快照
      * @param cleanup 是否只清理
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     @JsonIgnoreType public record Work(UUID owner,Stickers.Job job,boolean cleanup){}
 }

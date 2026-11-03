@@ -10,10 +10,12 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * 依赖本轮实际资源资料的注解工具，由明确 Feature 安装。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Component @TeaNekoAgentToolClass(value="sticker-selection",toolPackage="agent.sticker",managedByFeature=true)
 public final class StickerReplyTools{

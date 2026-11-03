@@ -7,6 +7,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.function.Supplier;
 /**
  * 资源发送借用的原请求、目标与守卫，不进入冻结计划或持久化。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @param data 原消息目标
  * @param request 原请求
  * @param index 原步骤号
@@ -15,7 +17,7 @@ import java.util.function.Supplier;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @JsonIgnoreType
 public record ReplySendContext(ITeaNekoMessageData data,AgentRunRequest request,int index,ExecutionControl control,Supplier<CompletionStage<Void>> guard){}

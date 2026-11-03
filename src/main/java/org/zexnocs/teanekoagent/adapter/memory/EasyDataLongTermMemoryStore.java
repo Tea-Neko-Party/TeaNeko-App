@@ -34,10 +34,12 @@ import java.util.function.Supplier;
  * <br>2026/11/03：表达样本、渐进采用和整理水位共同提交，保留生成端口替换能力。
  * <br>2026/11/03：回收旧代次与失效索引，精简过期原话并保留当前遗忘保护。
  * <br>2026/11/03：明确保存接入同一长期领域，保留原文和完整附加信息。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
@@ -572,12 +574,14 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     }
     /**
      * 明确保存的原操作回执，不因后台合并而更换原请求结果。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param fingerprint 原始命令摘要
      * @param result 实际回执
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record ExplicitReceipt(String fingerprint, MemoryAddResult result) { }
     /**
@@ -674,6 +678,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     }
     /**
      * 本人维护的幂等回执与来源审计，不进入模型普通查询。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param fingerprint 原调用参数指纹
      * @param actorId 真实操作者
      * @param sourceId 原消息标识
@@ -682,11 +688,13 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record ChangeReceipt(String fingerprint, UUID actorId, String sourceId, Instant at, LongMemories.Item item) { }
     /**
      * 整理租约与已完成覆盖，零候选提交也推进原水位，避免反复学习闲聊。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param through 已整理覆盖
      * @param lease 当前租约
      * @param until 租约到期
@@ -697,7 +705,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     private record Job(long through, @Nullable UUID lease, Instant until, Instant retryAt, int failures, long claimedThrough, String fingerprint) {
         /** @return 尚无整理进度的任务 */

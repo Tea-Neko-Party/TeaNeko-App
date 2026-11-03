@@ -39,10 +39,12 @@ import java.util.function.Supplier;
  * <br>2026/11/03：可选观察端口与联合生成共用处理器和事务。
  * <br>2026/11/03：独立装配持久维护，关闭学习不停止到期回收。
  * <br>2026/11/03：近期资料接入实际发送回执。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Configuration(proxyBeanMethods = false)
 public class LayeredMemoryConfig {

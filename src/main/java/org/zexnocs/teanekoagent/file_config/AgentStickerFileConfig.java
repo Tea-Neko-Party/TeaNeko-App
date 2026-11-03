@@ -14,10 +14,12 @@ import java.util.Map;
 /**
  * 全实例素材库配置；不保存模型凭据，不随记忆空间清理。
  * <br>2026/11/03：后台事件仅向明确选择的所属插件开放。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 @Getter @Setter @NoArgsConstructor
 @FileConfig(value="stickers",path="agent",type=FileConfigType.YAML)

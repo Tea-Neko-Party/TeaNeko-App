@@ -10,22 +10,26 @@ import java.util.UUID;
 
 /**
  * 协议和交付之间的不可变值，不持有服务、控制或权限。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ReplyPlans {
     /** 禁止实例化值类型集合。 */
     private ReplyPlans() {}
     /**
      * 完整协议的精确键。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param id 协议 ID
      * @param version 版本
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record ProtocolKey(String id, int version) {
         /**
@@ -38,49 +42,59 @@ public final class ReplyPlans {
     }
     /**
      * 协议内指令键。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param protocol 所属协议
      * @param name 指令名
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record DirectiveKey(ProtocolKey protocol, String name) {}
     /**
      * 允许插件实现的内容合同；实现及所有字段必须不可变。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public interface Content {}
     /**
      * 字面文本。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param value 正文
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Text(String value) implements Content {}
     /**
      * 普通图片引用。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param url 图片引用
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Image(String url) implements Content {}
     /**
      * 已切分的指令。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param name 指令名
      * @param fields 业务字段
      * @param body 字面正文
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Directive(String name, Map<String,String> fields, String body) {
         /**
@@ -93,17 +107,21 @@ public final class ReplyPlans {
     }
     /**
      * 等待归一化前的草稿。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param content 不可变内容
      * @param mode 回复方式
      * @param waitMillis 建议等待，未声明时为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Draft(Content content, Mode mode, @Nullable Integer waitMillis) {}
     /**
      * 冻结的发送步骤。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param content 内容
      * @param mode 回复方式
      * @param waitMillis 实际等待
@@ -114,15 +132,17 @@ public final class ReplyPlans {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public record Step(Content content, Mode mode, int waitMillis, String type, int version, String text, String digest) {}
     /**
      * 只由本包编译器创建的完整计划，语义答案和原文摘要共同冻结。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
     public static final class Approved {
         private final UUID requestId;

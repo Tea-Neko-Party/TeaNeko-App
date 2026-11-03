@@ -17,10 +17,12 @@ import java.util.function.Supplier;
 
 /**
  * 按原 client/scope/机器人账号串行安排轮次和发送，独立拥有等待控制。
+ * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.0.0
- * @version 4.6.1-l
+ * @version 4.6.2-l
  */
 public final class ReplyCoordinator implements AutoCloseable {
     private final Executor executor;
@@ -157,21 +159,25 @@ public final class ReplyCoordinator implements AutoCloseable {
     @Override public void close(){List<Pending<?>> selected;synchronized(this){closed=true;selected=List.copyOf(entries.values());}selected.forEach(p->p.control.close());}
     /**
      * 原真实目标键。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param scope 作用域
      * @param self 机器人账号
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
 private record BotScope(AgentScope scope,String self){}
     /**
      * 在途拥有关系，不进入 ECS 或数据库。
+     * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
+     *
      * @param <T> 结果类型
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.0.0
-     * @version 4.6.1-l
+     * @version 4.6.2-l
      */
 private static final class Pending<T>{
         final String owner;final AgentActorContext actor;final BotScope key;final ExecutionControl control;
