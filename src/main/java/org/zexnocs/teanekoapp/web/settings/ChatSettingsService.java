@@ -3,13 +3,11 @@ package org.zexnocs.teanekoapp.web.settings;
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditService;
 import org.zexnocs.teanekocore.database.configdata.ConfigEdits;
-import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
@@ -24,11 +22,12 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：自动配置目录复用原事务，提交前复核平台命名空间与配置分组授权。
+ * <br>2026/11/04：管理员直接管理已启用配置，取消本地配置分组白名单，保留业务边界复核。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service
 public final class ChatSettingsService {
@@ -36,27 +35,26 @@ public final class ChatSettingsService {
     private final ClientManagementDirectory clients;
     private final ConfigEditService edits;
     private final PluginRegistry plugins;
-    private final IFileConfigService files;
 
     /**
+     * 2026/11/04：配置可见性由管理身份、插件及客户端适用范围决定。
      * @param sections 已注册配置及专用投影目录
      * @param clients 原平台目录
      * @param edits 原子版本配置端口
      * @param plugins 原插件代次
-     * @param files 本地允许配置区
      */
     public ChatSettingsService(ChatSettingsDirectory sections, ClientManagementDirectory clients, ConfigEditService edits,
-                                PluginRegistry plugins, IFileConfigService files) {
+                                PluginRegistry plugins) {
         this.clients = clients;
         this.edits = edits;
         this.plugins = plugins;
-        this.files = files;
         this.sections = sections;
     }
 
     /**
+     * 2026/11/04：管理员目录无需额外本地分组白名单。
      * @param guard 当前管理身份
-     * @return 本地允许且插件启用的配置区
+     * @return 已注册且插件启用的配置区
      */
     public List<ChatSettings.Section> sections(Runnable guard) {
         guard.run();
@@ -160,12 +158,12 @@ public final class ChatSettingsService {
 
     /**
      * @param id 既有配置区
-     * @return 是否明确允许且归属有效
+     * 2026/11/04：已注册配置无需本地白名单，所属插件仍须启用。
+     * @return 配置是否存在且归属有效
      */
     private boolean allowed(String id) {
         var entry = sections.entries().get(id);
-        var policy = files.requireCurrent(WebSecurityFileConfig.class).snapshot();
-        if (entry == null || !(policy.settingsSections().contains(id) || policy.settingsGroups().contains(entry.group()))) {
+        if (entry == null) {
             return false;
         }
         var owner = AnnotatedElementUtils.findMergedAnnotation(entry.owner(), PluginOwned.class);

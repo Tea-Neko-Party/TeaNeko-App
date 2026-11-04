@@ -30,10 +30,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：将原历史清理任务纳入记忆分类，只读展示。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class ConversationHistoryConfig {
@@ -76,15 +78,19 @@ public class ConversationHistoryConfig {
      * 复用 Spring 已有定时设施，每次清理一百行，失败只记固定原因。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：声明历史清理分类，网页不控制原清理生命周期。
+     * <br>2026/11/04：补充历史维护的执行、保留和只读说明。
      *
      * @author zExNocs
      * @date 2026/10/30
      * @since 4.5.0-l
-     * @version 4.7.1-l
+     * @version 4.7.3-l
      */
     // 2026/11/04：元数据从实际 Spring 方法的所属类型读取。
+    // 2026/11/04：补充任务用途、执行边界与网页控制说明。
     @TimerDisplay(category = "agent.memory", categoryName = "Agent 记忆", name = "会话历史清理",
-            description = "按原保留规则有界清理历史，异步事务完成情况仍由原存储服务确认。", controllable = false)
+            description = "按配置周期分批清理超过保留期的会话文字历史，上一批尚未完成时跳过重复执行。"
+            + "只清理历史存储中已到期的数据，不生成摘要或调用模型，也不等同于删除长期记忆。"
+            + "数据库失败会保留后续重试机会；该维护来源只读，历史是否采集仍由各聊天的采集开关决定。", controllable = false)
     public static final class Cleanup {
         private final IHistoryStore store;
         private final ILogger logger;

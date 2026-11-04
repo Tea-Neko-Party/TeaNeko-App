@@ -23,14 +23,19 @@ import static org.zexnocs.teanekoagent.schedule.AgentScheduledTask.Status.*;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "agent.schedule", categoryName = "Agent 计划任务", name = "持久计划扫描",
-        description = "派发数据库中的持久计划，单条计划仍在聊天工作区管理。", controllable = false)
+        description = "扫描已到期的持久计划，领取任务后按当前创建者权限、客户端状态和动作规则执行。"
+        + "计划及执行进度保存在数据库中，重启后按持久状态继续处理，失败与结果不明分别记录。"
+        + "本项是只读调度入口；查看或取消具体计划请到 Agent 工作区的持久计划页，已开始的外部动作不能撤回。", controllable = false)
 public final class AgentScheduleService implements AutoCloseable {
     private final EasyDataScheduleStore store;
     private final Clock clock;

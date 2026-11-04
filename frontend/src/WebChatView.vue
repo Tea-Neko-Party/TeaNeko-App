@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, nextTick, onBeforeUnmount, onMounted, ref} from 'vue'
 import {
   ElAlert,
@@ -308,21 +310,23 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); pending.value = u
     <DetailPanel title="聊天说明"><p>这是独立网页聊天。已启用 Agent 的私聊会自动回复，群聊可提及 TeaNeko；成员身份在“档案与成员”中设置。</p></DetailPanel>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElAlert v-if="notice" :title="notice" type="info" :closable="false" />
-    <ElCard shadow="never" class="runtime-card"><div class="editor-heading"><h2>网页聊天</h2><ElButton :disabled="busy" @click="run(refresh)">刷新聊天与档案</ElButton></div>
+    <ElCard shadow="never" class="runtime-card"><div class="editor-heading"><h2>网页聊天</h2><RefreshButton :disabled="busy" @click="run(refresh)" label="刷新聊天与档案" /></div>
       <!-- 2026/11/04：常驻创建入口，不要求先进入档案管理页。 -->
-      <div class="editor-actions"><ElButton :disabled="blocked || !home" @click="openCreateRoom('PRIVATE')"><ConsoleIcon name="private" /> 创建私聊</ElButton><ElButton :disabled="blocked || !home" @click="openCreateRoom('GROUP')"><ConsoleIcon name="group" /> 创建模拟群</ElButton></div>
-      <label for="web-room">选择私聊或模拟群</label><ElSelect id="web-room" v-model="picker" aria-label="网页聊天会话" placeholder="先创建一个聊天" :disabled="busy" @change="choose"><ElOption v-for="item in home?.rooms ?? []" :key="item.id" :label="`${item.kind === 'GROUP' ? '群聊' : '私聊'} · ${item.name}`" :value="item.id" /></ElSelect>
+      <div class="web-room-picker">
+        <div class="editor-actions"><ElButton :disabled="blocked || !home" @click="openCreateRoom('PRIVATE')"><ConsoleIcon name="private" /> 创建私聊</ElButton><ElButton :disabled="blocked || !home" @click="openCreateRoom('GROUP')"><ConsoleIcon name="group" /> 创建模拟群</ElButton></div>
+        <div class="web-room-field"><label for="web-room">选择私聊或模拟群</label><ElSelect id="web-room" v-model="picker" aria-label="网页聊天会话" placeholder="先创建一个聊天" :disabled="busy" @change="choose"><ElOption v-for="item in home?.rooms ?? []" :key="item.id" :label="`${item.kind === 'GROUP' ? '群聊' : '私聊'} · ${item.name}`" :value="item.id" /></ElSelect></div>
+      </div>
     </ElCard>
     <!-- 2026/11/04：关闭弹窗保留表单及原请求，可返回页面处理未确认回执。 -->
     <ElDialog v-model="createRoomOpen" title="新建私聊或模拟群" width="min(520px, 94vw)" class="web-chat">
-      <template v-if="home">
+      <div v-if="home" class="web-create-form">
         <label>聊天显示名<ElInput v-model="roomName" maxlength="80" aria-label="新网页聊天名称" :disabled="blocked" placeholder="聊天显示名" /></label>
         <label>聊天类型<ElSelect v-model="roomKind" aria-label="新网页聊天类型" :disabled="blocked"><ElOption label="私聊" value="PRIVATE"><ConsoleIcon name="private" /> 私聊</ElOption><ElOption label="模拟群" value="GROUP"><ConsoleIcon name="group" /> 模拟群</ElOption></ElSelect></label>
         <label>聊天成员<ElSelect v-model="selectedProfiles" multiple aria-label="新网页聊天成员" :disabled="blocked"><ElOption v-for="profile in home.profiles" :key="profile.id" :label="profile.name" :value="profile.id" /></ElSelect></label>
         <p class="small muted">私聊选择一位档案，每个档案只有一个私聊；模拟群可选多位。初始权限均为普通成员；创建不会启用 Agent 或更改记忆绑定。新增档案请到“档案与成员”。</p>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" />
         <ElButton type="primary" :disabled="blocked || !roomName.trim() || !selectedProfiles.length || roomKind === 'PRIVATE' && selectedProfiles.length !== 1" @click="administrative('chat/rooms', { operationId: operationId(), kind: roomKind, name: roomName, profiles: [...selectedProfiles] }, '创建网页聊天')">创建聊天</ElButton>
-      </template>
+      </div>
     </ElDialog>
     <ElTabs v-if="home" class="web-chat-tabs">
       <ElTabPane label="聊天消息">
@@ -358,8 +362,18 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); pending.value = u
         </template>
       </ElTabPane>
       <ElTabPane label="档案与成员">
-        <ElCard shadow="never" class="runtime-card"><h3>新增网页档案</h3><ElInput v-model="nickname" maxlength="80" aria-label="新网页档案昵称" :disabled="blocked" placeholder="例如：小茶" /><ElButton :disabled="blocked || !nickname.trim()" @click="administrative('chat/profiles', { operationId: operationId(), name: nickname }, '创建网页档案')">创建档案</ElButton><p v-for="profile in home.profiles" :key="profile.id" class="small revision">{{ profile.name }} · 网页号 {{ profile.id }} · UUID {{ profile.uuid }}</p></ElCard>
-        <ElCard v-if="room?.kind === 'GROUP'" shadow="never" class="runtime-card"><h3>当前群成员管理</h3><p class="small muted">保存会撤销旧消息的借用能力。角色只影响网页平台，不能获得其他客户端或 DEBUG 权限。</p><p v-for="member in members" :key="member.profile">{{ member.card }} · {{ roles[member.role] }} <ElButton text :disabled="blocked" @click="administrative(`${base()}/members`, { operationId: operationId(), revision: room!.revision, member: { profile: member.profile, card: member.card, role: member.role }, action: 'REMOVE' }, '移出网页成员')">移出</ElButton></p><ElSelect v-model="memberProfile" aria-label="待管理网页成员" :disabled="blocked"><ElOption v-for="profile in home.profiles" :key="profile.id" :label="profile.name" :value="profile.id" /></ElSelect><ElInput v-model="memberCard" aria-label="网页群名片" maxlength="80" :disabled="blocked" placeholder="群名片" /><ElSelect v-model="memberRole" aria-label="网页成员角色" :disabled="blocked"><ElOption label="普通成员" value="MEMBER" /><ElOption label="群管理员" value="ADMIN" /><ElOption label="群主" value="OWNER" /></ElSelect><ElButton :disabled="blocked || !memberProfile || !memberCard.trim()" @click="administrative(`${base()}/members`, { operationId: operationId(), revision: room!.revision, member: { profile: memberProfile, card: memberCard, role: memberRole }, action: 'UPSERT' }, '保存网页成员')">保存成员</ElButton></ElCard>
+        <!-- 2026/11/04：档案与成员分卡片留白，三个成员字段和提交操作分别排列。 -->
+        <div class="web-chat-admin">
+          <ElCard shadow="never" class="runtime-card"><h3>新增网页档案</h3><div class="web-profile-form"><ElInput v-model="nickname" maxlength="80" aria-label="新网页档案昵称" :disabled="blocked" placeholder="例如：小茶" /><ElButton :disabled="blocked || !nickname.trim()" @click="administrative('chat/profiles', { operationId: operationId(), name: nickname }, '创建网页档案')">创建档案</ElButton></div><p v-for="profile in home.profiles" :key="profile.id" class="small revision">{{ profile.name }} · 网页号 {{ profile.id }} · UUID {{ profile.uuid }}</p></ElCard>
+          <ElCard v-if="room?.kind === 'GROUP'" shadow="never" class="runtime-card"><h3>当前群成员管理</h3><p class="small muted">保存会撤销旧消息的借用能力。角色只影响网页平台，不能获得其他客户端或 DEBUG 权限。</p><p v-for="member in members" :key="member.profile">{{ member.card }} · {{ roles[member.role] }} <ElButton text :disabled="blocked" @click="administrative(`${base()}/members`, { operationId: operationId(), revision: room!.revision, member: { profile: memberProfile, card: member.card, role: member.role }, action: 'REMOVE' }, '移出网页成员')">移出</ElButton></p>
+            <div class="web-member-form">
+              <label>成员档案<ElSelect v-model="memberProfile" aria-label="待管理网页成员" :disabled="blocked"><ElOption v-for="profile in home.profiles" :key="profile.id" :label="profile.name" :value="profile.id" /></ElSelect></label>
+              <label>群名片<ElInput v-model="memberCard" aria-label="网页群名片" maxlength="80" :disabled="blocked" placeholder="群名片" /></label>
+              <label>群内角色<ElSelect v-model="memberRole" aria-label="网页成员角色" :disabled="blocked"><ElOption label="普通成员" value="MEMBER" /><ElOption label="群管理员" value="ADMIN" /><ElOption label="群主" value="OWNER" /></ElSelect></label>
+              <div class="editor-actions"><ElButton :disabled="blocked || !memberProfile || !memberCard.trim()" @click="administrative(`${base()}/members`, { operationId: operationId(), revision: room!.revision, member: { profile: memberProfile, card: memberCard, role: memberRole }, action: 'UPSERT' }, '保存网页成员')">保存成员</ElButton></div>
+            </div>
+          </ElCard>
+        </div>
       </ElTabPane>
       <ElTabPane label="当前聊天图片"><ElEmpty v-if="!room" description="先选择一个聊天" /><div v-else class="web-media-grid"><ElCard v-for="id in mediaIds" :key="id" shadow="never"><img :src="imageUrl(id)" class="web-message-image" alt="当前聊天图片" loading="lazy" /><p class="small revision">{{ id }}</p><ElButton :disabled="blocked" @click="media = id">选为附图</ElButton><ElButton :disabled="blocked" @click="removeImage(id)">删除未引用图片</ElButton></ElCard></div></ElTabPane>
     </ElTabs>

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：重新读取采用统一图标，放弃修改仍明确显示动作文字。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
@@ -212,7 +214,7 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
         </ElCard>
         <ElCard v-if="dirty" shadow="never"><h3>本次修改</h3><ul><li v-for="line in summary" :key="line" class="small revision">{{ line }}</li></ul><p class="small muted">保存将重新排版 YAML，原注释不会保留。未修改的值、环境模板和未知配置项保留。</p></ElCard>
         <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>原操作尚待确认</h3><p class="small revision">操作编号：{{ pending.body.operationId }}</p><p class="small muted">连接中断不代表写入失败。先查询原回执；如尚无记录，可使用原请求重试。</p><ElButton :disabled="busy" @click="query">查询原操作</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton></ElCard>
-        <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">保存到磁盘</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton :disabled="busy" @click="discard">{{ dirty ? '放弃修改' : '重新读取' }}</ElButton></div>
+        <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">保存到磁盘</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton v-if="dirty" :disabled="busy" @click="discard">放弃修改</ElButton><RefreshButton v-else :disabled="busy" label="重新读取配置文件" @click="discard" /></div>
         <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ statusNames[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>{{ new Date(receipt.at).toLocaleString('zh-CN') }}{{ receipt.replayed ? ' · 原结果重放' : '' }} · 历史回执不代表当前进程或磁盘仍是同一状态。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
       </div>
     </div>

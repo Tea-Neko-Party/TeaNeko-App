@@ -27,10 +27,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Description("""
         让机器人给你个人资料卡点赞。
@@ -41,8 +43,11 @@ import java.util.concurrent.ConcurrentLinkedQueue;
         permission = CommandPermission.ALL,
         supportedClients = {OnebotTeaNekoClient.class})
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "定时点赞",
-        description = "按原登记队列执行每日点赞。")
+        description = "每天按当前 cron 规则处理已登记的定时点赞用户列表，每位用户提交十次点赞。"
+        + "执行时刷新当日去重集合，并记录本轮处理的用户名单；平台是否接受仍取决于连接状态和真实接口结果。"
+        + "允许暂停或恢复后续调度，暂停不撤销已经发出的点赞请求；登记名单由原点赞功能维护。")
 public class LikeCommand {
     /// 数据库相关常量
     public static final String DATABASE_NAMESPACE = "like_command";

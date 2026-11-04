@@ -11,8 +11,7 @@ trusted-proxies: []
 # machine-tokens:
 #   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
 machine-tokens: {}
-# 2026/11/03：新插件贡献的编辑区必须在本地明确加入，不能仅因扫描到 Bean 自动开放。
-settings-sections: ['agent']
+# 2026/11/04：管理员直接编辑适用且已启用的聊天配置，无需 settings-sections/settings-groups 白名单。
 # 只开放声明管理来源的注册方法；旧配置需本机明确补充后重载。
 console-prefixes: ['/console']
 # 2026/11/03：只公开这些已注册文件表单，不开放认证根配置或任意路径。

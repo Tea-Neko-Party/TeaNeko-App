@@ -36,16 +36,21 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.3
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service("GroupRequestService")
 @RequiredArgsConstructor
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "client.maintenance", categoryName = "客户端维护", name = "过期入群请求清理",
-        description = "回收已过期的原平台入群审核请求。", controllable = false)
+        description = "按原间隔检查暂存的入群申请，移除已经超过处理有效期的请求记录。"
+        + "只回收本地待处理缓存，不自动批准或拒绝平台申请；后续人工处理仍须检查真实请求和操作者权限。"
+        + "客户端重启或来源失效后不会凭旧缓存补发处理动作，该清理任务只读。", controllable = false)
 public class GroupRequestReviewService {
     private final static String TASK_NAMESPACE = "group-request-service-cleaner";
     /// 用于注册自动清理过期请求的定时器，单位为毫秒。默认为 1 小时。

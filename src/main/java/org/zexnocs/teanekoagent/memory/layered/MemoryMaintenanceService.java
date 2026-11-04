@@ -19,14 +19,19 @@ import java.util.function.BooleanSupplier;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "agent.memory", categoryName = "Agent 记忆", name = "记忆数据维护",
-        description = "维护已装配记忆端口的保留窗口，不调用模型。", controllable = false)
+        description = "按配置周期依次维护已装配的记忆数据域，回收到期正文、失效租约和允许清理的辅助状态。"
+        + "不调用模型；关闭学习或停止采集后，已有数据仍按原保留规则维护，有效长期结论不因停止学习被删除。"
+        + "每次执行有界事务，单个数据域失败不阻止其他域继续，后续从已提交进度恢复；维护任务只读。", controllable = false)
 public final class MemoryMaintenanceService implements AutoCloseable {
     private final List<IMemoryMaintenance> stores;
     private final BooleanSupplier enabled;

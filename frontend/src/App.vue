@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
 import {ElAlert, ElButton, ElCard, ElConfigProvider, ElDrawer, ElEmpty} from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
@@ -6,6 +8,7 @@ import LoginView from './LoginView.vue'
 import ChatSettingsView from './ChatSettingsView.vue'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 import AgentWorkspaceView from './AgentWorkspaceView.vue'
+import ChatTargetPicker from './ChatTargetPicker.vue'
 import FileSettingsView from './FileSettingsView.vue'
 import RuntimeView from './RuntimeView.vue'
 import CommandConsoleView from './CommandConsoleView.vue'
@@ -48,6 +51,9 @@ const consoleView = ref<InstanceType<typeof CommandConsoleView>>()
 const runtimeOpened = ref(false)
 const filesOpened = ref(false)
 const agentTarget = ref<AgentTarget>()
+// 2026/11/04：Agent 目录与聊天配置各自保留选择状态，不通过配置页中转。
+const agentOpened = ref(false)
+const agentPicker = ref<InstanceType<typeof ChatTargetPicker>>()
 const agentView = ref<InstanceType<typeof AgentWorkspaceView>>()
 const settingsOpened = ref(false)
 const tokensOpened = ref(false)
@@ -63,6 +69,7 @@ function navigate(value: ConsolePage) {
   if (value === 'files') filesOpened.value = true
   if (value === 'runtime') runtimeOpened.value = true
   if (value === 'chat') chatOpened.value = true
+  if (value === 'agent') agentOpened.value = true
   page.value = value
   mobileOpen.value = false
 }
@@ -81,6 +88,7 @@ function clearSession() {
   filesOpened.value = false
   runtimeOpened.value = false
   agentTarget.value = undefined
+  agentOpened.value = false
   consoleTarget.value = undefined
   chatOpened.value = false
   mobileOpen.value = false
@@ -94,6 +102,7 @@ function machineTokensApplied() {
 }
 
 async function inspectAgent(target: AgentTarget) {
+  agentOpened.value = true
   if (agentTarget.value && JSON.stringify(agentTarget.value) === JSON.stringify(target)) { page.value = 'agent'; return }
   if (agentTarget.value && JSON.stringify(agentTarget.value) !== JSON.stringify(target) && !await agentView.value?.canLeave()) return
   agentTarget.value = target
@@ -187,14 +196,17 @@ onMounted(() => run(refresh, true))
       </header>
       <main id="main-content" class="content" tabindex="-1">
         <div class="page-heading"><h1>{{ title }}</h1>
-          <ElButton v-if="['overview', 'platforms'].includes(page)" :loading="busy" @click="run(refreshPage)"><ConsoleIcon name="refresh" /><span>刷新</span></ElButton></div>
+          <RefreshButton v-if="['overview', 'platforms'].includes(page)" :loading="busy" @click="run(refreshPage)" label="刷新" /></div>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
         <ChatSettingsView v-if="settingsOpened" v-show="page === 'settings'" :clients="platforms" :initial-client="selectedClient" @expired="clearSession" @inspect="inspectAgent" @console="inspectConsole" />
-        <AgentWorkspaceView v-if="agentTarget" ref="agentView" v-show="page === 'agent'" :target="agentTarget" :active="page === 'agent'" @expired="clearSession" @select-target="openSettings()" />
+        <section v-if="agentOpened" v-show="page === 'agent'">
+          <ChatTargetPicker ref="agentPicker" :clients="platforms" :target="agentTarget" @expired="clearSession" @select="inspectAgent" />
+          <AgentWorkspaceView v-if="agentTarget" ref="agentView" :target="agentTarget" :active="page === 'agent'" @expired="clearSession" @select-target="agentPicker?.focus()" />
+        </section>
         <FileSettingsView v-if="filesOpened" v-show="page === 'files'" @expired="clearSession" />
         <RuntimeView v-if="runtimeOpened" v-show="page === 'runtime'" :active="page === 'runtime'" @expired="clearSession" />
         <CommandConsoleView v-if="consoleTarget" ref="consoleView" v-show="page === 'console'" :target="consoleTarget" :active="page === 'console'" @expired="clearSession" @select-target="openSettings()" />
-        <ElEmpty v-if="page === 'agent' && !agentTarget || page === 'console' && !consoleTarget" description="先选择要管理的聊天">
+        <ElEmpty v-if="page === 'console' && !consoleTarget" description="先选择要管理的聊天">
           <ElButton type="primary" @click="openSettings()">选择聊天</ElButton>
         </ElEmpty>
         <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @expired="clearSession" @inspect="inspectAgent" @settings="openSettings('web')" />

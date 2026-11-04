@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
@@ -178,7 +180,7 @@ onMounted(async () => {
 <template>
   <!-- 2026/11/04：目录默认无秘密，只有明确查看或编辑的客户端显示输入。 -->
   <section class="machine-tokens" aria-label="机器令牌管理">
-    <div class="section-title"><h2>机器令牌</h2><ElButton :disabled="locked || !!editing" @click="run(load)">刷新</ElButton></div>
+    <div class="section-title"><h2>机器令牌</h2><RefreshButton :disabled="locked || !!editing" @click="run(load)" label="刷新" /></div>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElAlert v-if="notice" :title="notice" type="info" :closable="true" @close="notice = ''" />
     <ElEmpty v-if="view && !view.clients.length" description="没有已注册的机器连接入口" />

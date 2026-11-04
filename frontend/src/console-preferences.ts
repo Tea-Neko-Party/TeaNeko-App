@@ -1,5 +1,7 @@
 import type {InjectionKey} from 'vue'
 import {computed, inject, onScopeDispose, provide, ref, watchEffect} from 'vue'
+import type {ConsoleColors} from './console-colors'
+import {colorVariables, customColorKeys, luminance, parseColors} from './console-colors'
 
 type Theme = 'system' | 'light' | 'dark'
 
@@ -25,6 +27,8 @@ function createPreferences() {
   const storedTheme = read('theme')
   const theme = ref<Theme>(storedTheme === 'light' || storedTheme === 'dark' ? storedTheme : 'system')
   const collapsed = ref(read('sidebar') === 'collapsed')
+  // 2026/11/04：自定义配色仅保存界面颜色，关闭或重置后继续使用原主题。
+  const colors = ref<ConsoleColors | undefined>(parseColors(read('colors')))
   const media = window.matchMedia('(prefers-color-scheme: dark)')
   const systemDark = ref(media.matches)
   const updateSystem = (event: MediaQueryListEvent) => { systemDark.value = event.matches }
@@ -34,7 +38,13 @@ function createPreferences() {
   const dark = computed(() => theme.value === 'dark' || theme.value === 'system' && systemDark.value)
   watchEffect(() => {
     document.documentElement.classList.toggle('dark', dark.value)
-    document.documentElement.style.colorScheme = dark.value ? 'dark' : 'light'
+    document.documentElement.style.colorScheme = (colors.value ? luminance(colors.value.background) < 0.179 : dark.value) ? 'dark' : 'light'
+    const variables = colors.value ? colorVariables(colors.value) : {}
+    for (const key of customColorKeys) {
+      const value = variables[key]
+      if (value) document.documentElement.style.setProperty(key, value)
+      else document.documentElement.style.removeProperty(key)
+    }
   })
 
   function setAdvanced(value: boolean) {
@@ -52,7 +62,12 @@ function createPreferences() {
     write('sidebar', collapsed.value ? 'collapsed' : 'expanded')
   }
 
-  return {advanced, theme, dark, collapsed, setAdvanced, cycleTheme, toggleSidebar}
+  function setColors(value?: ConsoleColors) {
+    colors.value = value ? {...value} : undefined
+    write('colors', value ? JSON.stringify(value) : '')
+  }
+
+  return {advanced, theme, dark, collapsed, colors, setColors, setAdvanced, cycleTheme, toggleSidebar}
 }
 
 const key: InjectionKey<ReturnType<typeof createPreferences>> = Symbol('控制台界面偏好')

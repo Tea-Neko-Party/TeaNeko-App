@@ -27,11 +27,12 @@ import java.util.Map;
  * <br>2026/11/04：机器令牌允许短值及空白放行，管理员凭据继续独立校验。
  * <br>2026/11/04：统一空白机器令牌快照，并提供仅替换机器策略的比较入口。
  * <br>2026/11/04：配置分组须由本地显式授权，并参与会话代次及受限应用比较。
+ * <br>2026/11/04：聊天配置改为管理员直接访问，旧配置区与分组字段只保留读取兼容。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Getter
 @Setter
@@ -48,10 +49,10 @@ public class WebSecurityFileConfig implements IFileConfigData {
     @NonNull
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Map<String, String> machineTokens = Map.of();
-    // 2026/11/03：发现与授权分开，默认只开放 Agent 的明确字段。
+    // 2026/11/04：保留旧字段读取兼容；管理员聊天配置已不再使用该白名单。
     @NonNull
     private List<String> settingsSections = List.of("agent");
-    // 2026/11/04：旧配置不会因发现更多管理器而自动开放普通配置分组。
+    // 2026/11/04：保留旧分组字段读取兼容，不再限制管理员可见的聊天配置。
     @NonNull
     private List<String> settingsGroups = List.of();
     // 2026/11/03：认证根配置不进入文件编辑白名单，文件类型仍由本地适配器固定。
@@ -146,22 +147,23 @@ public class WebSecurityFileConfig implements IFileConfigData {
      * <br>2026/11/04：比较机器策略以外的认证根设置，阻止网页顺带应用本机其他改动。
      * <br>2026/11/04：配置分组参与认证代次与受限应用比较，不默认开放新分组。
      *
+     * 2026/11/04：旧聊天配置白名单只保留兼容值，不参与配置访问判断。
      * @param enabled 是否启用控制面
      * @param adminToken 根令牌，空值触发本次启动生成
      * @param publicOrigin 唯一外部 HTTPS 来源
      * @param trustedProxies 显式可信代理地址
      * @param machineTokens 独立机器接入凭据
-     * @param settingsSections 本地明确允许的聊天配置区
+     * @param settingsSections 旧聊天配置区兼容值
      * @param fileSections 本地明确允许的文件区
      * @param managementResources 本地明确允许的管理资源
      * @param consolePrefixes 本地明确允许的指令台前缀
      * @param idleMinutes 空闲期限
      * @param absoluteHours 绝对期限
-     * @param settingsGroups 本地允许的配置分组
+     * @param settingsGroups 旧配置分组兼容值
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.1-l
+     * @version 4.7.3-l
      */
     @JsonIgnoreType
     public record Snapshot(boolean enabled, @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String adminToken,

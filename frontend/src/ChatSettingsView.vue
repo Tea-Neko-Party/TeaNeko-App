@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {
   ElAlert,
@@ -335,7 +337,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <!-- 2026/11/04：功能分区与聊天类型都使用本地矢量图标辅助识别。 -->
       <button role="tab" :aria-selected="configGroup === 'general'" :class="{selected: configGroup !== 'agent'}" :disabled="busy" @click="chooseGroup('general')"><ConsoleIcon name="other" /> 其他功能配置</button>
     </div>
-    <ElAlert v-if="!sections.length && !busy" title="本地配置尚未允许任何聊天设置分区。" type="info" :closable="false" />
+    <ElAlert v-if="!sections.length && !busy" title="当前没有可用的聊天配置，请检查客户端及插件是否已启用。" type="info" :closable="false" />
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="success" :closable="true" @close="notice = ''" />
     <div class="settings-toolbar">
@@ -345,7 +347,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <label>机器人账号 / 历史目录<ElSelect :model-value="account" :disabled="busy" placeholder="尚未发现账号" @update:model-value="chooseAccount">
         <ElOption v-for="item in accounts" :key="item.ref" :value="item.ref" :label="item.name" />
       </ElSelect></label>
-      <ElButton :disabled="busy || !client" :loading="busy" @click="discover">更新已知目录</ElButton>
+      <RefreshButton :disabled="busy || !client" :loading="busy" @click="discover" label="更新已知目录" />
     </div>
     <div class="settings-columns">
       <ElCard shadow="never" class="target-list">
@@ -370,10 +372,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <ElSelect v-if="sectionOptions.length > 1" :model-value="section" :disabled="busy" aria-label="配置类型" @update:model-value="chooseSection">
             <ElOption v-for="item in sectionOptions" :key="item.id" :value="item.id" :label="item.name" />
           </ElSelect>
-          <ElButton v-if="!view" :disabled="busy" @click="run(restoreOrRead)">重新读取配置</ElButton>
+          <RefreshButton v-if="!view" :disabled="busy" @click="run(restoreOrRead)" label="重新读取配置" />
         </div>
         <ElEmpty v-if="!selected" description="选择一个聊天，查看与修改设置" />
-        <ElEmpty v-else-if="!sectionOptions.length" description="这个聊天暂无已开放的此类配置"><p class="small muted">普通配置分组须先在本地 settings-groups 中明确允许。</p></ElEmpty>
+        <!-- 2026/11/04：管理员直接编辑适用配置，空目录只说明当前客户端或插件未提供配置。 -->
+        <ElEmpty v-else-if="!sectionOptions.length" description="这个聊天暂无适用的此类配置"><p class="small muted">这里只显示适用于当前客户端且所属插件已启用的聊天配置。</p></ElEmpty>
         <template v-else-if="view">
           <div class="editor-heading"><div><h2>{{ view.targetName }}</h2><span class="connection-state">{{ view.registered ? '已登记' : '尚未登记' }}</span></div>
             <ElButton v-if="configGroup === 'agent'" :disabled="busy || !!pending" @click="emit('inspect', { client, account, target: selected.ref, name: view.targetName })">活动与记忆</ElButton>
@@ -406,11 +409,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <ElCard v-if="pending" shadow="never"><h3>上次操作尚待确认</h3><p class="small">操作编号：{{ pending.operationId }}</p>
             <p class="small muted">失败或断开不证明未提交。请查询真实结果，或使用相同编号重试原请求。</p>
             <ElButton :disabled="busy" @click="queryPending">查询提交结果</ElButton><ElButton :disabled="busy" @click="resend">重试原请求</ElButton>
-            <ElButton :disabled="busy" @click="discardPending">放弃草稿并刷新</ElButton></ElCard>
+            <RefreshButton :disabled="busy" @click="discardPending" label="放弃草稿并刷新" /></ElCard>
           <div class="editor-actions">
             <ElButton v-if="!view.registered" type="primary" :disabled="busy || !!pending" @click="submit('REGISTER')">登记此配置</ElButton>
             <template v-else><ElButton type="primary" :disabled="busy || !dirty || !!pending" @click="submit('PATCH')">保存修改</ElButton>
-              <ElButton :disabled="busy || !!pending" @click="reload">重新读取</ElButton>
+              <RefreshButton :disabled="busy || !!pending" @click="reload" label="重新读取" />
               <ElButton v-show="advanced" type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">注销登记</ElButton></template>
             <span v-if="dirty" class="small muted">有未保存的修改{{ hiddenDirtyCount ? `（${hiddenDirtyCount} 项已折叠）` : '' }}</span>
           </div>

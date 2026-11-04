@@ -39,14 +39,19 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.7.2-l
+ * @version 4.7.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "agent.memory", categoryName = "Agent 记忆", name = "分层记忆整理",
-        description = "原调度方法发起后台整理，方法结束不代表模型或数据库事务结束。", controllable = false)
+        description = "轮询持久化的记忆分区，优先领取可整理的中期片段生成长期记忆，再按阈值压缩较旧的原始消息。"
+        + "同一处理器最多一个在途生成任务，继续检查学习开关、原话证据、模型容量和租约；成功候选与进度一起提交，失败按持久退避重试。"
+        + "扫描入口只读；停止生成应修改分层记忆或对应聊天的摘要、学习配置。", controllable = false)
 public final class LayeredMemoryProcessor implements AutoCloseable {
     private final ILayeredMemoryStore store;
     private final ILayeredMemoryCompressor compressor;

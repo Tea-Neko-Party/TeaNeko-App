@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {
   ElAlert,
@@ -164,8 +166,8 @@ onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('bef
     <div class="agent-tabs" role="tablist" aria-label="运行管理分区"><button v-for="item in [{ id: 'timers', name: '定时规则' }, { id: 'runs', name: 'Core 任务' }, { id: 'logs', name: '运行日志' }]" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="select(item.id)">{{ item.name }}</button></div>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElAlert v-if="notice" :title="notice" type="info" :closable="false" />
-    <div class="editor-actions"><ElButton :disabled="busy" @click="run(refresh)">刷新当前页</ElButton><label class="small muted">每 5 秒刷新 <ElSwitch v-model="auto" :disabled="!!pending" /></label></div>
-    <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>定时器操作尚待确认</h3><p class="small revision">{{ pending.change.operationId }}</p><p class="small muted">中断不代表没有执行，先查原回执。回执只在原进程保留。</p><ElButton :disabled="busy" @click="operation">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><ElButton :disabled="busy" @click="discard">重新读取并放弃原请求</ElButton></ElCard>
+    <div class="editor-actions"><RefreshButton :disabled="busy" @click="run(refresh)" label="刷新当前页" /><label class="small muted">每 5 秒刷新 <ElSwitch v-model="auto" :disabled="!!pending" /></label></div>
+    <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>定时器操作尚待确认</h3><p class="small revision">{{ pending.change.operationId }}</p><p class="small muted">中断不代表没有执行，先查原回执。回执只在原进程保留。</p><ElButton :disabled="busy" @click="operation">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><RefreshButton :disabled="busy" @click="discard" label="重新读取并放弃原请求" /></ElCard>
     <template v-if="panel === 'timers'">
       <!-- 2026/11/04：分类来源于服务端完整观测窗口，所有过滤在分页前执行。 -->
       <div class="timer-category-filters" role="group" aria-label="定时任务分类">
@@ -207,7 +209,7 @@ onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('bef
       <p v-if="logs" class="small muted">当前窗口最多 {{ logs.policy.maxLogs }} 条 / {{ logs.policy.retentionMinutes }} 分钟 · 丢弃或淘汰 {{ logs.dropped }} 条。</p>
       <ElAlert v-if="logs && !logs.policy.captureMessages" title="当前只采集等级与来源。可在本地配置的“任务与日志观测”中开启日志正文采集，保存后应用；也可在本机修改 config/runtime/observability.yml 并重载。" type="info" :closable="false" />
       <ElCard v-for="log in displayedLogs" :key="`${logs?.instance}-${log.sequence}`" shadow="never" class="runtime-card"><div class="editor-heading"><strong>{{ log.level }}</strong><time class="small muted">{{ date(log.at) }}</time></div><p class="small revision">{{ log.namespace }}</p><pre class="log-message">{{ log.message }}</pre><p v-if="log.requestId || log.scope || log.plugin" class="small revision">{{ log.requestId }} {{ log.scope }} {{ log.plugin }}</p></ElCard>
-      <ElEmpty v-if="logs && !displayedLogs.length" description="当前扫描页没有匹配日志" /><ElButton :disabled="busy" @click="run(() => loadLogs())">{{ logs?.more ? '继续读取日志' : '读取最新日志' }}</ElButton>
+      <ElEmpty v-if="logs && !displayedLogs.length" description="当前扫描页没有匹配日志" /><ElButton v-if="logs?.more" :disabled="busy" @click="run(() => loadLogs())">继续读取日志</ElButton><RefreshButton v-else :disabled="busy" label="刷新最新日志" @click="run(() => loadLogs())" />
     </template>
     <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>定时器门禁已确认</h3><p>{{ receipt.note }}</p><p>原操作：{{ receipt.operationId }} · 版本 {{ receipt.revision }}</p><p>原提交时间：{{ date(receipt.at) }}；历史回执不代表现在仍是同一状态。</p><ElButton :disabled="busy" @click="operation">查询此回执</ElButton></ElCard>
   </div>

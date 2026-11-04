@@ -28,16 +28,21 @@ import java.util.concurrent.atomic.AtomicInteger;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.3.4
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service
 @RequiredArgsConstructor
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "活跃度惩罚缓存清理",
-        description = "回收已处理或不再适用的惩罚记录。", controllable = false)
+        description = "定期清理群活跃度处理过程中的临时投票和惩罚缓存。"
+        + "移除已经处理完成、用户不再属于低活跃名单或所属群已没有低活跃成员的条目。"
+        + "清理本身不踢人、不发送提醒，也不替代原处理命令；这是只读维护任务。", controllable = false)
 public class GroupActivityPunishService {
     /// 惩罚的豁免时间。
     private final static Duration EXEMPTION_TIME = Duration.ofDays(7);

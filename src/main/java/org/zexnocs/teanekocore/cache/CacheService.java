@@ -20,15 +20,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * 主要用于清理长时间未被访问的缓存资源。
  * <br>2026/11/04：声明缓存维护分类，关键清理任务只读展示。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/02/10
  * @since 4.0.2
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service
 // 2026/11/04：网页只观测维护任务，不开放暂停全局缓存回收。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "core.maintenance", categoryName = "Core 维护", name = "通用缓存清理",
-        description = "按原缓存容器的过期规则回收，不改变业务缓存生命周期。", controllable = false)
+        description = "按配置间隔通知已登记缓存容器执行各自的到期清理，释放不再有效的临时数据。"
+        + "每个缓存仍按自己的保留规则判断是否清除，本任务不重置正常缓存的有效期。"
+        + "这是共享的 Core 维护任务，网页只读，缓存的实际内容与清理条件由所属业务决定。", controllable = false)
 public class CacheService implements ICacheService {
     /// 清理缓存任务的命名空间
     public static final String CLEAN_CACHE_TASK_NAMESPACE = "one-bot-cache-service-clean-cache-task";

@@ -1,13 +1,11 @@
 package org.zexnocs.teanekoapp.web.settings;
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
-import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
@@ -24,17 +22,18 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
- * 验证自动发现不等于授权，客户端适用范围在读取和提交之前检查。
+ * 验证管理员直接管理已启用配置，客户端与插件边界在读取和提交之前检查。
+ * <br>2026/11/04：取消额外本地白名单，覆盖默认目录、身份拒绝和原平台隔离。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 class ChatSettingsServiceTest {
-    /** 自动目录需要本地授权，平台专用管理器不能借其他客户端执行。 */
+    /** 2026/11/04：配置自动提供给管理员，未登录、插件关闭或平台不适用时仍拒绝。 */
     @Test
-    void discoversManagersButChecksGroupClientAndPluginBeforeDatabase() {
+    void discoversManagersWithoutLocalAllowlistButChecksClientAndPlugin() {
         var scanner = mock(IBeanScanner.class);
         var general = new GeneralManager();
         var platform = new PlatformManager();
@@ -44,9 +43,6 @@ class ChatSettingsServiceTest {
         doReturn(GeneralManager.class).when(scanner).getBeanClass(general);
         doReturn(PlatformManager.class).when(scanner).getBeanClass(platform);
         var directory = new ChatSettingsDirectory(scanner, new ObjectMapper());
-        var policy = new WebSecurityFileConfig();
-        var files = mock(IFileConfigService.class);
-        when(files.requireCurrent(WebSecurityFileConfig.class)).thenReturn(policy);
         var plugins = mock(PluginRegistry.class);
         when(plugins.isEnabled("test.plugin")).thenReturn(true);
         var clients = mock(ClientManagementDirectory.class);
@@ -60,15 +56,12 @@ class ChatSettingsServiceTest {
             return action.apply(adapter);
         }).when(clients).invoke(eq("web"), any());
         var edits = mock(ConfigEditService.class);
-        var service = new ChatSettingsService(directory, clients, edits, plugins, files);
-        assertTrue(service.sections(() -> {}).isEmpty());
-        // 2026/11/04：已有混合大小写管理器可单独授权，不能因自动发现阻断整个目录。
-        policy.setSettingsSections(java.util.List.of("sauceNAO"));
-        assertEquals("sauceNAO", policy.snapshot().settingsSections().getFirst());
-        assertEquals(1, service.sections(() -> {}).size());
-        policy.setSettingsSections(java.util.List.of());
-        policy.setSettingsGroups(java.util.List.of("general"));
+        var service = new ChatSettingsService(directory, clients, edits, plugins);
+        // 2026/11/04：默认即提供两项已启用配置，不依赖本地白名单。
         assertEquals(2, service.sections(() -> {}).size());
+        assertThrows(SecurityException.class, () -> service.sections(() -> {
+            throw new SecurityException("当前不是管理员。");
+        }));
         assertEquals("sauceNAO", service.sections("web", "bot", "room", () -> {}).toCompletableFuture().join().getFirst().id());
         assertThrows(CompletionException.class, () -> service.read("web", "bot", "room", "platform", () -> {}).toCompletableFuture().join());
         verifyNoInteractions(edits);

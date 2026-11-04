@@ -21,15 +21,20 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service("setSpecialTitleService")
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "client.maintenance", categoryName = "客户端维护", name = "每日头衔限制清理",
-        description = "按原规则重置当日头衔设置限制。", controllable = false)
+        description = "按每日零点的 cron 规则清空特殊头衔功能的当日限制缓存，恢复下一周期的操作机会。"
+        + "清理只影响本地限制记录，不批量修改群成员的现有头衔，也不代替设置头衔时的平台权限校验。"
+        + "这是只读维护任务，实际触发时区以当前调度规则为准。", controllable = false)
 public class SetSpecialTitleService {
     public static final String DEBUG_NAMESPACE = "头衔修改";
 

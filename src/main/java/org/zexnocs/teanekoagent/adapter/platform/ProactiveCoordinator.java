@@ -34,15 +34,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "agent.proactive", categoryName = "Agent 主动活动", name = "自主候选扫描",
-        description = "定期扫描已确认目标，实际候选继续受原权限、预算与冷却约束。", controllable = false)
+        description = "定期检查已知聊天的主动活动条件，满足启用、时间窗口和冷却规则时才尝试生成候选。"
+        + "候选使用系统身份，继续检查当前聊天权限、人格、模型上下文和发送目标；可能选择不发言，也可能向真实聊天发送消息。"
+        + "本项为只读扫描任务；需要停止某个聊天的主动活动时修改该聊天的 Agent 主动模式配置。", controllable = false)
 public final class ProactiveCoordinator implements AutoCloseable {
     private final IConfigDataService configs;
     private final AgentScopeConfigManager manager;

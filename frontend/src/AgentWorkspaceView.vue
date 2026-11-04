@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
+import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import {ApiError, request} from './api'
@@ -274,11 +276,11 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
       <p>断开或失败不表示没有提交，请查询原结果或原样重试。</p>
       <ElButton :disabled="busy" @click="queryOperation">查询原回执</ElButton>
       <ElButton :disabled="busy" @click="resend">原样重试</ElButton>
-      <ElButton :disabled="busy" @click="discard">保留编号后放弃并刷新</ElButton>
+      <RefreshButton :disabled="busy" @click="discard" label="保留编号后放弃并刷新" />
       </ElCard>
     <template v-if="panel === 'schedules'">
       <p class="small muted">显示当前聊天的持久计划。取消只阻止未来执行，已开始的外部动作不能保证撤销。暂停与结果不明的计划不提供无条件重试。</p>
-      <ElButton :disabled="busy || !!pending" @click="run(() => loadSchedules())">刷新计划首页</ElButton>
+      <RefreshButton :disabled="busy || !!pending" @click="run(() => loadSchedules())" label="刷新计划首页" />
       <ElCard v-for="item in schedules?.items ?? []" :key="item.id" shadow="never" class="runtime-card"><h3>{{ item.title }}</h3><p>{{ scheduleStates[item.state] ?? item.state }}</p><p class="small muted">发生时间：{{ date(item.nextFire) }} · 原时区 {{ item.zoneId }}<br />{{ item.intervalSeconds ? `每 ${item.intervalSeconds} 秒一次` : '单次计划' }} · 动作 {{ item.action }}</p><p>{{ item.outcome }}</p><p class="small revision">{{ item.id }} · 版本 {{ item.revision }}</p><ElButton v-if="item.cancellable" type="danger" plain :disabled="busy || !!pending" @click="commit('schedules', { action: 'CANCEL', after: '', id: item.id, revision: item.revision }, `取消“${item.title}”的未来计划？已开始的动作可能仍会完成。`)">取消未来计划</ElButton></ElCard>
       <ElEmpty v-if="schedules && !schedules.items.length" description="本页没有匹配计划；存在后页时可继续扫描" /><ElButton v-if="schedules?.next" :disabled="busy || !!pending" @click="run(() => loadSchedules(true))">继续扫描计划</ElButton>
     </template>
@@ -286,7 +288,7 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
       <div class="agent-toolbar">
       <label>每十秒自动刷新 <ElSwitch v-model="auto" />
       </label>
-      <ElButton :loading="busy" @click="run(loadActivity)">刷新活动</ElButton>
+      <RefreshButton :loading="busy" @click="run(loadActivity)" label="刷新活动" />
       </div>
       <DetailPanel title="活动说明"><p>模型完成与消息发送分别记录；进程重启后清空此活动窗口。</p></DetailPanel>
       <p v-if="timeline" class="small muted">窗口开始 {{ date(timeline.startedAt) }} · {{ timeline.truncated ? '更早节点已超出窗口' : '当前窗口尚未截断' }} · 页面最多保留三百个节点</p>

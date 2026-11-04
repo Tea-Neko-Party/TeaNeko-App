@@ -22,16 +22,21 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/03/18
  * @since 4.3.4
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @RequiredArgsConstructor
 @Service
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "群活跃度定时扫描",
-        description = "按各聊天原 cron 扫描活跃度，已发起的异步业务继续执行。")
+        description = "按每个群聊配置的 cron 规则扫描成员活跃度，生成当前规则下的低活跃度统计。"
+        + "扫描完成后向配置的监控群发送明细，真实查询及发送过程由原业务异步执行；群配置被撤销时不再处理。"
+        + "可暂停或恢复对应规则的后续触发，已开始的扫描和已发送消息不会回滚。")
 public class GroupActivityCronService {
 
     /// scope ID → cron timer

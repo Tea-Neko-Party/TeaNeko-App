@@ -28,18 +28,23 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：声明系统监测分类，原报警采样任务只读展示。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
 @Command(value = {"/status"},
         permission = CommandPermission.ALL,
         scope = CommandScope.ALL)
 // 2026/11/04：只贡献原监测任务的分类，不开放网页暂停。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "core.maintenance", categoryName = "Core 维护", name = "系统负载监测",
-        description = "原状态命令定期检测 CPU 与内存阈值。", controllable = false)
+        description = "定期读取系统 CPU 与内存使用情况，超过既有阈值时通过原日志报告通道发送负载告警。"
+        + "这里只做状态采样和告警，不执行重启、进程终止或资源释放；网页概览的即时采样独立运行。"
+        + "该监测任务只读，具体执行周期与最近运行情况见本卡片的规则和任务记录。", controllable = false)
 public class StatusCommand {
     /// CPU 使用率阈值
     private final static int CPU_THRESHOLD = 80;

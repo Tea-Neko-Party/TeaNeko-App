@@ -37,15 +37,20 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 @Service
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "每日签到缓存重置",
-        description = "每天按原规则清空当日签到标记，不能从网页暂停日切。", controllable = false)
+        description = "按每日零点的 cron 规则清空当天签到去重缓存，为新一天的签到释放登记位置。"
+        + "只重置临时去重标记，不删除历史签到数据、连续签到记录或积分；后续签到仍执行原日期与持久化校验。"
+        + "任务属于只读维护，实际触发时区以当前调度规则为准。", controllable = false)
 public class SignInService {
     /// 存储签到数据的命名空间
     public static final String NAMESPACE = "sign_in";

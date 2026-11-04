@@ -31,14 +31,19 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
  *
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.7.1-l
+ * @version 4.7.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
 @TimerDisplay(category = "agent.stickers", categoryName = "Agent 素材", name = "表情包后台整理",
-        description = "按原租约处理采集、分析与文件回收，不阻塞普通聊天。", controllable = false)
+        description = "处理已受理的表情素材采集与重新分析作业，每次最多启动一个有时限的后台流程。"
+        + "按来源规则获取图片、调用已选模型进行分类，并按收藏条件写入共享图库；没有待处理作业时执行文件回收和可用性检查。"
+        + "只有已受理且符合采集条件的作业才会进入分析，继续受图库开关、来源白名单、容量和模型预算约束；网页只读。", controllable = false)
 public final class StickerCollectionService implements AutoCloseable {
     private final StickerLibrary library;
     private final StickerExtensionRegistry registry;

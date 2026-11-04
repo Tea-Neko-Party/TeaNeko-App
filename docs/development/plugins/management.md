@@ -41,7 +41,7 @@ Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验�
 
 4.7.1-l 起，已启用 `@ConfigManager` 经原 scanner 自动生成通用表单，默认属于 `general` 组。为管理器提供中文 description，为字段提供 `@Description`；元数据使用原 ObjectMapper，支持继承、泛型、别名、标量及集合/对象 JSON。通用入口通过 `ConfigEditService.changeJson` 提交完整 JSON 值，字符串必须是 JSON 字符串；旧命令与专用适配器保持原文本协议。字段校验器可覆写 `isValidJson` 处理集合等结构化值，默认适配原标量校验。敏感字段不导出，也不允许普通修改。
 
-复杂或受限配置实现 `IChatSettingsSection`，标记 `@TeaNekoChatSettings(value = "原管理器标识", group = "agent或自定义分组")` 并注册 Spring Bean。它必须对应实际已启用管理器，并优先于该管理器的通用投影；重复键明确报错。保留命名空间等特殊绑定的专用用例，不借通用字段放开。配置区须由本地 `settings-sections` 或 `settings-groups` 明确允许，且所属 `@PluginOwned` 插件启用。
+复杂或受限配置实现 `IChatSettingsSection`，标记 `@TeaNekoChatSettings(value = "原管理器标识", group = "agent或自定义分组")` 并注册 Spring Bean。它必须对应实际已启用管理器，并优先于该管理器的通用投影；重复键明确报错。保留命名空间等特殊绑定的专用用例，不借通用字段放开。自 4.7.3-l 起，管理员直接访问已启用且适用于当前客户端的配置，无需本地 `settings-sections` 或 `settings-groups` 放行；所属 `@PluginOwned` 插件、字段校验及事务内业务检查继续生效。
 
 平台由 `IClientManagementAdapter` 贡献 accounts、targets、resolve、discover；resolve 校验平台/账号/目标关系，`configNamespaces(resolved)` 声明此目标适用的配置命名空间，默认空集。OneBot 声明通用及对应群聊/私聊、平台配置，网页平台只声明通用及相应群聊/私聊配置。实际事务前重新核对适用范围、授权及插件代次，不把浏览器提交的值作为适用范围。已发布 HTTP 路径见[聊天设置](../web-console.md#聊天设置)。
 

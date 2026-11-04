@@ -84,7 +84,9 @@ IntelliJ 直接运行主类时，可在 VM options 加入 `--enable-native-acces
 
 Web 默认关闭，提供 Agent、聊天配置、本地文件配置、任务、日志、客户端指令和网页聊天管理。完整字段和操作说明见 [Web 控制台部署与开发](docs/development/web-console.md)。以下命令均在项目根目录执行，Windows 使用 PowerShell；其他系统将 `.\gradlew.bat` 换成 `./gradlew`。
 
-聊天配置分为 Agent 与其他功能，可按平台和聊天登记、修改、注销。普通配置需在本地安全文件中允许对应 `settings-sections`，或设置 `settings-groups: ['general']` 开放普通配置组；仅发现配置不会自动开放。任务与日志观测配置可通过 `file-sections` 中的 `core.runtime` 开放，保存后单独应用。
+聊天配置分为 Agent 与其他功能，管理员可按平台和聊天直接登记、修改、注销适用且已启用的配置，无需本地 `settings-sections` 或 `settings-groups` 放行。Agent 工作区使用独立的平台、账号和聊天选择器。任务与日志观测配置仍可通过 `file-sections` 中的 `core.runtime` 开放，保存后单独应用。
+
+右上角“外观设置”可预览和保存网页背景、前景文字与强调色，配色只保存在当前浏览器，支持恢复默认。刷新及目录更新使用带动作提示的图标按钮；详细操作见[控制台说明](docs/development/web-console.md)。
 
 “任务与日志”可按分类、规则类型、状态和名称筛选实际定时任务；Spring 与关键维护任务只读，可管理的 Core Timer 保留暂停、恢复和原回执查询。详见[任务与定时规则](docs/development/web-console-runtime.md)。
 
