@@ -10,12 +10,15 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.4-l
  */
-@ConfigManager(value = "agent", description = "Agent 作用域、人格与记忆开关、活动模式和历史窗口",
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "agent", displayName = "聊天助手", description = "Agent 作用域、人格与记忆开关、活动模式和历史窗口",
         storage = TeaNekoAgentEasyDataObject.class,
         configType = AgentScopeConfigData.class, fieldChecker = AgentScopeFieldChecker.class,
         namespaces = {TeaNekoConfigNamespaces.GENERAL, TeaNekoConfigNamespaces.PRIVATE, TeaNekoConfigNamespaces.GROUP})

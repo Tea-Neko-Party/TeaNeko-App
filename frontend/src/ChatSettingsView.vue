@@ -19,6 +19,7 @@ import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
 import {useConsolePreferences} from './console-preferences'
+import type {AgentTarget} from './AgentWorkspaceView.vue'
 
 interface Account { ref: string; name: string; platformId: string; observedAt: string }
 interface Target { ref: string; kind: string; name: string; platformId: string; source: string; shared: boolean; observedAt: string }
@@ -74,6 +75,32 @@ const part = (value: string) => encodeURIComponent(value)
 const defaultLabel = (field: Field) => field.jsonValue && field.defaultValue === 'null' ? '空值（null）' : field.kind === 'BOOLEAN' ? (field.defaultValue === 'true' ? '开启' : '关闭')
   : field.choices[displayValue(field, field.defaultValue)] ?? (displayValue(field, field.defaultValue) || '留空')
 const targetPath = () => `clients/${part(client.value)}/accounts/${part(account.value)}/targets/${part(selected.value!.ref)}/settings/${part(section.value)}`
+// 2026/11/04：跨页面定位等待目录初始化，保留原目标的草稿与待确认请求。
+let ready: () => void
+const initialized = new Promise<void>(resolve => { ready = resolve })
+
+async function openTarget(target: AgentTarget) {
+  await initialized
+  if (busy.value || !await leaveDraft()) return
+  await run(async () => {
+    stash()
+    clearEditor()
+    client.value = target.client
+    accounts.value = await request<Account[]>(`clients/${part(target.client)}/accounts`)
+    if (!accounts.value.some(item => item.ref === target.account)) throw new Error('当前聊天账号已不可用，请刷新目录。')
+    account.value = target.account
+    kind.value = ''
+    search.value = ''
+    await loadTargets()
+    selected.value = targets.value.find(item => item.ref === target.target)
+      ?? {ref: target.target, name: target.name, kind: '', platformId: '', source: '', shared: false, observedAt: ''}
+    sections.value = await request<Section[]>(`clients/${part(client.value)}/accounts/${part(account.value)}/targets/${part(target.target)}/settings`)
+    configGroup.value = 'agent'
+    section.value = sectionOptions.value[0]?.id ?? ''
+    if (section.value) await restoreOrRead()
+  })
+}
+defineExpose({openTarget})
 
 async function run(action: () => Promise<void>) {
   if (busy.value) return
@@ -257,7 +284,7 @@ async function submit(action: string) {
   if (action !== 'PATCH') {
     try {
       await ElMessageBox.confirm(action === 'REGISTER'
-        ? `为当前聊天登记“${view.value.name}”，按下方类型默认值创建。请确认共享影响。`
+        ? `为当前聊天登记“${view.value.name}”，使用类型默认值创建。请确认共享影响。`
         : `仅注销当前聊天的“${view.value.name}”配置，不删除聊天、历史、记忆或其他配置。`,
       action === 'REGISTER' ? '登记配置' : '注销配置', { type: 'warning', confirmButtonText: '确认', cancelButtonText: '取消' })
     } catch { return }
@@ -325,6 +352,7 @@ onMounted(async () => {
     section.value = sectionOptions.value[0]?.id ?? ''
   })
   await chooseClient(props.initialClient || available.value[0]?.clientId || '')
+  ready()
 })
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
@@ -378,17 +406,20 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         <!-- 2026/11/04：管理员直接编辑适用配置，空目录只说明当前客户端或插件未提供配置。 -->
         <ElEmpty v-else-if="!sectionOptions.length" description="这个聊天暂无适用的此类配置"><p class="small muted">这里只显示适用于当前客户端且所属插件已启用的聊天配置。</p></ElEmpty>
         <template v-else-if="view">
-          <div class="editor-heading"><div><h2>{{ view.targetName }}</h2><span class="connection-state">{{ view.registered ? '已登记' : '尚未登记' }}</span></div>
+          <!-- 2026/11/04：左侧已标明聊天，右侧只展示配置名称与登记状态。 -->
+          <div class="editor-heading"><span class="connection-state">{{ view.registered ? '已登记' : '尚未登记' }}</span>
             <ElButton v-if="configGroup === 'agent'" :disabled="busy || !!pending" @click="emit('inspect', { client, account, target: selected.ref, name: view.targetName })">活动与记忆</ElButton>
             <ElButton v-show="advanced" :disabled="busy || !!pending" @click="emit('console', { client, account, target: selected.ref, name: view.targetName })">指令台</ElButton>
           </div>
-          <div class="section-title"><h3>{{ view.name }}</h3><DetailPanel title="配置说明"><p>{{ sections.find(item => item.id === section)?.description }}</p></DetailPanel></div>
+          <div class="section-title"><h3>{{ view.name }}</h3></div>
+          <p class="config-description">{{ sections.find(item => item.id === section)?.description }}</p>
           <p class="small muted">{{ view.sharedExplanation }}</p>
-          <ElAlert v-if="!view.registered" title="下方是登记后的默认值，并未写入或启用。请明确登记后再修改。" type="info" :closable="false" />
+          <ElButton v-if="!view.registered" type="primary" :disabled="busy || !!pending" @click="submit('REGISTER')">登记此配置</ElButton>
+          <template v-if="view.registered">
           <ElCard v-for="group in groups" :key="group" shadow="never" class="field-group"><h3>{{ group }}</h3>
             <div v-for="field in fieldsIn(group)" :key="field.name" class="settings-field">
               <div><label :for="'field-' + field.name">{{ field.label }}</label>
-                <DetailPanel title="说明"><p>{{ field.description }}</p><span class="field-source">{{ field.source }} · 默认：{{ defaultLabel(field) }}</span></DetailPanel></div>
+                <p class="config-description">{{ field.description }}</p><span class="field-source">{{ field.source }} · 默认：{{ defaultLabel(field) }}</span></div>
               <div class="config-field-input">
               <ElCheckbox v-if="field.jsonValue && field.nullable && field.kind !== 'JSON'" :model-value="values[field.name] === 'null'" :disabled="busy || !view.registered || !field.editable || !!pending" @update:model-value="value => setNull(field, !!value)">不设置（null）</ElCheckbox>
               <ElSwitch v-if="field.kind === 'BOOLEAN'" :id="'field-' + field.name" :model-value="values[field.name] === 'true'"
@@ -406,17 +437,17 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           </ElCard>
           <ElButton v-if="hiddenCount" text @click="showAllFields = true">展开其余 {{ hiddenCount }} 项配置</ElButton>
           <ElButton v-else-if="showAllFields && !advanced && section === 'agent'" text @click="showAllFields = false">仅显示常用配置</ElButton>
+          <div class="editor-actions">
+            <ElButton type="primary" :disabled="busy || !dirty || !!pending" @click="submit('PATCH')">保存修改</ElButton>
+            <RefreshButton :disabled="busy || !!pending" @click="reload" label="重新读取" />
+            <ElButton v-show="advanced" type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">注销登记</ElButton>
+            <span v-if="dirty" class="small muted">有未保存的修改{{ hiddenDirtyCount ? `（${hiddenDirtyCount} 项已折叠）` : '' }}</span>
+          </div>
+          </template>
           <ElCard v-if="pending" shadow="never"><h3>上次操作尚待确认</h3><p class="small">操作编号：{{ pending.operationId }}</p>
             <p class="small muted">失败或断开不证明未提交。请查询真实结果，或使用相同编号重试原请求。</p>
             <ElButton :disabled="busy" @click="queryPending">查询提交结果</ElButton><ElButton :disabled="busy" @click="resend">重试原请求</ElButton>
             <RefreshButton :disabled="busy" @click="discardPending" label="放弃草稿并刷新" /></ElCard>
-          <div class="editor-actions">
-            <ElButton v-if="!view.registered" type="primary" :disabled="busy || !!pending" @click="submit('REGISTER')">登记此配置</ElButton>
-            <template v-else><ElButton type="primary" :disabled="busy || !dirty || !!pending" @click="submit('PATCH')">保存修改</ElButton>
-              <RefreshButton :disabled="busy || !!pending" @click="reload" label="重新读取" />
-              <ElButton v-show="advanced" type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">注销登记</ElButton></template>
-            <span v-if="dirty" class="small muted">有未保存的修改{{ hiddenDirtyCount ? `（${hiddenDirtyCount} 项已折叠）` : '' }}</span>
-          </div>
           <ElCard v-if="lastReceipt" shadow="never" class="operation-receipt"><h3>真实操作回执</h3>
             <p>操作者：本地管理员 · {{ date(lastReceipt.at) }}{{ lastReceipt.replayed ? ' · 原结果重放' : '' }}</p>
             <DetailPanel><p class="small">操作编号：{{ lastReceipt.operationId }}</p></DetailPanel>

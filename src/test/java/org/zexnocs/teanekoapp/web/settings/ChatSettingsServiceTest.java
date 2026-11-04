@@ -18,17 +18,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.*;
 
 /**
  * 验证管理员直接管理已启用配置，客户端与插件边界在读取和提交之前检查。
  * <br>2026/11/04：取消额外本地白名单，覆盖默认目录、身份拒绝和原平台隔离。
+ * <br>2026/11/04：验证简短显示名独立于稳定标识及完整说明。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.3-l
+ * @version 4.7.4-l
  */
 class ChatSettingsServiceTest {
     /** 2026/11/04：配置自动提供给管理员，未登录、插件关闭或平台不适用时仍拒绝。 */
@@ -62,7 +64,11 @@ class ChatSettingsServiceTest {
         assertThrows(SecurityException.class, () -> service.sections(() -> {
             throw new SecurityException("当前不是管理员。");
         }));
-        assertEquals("sauceNAO", service.sections("web", "bot", "room", () -> {}).toCompletableFuture().join().getFirst().id());
+        // 2026/11/04：短名称改变不影响原配置键或完整说明。
+        var visible = service.sections("web", "bot", "room", () -> {}).toCompletableFuture().join().getFirst();
+        assertEquals("sauceNAO", visible.id());
+        assertEquals("图片来源", visible.name());
+        assertEquals("通用配置", visible.description());
         assertThrows(CompletionException.class, () -> service.read("web", "bot", "room", "platform", () -> {}).toCompletableFuture().join());
         verifyNoInteractions(edits);
         when(plugins.isEnabled("test.plugin")).thenReturn(false);
@@ -75,12 +81,14 @@ class ChatSettingsServiceTest {
 
     /**
      * 通用群配置声明。
+     * <br>2026/11/04：显示名称不参与配置标识解析。
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.7.1-l
+     * @version 4.7.4-l
      */
-    @ConfigManager(value = "sauceNAO", description = "通用配置", namespaces = "teaneko-group")
+    // 2026/11/04：用短名称验证实际配置发现投影。
+    @ConfigManager(value = "sauceNAO", displayName = "图片来源", description = "通用配置", namespaces = "teaneko-group")
     public static class GeneralManager {}
 
     /**

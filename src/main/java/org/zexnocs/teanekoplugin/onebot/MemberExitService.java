@@ -16,11 +16,15 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 /**
  * 成员退群提醒。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/13
  * @since 4.2.3
+ * @version 4.7.4-l
  */
-@ConfigManager(value = "member-exit-warning", description = """
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "member-exit-warning", displayName = "退群提醒", description = """
         当成员在该群组中退群时，发送一条消息提醒。
         配置的值：对群组成员的称呼。
         例如 "猫猫"，默认 "成员"。""",

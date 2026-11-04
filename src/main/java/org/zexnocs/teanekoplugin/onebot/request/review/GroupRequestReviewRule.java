@@ -19,11 +19,15 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 /**
  * 用于添加和删除群组请求的监听器。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/11
  * @since 4.1.3
+ * @version 4.7.4-l
  */
-@ConfigManager(value = "group-request-review", description = """
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "group-request-review", displayName = "入群人工审核", description = """
         开启人工审核当前群组的入群请求。
         开启后，可指定审核该群组入群请求的群组 ID 列表。""",
         configType = GroupRequestReviewRuleConfig.class,

@@ -36,7 +36,7 @@ interface Admin { path: string; body: { operationId: string; [key: string]: unkn
 interface Settings { registered: boolean; fields: { name: string; label: string; value: string }[] }
 const props = defineProps<{ active: boolean }>()
 const {advanced} = useConsolePreferences()
-const emit = defineEmits<{ expired: []; inspect: [target: AgentTarget]; settings: [] }>()
+const emit = defineEmits<{ expired: []; inspect: [target: AgentTarget]; settings: [target: AgentTarget] }>()
 const home = ref<Home>()
 const roomId = ref('')
 const picker = ref('')
@@ -51,6 +51,9 @@ const mention = ref(false)
 const reply = ref('')
 const media = ref('')
 const mediaIds = ref<string[]>([])
+// 2026/11/04：上传与拖放共用原受限媒体接口，预览只引用当前聊天的服务端图片。
+const fileInput = ref<HTMLInputElement>()
+const dragging = ref(false)
 const pending = ref<{ room: string; body: Send }>()
 const pendingAdmin = ref<Admin>()
 const pendingUpload = ref<{ room: string; id: string; file: File }>()
@@ -70,6 +73,9 @@ const memberProfile = ref('')
 const memberCard = ref('')
 const memberRole = ref('MEMBER')
 let generation = 0
+let polling = false
+let pullSequence = 0
+let pollController: AbortController | undefined
 let interval: ReturnType<typeof setInterval> | undefined
 const base = (id = roomId.value) => `chat/rooms/${encodeURIComponent(id)}`
 const imageUrl = (id: string) => `/api/v1/${base()}/media/${encodeURIComponent(id)}`
@@ -110,19 +116,23 @@ async function refreshHome() {
   if (room.value && !room.value.members.some(value => value.profile === sender.value)) sender.value = room.value.members[0]?.profile ?? ''
 }
 
-async function pull() {
+async function pull(signal?: AbortSignal) {
   if (!room.value) return
   const follow = !messagePane.value || messagePane.value.scrollHeight - messagePane.value.scrollTop - messagePane.value.clientHeight < 100
   const current = generation
-  const result = await request<Page>(`${base()}/messages?after=${cursor.value}`)
-  if (current !== generation) return
+  const sequence = ++pullSequence
+  const result = await request<Page>(`${base()}/messages?after=${cursor.value}`, {signal})
+  if (current !== generation || sequence !== pullSequence) return
   if (result.reset) {
     messages.value = []
     notice.value = '消息窗口已前移，正在显示当前可用记录；未显示的部分不能解释为没有发生。'
   }
-  const indexed = new Map(messages.value.map(item => [item.id, item]))
-  result.items.forEach(item => indexed.set(item.id, item))
-  messages.value = [...indexed.values()].sort((a, b) => a.sequence - b.sequence).slice(-2000)
+  // 2026/11/04：空轮询不重建消息列表，保持输入焦点和已加载图片稳定。
+  if (result.items.length) {
+    const indexed = new Map(messages.value.map(item => [item.id, item]))
+    result.items.forEach(item => indexed.set(item.id, item))
+    messages.value = [...indexed.values()].sort((a, b) => a.sequence - b.sequence).slice(-2000)
+  }
   cursor.value = result.next
   more.value = result.more
   await nextTick()
@@ -155,6 +165,7 @@ async function choose(id: string) {
     return
   }
   generation++
+  pollController?.abort()
   busy.value = false
   roomId.value = id
   picker.value = id
@@ -233,6 +244,11 @@ async function send() {
   })
 }
 
+/** 2026/11/04：中文输入法组合输入期间不触发快捷发送。 */
+function sendShortcut(event: Event | KeyboardEvent) {
+  if (event instanceof KeyboardEvent && !event.isComposing) void send()
+}
+
 async function query() {
   const original = pending.value
   const id = original?.body.operationId ?? receipt.value?.operationId
@@ -250,10 +266,43 @@ async function upload(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
-  if (!file || blocked.value || !room.value) return
+  if (file) await uploadFile(file)
+}
+
+/** 2026/11/04：按钮选择和拖放采用相同的单图、类型与容量校验。 */
+async function uploadFile(file: File) {
+  if (blocked.value || !room.value) return
+  if (file.type && !['image/png', 'image/jpeg', 'image/gif'].includes(file.type)) {
+    error.value = '请选择 PNG、JPEG 或 GIF 图片。'
+    return
+  }
   if (file.size > 1048576) { error.value = '每张图片最多一 MiB，标准 PNG 超过上限也会被拒绝。'; return }
   pendingUpload.value = { room: roomId.value, id: crypto.randomUUID(), file }
   await run(retryUpload)
+}
+
+/** 2026/11/04：每条消息只支持一张附图，不能悄悄丢弃多文件拖放。 */
+function dropImage(event: DragEvent) {
+  dragging.value = false
+  if (blocked.value) return
+  const files = event.dataTransfer?.files
+  if (!files?.length) return
+  event.preventDefault()
+  if (files.length !== 1) { error.value = '每条消息请选择一张图片。'; return }
+  void uploadFile(files[0]!)
+}
+
+/** 2026/11/04：只接管文件拖放，正文里的普通文字拖动仍由浏览器处理。 */
+function dragImage(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes('Files')) return
+  event.preventDefault()
+  dragging.value = !blocked.value
+}
+
+/** 2026/11/04：跨越输入区子元素不闪烁，真正离开区域才清除拖放提示。 */
+function leaveImage(event: DragEvent) {
+  if (event.relatedTarget instanceof Node && (event.currentTarget as HTMLElement).contains(event.relatedTarget)) return
+  dragging.value = false
 }
 
 async function retryUpload() {
@@ -287,6 +336,35 @@ function inspect() {
   if (room.value) emit('inspect', { client: 'web', account: 'web-bot', target: room.value.id, name: room.value.name })
 }
 
+/** 2026/11/04：设置入口携带当前真实聊天，省去再次选择会话。 */
+function openSettings() {
+  if (room.value) emit('settings', {client: 'web', account: 'web-bot', target: room.value.id, name: room.value.name})
+}
+
+/** 2026/11/04：后台读取不占用编辑锁，且不会清除正在输入的新草稿。 */
+async function poll() {
+  if (polling || busy.value || !props.active || document.hidden || !room.value) return
+  const current = generation
+  const controller = new AbortController()
+  pollController = controller
+  polling = true
+  try {
+    await pull(controller.signal)
+    const original = receipt.value
+    if (current === generation && original?.status === 'PERSISTED') {
+      const result = await request<Receipt>(`${base()}/operations/${encodeURIComponent(original.operationId)}`, {signal: controller.signal})
+      if (current === generation && receipt.value?.operationId === original.operationId) receipt.value = result
+    }
+  } catch (failure) {
+    if (current !== generation || controller.signal.aborted) return
+    error.value = failure instanceof Error ? failure.message : '消息读取未完成。'
+    if (failure instanceof ApiError && failure.status === 401) emit('expired')
+  } finally {
+    polling = false
+    if (pollController === controller) pollController = undefined
+  }
+}
+
 function beforeUnload(event: BeforeUnloadEvent) {
   if (text.value.trim() || media.value || pending.value || pendingAdmin.value || pendingUpload.value) { event.preventDefault(); event.returnValue = '' }
 }
@@ -294,14 +372,9 @@ function beforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   void run(refresh)
   window.addEventListener('beforeunload', beforeUnload)
-  interval = setInterval(() => {
-    if (props.active && !document.hidden && room.value && !busy.value) void run(async () => {
-      await pull()
-      if (receipt.value?.status === 'PERSISTED') await query()
-    })
-  }, 2000)
+  interval = setInterval(() => void poll(), 2000)
 })
-onBeforeUnmount(() => { generation++; clearInterval(interval); pending.value = undefined; pendingAdmin.value = undefined; pendingUpload.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => { generation++; pollController?.abort(); clearInterval(interval); pending.value = undefined; pendingAdmin.value = undefined; pendingUpload.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
 </script>
 
 <template>
@@ -334,7 +407,7 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); pending.value = u
         <template v-else>
           <ElCard shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ room.name }}</h3><ElTag>{{ room.kind === 'GROUP' ? '网页模拟群' : '网页私聊' }}</ElTag></div>
             <p v-if="settings && !settings.registered">尚未登记 Agent，消息仍可保存；请到聊天设置明确登记。</p>
-            <div class="editor-actions"><ElButton @click="emit('settings')">聊天设置</ElButton><ElButton @click="inspect">活动与记忆</ElButton></div>
+            <div class="editor-actions"><ElButton @click="openSettings">聊天设置</ElButton><ElButton @click="inspect">活动与记忆</ElButton></div>
             <DetailPanel title="Agent 状态"><p>记忆空间：{{ namespace }}；人格按当前聊天独立。</p><p v-for="field in learning" :key="field.name">{{ field.label }}：{{ settings?.registered && field.value === 'true' ? '开启' : '关闭或尚未登记' }}</p></DetailPanel>
           </ElCard>
           <div ref="messagePane" class="web-messages" aria-label="网页聊天消息" aria-live="polite">
@@ -351,12 +424,20 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); pending.value = u
             </article>
           </div>
           <ElButton v-if="more" :disabled="busy" @click="run(pull)">继续读取消息</ElButton>
-          <ElCard shadow="never" class="runtime-card"><h3>发送消息</h3><template v-if="advanced || members.length > 1"><label for="web-sender">发言档案</label><ElSelect id="web-sender" v-model="sender" aria-label="网页发言档案" :disabled="blocked"><ElOption v-for="member in members" :key="member.profile" :label="`${member.card} · ${roles[member.role]}`" :value="member.profile" /></ElSelect></template>
+          <!-- 2026/11/04：将附件、正文和发送动作合为一个可拖放的输入区。 -->
+          <ElCard shadow="never" class="runtime-card web-composer-card"><template v-if="advanced || members.length > 1"><label for="web-sender">发言档案</label><ElSelect id="web-sender" v-model="sender" aria-label="网页发言档案" :disabled="blocked"><ElOption v-for="member in members" :key="member.profile" :label="`${member.card || member.name} · ${roles[member.role]}`" :value="member.profile" /></ElSelect></template>
             <p v-if="reply" class="small revision">引用 {{ reply }} <ElButton text :disabled="blocked" @click="reply = ''">取消引用</ElButton></p>
-            <p v-if="media" class="small revision">附图 {{ media }} <ElButton text :disabled="blocked" @click="media = ''">移除附图</ElButton></p>
-            <ElInput v-model="text" type="textarea" :rows="4" maxlength="16384" aria-label="网页消息正文" :disabled="blocked" placeholder="输入对话或原客户端命令，Ctrl+Enter 发送；内容按纯文本显示" @keydown.ctrl.enter.prevent="send" />
-            <div class="editor-actions"><ElSwitch v-if="room.kind === 'GROUP'" v-model="mention" active-text="提及 TeaNeko" :disabled="blocked" /><label class="web-file-label">上传图片<input type="file" accept="image/png,image/jpeg,image/gif" aria-label="上传网页聊天图片" :disabled="blocked" @change="upload" /></label><ElButton type="primary" :disabled="blocked || !sender || !text.trim() && !media" @click="send">发送到当前网页聊天</ElButton></div>
-            <DetailPanel title="图片要求"><p>图片最大一 MiB、边长 4096、约四百万像素。保存为静态 PNG，GIF 仅取首帧。</p></DetailPanel>
+            <div class="web-composer" :class="{'is-dragging': dragging}" @dragover="dragImage" @dragleave="leaveImage" @drop="dropImage">
+              <div v-if="media" class="web-attachment"><img :src="imageUrl(media)" alt="待发送的附图" /><button class="icon-button attachment-remove" aria-label="移除附图" title="移除附图" :disabled="blocked" @click="media = ''"><ConsoleIcon name="close" /></button></div>
+              <div class="web-composer-row">
+                <input ref="fileInput" class="visually-hidden" type="file" tabindex="-1" accept="image/png,image/jpeg,image/gif" aria-label="上传网页聊天图片" :disabled="blocked" @change="upload" />
+                <button class="icon-button composer-add" aria-label="添加图片" title="添加图片（也可拖放）" :disabled="blocked" @click="fileInput?.click()"><ConsoleIcon name="plus" /></button>
+                <ElInput v-model="text" type="textarea" :autosize="{minRows: 1, maxRows: 8}" maxlength="16384" aria-label="网页消息正文" :disabled="blocked" placeholder="发送消息，或拖入一张图片" @keydown.ctrl.enter.prevent="sendShortcut" />
+                <button class="icon-button composer-send" aria-label="发送消息" title="发送消息（Ctrl+Enter）" :disabled="blocked || !sender || !text.trim() && !media" @click="send"><ConsoleIcon name="send" /></button>
+              </div>
+              <p v-if="dragging" class="small muted composer-drop-hint">松开即可上传图片</p>
+            </div>
+            <div class="composer-footer"><ElSwitch v-if="room.kind === 'GROUP'" v-model="mention" active-text="提及 TeaNeko" :disabled="blocked" /><span class="small muted">Ctrl+Enter 发送 · 图片最大 1 MiB</span></div>
           </ElCard>
           <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ status[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p class="small revision">原操作：{{ receipt.operationId }}<br />消息：{{ receipt.messageId }}</p><ElButton :disabled="busy" @click="run(query)">查询原消息回执</ElButton></ElCard>
         </template>

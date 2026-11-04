@@ -28,14 +28,17 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 群活跃度总调度器
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.3.4
- * @version 4.5.0-l
+ * @version 4.7.4-l
  */
 @RequiredArgsConstructor
+// 2026/11/04：显示名称与原稳定配置键分别维护。
 @ConfigManager(
-        value = "group-activity",
+        value = "group-activity", displayName = "群活跃度",
         description = """
                 群活跃度检测。监控该群中成员活跃度情况，并发送到指定的监控群中。
                 请在被监控的群中注册。""",

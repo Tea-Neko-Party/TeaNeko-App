@@ -74,11 +74,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：验证平台原始群名称进入通用消息上下文，便于聊天目录显示。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.2-l
+ * @version 4.7.4-l
  */
 class OnebotAgentToolsTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -111,6 +112,7 @@ class OnebotAgentToolsTest {
 
     /**
      * 生成带稳定来源及群名片的消息，不通过模型字段构造身份。
+     * 2026/11/04：夹具同时携带真实平台的群名称。
      * @param id 消息 ID
      * @param scope 真实 scope
      * @param user 平台用户
@@ -120,7 +122,8 @@ class OnebotAgentToolsTest {
         return OnebotMessageData.builder().client(client).scopeId(scope).messageId(id).time(Instant.parse("2026-11-02T00:00:00Z"))
                 .messageType(TeaNekoMessageType.GROUP).messages(new DefaultTeaNekoContentListBuilder().addText("请记住花茶").build())
                 .userData(TeaNekoUserData.builder().uuid(UUID.randomUUID()).userIdInPlatform(user).nickname("昵称").groupId("123").role(CommandPermission.MEMBER).build())
-                .onebotRawMessageData(OnebotRawMessageData.builder().sender(OnebotSenderData.builder().card("群名片").build()).build()).build();
+                .onebotRawMessageData(OnebotRawMessageData.builder().groupName("已知群名称")
+                        .sender(OnebotSenderData.builder().card("群名片").build()).build()).build();
     }
 
     /**
@@ -139,9 +142,12 @@ class OnebotAgentToolsTest {
         }
     }
 
-    /** 当前工具返回真实群资料和发送者信息，元数据不会污染明确记忆原文。 */
-    @Test void toolsReturnSenderAndGroupAndKeepOriginalTextSeparate() {
+    /** 2026/11/04：当前工具及消息上下文保留群名称和发送者信息，不污染用户原话。 */
+    @Test
+    void toolsReturnSenderAndGroupAndKeepOriginalTextSeparate() {
         var input = NativeMessageInput.from(source);
+        assertEquals("已知群名称", source.getScopeName());
+        assertTrue(NativeMessageInput.contextText(source).contains("已知群名称"));
         assertEquals("请记住花茶", input.text()); assertTrue(mapper.writeValueAsString(input.message()).contains("senderUuid"));
         assertTrue(mapper.writeValueAsString(input.message()).contains("群名片"));
         // 2026/11/03：真实机器人账号不要求先注册用户，@机器人与@其他人、@全体明确区分。

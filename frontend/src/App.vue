@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
-import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
+import {computed, nextTick, onBeforeUnmount, onMounted, ref} from 'vue'
 import {ElAlert, ElButton, ElCard, ElConfigProvider, ElDrawer, ElEmpty} from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import LoginView from './LoginView.vue'
@@ -56,6 +56,8 @@ const agentOpened = ref(false)
 const agentPicker = ref<InstanceType<typeof ChatTargetPicker>>()
 const agentView = ref<InstanceType<typeof AgentWorkspaceView>>()
 const settingsOpened = ref(false)
+const settingsView = ref<InstanceType<typeof ChatSettingsView>>()
+const agentPickerOpen = ref(false)
 const tokensOpened = ref(false)
 const selectedClient = ref('')
 const title = computed(() => ({ overview: '运行概览', platforms: '客户端', session: '当前会话', settings: '聊天配置', agent: 'Agent 工作区', files: '本地配置', runtime: '任务与日志', console: '指令台', chat: '网页聊天' })[page.value])
@@ -77,6 +79,19 @@ function navigate(value: ConsolePage) {
 function openSettings(client = '') {
   selectedClient.value = client
   navigate('settings')
+}
+
+// 2026/11/04：网页聊天携带平台、账号及目标直达设置，复用设置页的草稿确认。
+async function openChatSettings(target: AgentTarget) {
+  navigate('settings')
+  await nextTick()
+  await settingsView.value?.openTarget(target)
+}
+
+async function selectAgentTarget() {
+  agentPickerOpen.value = true
+  await nextTick()
+  agentPicker.value?.focus()
 }
 
 function clearSession() {
@@ -103,9 +118,10 @@ function machineTokensApplied() {
 
 async function inspectAgent(target: AgentTarget) {
   agentOpened.value = true
-  if (agentTarget.value && JSON.stringify(agentTarget.value) === JSON.stringify(target)) { page.value = 'agent'; return }
+  if (agentTarget.value && JSON.stringify(agentTarget.value) === JSON.stringify(target)) { agentPickerOpen.value = false; page.value = 'agent'; return }
   if (agentTarget.value && JSON.stringify(agentTarget.value) !== JSON.stringify(target) && !await agentView.value?.canLeave()) return
   agentTarget.value = target
+  agentPickerOpen.value = false
   page.value = 'agent'
 }
 
@@ -198,10 +214,10 @@ onMounted(() => run(refresh, true))
         <div class="page-heading"><h1>{{ title }}</h1>
           <RefreshButton v-if="['overview', 'platforms'].includes(page)" :loading="busy" @click="run(refreshPage)" label="刷新" /></div>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
-        <ChatSettingsView v-if="settingsOpened" v-show="page === 'settings'" :clients="platforms" :initial-client="selectedClient" @expired="clearSession" @inspect="inspectAgent" @console="inspectConsole" />
+        <ChatSettingsView v-if="settingsOpened" ref="settingsView" v-show="page === 'settings'" :clients="platforms" :initial-client="selectedClient" @expired="clearSession" @inspect="inspectAgent" @console="inspectConsole" />
         <section v-if="agentOpened" v-show="page === 'agent'">
-          <ChatTargetPicker ref="agentPicker" :clients="platforms" :target="agentTarget" @expired="clearSession" @select="inspectAgent" />
-          <AgentWorkspaceView v-if="agentTarget" ref="agentView" :target="agentTarget" :active="page === 'agent'" @expired="clearSession" @select-target="agentPicker?.focus()" />
+          <ChatTargetPicker v-show="!agentTarget || agentPickerOpen" ref="agentPicker" :clients="platforms" :target="agentTarget" @expired="clearSession" @select="inspectAgent" />
+          <AgentWorkspaceView v-if="agentTarget" ref="agentView" :target="agentTarget" :active="page === 'agent'" @expired="clearSession" @select-target="selectAgentTarget" />
         </section>
         <FileSettingsView v-if="filesOpened" v-show="page === 'files'" @expired="clearSession" />
         <RuntimeView v-if="runtimeOpened" v-show="page === 'runtime'" :active="page === 'runtime'" @expired="clearSession" />
@@ -209,7 +225,7 @@ onMounted(() => run(refresh, true))
         <ElEmpty v-if="page === 'console' && !consoleTarget" description="先选择要管理的聊天">
           <ElButton type="primary" @click="openSettings()">选择聊天</ElButton>
         </ElEmpty>
-        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @expired="clearSession" @inspect="inspectAgent" @settings="openSettings('web')" />
+        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @expired="clearSession" @inspect="inspectAgent" @settings="openChatSettings" />
         <template v-if="page === 'overview'">
           <div class="stats"><ElCard shadow="never"><div class="stat-label"><span>客户端</span><ConsoleIcon name="platforms" /></div><strong>{{ platforms.length }}</strong></ElCard>
             <ElCard shadow="never"><div class="stat-label"><span>开放连接</span><span class="live-dot"></span></div><strong>{{ connectionCount }}</strong></ElCard>

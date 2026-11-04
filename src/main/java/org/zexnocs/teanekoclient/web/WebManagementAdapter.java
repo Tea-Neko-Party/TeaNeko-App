@@ -18,11 +18,12 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：网页聊天声明通用配置适用范围，不开放其他平台专用配置。
+ * <br>2026/11/04：网页目录刷新只重读本地持久档案，不调用外部联系人发现。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.4-l
  */
 @Component
 @TeaNekoClientManagement(WebTeaNekoClient.ID)
@@ -56,6 +57,21 @@ public final class WebManagementAdapter implements IClientManagementAdapter {
     @Override
     public CompletionStage<List<ChatTargets.Account>> accounts() {
         return CompletableFuture.completedStage(List.of(new ChatTargets.Account(WebChat.SELF, "网页机器人", WebChat.SELF, Instant.now())));
+    }
+
+    /**
+     * 2026/11/04：网页客户端没有外部联系人，同步动作只返回自己的真实账号目录。
+     *
+     * @param guard 当前管理员及插件授权
+     * @return 完成授权复核后的网页账号
+     */
+    @Override
+    public CompletionStage<List<ChatTargets.Account>> discover(Runnable guard) {
+        guard.run();
+        return accounts().thenApply(values -> {
+            guard.run();
+            return values;
+        });
     }
 
     /**

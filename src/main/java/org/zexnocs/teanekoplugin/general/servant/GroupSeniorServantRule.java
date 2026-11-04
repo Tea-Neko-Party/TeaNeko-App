@@ -7,12 +7,16 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 /**
  * 群高级公务员服务。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/07
  * @since 4.1.0
+ * @version 4.7.4-l
  */
+// 2026/11/04：显示名称与原稳定配置键分别维护。
 @ConfigManager(
-        value = "group-servants",
+        value = "group-servants", displayName = "群高级管理员",
         description = """
         群高级公务员，具有一票决定权。""",
         namespaces = {TeaNekoConfigNamespaces.GROUP},

@@ -17,13 +17,17 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 /**
  * 低QQ等级自动拒绝入群请求。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/08
  * @since 4.1.1
+ * @version 4.7.4-l
  */
 @EventListener
+// 2026/11/04：显示名称与原稳定配置键分别维护。
 @ConfigManager(
-        value = "low-qq-level-auto-reject",
+        value = "low-qq-level-auto-reject", displayName = "入群等级限制",
         description = """
         低QQ等级等级用户自动拒绝入群请求。""",
         configType = LowQQLevelAutoRejectRuleConfig.class,

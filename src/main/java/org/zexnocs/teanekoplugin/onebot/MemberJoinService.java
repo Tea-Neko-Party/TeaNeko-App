@@ -15,11 +15,15 @@ import org.zexnocs.teanekocore.event.core.EventListener;
 /**
  * 新成员加入时发送欢迎信息。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/13
  * @since 4.2.3
+ * @version 4.7.4-l
  */
-@ConfigManager(value = "member-join-welcome", description = """
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "member-join-welcome", displayName = "入群欢迎", description = """
         当群组有新成员加入时，发送欢迎信息。
         配置的值：欢迎信息""",
         namespaces = {OnebotTeaNekoClient.GROUP_NAMESPACE},

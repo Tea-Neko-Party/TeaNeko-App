@@ -23,10 +23,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * SauceNAO 搜图指令。
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.4-l
  */
 @Description("""
         使用 SauceNAO 的 api 进行搜图。
@@ -34,8 +36,9 @@ import java.util.concurrent.CompletionStage;
 @Command(value = {"/sauceNAO", "/s搜图", "s搜图"},
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL)
+// 2026/11/04：显示名称与原稳定配置键分别维护。
 @ConfigManager(
-        value = "sauceNAO",
+        value = "sauceNAO", displayName = "图片来源查询",
         description = "sauceNAO 的 api 配置",
         namespaces = {
                 TeaNekoConfigNamespaces.GENERAL

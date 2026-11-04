@@ -39,11 +39,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：通过真实 Spring 装配平台组件，验证注册目录及事件实际通知前撤权。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：验证网页目录刷新复用本地账号并继续执行管理授权。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.4-l
  */
 @Timeout(20)
 class WebChatIntegrationTest {
@@ -66,11 +67,15 @@ class WebChatIntegrationTest {
 
     /**
      * 原生消息只通知一次，图像和自我提及正确映射，发送以持久消息号确认，重启后只补读。
+     * 2026/11/04：一并验证网页管理适配器的真实目录刷新能力。
      * @throws Exception 当异步通知或图片夹具失败时
      */
     @Test
     void usesTheOriginalMessageContractAndPersistsActualDeliveryWithoutReplay() throws Exception {
         try (var db = new NamespaceDatabaseFixture(); var root = new Root(db, Runnable::run)) {
+            var adapter = root.context.getBean(WebManagementAdapter.class);
+            assertEquals(WebChat.SELF, adapter.discover(ALLOWED).toCompletableFuture().join().getFirst().ref());
+            assertThrows(SecurityException.class, () -> adapter.discover(() -> { throw new SecurityException("会话已撤销。"); }));
             var room = root.room("GROUP", "网页测试群");
             byte[] image = root.images.normalize(png(1), ALLOWED).toCompletableFuture().join();
             String media = root.store.upload(room.id(), UUID.randomUUID(), image, ALLOWED).toCompletableFuture().join();

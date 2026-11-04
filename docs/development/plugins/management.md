@@ -39,7 +39,9 @@ ManagementContext 的 subject、scopeRef 来自已认证适配器，requestId �
 
 Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验，namespace/人格绑定走专用用例。4.7.0-l 的 ConfigEditService 在同一原 EasyData 事务中完成版本检查、局部合并、幂等和审计，不在 Controller 先读版本再无条件覆盖。
 
-4.7.1-l 起，已启用 `@ConfigManager` 经原 scanner 自动生成通用表单，默认属于 `general` 组。为管理器提供中文 description，为字段提供 `@Description`；元数据使用原 ObjectMapper，支持继承、泛型、别名、标量及集合/对象 JSON。通用入口通过 `ConfigEditService.changeJson` 提交完整 JSON 值，字符串必须是 JSON 字符串；旧命令与专用适配器保持原文本协议。字段校验器可覆写 `isValidJson` 处理集合等结构化值，默认适配原标量校验。敏感字段不导出，也不允许普通修改。
+4.7.1-l 起，已启用 `@ConfigManager` 经原 scanner 自动生成通用表单，默认属于 `general` 组。为管理器提供中文 description，为字段提供 `@Description`；4.7.4-l 起另用 `displayName` 提供简短中文名称，例如 `displayName = "入群欢迎"`，不改变原 `value`、Bean 名称或持久键。旧插件未填写时沿用说明首行。页面选中配置后直接展示完整说明，尚未登记时不显示默认字段。
+
+元数据使用原 ObjectMapper，支持继承、泛型、别名、标量及集合/对象 JSON。通用入口通过 `ConfigEditService.changeJson` 提交完整 JSON 值，字符串必须是 JSON 字符串；旧命令与专用适配器保持原文本协议。字段校验器可覆写 `isValidJson` 处理集合等结构化值，默认适配原标量校验。敏感字段不导出，也不允许普通修改。
 
 复杂或受限配置实现 `IChatSettingsSection`，标记 `@TeaNekoChatSettings(value = "原管理器标识", group = "agent或自定义分组")` 并注册 Spring Bean。它必须对应实际已启用管理器，并优先于该管理器的通用投影；重复键明确报错。保留命名空间等特殊绑定的专用用例，不借通用字段放开。自 4.7.3-l 起，管理员直接访问已启用且适用于当前客户端的配置，无需本地 `settings-sections` 或 `settings-groups` 放行；所属 `@PluginOwned` 插件、字段校验及事务内业务检查继续生效。
 

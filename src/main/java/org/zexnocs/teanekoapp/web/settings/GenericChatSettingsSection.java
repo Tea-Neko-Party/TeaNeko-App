@@ -18,10 +18,13 @@ import java.util.concurrent.CompletionStage;
  * 已注册配置声明的纯元数据投影，不作为插件 Bean，不持有数据库或业务执行能力。
  * 插件专用适配器仍通过原注解目录发现，并优先于同一管理器的通用投影。
  *
+ * 修改记录：<br>
+ * 2026/11/04：优先显示配置声明中的简短中文名称，说明继续独立提供。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.7.4-l
  */
 final class GenericChatSettingsSection implements IChatSettingsSection {
     private final ConfigManager manager;
@@ -38,10 +41,14 @@ final class GenericChatSettingsSection implements IChatSettingsSection {
         this.schema = new ConfigSchema(mapper, manager.configType());
     }
 
-    /** @return 配置说明的首行，缺失时使用真实管理器标识 */
+    /**
+     * 2026/11/04：显示名称与完整配置说明分开维护。
+     *
+     * @return 声明的简短名称，旧插件没有声明时沿用原首行名称
+     */
     @Override
     public String name() {
-        return label(manager.description(), manager.value());
+        return manager.displayName().isBlank() ? label(manager.description(), manager.value()) : manager.displayName();
     }
 
     /** @return 原存储、字段校验及适用命名空间声明 */

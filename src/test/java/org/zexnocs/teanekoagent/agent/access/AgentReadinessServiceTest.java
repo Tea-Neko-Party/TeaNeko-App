@@ -27,11 +27,12 @@ import static org.mockito.Mockito.*;
  * 不启动容器、数据库或 HTTP，验证就绪检查的配置隔离、快照及敏感信息边界。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：检查就绪失败的阶段诊断，继续验证凭据脱敏与恢复。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.4-l
  */
 class AgentReadinessServiceTest {
     private static final String SECRET = "offline-sensitive-sentinel";
@@ -91,34 +92,43 @@ class AgentReadinessServiceTest {
         verifyNoInteractions(models, model, credentials, logger);
     }
 
-    /** 验证主配置失败只返回固定诊断，并可在配置重载后重新检查恢复。 */
-    @Test void localConfigurationFailureIsRedactedAndRecoverable() {
+    /** 2026/11/04：主配置失败报告安全阶段，并可在配置重载后重新检查恢复。 */
+    @Test
+    void localConfigurationFailureIsRedactedAndRecoverable() {
         when(config.read()).thenThrow(new IllegalStateException(SECRET)).thenReturn(settings);
         var failed = service.inspect(definition);
         assertEquals(AgentReadiness.Status.LOCAL_CONFIG_UNAVAILABLE, failed.status());
         assertFalse(failed.toString().contains(SECRET));
-        verify(logger).error(AgentReadinessService.class.getName(), AgentReadiness.Status.LOCAL_CONFIG_UNAVAILABLE.description());
+        // 2026/11/04：诊断包含固定阶段，不依赖供应商或配置异常原文。
+        verify(logger).error(eq(AgentReadinessService.class.getName()), startsWith(AgentReadiness.Status.LOCAL_CONFIG_UNAVAILABLE.description()));
         assertEquals(AgentReadiness.Status.READY, service.inspect(definition).status());
     }
 
-    /** 验证模型路由或能力失败时不读取凭据，也不向日志传递异常链。 */
-    @Test void modelFailureDoesNotReachCredentialBoundary() {
+    /** 2026/11/04：模型参数失败报告检查位置，记忆整理区分配置拒绝和运行中撤权。 */
+    @Test
+    void modelFailureDoesNotReachCredentialBoundary() {
         when(models.resolveOptions(any())).thenThrow(new IllegalStateException(SECRET));
         var failed = service.inspect(definition);
         assertEquals(AgentReadiness.Status.MODEL_UNAVAILABLE, failed.status());
         assertFalse(failed.toString().contains(SECRET));
         verifyNoInteractions(credentials);
-        verify(logger).error(AgentReadinessService.class.getName(), AgentReadiness.Status.MODEL_UNAVAILABLE.description());
+        var decision = new AgentAccessDecision(AgentAccessDecision.Reason.READINESS_UNAVAILABLE,
+                java.util.Optional.empty(), java.util.Optional.of(failed));
+        assertEquals(org.zexnocs.teanekoagent.memory.layered.MemoryProcessingException.Reason.READINESS_UNAVAILABLE,
+                new org.zexnocs.teanekoagent.memory.layered.MemoryProcessingException(decision).reason());
+        verify(logger).error(eq(AgentReadinessService.class.getName()), argThat(message ->
+                message.contains("解析有效模型参数") && message.contains("context-window-tokens") && !message.contains(SECRET)));
         verify(logger, never()).error(anyString(), anyString(), any(Throwable.class));
     }
 
-    /** 验证缺失认证被明确区分，日志与结果均不回显原始凭据值。 */
-    @Test void credentialFailureIsDistinctAndRedacted() {
+    /** 2026/11/04：缺失认证的阶段诊断与其他配置失败分开，始终不回显凭据值。 */
+    @Test
+    void credentialFailureIsDistinctAndRedacted() {
         when(credentials.require("test")).thenThrow(new IllegalStateException(SECRET));
         var failed = service.inspect(definition);
         assertEquals(AgentReadiness.Status.CREDENTIALS_UNAVAILABLE, failed.status());
         assertFalse(failed.toString().contains(SECRET));
-        verify(logger).error(AgentReadinessService.class.getName(), AgentReadiness.Status.CREDENTIALS_UNAVAILABLE.description());
+        verify(logger).error(eq(AgentReadinessService.class.getName()), startsWith(AgentReadiness.Status.CREDENTIALS_UNAVAILABLE.description()));
         verify(logger, never()).error(anyString(), anyString(), any(Throwable.class));
     }
 

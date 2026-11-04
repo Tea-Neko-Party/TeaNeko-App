@@ -71,13 +71,39 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/04：验证启动令牌提示及网页日志隔离。
  * <br>2026/11/04：验证机器令牌专用路由、空白策略与随机管理员令牌保持。
  * <br>2026/11/04：机器采样端点通过同一真实管理会话与来源限制。
+ * <br>2026/11/04：已关闭 Agent 资料映射为明确的业务冲突状态。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.4-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 2026/11/04：已关闭资料经真实认证与防伪链返回可操作业务状态，不再误报服务器故障。
+     *
+     * @throws Exception 当隔离 MVC 请求执行失败时
+     */
+    @Test
+    void disabledAgentFeatureHasAnExplicitSafeResponse() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            var session = fixture.authenticate();
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            when(fixture.management.invoke(anyString(), anyString(), anyString(), anyString(), any(), any()))
+                    .thenAnswer(ignored -> java.util.concurrent.CompletableFuture.failedStage(
+                            new org.zexnocs.teanekoagent.agent.prompt.AgentPromptException(
+                                    org.zexnocs.teanekoagent.agent.prompt.AgentPromptException.Reason.DISABLED)));
+            var result = fixture.mvc.perform(fixture.request(
+                            "/api/v1/clients/web/accounts/web-bot/targets/room/management/teaneko.agent:personality", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
+                    .content("{\"action\":\"READ\"}"))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("AGENT_FEATURE_DISABLED"));
+        }
+    }
+
     /**
      * 新机器入口复用真实会话与防伪链，显式查看禁止缓存且绑定原候选秘密。
      * @throws Exception 当 MVC 请求执行失败时

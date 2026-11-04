@@ -79,9 +79,7 @@ h3 { font-size: 15px; }
   border: 0; border-radius: 9px; background: transparent; color: var(--muted);
 }
 .icon-button:hover { background: var(--surface-soft); color: var(--ink); }
-/* 2026/11/04：刷新图标保持统一点击面积；操作名称通过提示与无障碍标签提供。 */
-.refresh-button.el-button { width: 36px; height: 36px; flex-shrink: 0; padding: 7px; }
-.refresh-button .console-icon { width: 18px; height: 18px; margin: 0 !important; }
+/* 2026/11/04：刷新按钮的尺寸与动画由组件内样式维护，避免全局引用组件库生成的类名。 */
 .appearance-controls { display: flex; align-items: center; gap: 14px; }
 .mode-switch { display: flex; gap: 3px; padding: 3px; border-radius: 9px; background: var(--surface-soft); }
 .mode-switch button { border: 0; border-radius: 6px; padding: 5px 12px; font-size: 12px; color: var(--muted); background: transparent; }
@@ -197,6 +195,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .settings-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(110px, 44%); align-items: center; gap: 18px; padding: 18px 0; border-top: 1px solid var(--line); }
 .settings-field label { font-size: 13px; font-weight: 600; }
 .settings-field p { margin: 8px 0; line-height: 1.7; }
+.config-description { color: var(--muted); font-size: 13px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
 .settings-field .el-switch { justify-self: end; }
 .config-field-input { display: grid; gap: 8px; min-width: 0; }
 .config-field-input .el-button { justify-self: end; }
@@ -261,6 +260,24 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .web-mention { color: var(--accent); font-weight: 600; }
 .web-file-label { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; font-size: 13px; }
 .web-file-label input { max-width: 100%; width: 220px; }
+/* 2026/11/04：附件置顶、加号在左、发送在右；低宽度仍为正文留出伸缩空间。 */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
+.web-composer { padding: 10px; border: 1px solid var(--line); border-radius: 24px; background: var(--surface-soft); transition: border-color .15s; }
+.web-composer:focus-within, .web-composer.is-dragging { border-color: var(--accent); }
+.web-composer-row { display: flex; align-items: flex-end; gap: 8px; }
+.web-composer-row .el-textarea { flex: 1; min-width: 0; margin: 0; }
+.web-composer-row .el-textarea__inner { padding: 8px 2px; background: transparent; box-shadow: none; resize: none; min-height: 36px; }
+.web-composer-row .el-textarea__inner:focus, .web-composer-row .el-textarea__inner:hover { box-shadow: none; }
+.web-composer-row .icon-button { flex-shrink: 0; border-radius: 50%; }
+/* 2026/11/04：发送图标复用主题已定义的对比色，适配深色及自定义强调色。 */
+.web-composer-row .composer-send { background: var(--accent); color: var(--accent-contrast); }
+.web-composer-row .composer-send:disabled { opacity: .4; cursor: default; }
+.web-attachment { position: relative; width: 88px; margin: 2px 8px 12px; }
+.web-attachment img { display: block; width: 88px; height: 88px; object-fit: cover; border-radius: 12px; }
+.web-attachment .attachment-remove { position: absolute; top: -7px; right: -7px; width: 25px; height: 25px; border-radius: 50%; background: var(--surface); color: var(--ink); box-shadow: 0 1px 5px #0003; }
+.attachment-remove .console-icon { width: 16px; height: 16px; }
+.composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.composer-drop-hint { margin: 8px; text-align: center; pointer-events: none; }
 .web-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 16px; }
 .console-command { border-top: 1px solid var(--line); padding: 18px 0 6px; }
 .console-command > strong { margin-right: 12px; overflow-wrap: anywhere; }

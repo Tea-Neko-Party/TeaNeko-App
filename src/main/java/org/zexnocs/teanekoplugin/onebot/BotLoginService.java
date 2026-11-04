@@ -19,11 +19,15 @@ import java.time.Duration;
 /**
  * 当 bot 上线时进行喊话
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/13
  * @since 4.2.3
+ * @version 4.7.4-l
  */
-@ConfigManager(value = "bot-login", description = """
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "bot-login", displayName = "上线通知", description = """
         让机器人登录时对当前群组进行喊话。
         配置的值：喊话的内容。""",
         namespaces = {OnebotTeaNekoClient.GROUP_NAMESPACE},

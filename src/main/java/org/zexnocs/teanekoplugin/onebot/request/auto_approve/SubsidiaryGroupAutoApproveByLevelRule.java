@@ -15,12 +15,16 @@ import org.zexnocs.teanekoplugin.onebot.request.review.GroupRequestReviewService
 /**
  * 根据主群自动批准子群的入群申请
  *
+ * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
+ *
  * @author zExNocs
  * @date 2026/03/08
  * @since 4.1.3
+ * @version 4.7.4-l
  */
 @EventListener
-@ConfigManager(value = "subsidiary-group-auto-approve-by-level",
+// 2026/11/04：显示名称与原稳定配置键分别维护。
+@ConfigManager(value = "subsidiary-group-auto-approve-by-level", displayName = "子群入群审核",
                description = "根据主群中等级自动批准子群的入群申请。此外可以设定白名单和黑名单。",
                configType = SubsidiaryGroupAutoApproveByLevelRuleConfig.class,
                namespaces = {OnebotTeaNekoClient.GROUP_NAMESPACE})
