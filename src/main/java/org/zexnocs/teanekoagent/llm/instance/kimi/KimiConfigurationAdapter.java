@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.llm.instance.kimi;
 import org.zexnocs.teanekoagent.llm.file_config.form.ILLMConfigurationAdapter;
 import org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationAdapter;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Kimi 的配置样板，与供应商适配器放在同一目录并复用固定连接常量。
@@ -10,10 +11,12 @@ import java.util.List;
  * 修改记录：<br>
  * 2026/11/04：业务标识与 Spring Bean 名解耦，使用独立 id 声明。
  *
+ * <br>2026/11/04：人工维护官方型号及上下文容量。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.5-l
+ * @version 4.7.6-l
  */
 // 2026/11/04：保持原业务标识，容器按实现类生成 Bean 名。
 @LLMConfigurationAdapter(id = KimiChatModel.PROVIDER)
@@ -23,7 +26,12 @@ public final class KimiConfigurationAdapter implements ILLMConfigurationAdapter 
     public Template describe() {
         return new Template("Kimi", "复用适配器默认连接；更换具体模型或自定义服务后请核对上下文容量。",
                 ILLMConfigurationAdapter.defaults(KimiChatModel.PROVIDER, KimiModelOptions.DEFAULT_MODEL, KimiModelOptions.DEFAULT_BASE_URL,
-                        KimiModelOptions.DEFAULT_API_PATH, 262144L, 16384), List.of(KimiModelOptions.DEFAULT_MODEL));
+                        // 2026/11/04：人工维护官方型号和容量，具体账号资格仍由供应商校验。
+                        KimiModelOptions.DEFAULT_API_PATH, 262144L, 16384),
+                List.of("kimi-k3.1-pro", "kimi-k3.1-pro-highspeed", "kimi-k3", "kimi-k2.7-code",
+                        "kimi-k2.7-code-highspeed", "kimi-k2.6"),
+                Map.of("kimi-k3.1-pro", 1048576L, "kimi-k3.1-pro-highspeed", 1048576L, "kimi-k3", 1048576L,
+                        "kimi-k2.7-code", 262144L, "kimi-k2.7-code-highspeed", 262144L, "kimi-k2.6", 262144L));
     }
 }
 

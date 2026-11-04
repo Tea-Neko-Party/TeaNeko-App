@@ -16,11 +16,13 @@ import java.util.*;
 /**
  * 将实际命令目录投影为说明和补全数据，按同一权限与 scope 服务判断当前来源。
  * 目录不执行命令，不取得平台发送能力；全局说明读取由宿主提供管理员授权。
+ * <br>2026/11/04：增加独立中文指令名称用于选择与说明卡片。
+ * <br>2026/11/04：分别投影主指令默认规则、方法有效规则及权限组，供控制台展示继承差异。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.5-l
+ * @version 4.7.7-l
  */
 @Service
 public final class CommandCatalog {
@@ -120,13 +122,18 @@ public final class CommandCatalog {
         var description = method.getAnnotation(Description.class);
         var permission = child == null ? defaults.permission() : child.permission();
         var scope = child == null ? defaults.scope() : child.scope();
-        entries.add(new Entry(command.value()[0], List.of(command.value()), sub,
+        // 2026/11/04：权限组沿用执行器的非空覆盖语义；主规则独立返回，不借用首个方法的有效值。
+        var packages = child == null ? defaults.permissionPackage() : child.permissionPackage();
+        // 2026/11/04：输出独立中文显示名，命令匹配仍使用原前缀。
+        entries.add(new Entry(command.value()[0], command.displayName(), List.of(command.value()), sub,
                 child == null ? List.of() : List.of(child.value()), insertion, usage,
                 parent == null ? "" : parent.value(), description == null ? "" : description.value(), parameters,
                 (permission == CommandPermission.DEFAULT ? command.permission() : permission).name(),
                 (scope == CommandScope.DEFAULT ? command.scope() : scope).name(),
                 Arrays.stream(command.supportedClients()).map(Class::getSimpleName).toList(),
-                command.mode() == Command.CommandMode.REGEX, method.isAnnotationPresent(ManagementCommand.class)));
+                command.mode() == Command.CommandMode.REGEX, method.isAnnotationPresent(ManagementCommand.class),
+                command.permission().name(), command.scope().name(), List.of(command.permissionPackage()),
+                List.of(packages.length == 0 ? command.permissionPackage() : packages)));
     }
 
     /**
@@ -158,9 +165,14 @@ public final class CommandCatalog {
      */
     public record Argument(String name, String type, String description, boolean optional, String defaultValue) {}
 
-    /**
+/**
      * 一个真实命令方法的目录项，查看不代表可以执行。
+     * 修改记录：<br>
+     * 2026/11/04：增加中文显示名，调用前缀和权限合同保持独立。
+     * <br>2026/11/04：携带主规则与有效权限组，说明默认继承与方法覆盖。
+     *
      * @param command 主前缀
+     * @param displayName 中文指令名称
      * @param aliases 主前缀别名
      * @param subcommand 子指令
      * @param subAliases 子指令别名
@@ -174,13 +186,18 @@ public final class CommandCatalog {
      * @param clients 原客户端声明
      * @param regex 是否为正则入口
      * @param management 是否只支持管理来源
+     * @param defaultPermission 主指令成员要求
+     * @param defaultScope 主指令范围要求
+     * @param defaultPackages 主指令权限组
+     * @param permissionPackages 当前方法有效权限组
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.5-l
-     * @version 4.7.5-l
+     * @version 4.7.7-l
      */
-    public record Entry(String command, List<String> aliases, String subcommand, List<String> subAliases,
+    public record Entry(String command, String displayName, List<String> aliases, String subcommand, List<String> subAliases,
                         String insertion, String usage, String introduction, String description,
                         List<Argument> parameters, String permission, String scope, List<String> clients,
-                        boolean regex, boolean management) {}
+                        boolean regex, boolean management, String defaultPermission, String defaultScope,
+                        List<String> defaultPackages, List<String> permissionPackages) {}
 }

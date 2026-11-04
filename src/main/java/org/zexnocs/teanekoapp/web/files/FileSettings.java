@@ -11,10 +11,12 @@ import java.util.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：文件视图增加独立用途说明。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 public final class FileSettings {
     /** 禁止实例化契约命名空间。 */
@@ -155,12 +157,16 @@ public final class FileSettings {
     public record Field(String path, String label, String description, String kind, boolean secret,
                         boolean configured, String source, @Nullable JsonNode value) {}
 
-    /**
+/**
      * 表单区和磁盘/运行状态明确分开。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
+     * 修改记录：<br>
+     * 2026/11/04：增加独立文件用途说明，保持字段和秘密投影边界。
+     *
      * @param id 管理区
      * @param name 中文名
+     * @param description 文件用途及说明，不包含原始文件内容
      * @param revision 磁盘版本
      * @param exists 是否已存在
      * @param application 应用方式
@@ -171,9 +177,10 @@ public final class FileSettings {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.6-l
      */
-    public record View(String id, String name, String revision, boolean exists, String application,
+    // 2026/11/04：独立文件说明不携带原始文档正文。
+    public record View(String id, String name, String description, String revision, boolean exists, String application,
             FileConfigDocument.Stamp runtime, List<Field> fields, List<CollectionRule> collections,
             Map<String, Integer> collectionSizes) {}
 

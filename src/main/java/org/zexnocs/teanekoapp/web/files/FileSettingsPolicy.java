@@ -15,10 +15,12 @@ import java.util.Set;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：显式开放字段复用原解析器注解说明，保持秘密保护。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 final class FileSettingsPolicy {
     /** 禁止实例化字段策略工具。 */
@@ -53,16 +55,24 @@ final class FileSettingsPolicy {
      * @param tree 原树
      * @param adapter 原字段声明
      * @param exists 文件是否已存在
+     * @param schema 原文件解析器提供的类型元数据，不支持时为空
      * @return 仅明确字段的脱敏视图
      */
-    static List<FileSettings.Field> fields(JsonNode tree, IFileSettingsAdapter adapter, boolean exists) {
+    static List<FileSettings.Field> fields(JsonNode tree, IFileSettingsAdapter adapter, boolean exists,
+            org.zexnocs.teanekocore.framework.config.@org.jspecify.annotations.Nullable ConfigSchema schema) {
         var fields = new ArrayList<FileSettings.Field>();
         for (var rule : adapter.fields()) {
             for (String path : expand(tree, rule.path())) {
                 var node = tree.at(path);
                 boolean configured = !node.isMissingNode() && !node.isNull()
                         && (node.isString() ? !node.asString().isBlank() : !node.isContainer() || !node.isEmpty());
-                fields.add(new FileSettings.Field(path, rule.label(), rule.description(), rule.kind(), rule.secret(),
+                // 2026/11/04：说明来源为类型注解，秘密字段仍只显示声明与状态。
+                String explanation = schema == null ? rule.description() : schema.findPointer(path)
+                        .map(org.zexnocs.teanekocore.framework.config.ConfigSchema.Property::description)
+                        .filter(value -> !value.equals("尚未提供说明"))
+                        .map(value -> value.equals(rule.description()) ? value : value + "\n" + rule.description())
+                        .orElse(rule.description());
+                fields.add(new FileSettings.Field(path, rule.label(), explanation, rule.kind(), rule.secret(),
                         configured, node.isMissingNode() ? "未声明，使用类型默认值" : exists ? "文件原值或环境模板" : "未保存模板",
                         rule.secret() || node.isMissingNode() ? null : node.deepCopy()));
             }

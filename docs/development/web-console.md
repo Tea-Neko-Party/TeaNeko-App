@@ -1,6 +1,6 @@
 # Web 控制台部署与开发
 
-当前开发版本：4.7.5-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，本批聊天室与模型改进见[实施记录](../plan/old/4.7.5-web-chat-models.md)。
+当前开发版本：4.7.6-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，本批聊天室与模型改进见[实施记录](../plan/old/4.7.6-console-polish.md)。
 
 ## 界面与模式
 
@@ -151,6 +151,8 @@ describe 返回中文平台名、状态、实际连接数、说明、观测时�
 默认网页记忆共享，实机演练前应明确测试 namespace。以上项目尚未执行，发布及部署仍单独确认。
 
 ## 聊天设置
+
+v4.7.6-l 会从所有适用于当前客户端、插件已启用的配置管理器恢复已登记聊天，不再只扫描 Agent 配置；按各管理器原 EasyData 存储及独立游标有界读取。导入旧数据库后，账号无法确认的配置进入“历史配置（账号未归属）”，群聊与私聊不会伪装成当前连接账号的联系人。私聊还需要原 TeaUser 平台映射可用。选择该历史目录即可编辑；配置较多时点击“继续发现已登记配置”，全部发现后“更新已知目录”可重新扫描后续迁移或新增记录。离线发现配置不要求 OneBot 连接，平台联系人查询仍要求真实连接。
 
 进入“聊天配置”，依次选择平台、机器人账号或历史目录、群聊/私聊和目标。“Agent 配置”和“其他功能配置”分别管理；普通配置按原 `@ConfigManager` 自动发现，字段说明来自 `@Description`。没有说明时显示真实字段名。先选择配置类型，未登记时只预览默认值；点击“登记此配置”提交该类型默认值，再编辑字段。注销仅删除这一配置。
 

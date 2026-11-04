@@ -62,10 +62,12 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
+ * <br>2026/11/04：验证上下文配置错误的根因诊断及秘密脱敏。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.7.2-l
+ * @version 4.7.6-l
  */
 class AgentServiceTest {
     /** 验证冷句柄准备不读取配置，启动前取消会释放资源并阻止迟到启动。 */
@@ -501,6 +503,29 @@ class AgentServiceTest {
         assertTrue(diagnostic.getValue().contains("异常类型="));
         assertTrue(diagnostic.getValue().contains("IllegalStateException"));
         assertFalse(diagnostic.getValue().contains("不可导出的敏感异常"));
+    }
+
+    /** 2026/11/04：被转换为配置错误的上下文失败保留安全类型和位置，禁止输出原异常正文。 */
+    @Test
+    void rejectedContextRetainsSafeDiagnostic() {
+        var source = mock(org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource.class);
+        // 2026/11/04：实际存在资料才进入来源复核；完成性断言避免手动执行器夹具无限等待。
+        var fragment = new org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment("test_resource", "待复核的资料");
+        when(source.resolve(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(List.of(fragment)));
+        when(source.verify(any(), any(), any())).thenReturn(CompletableFuture.failedStage(
+                new IllegalArgumentException("上下文中的秘密不能写入日志")));
+        try (var custom = new AgentService(gate, interactions, tools, new ObjectMapper(), runtime,
+                runtime.scheduler, runtime.clock, logger, null, source, null)) {
+            var result = custom.run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture();
+            runtime.runAll();
+            assertTrue(result.isDone());
+            assertEquals(CONFIGURATION_ERROR, result.join().status());
+            var diagnostic = org.mockito.ArgumentCaptor.forClass(String.class);
+            verify(logger).error(eq(AgentService.class.getName()), diagnostic.capture());
+            assertTrue(diagnostic.getValue().contains("IllegalArgumentException"));
+            assertFalse(diagnostic.getValue().contains("上下文中的秘密"));
+            verifyNoInteractions(models);
+        }
     }
 
     /** 验证业务执行器拒绝排队时 Stage 仍以业务失败结束。 */

@@ -18,20 +18,32 @@ import java.util.Set;
  * 依据实际序列化契约解析配置字段，统一继承、泛型、别名及敏感内容识别。
  * 元数据不持有配置实例，数据库配置与本地文件投影共用该契约。
  *
+ * <br>2026/11/04：按真实 JSON 指针解析嵌套和泛型属性说明。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.7.6-l
  */
 public final class ConfigSchema {
     private final List<Property> properties;
+    // 2026/11/04：复用实际解析器的类型和命名规则，为显式文件字段定位说明。
+    private final ObjectMapper mapper;
 
     /**
      * @param mapper 与持久化或文件解析一致的转换器
      * @param type 配置实际类型
      */
     public ConfigSchema(ObjectMapper mapper, Class<?> type) {
-        var beanType = mapper.constructType(type);
+        this(mapper, mapper.constructType(type));
+    }
+
+    /**
+     * @param mapper 原格式解析器
+     * @param beanType 保留泛型绑定的当前类型
+     */
+    private ConfigSchema(ObjectMapper mapper, JavaType beanType) {
+        this.mapper = mapper;
         var config = mapper.deserializationConfig();
         var introspector = config.classIntrospectorInstance().forOperation(config);
         var bean = introspector.introspectForDeserialization(beanType, introspector.introspectClassAnnotations(beanType));
@@ -57,6 +69,36 @@ public final class ConfigSchema {
     /** @return 按类型声明顺序排列的字段契约 */
     public List<Property> properties() {
         return properties;
+    }
+
+    /**
+     * 2026/11/04：只解析声明的属性路径，支持嵌套、数组与泛型，不读取配置实例。
+     * @param pointer 已开放字段的实际 JSON 指针
+     * @return 对应属性说明；无法映射到声明字段时为空
+     */
+    public java.util.Optional<Property> findPointer(String pointer) {
+        var schema = this;
+        Property property = null;
+        String[] segments = pointer.substring(1).split("/");
+        for (int index = 0; index < segments.length; index++) {
+            String name = segments[index].replace("~1", "/").replace("~0", "~");
+            property = schema.properties.stream().filter(value -> value.jsonName().equals(name)
+                    || value.aliases().contains(name)).findFirst().orElse(null);
+            if (property == null) {
+                return java.util.Optional.empty();
+            }
+            JavaType next = property.type();
+            if (next.isCollectionLikeType() || next.isArrayType()) {
+                if (++index >= segments.length || !segments[index].matches("[0-9]+")) {
+                    return java.util.Optional.empty();
+                }
+                next = next.getContentType();
+            }
+            if (index < segments.length - 1) {
+                schema = new ConfigSchema(mapper, next);
+            }
+        }
+        return java.util.Optional.ofNullable(property);
     }
 
     /**

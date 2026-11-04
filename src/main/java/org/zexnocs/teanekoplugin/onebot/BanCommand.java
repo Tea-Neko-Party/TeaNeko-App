@@ -18,13 +18,16 @@ import java.util.regex.Pattern;
 /**
  * 群禁言命令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("给群猫猫戴上口球！")
-@Command(value = {"/ban", "/禁言", "/口球"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "群聊禁言", value = {"/ban", "/禁言", "/口球"},
         permission = CommandPermission.OWNER,
         scope = CommandScope.GROUP,
         permissionPackage = "permission.group.ban",

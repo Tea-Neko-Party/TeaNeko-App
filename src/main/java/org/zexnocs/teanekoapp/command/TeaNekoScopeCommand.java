@@ -14,14 +14,17 @@ import java.util.concurrent.CompletionStage;
 /**
  * 茶猫权限指令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.11
- * @version 4.5.0-l
+ * @version 4.7.6-l
  * @see CommandScopeManager
  */
 @Description("debugger指令。设置指令范围的指令。")
-@Command(value = "/scope",
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "指令作用域", value = "/scope",
         permission = CommandPermission.DEBUG,
         scope = CommandScope.ALL)
 @RequiredArgsConstructor

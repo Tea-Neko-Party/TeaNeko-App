@@ -237,7 +237,7 @@ onMounted(() => run(refresh, true))
         <ElEmpty v-if="page === 'console' && !consoleTarget" description="先选择要管理的聊天">
           <ElButton type="primary" @click="openSettings()">选择聊天</ElButton>
         </ElEmpty>
-        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @room-state="value => chatImmersive = value" @expired="clearSession" @inspect="inspectAgent" @settings="openChatSettings" />
+        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :clients="platforms" :active="page === 'chat'" @room-state="value => chatImmersive = value" @expired="clearSession" @inspect="inspectAgent" @settings="openChatSettings" />
         <template v-if="page === 'overview'">
           <div class="stats"><ElCard shadow="never"><div class="stat-label"><span>客户端</span><ConsoleIcon name="platforms" /></div><strong>{{ platforms.length }}</strong></ElCard>
             <ElCard shadow="never"><div class="stat-label"><span>开放连接</span><span class="live-dot"></span></div><strong>{{ connectionCount }}</strong></ElCard>

@@ -41,6 +41,7 @@
 
 ```java
 @Command(
+        displayName = "问候",
         value = {"/hello", "/hi"},
         permission = CommandPermission.ALL,
         scope = CommandScope.ALL

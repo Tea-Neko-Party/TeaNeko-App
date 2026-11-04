@@ -9,12 +9,23 @@ import java.util.List;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：分别说明通用类型检查和模块专用语义预检的边界。
  *
+ * <br>2026/11/04：增加文件级用途说明，允许复用类型注解。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.6-l
  */
 public interface IFileSettingsAdapter {
+    /**
+     * 2026/11/04：类型注解提供完整文件用途和解释，专用适配器可按职责补充。
+     * @return 中文文件说明，不包含当前配置值
+     */
+    default String description() {
+        var annotation = type().getAnnotation(org.zexnocs.teanekocore.framework.description.Description.class);
+        return annotation == null ? "" : annotation.value();
+    }
+
     /** @return 本适配器实际完成的预检范围说明 */
     default String validationNote() {
         return "原格式、环境占位符、字段及模块语义预检通过；尚未保存或应用。";

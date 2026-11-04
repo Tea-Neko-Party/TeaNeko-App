@@ -10,15 +10,23 @@ import java.lang.annotation.Target;
 
 /**
  * 指令注解，用于标记一个类为指令解释器。
+ * <br>2026/11/04：中文显示名独立于调用前缀和 Spring Bean 名。
  *
  * @author zExNocs
  * @date 2026/02/18
  * @since 4.0.0
+ * @version 4.7.6-l
  */
 @Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Command {
+    /**
+     * 2026/11/04：控制台与帮助目录使用的短名称，不参与命令匹配。
+     * @return 中文显示名，未声明时由宿主使用原指令前缀
+     */
+    String displayName() default "";
+
     /**
      * 指令名称，例如 "{/help, /帮助}"
      * <p>取第一个元素作为主要指令名称。

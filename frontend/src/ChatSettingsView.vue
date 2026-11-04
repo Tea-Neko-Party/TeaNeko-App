@@ -30,13 +30,15 @@ interface Receipt { operationId: string; revision: string; registered: boolean; 
 interface View { section: string; name: string; targetName: string; registered: boolean; revision: string; sharedExplanation: string; fields: Field[] }
 interface Change { operationId: string; expectedRevision: string; action: string; fields: Record<string, string> }
 
-const props = defineProps<{ clients: Platform[]; initialClient: string }>()
+const props = defineProps<{ clients: Platform[]; initialClient: string; fixedTarget?: AgentTarget; embedded?: boolean }>()
 const emit = defineEmits<{ expired: []; inspect: [target: { client: string; account: string; target: string; name: string }]; console: [target: { client: string; account: string; target: string; name: string }] }>()
 const client = ref('')
 const account = ref('')
 const accounts = ref<Account[]>([])
 const targets = ref<Target[]>([])
 const next = ref('')
+// 2026/11/04：配置发现与目标分页独立，未扫描完的迁移数据提供明确的继续入口。
+const importMore = ref(false)
 const kind = ref('')
 const search = ref('')
 const selected = ref<Target>()
@@ -190,6 +192,7 @@ async function loadTargets(more = false) {
   const result = await request<Page>(`clients/${part(client.value)}/accounts/${part(account.value)}/targets?${query}`)
   targets.value = more ? [...targets.value, ...result.items] : result.items
   next.value = result.next
+  importMore.value = result.importMore
 }
 
 async function chooseClient(value: string) {
@@ -365,8 +368,14 @@ onMounted(async () => {
     if (!sections.value.some(item => item.group === configGroup.value)) configGroup.value = 'general'
     section.value = sectionOptions.value[0]?.id ?? ''
   })
-  await chooseClient(props.initialClient || available.value[0]?.clientId || '')
-  ready()
+  // 2026/11/04：房间内配置直接绑定服务端目标，独立实例保留各房间草稿。
+  if (props.fixedTarget) {
+    ready()
+    await openTarget(props.fixedTarget)
+  } else {
+    await chooseClient(props.initialClient || available.value[0]?.clientId || '')
+    ready()
+  }
 })
 onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
@@ -382,7 +391,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
     <ElAlert v-if="!sections.length && !busy" title="当前没有可用的聊天配置，请检查客户端及插件是否已启用。" type="info" :closable="false" />
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="success" :closable="true" @close="notice = ''" />
-    <div class="settings-toolbar">
+    <div v-if="!embedded" class="settings-toolbar">
       <label>聊天平台<ElSelect :model-value="client" :disabled="busy" @update:model-value="chooseClient">
         <ElOption v-for="item in available" :key="item.clientId" :value="item.clientId" :label="item.name" />
       </ElSelect></label>
@@ -391,8 +400,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       </ElSelect></label>
       <RefreshButton :disabled="busy || !client" :loading="busy" @click="discover" label="更新已知目录" />
     </div>
-    <div class="settings-columns">
-      <ElCard shadow="never" class="target-list">
+    <div class="settings-columns" :class="{'embedded-settings-columns': embedded}">
+      <ElCard v-if="!embedded" shadow="never" class="target-list">
         <h2>群聊与私聊</h2>
         <ElSelect v-model="kind" :disabled="busy" placeholder="全部已知聊天" @change="run(() => loadTargets())">
           <template #prefix><ConsoleIcon :name="kind === 'GROUP' ? 'group' : kind === 'PRIVATE' ? 'private' : 'chat'" /></template>
@@ -406,6 +415,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           :disabled="busy" @click="chooseTarget(item)"><strong>{{ item.name }}</strong>
           <span class="chat-kind"><ConsoleIcon :name="item.kind === 'GROUP' ? 'group' : item.kind === 'PRIVATE' ? 'private' : 'other'" />{{ item.kind === 'GROUP' ? '群聊' : item.kind === 'PRIVATE' ? '私聊' : '其他' }} · {{ item.source === 'PLATFORM' ? '平台查询' : item.source === 'MESSAGE' ? '真实消息' : '已登记配置' }}</span></button>
         <ElButton v-if="next" text :disabled="busy" @click="run(() => loadTargets(true))">加载更多聊天</ElButton>
+        <ElButton v-if="importMore" text :disabled="busy" @click="discover">继续发现已登记配置</ElButton>
         <DetailPanel title="目录说明"><p>离线时显示已知目录，可用“更新已知目录”向已连接的平台查询。</p></DetailPanel>
       </ElCard>
       <div class="settings-editor">

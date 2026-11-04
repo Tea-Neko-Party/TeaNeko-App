@@ -309,6 +309,17 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .command-parameters { font-size: 13px; line-height: 1.7; }
 .command-parameters dt { font-weight: 600; margin-top: 12px; }
 .command-parameters dd { margin: 4px 0 0; color: var(--muted); }
+/* 2026/11/04：目录与说明采用交替底色，房间内管理页复用编辑器并保持合理留白。 */
+.command-list .target-button { display: flex; justify-content: space-between; gap: 12px; background: var(--surface); }
+.command-list .target-button.alternate, .command-detail.alternate { background: var(--surface-soft); }
+.command-list .target-button.selected { background: var(--accent-soft); }
+.command-section > h2 { margin: 10px 0 16px; font-size: 16px; }
+.command-section .command-detail { margin-bottom: 16px; }
+.embedded-settings-columns { grid-template-columns: minmax(0, 1fr); }
+.web-chat-tabs .runtime-card .editor-actions { margin: 18px 0 24px; }
+.model-name-picker { display: grid; gap: 8px; }
+.model-name-picker > label { display: flex; align-items: center; gap: 8px; }
+.file-explanation, .config-description { white-space: pre-line; }
 /* 2026/11/04：模型编辑按路由分卡，样板表单在窄屏自动换行。 */
 .model-settings-columns { grid-template-columns: minmax(0, 1fr); }
 .model-template-picker .editor-actions { flex-wrap: wrap; }

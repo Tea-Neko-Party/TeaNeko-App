@@ -23,10 +23,12 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：提供原解析器的类型元数据，不暴露文件或凭据。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 @JsonIgnoreType
 public final class FileConfigDocument {
@@ -78,6 +80,14 @@ public final class FileConfigDocument {
      */
     public JsonNode tree(Snapshot snapshot) {
         return parser.readDocument(snapshot.content());
+    }
+
+    /**
+     * 2026/11/04：仅提供原类型声明的字段说明，不返回文件正文或环境展开值。
+     * @return 原解析器支持的元数据，不支持时为空
+     */
+    public org.zexnocs.teanekocore.framework.config.@org.jspecify.annotations.Nullable ConfigSchema schema() {
+        return parser.schema(type);
     }
 
     /**

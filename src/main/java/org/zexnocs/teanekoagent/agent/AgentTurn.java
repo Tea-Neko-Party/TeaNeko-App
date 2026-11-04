@@ -33,10 +33,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：保留上下文拒绝的首次真实原因，供宿主生成脱敏诊断。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.6.0-l
+ * @version 4.7.6-l
  */
 final class AgentTurn implements AutoCloseable {
     final AgentHandle handle;
@@ -55,6 +57,8 @@ final class AgentTurn implements AutoCloseable {
     private volatile @Nullable LLMInteractionResult observed;
     private volatile @Nullable MemoryNamespaceReference memoryReference;
     private final AtomicReference<AgentRunResult.Status> contextRejected = new AtomicReference<>();
+    // 2026/11/04：上下文拒绝转换为业务状态前保留首条原因，只供宿主生成脱敏诊断。
+    private final AtomicReference<Throwable> contextFailure = new AtomicReference<>();
     private volatile @Nullable AgentPromptTranscript promptTranscript;
 
     /**
@@ -190,8 +194,18 @@ final class AgentTurn implements AutoCloseable {
             case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
             case INPUT_TOO_LARGE -> AgentRunResult.Status.INPUT_TOO_LARGE;
         } : AgentRunResult.Status.CONFIGURATION_ERROR;
-        contextRejected.compareAndSet(null, status);
+        if (contextRejected.compareAndSet(null, status)) {
+            contextFailure.set(failure);
+        }
         return CompletableFuture.failedStage(new LLMOperationRejectedException());
+    }
+
+    /**
+     * 2026/11/04：不把原异常导出到轮次结果或模型，只由服务补充安全类型与代码位置。
+     * @return 首次上下文拒绝的实际原因，尚未拒绝时为空
+     */
+    @Nullable Throwable contextFailure() {
+        return contextFailure.get();
     }
 
     /**

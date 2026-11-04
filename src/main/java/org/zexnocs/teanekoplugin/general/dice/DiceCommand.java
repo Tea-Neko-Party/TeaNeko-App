@@ -15,13 +15,16 @@ import java.util.concurrent.CompletionStage;
 /**
  * 骰子命令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("投一个骰子！规格：/dice <期望值[可选]>")
-@Command(value = {"/dice", "骰子", "/d", "d"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "掷骰子", value = {"/dice", "骰子", "/d", "d"},
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL)
 public class DiceCommand {

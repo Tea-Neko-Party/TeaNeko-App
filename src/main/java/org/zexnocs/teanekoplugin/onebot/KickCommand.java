@@ -21,13 +21,16 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 群成员踢出命令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("将群成员踢出群聊。")
-@Command(value = {"/kick", "/踢出"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "移出群成员", value = {"/kick", "/踢出"},
         permission = CommandPermission.ADMIN,
         scope = CommandScope.GROUP,
         permissionPackage = "permission.group.kick",

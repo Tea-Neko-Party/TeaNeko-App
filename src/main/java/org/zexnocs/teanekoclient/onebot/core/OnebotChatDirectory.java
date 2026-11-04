@@ -24,10 +24,12 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：所有适用配置参与历史目录发现，显式刷新可重新扫描迁移数据。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 @Service
 public final class OnebotChatDirectory {
@@ -70,11 +72,12 @@ public final class OnebotChatDirectory {
         this.executor = executor;
     }
 
-    /** @return 当前已知账号，首次查询有界导入旧配置 */
+    /**
+     * 2026/11/04：已有账号也继续导入，避免迁移后目录存在而通用配置从未发现。
+     * @return 当前已知账号及未归属历史配置目录
+     */
     public CompletionStage<List<ChatTargets.Account>> accounts() {
-        return store.accounts("onebot").thenCompose(values -> values.isEmpty()
-                ? known(() -> {}).thenCompose(ignored -> store.accounts("onebot"))
-                : CompletableFuture.completedStage(values));
+        return known(() -> {}).thenCompose(ignored -> store.accounts("onebot"));
     }
 
     /**
@@ -123,8 +126,10 @@ public final class OnebotChatDirectory {
         }
         CompletionStage<List<ChatTargets.Account>> physical;
         try {
-            physical = store.importCursor("onebot").thenCompose(cursor -> cursor.equals("!done")
-                    ? store.imported("onebot", "") : CompletableFuture.completedStage(null))
+            // 2026/11/04：显式刷新重新发现迁移或新增的配置，在线联系人仍独立限流。
+            physical = store.importCursor("onebot").thenCompose(cursor ->
+                    Set.of("!done", "v2:!done").contains(cursor) ? store.imported("onebot", "")
+                            : CompletableFuture.completedStage(null))
                     .thenCompose(ignored -> known(guard)).thenComposeAsync(ignored -> {
                         guard.run();
                         var client = transport.getIfAvailable();

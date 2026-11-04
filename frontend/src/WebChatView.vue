@@ -17,10 +17,13 @@ import {
   ElTabs,
   ElTag
 } from 'element-plus'
+import type {Platform} from './api'
 import {ApiError, request} from './api'
 import ConsoleIcon from './ConsoleIcon.vue'
 import {useConsolePreferences} from './console-preferences'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
+import AgentWorkspaceView from './AgentWorkspaceView.vue'
+import ChatSettingsView from './ChatSettingsView.vue'
 
 interface Profile { id: string; uuid: string; name: string }
 interface Member { profile: string; card: string; role: string }
@@ -33,7 +36,7 @@ interface Receipt { operationId: string; messageId: string; status: string; note
 interface Send { operationId: string; profile: string; text: string; mention: boolean; reply: string; media: string; observedAt: string }
 interface Admin { path: string; body: { operationId: string; [key: string]: unknown }; action: string }
 interface Settings { registered: boolean; fields: { name: string; label: string; value: string }[] }
-const props = defineProps<{ active: boolean }>()
+const props = defineProps<{ active: boolean; clients: Platform[] }>()
 const {advanced} = useConsolePreferences()
 const emit = defineEmits<{ expired: []; inspect: [target: AgentTarget]; settings: [target: AgentTarget]; roomState: [open: boolean] }>()
 // 2026/11/04：目录与聊天室分开，返回保留本房间草稿及原请求。
@@ -41,6 +44,16 @@ const roomOpen = ref(false)
 const roomTab = ref('messages')
 const directoryKind = ref('')
 const profileOpen = ref(false)
+// 2026/11/04：房间子页首次进入才挂载，各房间分别保留配置草稿与待确认操作。
+const roomPages = ref<Record<string, {settings?: boolean; agent?: boolean}>>({})
+function roomTarget(item: Room): AgentTarget { return {client: 'web', account: 'web-bot', target: item.id, name: item.name} }
+function openRoomPage(panel: 'chat-config' | 'agent') {
+  if (!room.value) return
+  const state = roomPages.value[roomId.value] ??= {}
+  if (panel === 'agent') state.agent = true
+  else state.settings = true
+  roomTab.value = panel
+}
 const visibleRooms = computed(() => home.value?.rooms.filter(item => !directoryKind.value || item.kind === directoryKind.value) ?? [])
 interface ChatCommand {command: string; aliases: string[]; subcommand: string; subAliases: string[]; insertion: string; usage: string; description: string; introduction: string; regex: boolean}
 const commands = ref<ChatCommand[]>([])
@@ -434,12 +447,12 @@ async function removeImage(id: string) {
 }
 
 function inspect() {
-  if (room.value) emit('inspect', { client: 'web', account: 'web-bot', target: room.value.id, name: room.value.name })
+  openRoomPage('agent')
 }
 
 /** 2026/11/04：设置入口携带当前真实聊天，省去再次选择会话。 */
 function openSettings() {
-  if (room.value) emit('settings', {client: 'web', account: 'web-bot', target: room.value.id, name: room.value.name})
+  openRoomPage('chat-config')
 }
 
 /** 2026/11/04：后台读取不占用编辑锁，且不会清除正在输入的新草稿。 */
@@ -510,7 +523,7 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
       </div>
     </ElDialog>
     <div v-if="roomOpen && room" class="web-room-heading"><button class="icon-button" aria-label="返回聊天室列表" title="返回聊天室列表" @click="backToRooms"><ConsoleIcon name="back" /></button><h2>{{ room.name }}</h2><ElTag>{{ room.kind === 'GROUP' ? '群聊' : '私聊' }}</ElTag></div>
-    <ElTabs v-if="home && roomOpen" v-model="roomTab" class="web-chat-tabs">
+    <ElTabs v-if="home" v-show="roomOpen" v-model="roomTab" class="web-chat-tabs" @tab-change="value => { if (value === 'chat-config' || value === 'agent') openRoomPage(value) }">
       <ElTabPane label="聊天" name="messages" class="web-conversation">
         <ElEmpty v-if="!room" description="创建一个私聊或模拟群后开始；每个档案只对应一个私聊" />
         <template v-else>
@@ -569,6 +582,8 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
         </div>
       </ElTabPane>
       <ElTabPane label="图片" name="media"><ElEmpty v-if="!room" description="先选择一个聊天" /><div v-else class="web-media-grid"><ElCard v-for="id in mediaIds" :key="id" shadow="never"><img :src="imageUrl(id)" class="web-message-image" alt="当前聊天图片" loading="lazy" /><p v-if="advanced" class="small revision">{{ id }}</p><ElButton :disabled="blocked" @click="media = id; roomTab = 'messages'">选为附图</ElButton><ElButton :disabled="blocked" @click="removeImage(id)">删除未引用图片</ElButton></ElCard></div></ElTabPane>
+      <ElTabPane label="聊天设置" name="chat-config"><template v-for="item in home.rooms" :key="item.id"><ChatSettingsView v-if="roomPages[item.id]?.settings" v-show="roomId === item.id" :clients="clients" initial-client="web" :fixed-target="roomTarget(item)" embedded @expired="emit('expired')" @inspect="inspect" /></template></ElTabPane>
+      <ElTabPane label="活动与记忆" name="agent"><template v-for="item in home.rooms" :key="item.id"><AgentWorkspaceView v-if="roomPages[item.id]?.agent" v-show="roomId === item.id" :target="roomTarget(item)" :active="active && roomOpen && roomId === item.id && roomTab === 'agent'" embedded @expired="emit('expired')" /></template></ElTabPane>
     </ElTabs>
     <ElDialog v-model="profileOpen" title="网页档案" width="min(560px, 94vw)"><div v-if="home" class="web-profile-form"><ElInput v-model="nickname" maxlength="80" aria-label="新网页档案昵称" :disabled="blocked" placeholder="例如：小茶" /><ElButton :disabled="blocked || !nickname.trim()" @click="administrative('chat/profiles', { operationId: operationId(), name: nickname }, '创建网页档案')">创建档案</ElButton><p v-for="profile in home.profiles" :key="profile.id">{{ profile.name }}<span v-if="advanced" class="small revision"> · {{ profile.id }} · {{ profile.uuid }}</span></p></div></ElDialog>
     <ElCard v-if="pending || pendingAdmin || pendingUpload" shadow="never" class="pending-operation"><h3>原请求结果待确认</h3><p>连接失败不表示未受理；保留原编号和原文，不会自动重发。</p><p class="small revision">{{ pending?.body.operationId ?? pendingUpload?.id ?? pendingAdmin?.body.operationId }}</p><ElButton v-if="pending" :disabled="busy" @click="run(query)">查询原请求</ElButton><ElButton :disabled="busy" @click="run(pending ? deliver : pendingAdmin ? retryAdmin : retryUpload)">原样重试</ElButton><ElButton :disabled="busy" @click="forgetPending">放弃原请求</ElButton></ElCard>

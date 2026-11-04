@@ -25,10 +25,12 @@ import java.util.concurrent.Semaphore;
  * <br>2026/11/04：受限机器令牌用例复用相同的文件回执恢复规则。
  * <br>2026/11/04：专用与自动文件投影共享原文档事务和授权，不自动允许新发现的类型。
  *
+ * <br>2026/11/04：返回文件用途及原类型字段说明。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.6-l
  */
 @Service
 public final class FileSettingsService {
@@ -88,9 +90,10 @@ public final class FileSettingsService {
                 }
                 sizes.put(collection.path(), array.isArray() ? array.size() : 0);
             }
-            return new FileSettings.View(id, lease.adapter().name(), snapshot.revision(), snapshot.exists(),
+            // 2026/11/04：类型与字段解释直接传给网页，不导出原始注释或秘密文件内容。
+            return new FileSettings.View(id, lease.adapter().name(), lease.adapter().description(), snapshot.revision(), snapshot.exists(),
                     lease.adapter().application(), document.runtime(),
-                    FileSettingsPolicy.fields(tree, lease.adapter(), snapshot.exists()), lease.adapter().collections(), sizes);
+                    FileSettingsPolicy.fields(tree, lease.adapter(), snapshot.exists(), document.schema()), lease.adapter().collections(), sizes);
         });
     }
 

@@ -31,22 +31,30 @@ import java.util.Optional;
  *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
+ * <br>2026/11/04：为模型参数提供可由控制台读取的用途和单位。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.4.0
- * @version 4.7.2-l
+ * @version 4.7.6-l
  */
 @Getter
 @Setter
 @NoArgsConstructor
+// 2026/11/04：控制台展示类型及字段注解，不读取运行秘密。
+@org.zexnocs.teanekocore.framework.description.Description("模型路由参数；凭据和连接不通过普通序列化导出。")
 public class LLMModelFileConfigParameter {
     /**
-     * 模型适配器注册 ID。
-     * <br>一般与供应商 ID 相同，例如 {@code openai}、{@code deepseek}。
-     * <br>该值必须与模型适配器注册到 {@code LLMModelService} 中的 ID 一致，不再使用 {@code provider/model} 格式。
+     * 唯一配置路由 ID；同一适配器可以通过不同路由保存多个模型或密钥。
      */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("唯一模型配置路由；可自定义，不等于供应商模型名称。")
     private String id;
+
+    // 2026/11/04：配置路由与 Spring 协议适配器分离；旧文件省略时沿用原路由同名适配器。
+    @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("已注册的协议适配器，例如 deepseek、kimi；省略时使用路由标识。")
+    private String adapter;
 
     /**
      * 模型供应商标识。
@@ -61,6 +69,7 @@ public class LLMModelFileConfigParameter {
      * <br>该字段不参与模型适配器路由，路由只由 {@link #id} 决定。
      */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("具体模型标识；选择时核对真实上下文容量。")
     private String model;
 
     /**
@@ -69,6 +78,7 @@ public class LLMModelFileConfigParameter {
     @Nullable
     @JsonAlias("api")
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @org.zexnocs.teanekocore.framework.description.Description("相对于服务基础地址的接口路径，例如 /chat/completions。")
     private String apiPath;
 
     /**
@@ -76,6 +86,7 @@ public class LLMModelFileConfigParameter {
      */
     @Nullable
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @org.zexnocs.teanekocore.framework.description.Description("调用凭据；支持环境占位符，不回显原值。")
     private String apiKey;
 
     /**
@@ -83,26 +94,31 @@ public class LLMModelFileConfigParameter {
      */
     @Nullable
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
+    @org.zexnocs.teanekocore.framework.description.Description("服务基础地址；与接口路径组合为请求地址。")
     private String baseUrl;
 
     /**
      * 是否启用思考或推理模式。
      */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("是否请求思考模式，实际能力由供应商与型号决定。")
     private Boolean thinking;
 
     /**
      * 模型最多生成的 token 数量。
      */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("每次请求完整的最大输出 token 额度，不另设业务隐含上限。")
     private Integer maxTokens;
 
     /** 2026/11/04：部署模型的真实上下文总容量，不能从模型名称推测。 */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("实际型号的上下文总容量，计入输入与输出。")
     private Long contextWindowTokens;
 
     /** 2026/11/04：输入占上下文的最大比例，未填写时使用百分之八十。 */
     @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("输入最多占上下文的比例，默认 80%，仍为完整输出预留空间。")
     private Double contextInputRatio;
 
     /**
@@ -180,6 +196,17 @@ public class LLMModelFileConfigParameter {
             return Optional.empty();
         }
         return Optional.of(LLMModelId.of(provider));
+    }
+
+    /**
+     * 2026/11/04：将唯一配置路由解析为真实协议，旧配置保持同名含义。
+     * @return 实际协议适配器标识
+     * @throws LLMConfigurationException 当路由缺失或适配器标识非法时
+     */
+    public LLMModelId adapterId() {
+        return adapter == null || adapter.isBlank()
+                ? findModelId().orElseThrow(() -> new LLMConfigurationException("模型配置缺少路由标识。"))
+                : LLMModelId.of(adapter);
     }
 
     /**

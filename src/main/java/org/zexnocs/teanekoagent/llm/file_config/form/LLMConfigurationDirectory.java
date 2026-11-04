@@ -22,10 +22,12 @@ import java.util.regex.Pattern;
  * 修改记录：<br>
  * 2026/11/04：通过独立 id 注册样板与输入方式，避免业务键占用框架组件名。
  *
+ * <br>2026/11/04：将型号列表与真实上下文容量一起投影到页面。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.5-l
+ * @version 4.7.6-l
  */
 @Service
 public final class LLMConfigurationDirectory {
@@ -73,7 +75,8 @@ public final class LLMConfigurationDirectory {
                 throw new IllegalArgumentException("模型样板的路由与声明不一致。");
             }
             routes.add(new Route(entry.getKey().id(), template.name(), template.description(),
-                    template.defaults(), template.models()));
+                    // 2026/11/04：型号列表与容量均来自供应商声明，不在线请求模型。
+                    template.defaults(), template.models(), template.contextWindows()));
         }
         var modes = new ArrayList<CredentialMode>();
         for (var entry : inputs.entries().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
@@ -103,19 +106,24 @@ public final class LLMConfigurationDirectory {
         }
     }
 
-    /**
+/**
      * 公开模型样板。
+     * 修改记录：<br>
+     * 2026/11/04：公开各型号真实上下文容量供页面选择。
+     *
      * @param id 实际注册路由
      * @param name 显示名称
      * @param description 配置说明
      * @param defaults 公开可编辑初值
      * @param models 名称建议
+     * @param contextWindows 型号对应的真实上下文容量
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.5-l
-     * @version 4.7.5-l
+     * @version 4.7.6-l
      */
-    public record Route(String id, String name, String description, Map<String, Object> defaults, List<String> models) {}
+    public record Route(String id, String name, String description, Map<String, Object> defaults, List<String> models,
+                        Map<String, Long> contextWindows) {}
 
     /**
      * 凭据输入规则，不包含已配置值。

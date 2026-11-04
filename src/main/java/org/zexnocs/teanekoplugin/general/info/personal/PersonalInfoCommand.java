@@ -14,16 +14,19 @@ import java.util.concurrent.CompletionStage;
 /**
  * 个人简介命令，允许用户设置个人简介信息。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("""
         设置个人简介信息。
         格式：/个人简介 <内容>
         最多 200 个字符。换行会被删掉~""")
-@Command(value = {"/personal_info", "/pi", "/个人简介", "/个人介绍"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "个人简介", value = {"/personal_info", "/pi", "/个人简介", "/个人介绍"},
         permission = CommandPermission.ALL)
 public class PersonalInfoCommand {
     private final PersonalInfoService personalInfoService;

@@ -22,13 +22,16 @@ import java.util.concurrent.CompletionStage;
  * 配置管理指令，提供注册、注销、查询配置的功能
  * <br>4.1.0: 解决了配置 namespaces 固定的问题，将 namespace 与 client 绑定
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.11
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("配置管理指令，提供注册、注销、查询配置的功能。群组中只允许群主使用该指令。")
-@Command(value = {"/config", "/cfg", "/配置"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "聊天配置", value = {"/config", "/cfg", "/配置"},
         scope = CommandScope.ALL,
         permission = CommandPermission.OWNER,
         permissionPackage = {"teaNeko-config"})

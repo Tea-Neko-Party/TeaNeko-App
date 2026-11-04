@@ -6,10 +6,12 @@ import java.util.Map;
 /**
  * 供应商在自己的模型目录贡献公开样板，不读取用户凭据或发起网络请求。
  *
+ * <br>2026/11/04：样板增加各型号上下文容量声明。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.5-l
+ * @version 4.7.6-l
  */
 public interface ILLMConfigurationAdapter {
     /** @return 名称、说明和可编辑样板，不得包含运行凭据 */
@@ -29,17 +31,35 @@ public interface ILLMConfigurationAdapter {
                 "api-key", "", "context-window-tokens", context, "context-input-ratio", 0.8, "max-tokens", output);
     }
 
-    /**
+/**
      * 公开的供应商样板与模型名称提示。
+     * 修改记录：<br>
+     * 2026/11/04：增加各型号真实上下文容量声明。
+     *
      * @param name 中文显示名
      * @param description 配置说明
      * @param defaults 公开初值，不得包含实际凭据
      * @param models 模型名称建议，仍允许输入自定义名称
+     * @param contextWindows 供应商人工维护的各型号真实上下文容量
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.5-l
-     * @version 4.7.5-l
+     * @version 4.7.6-l
      */
-    record Template(String name, String description, Map<String, Object> defaults, List<String> models) {}
+    record Template(String name, String description, Map<String, Object> defaults, List<String> models,
+                    Map<String, Long> contextWindows) {
+        /**
+         * 2026/11/04：同容量型号沿用供应商默认容量，也可另外声明各型号容量。
+         * @param name 显示名
+         * @param description 使用说明
+         * @param defaults 公开初值
+         * @param models 维护的型号列表
+         */
+        public Template(String name, String description, Map<String, Object> defaults, List<String> models) {
+            this(name, description, defaults, models, models.stream().collect(java.util.stream.Collectors.toUnmodifiableMap(
+                    java.util.function.Function.identity(), ignored ->
+                            Number.class.cast(defaults.get("context-window-tokens")).longValue())));
+        }
+    }
 }
 

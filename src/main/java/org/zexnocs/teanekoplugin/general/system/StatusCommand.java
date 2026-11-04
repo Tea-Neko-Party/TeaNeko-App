@@ -30,13 +30,16 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.3-l
+ * @version 4.7.6-l
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
-@Command(value = {"/status"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "运行状态", value = {"/status"},
         permission = CommandPermission.ALL,
         scope = CommandScope.ALL)
 // 2026/11/04：只贡献原监测任务的分类，不开放网页暂停。

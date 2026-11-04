@@ -14,10 +14,12 @@ import java.util.concurrent.CompletionStage;
 /**
  * 设置 onebot 群内的头衔指令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("""
             设置群内的头衔。
@@ -26,7 +28,8 @@ import java.util.concurrent.CompletionStage;
             每日只能设置一次。
             可以叫管理员来帮你设置(无限制)
             样例：“/头衔 新人”，会获得“新人猫”的头衔。""")
-@Command(value = {"/setTitle", "/st", "/头衔"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "群成员头衔", value = {"/setTitle", "/st", "/头衔"},
         scope = CommandScope.GROUP,
         permission = CommandPermission.ALL,
         permissionPackage = "onebot.group.set-title",

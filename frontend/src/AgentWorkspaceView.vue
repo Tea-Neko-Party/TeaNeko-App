@@ -24,7 +24,7 @@ interface Schedules { items: Schedule[]; next: string }
 const schedules = ref<Schedules>()
 const scheduleStates: Record<string, string> = { ACTIVE: '等待执行', RUNNING: '已认领，动作执行中', COMPLETED: '已完成', CANCELLED: '未来计划已取消', EXPIRED: '已过期', PAUSED: '已暂停，需检查权限或执行器', INDETERMINATE: '结果不明，禁止自动重试' }
 
-const props = defineProps<{ target: AgentTarget; active: boolean }>()
+const props = defineProps<{ target: AgentTarget; active: boolean; embedded?: boolean }>()
 const emit = defineEmits<{ expired: []; selectTarget: [] }>()
 const panel = ref('activity')
 const busy = ref(false)
@@ -261,7 +261,7 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
 <template>
   <!-- 2026/11/04：收起重复说明，活动状态与待确认操作继续直接展示。 -->
   <div class="agent-workspace">
-    <div class="section-title">
+    <div v-if="!embedded" class="section-title">
       <h2>{{ target.name }}</h2>
       <ElButton @click="emit('selectTarget')">选择其他聊天</ElButton>
       </div>

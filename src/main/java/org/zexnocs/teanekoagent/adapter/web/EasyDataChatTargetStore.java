@@ -18,10 +18,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：识别新版分管理器发现游标，保持原目录分页与存储规则。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 @Service
 public final class EasyDataChatTargetStore implements IChatTargetStore {
@@ -91,7 +93,8 @@ public final class EasyDataChatTargetStore implements IChatTargetStore {
                         value.source(), true, state.seen().get(entry.getKey()));
             }).toList();
             return new ChatTargets.Page(page, values.size() > 50 ? page.getLast().ref() : "",
-                    !state.cursor().equals("!done"));
+                    // 2026/11/04：兼容原发现终点，新增目录按各管理器维护游标。
+                    !Set.of("!done", "v2:!done").contains(state.cursor()));
         });
     }
 

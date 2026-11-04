@@ -25,15 +25,18 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：为管理界面提供简短中文名称，配置标识和业务行为不变。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.4-l
+ * @version 4.7.6-l
  */
 @Description("""
         使用 SauceNAO 的 api 进行搜图。
         在指令中 回复 想要搜图的图片，或者在指令后直接输入图片链接。""")
-@Command(value = {"/sauceNAO", "/s搜图", "s搜图"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "图片来源查询", value = {"/sauceNAO", "/s搜图", "s搜图"},
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL)
 // 2026/11/04：显示名称与原稳定配置键分别维护。

@@ -14,13 +14,16 @@ import java.util.concurrent.CompletionStage;
 /**
  * 签到指令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("签到获取猫猫币喵！")
-@Command(value = {"/sign-in", "/签到", "签到", "签到喵", "/签到喵"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "每日签到", value = {"/sign-in", "/签到", "签到", "签到喵", "/签到喵"},
         permission = CommandPermission.ALL)
 @RequiredArgsConstructor
 public class SignInCommand {

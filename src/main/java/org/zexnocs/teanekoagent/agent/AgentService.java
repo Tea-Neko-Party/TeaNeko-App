@@ -38,10 +38,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：上下文失败转换为配置错误后仍记录安全异常类型与代码位置。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -453,7 +455,12 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
         var completion = turn.lifetime.guard(work).handle((ignored, failure) -> turn.settled().thenApply(done -> {
             var result = turn.result(failure);
             // 2026/11/02：与 LLM 日志共享请求标识，管线错误也保留安全的原因链。
-            if (result.status() == AgentRunResult.Status.FAILED) { reportFailure(turn, result, failure); }
+            // 2026/11/04：上下文校验失败虽转换为配置错误，仍保留原始安全诊断，避免只有终态而无原因。
+            var contextFailure = turn.contextFailure();
+            if (result.status() == AgentRunResult.Status.FAILED
+                    || result.status() == AgentRunResult.Status.CONFIGURATION_ERROR && contextFailure != null) {
+                reportFailure(turn, result, contextFailure == null ? failure : contextFailure);
+            }
             try { observer.accept(AgentTurnReport.from(request, result, java.time.Duration.between(acceptedAt, clock.instant()).toMillis())); }
             catch (RuntimeException ignoredReportFailure) { /* 监控不能改写业务结果。 */ }
             // 2026/11/03：模型终态与平台实际发送由不同节点报告。

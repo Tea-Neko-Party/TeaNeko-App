@@ -69,14 +69,47 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：验证生产插件令牌往返、哈希碰撞键序和资源防篡改。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.6.2-l
+ * @version 4.7.6-l
  */
 @Timeout(20)
 class MediaReplyIntegrationTest{
     @TempDir Path directory;
+    /** 2026/11/04：资源签名必须能经实际应用的 Jackson 模块往返，普通文字不能被表情资料阻断。 */
+    @Test
+    void resourcesRoundTripWithApplicationMapper() {
+        try (var h = new Harness(directory, true); var control = ExecutionControl.create()) {
+            h.scope.setEnabled(true);
+            h.scope.setNativeExpressionsEnabled(true);
+            for (int size = 2; size <= 8; size++) {
+                var revisions = new LinkedHashMap<String, Long>();
+                for (int index = 0; index < size; index++) {
+                    StringBuilder key = new StringBuilder();
+                    for (int bit = 0; bit < 3; bit++) {
+                        key.append((index & (1 << bit)) == 0 ? "Aa" : "BB");
+                    }
+                    revisions.put(key.toString(), (long) index);
+                }
+                h.pluginToken.set(new org.zexnocs.teanekocore.plugin.PluginRegistry.Token(revisions));
+                var request = h.request("网页资源验证" + size);
+                var input = h.input(request, control);
+                assertDoesNotThrow(() -> h.service.verify(request, input, control).toCompletableFuture().join());
+                if (size == 2) {
+                    // 2026/11/04：规范化只消除键顺序差异，不允许修改目录内容后沿用原签名。
+                    var changed = input.fragments().stream().map(fragment -> fragment.name().equals(StickerReplyService.FRAGMENT)
+                            ? new AgentPromptFragment(fragment.name(), fragment.text().replace("微笑", "篡改描述"),
+                            fragment.expiresAt(), fragment.transientToolResults()) : fragment).toList();
+                    var tampered = new AgentPromptInput(request.messages(), changed, 0);
+                    assertThrows(CompletionException.class, () -> h.service.verify(request, tampered, control)
+                            .toCompletableFuture().join());
+                }
+            }
+        }
+    }
     /**
      * 测试客户端显式声明媒体能力，实际编码直接借用已注册 OneBot 适配器。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
@@ -115,18 +148,23 @@ class MediaReplyIntegrationTest{
          */
         @Override public CompletionStage<Void> face(ITeaNekoMessageData data,String id,Mode mode){return delegate.face(data,id,mode);}
     }
-    /**
+/**
      * 局部默认装配，所有文件和目录仲裁真实执行，只有原生来源由受控租约替身提供。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
+     * <br>2026/11/04：增加生产序列化与插件令牌夹具，验证资源签名往返。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.6.2-l
+     * @version 4.7.6-l
      */
     private static final class Harness implements AutoCloseable{
+        // 2026/11/04：在单个夹具内切换碰撞键集合，覆盖生产令牌的嵌套 Map。
+        final java.util.concurrent.atomic.AtomicReference<org.zexnocs.teanekocore.plugin.PluginRegistry.Token> pluginToken =
+                new java.util.concurrent.atomic.AtomicReference<>(new org.zexnocs.teanekocore.plugin.PluginRegistry.Token(Map.of()));
         final NamespaceDatabaseFixture db=new NamespaceDatabaseFixture();final AnnotationConfigApplicationContext context=new AnnotationConfigApplicationContext();
         final ExecutorService workers=Executors.newVirtualThreadPerTaskExecutor();final ScheduledExecutorService timers=Executors.newSingleThreadScheduledExecutor();
         final ILogger logger=mock(ILogger.class);final FakeClient client=new FakeClient(logger);
@@ -136,12 +174,30 @@ class MediaReplyIntegrationTest{
         final ReplyCoordinator queue;final ExpressionDelivery delivery;final EasyDataDeliveryStore ledger;
         /** @param path 测试目录 */
         Harness(Path path){
+            this(path, false);
+        }
+        /**
+         * @param path 测试目录
+         * @param applicationMapper 是否使用生产序列化模块
+         */
+        Harness(Path path, boolean applicationMapper){
             gallery.setStorageRoot(path.toString());var expression=new AgentExpressionFileConfig();expression.setDefaultDelay(0);
             var files=mock(IFileConfigService.class);when(files.requireCurrent(AgentStickerFileConfig.class)).thenReturn(gallery);when(files.requireCurrent(AgentMediaReplyFileConfig.class)).thenReturn(media);when(files.requireCurrent(AgentExpressionFileConfig.class)).thenReturn(expression);
             var configs=mock(IConfigDataService.class);doReturn(Optional.of(scope)).when(configs).getConfigData(any(),eq(AgentScopeConfigData.class),anyString());
             var bridge=mock(NativeCommandBridge.class);when(bridge.source(any())).thenAnswer(call->Optional.ofNullable(sources.get(((AgentRunRequest)call.getArgument(0)).requestId())));
             ledger=new EasyDataDeliveryStore(db.data,db.store,db.mapper);
-            var beans=context.getBeanFactory();beans.registerSingleton("data",db.data);beans.registerSingleton("mapper",db.mapper);beans.registerSingleton("files",files);beans.registerSingleton("configs",configs);beans.registerSingleton("bridge",bridge);
+            // 2026/11/04：复现生产模块与无模块夹具的序列化差异。
+            var actualMapper = applicationMapper ? new org.zexnocs.teanekocore._app_config.JacksonConfig().objectMapper() : db.mapper;
+            var beans=context.getBeanFactory();beans.registerSingleton("data",db.data);beans.registerSingleton("mapper",actualMapper);beans.registerSingleton("files",files);beans.registerSingleton("configs",configs);beans.registerSingleton("bridge",bridge);
+            if (applicationMapper) {
+                // 2026/11/04：生产具有包含依赖的插件令牌；哈希冲突键复现序列化往返中的 Map 顺序变化。
+                var plugins = mock(org.zexnocs.teanekocore.plugin.PluginRegistry.class);
+                var token = new org.zexnocs.teanekocore.plugin.PluginRegistry.Token(Map.of("Aa", 1L, "BB", 2L));
+                pluginToken.set(token);
+                when(plugins.capture(anyString())).thenAnswer(ignored -> pluginToken.get());
+                when(plugins.isEnabled(anyString())).thenReturn(true);
+                beans.registerSingleton("plugins", plugins);
+            }
             beans.registerSingleton("manager",new AgentScopeConfigManager());beans.registerSingleton("virtualExecutor",workers);beans.registerSingleton("taskExecutor",timers);beans.registerSingleton("logger",logger);beans.registerSingleton("scanner",new BeanScanner(context,logger));
             beans.registerSingleton("ledger",new AgentDeliveryService(ledger,workers,Clock.systemUTC(),()->Duration.ofDays(7)));
             context.register(org.zexnocs.teanekoagent._app_config.AgentExpressionConfig.class,org.zexnocs.teanekoagent._app_config.AgentStickerConfig.class,

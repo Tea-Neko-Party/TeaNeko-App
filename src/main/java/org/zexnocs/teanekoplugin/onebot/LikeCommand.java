@@ -29,16 +29,19 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.3-l
+ * @version 4.7.6-l
  */
 @Description("""
         让机器人给你个人资料卡点赞。
         可以选择手动点赞，也可以选择加入到每天凌晨1点的定时点赞队列中。
         点赞每天凌晨1点刷新。""")
-@Command(value = {"/like", "like"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "名片点赞", value = {"/like", "like"},
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL,
         supportedClients = {OnebotTeaNekoClient.class})

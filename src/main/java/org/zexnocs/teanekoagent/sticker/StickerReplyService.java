@@ -25,6 +25,7 @@ import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.core.StreamReadFeature;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.SerializationFeature;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -44,10 +45,12 @@ import java.util.concurrent.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：规范化签名 Map 键序，修复插件令牌往返导致资源证明误拒绝和 Agent 无回复。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.6.2-l
+ * @version 4.7.6-l
  */
 @Component
 public final class StickerReplyService implements AutoCloseable {
@@ -80,7 +83,12 @@ public final class StickerReplyService implements AutoCloseable {
     public StickerReplyService(StickerExtensionRegistry stores,ExpressionClientRegistry clients,ObjectProvider<NativeCommandBridge> bridge,
             IFileConfigService files,IConfigDataService configs,AgentScopeConfigManager manager,ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){
         this.stores=stores;this.clients=clients;this.bridge=bridge;this.files=files;this.configs=configs;this.manager=manager;this.executor=executor;
-        this.mapper=mapper.rebuild().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
+        // 2026/11/04：资源证明按稳定键序序列化，插件令牌 Map 经 JSON 往返后仍产生相同签名字节。
+        this.mapper = mapper.rebuild()
+                .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+                .enable(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS)
+                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+                .build();
         this.codec=new LLMMessageCodec(mapper);new SecureRandom().nextBytes(secret);
     }
     /**

@@ -11,18 +11,26 @@ import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：为网页容量设置提供用途、范围与裁剪解释。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
 @Getter
 @Setter
 @FileConfig(value = "chat", path = "web", type = FileConfigType.YAML)
+// 2026/11/04：控制台展示类型及字段注解，不读取运行秘密。
+@org.zexnocs.teanekocore.framework.description.Description("网页聊天的房间、档案、消息窗口及图片容量；下调上限不主动删除已有房间或档案。")
 public final class WebChatSettings implements IFileConfigData {
+    @org.zexnocs.teanekocore.framework.description.Description("最多保存的网页房间数量，范围 1～128。")
     private int maxRooms = 32;
+    @org.zexnocs.teanekocore.framework.description.Description("最多保存的网页档案数量，范围 1～32。")
     private int maxProfiles = 16;
+    @org.zexnocs.teanekocore.framework.description.Description("每个房间的消息窗口，范围 50～2000；后续追加时裁剪。")
     private int maxMessages = 500;
+    @org.zexnocs.teanekocore.framework.description.Description("媒体容量，范围 1～128；满时拒绝上传，不删除已引用图片。")
     private int maxMedia = 64;
 
     /**

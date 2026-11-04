@@ -11,12 +11,15 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.6-l
  */
-@Command(value = "/console", permission = CommandPermission.ALL, scope = CommandScope.ALL)
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "管理指令台", value = "/console", permission = CommandPermission.ALL, scope = CommandScope.ALL)
 @Description("指令台管理命令。/console 查看当前目标；/console say 文本 向所选真实聊天发送文本。仅接受受信管理来源。")
 public final class ConsoleCommands {
     /**

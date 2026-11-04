@@ -3,8 +3,9 @@
 import {computed, ref} from 'vue'
 import {ElAlert, ElButton, ElDialog, ElInput, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import type {CredentialInput} from './FileFieldEditor.vue'
+import ModelNamePicker from './ModelNamePicker.vue'
 
-export interface ModelRoute {id: string; name: string; description: string; defaults: Record<string, unknown>; models: string[]}
+export interface ModelRoute {id: string; name: string; description: string; defaults: Record<string, unknown>; models: string[]; contextWindows?: Record<string, number>}
 export interface ModelCatalog {routes: ModelRoute[]; inputs: CredentialInput[]}
 const props = defineProps<{catalog: ModelCatalog; configured: string[]; disabled: boolean; hasDefault: boolean}>()
 const emit = defineEmits<{append: [value: Record<string, unknown>, defaultRoute: boolean]}>()
@@ -62,7 +63,7 @@ function add() {
       <div class="model-create-form">
         <label>协议适配器<ElSelect :model-value="routeId" :disabled="!custom" aria-label="新增模型协议适配器" @update:model-value="value => selectRoute(String(value))"><ElOption v-for="item in available" :key="item.id" :value="item.id" :label="item.name" /></ElSelect></label>
         <p class="config-description">{{ route?.description }}</p>
-        <label>模型名称<ElSelect v-model="form.model" filterable allow-create default-first-option aria-label="新增模型名称"><ElOption v-for="model in route?.models" :key="model" :value="model" :label="model" /></ElSelect></label>
+        <div><label>模型名称</label><ModelNamePicker v-model="form.model" :names="route?.models ?? []" label="新增模型名称" @select="value => { const capacity = route?.contextWindows?.[value]; if (capacity) form.context = String(capacity) }" /></div>
         <template v-if="custom"><label>服务地址<ElInput v-model="form.url" aria-label="新增模型服务地址" placeholder="https://example.com/v1" /></label><label>接口路径<ElInput v-model="form.path" aria-label="新增模型接口路径" placeholder="/chat/completions" /></label></template>
         <div class="model-create-numbers"><label>最大输出 token<ElInput v-model="form.output" type="number" aria-label="新增模型最大输出" /></label><label>上下文总容量<ElInput v-model="form.context" type="number" aria-label="新增模型上下文容量" /></label></div>
         <label>输入上下文占比<ElInput v-model="form.ratio" type="number" aria-label="新增模型输入比例" /></label>

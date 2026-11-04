@@ -23,12 +23,15 @@ import java.util.stream.Collectors;
  * <br>2026/11/02：为全部子命令提供 subhelp 可读取的用途和参数说明。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.6.0-l
+ * @version 4.7.6-l
  */
-@Command(value = "/agent", permission = CommandPermission.ALL, scope = CommandScope.ALL)
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "聊天助手", value = "/agent", permission = CommandPermission.ALL, scope = CommandScope.ALL)
 @Description("Agent 显式聊天、空间绑定与 DEBUG 记忆/人格管理；使用前先登记当前作用域 agent 配置。")
 public class AgentCommand {
     private final AgentCommandGateway gateway;

@@ -21,13 +21,16 @@ import java.util.concurrent.CompletionStage;
 /**
  * 消息撤回命令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
 @Description("撤回成员消息。只有拥有相关权限的人才可以使用。")
-@Command(value = {"/delete", "/撤回"},
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "撤回消息", value = {"/delete", "/撤回"},
         permissionPackage = "permission.group.manager-delete",
         scope = CommandScope.GROUP,
         permission = CommandPermission.ADMIN,

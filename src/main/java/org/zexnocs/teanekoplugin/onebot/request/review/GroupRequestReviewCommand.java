@@ -17,12 +17,15 @@ import java.util.concurrent.CompletionStage;
 /**
  * 管理群入群请求的指令。
  *
+ * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.4
- * @version 4.5.0-l
+ * @version 4.7.6-l
  */
-@Command(
+// 2026/11/04：显示名与稳定指令前缀分别维护。
+@Command(displayName = "入群申请审核",
         value = {"/gr"},
         scope = CommandScope.GROUP,
         permission = CommandPermission.ALL,

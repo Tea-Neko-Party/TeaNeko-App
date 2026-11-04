@@ -47,10 +47,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
+ * <br>2026/11/04：验证原文件类型说明及字段注解通过秘密保护投影。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.2-l
+ * @version 4.7.6-l
  */
 class FileSettingsIntegrationTest {
     /**
@@ -95,6 +97,10 @@ class FileSettingsIntegrationTest {
     void saveRetainsRawSecretsAndUnknownNodesAndApplyIsSeparate() throws Exception {
         var fixture = new Fixture(root);
         var before = result(fixture.service.read("test.value", () -> {}));
+        // 2026/11/04：注解说明独立于原文件和秘密投影。
+        assertEquals("测试文件用途说明", before.description());
+        assertTrue(before.fields().stream().anyMatch(field -> field.path().equals("/name")
+                && field.description().contains("测试名称的填写解释")));
         assertFalse(mapper.writeValueAsString(before).contains("不应回显的值"));
         var change = new FileSettings.Change(UUID.randomUUID(), before.revision(),
                 List.of(new FileSettings.Edit("/name", "SET", mapper.valueToTree("新名称"))));
@@ -384,17 +390,23 @@ class FileSettingsIntegrationTest {
         }
     }
 
-    /**
+/**
      * 简单文件类型，未知字段由原解析器保留在原树而不绑定。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
+     * 修改记录：<br>
+     * 2026/11/04：提供文件及字段说明用于真实投影验证。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.6-l
      */
     @FileConfig(value = "value", type = FileConfigType.YAML, sensitive = true)
+    // 2026/11/04：通过实际文件类型读取公开说明。
+    @org.zexnocs.teanekocore.framework.description.Description("测试文件用途说明")
     public static class Value implements IFileConfigData {
+        @org.zexnocs.teanekocore.framework.description.Description("测试名称的填写解释")
         public String name = "默认";
         public String secret = "";
         /** 创建文件默认值。 */

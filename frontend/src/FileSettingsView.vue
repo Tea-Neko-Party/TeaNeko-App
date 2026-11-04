@@ -9,10 +9,11 @@ import type {FileField as Field} from './FileFieldEditor.vue'
 import FileFieldEditor from './FileFieldEditor.vue'
 import type {ModelCatalog} from './ModelTemplateEditor.vue'
 import ModelTemplateEditor from './ModelTemplateEditor.vue'
+import ModelNamePicker from './ModelNamePicker.vue'
 
 interface Stamp { revision: string; generation: number; current: boolean }
 interface Collection { path: string; label: string; maximum: number }
-interface Section { id: string; name: string; application: string }
+interface Section { id: string; name: string; application: string; description?: string }
 interface View extends Section { revision: string; exists: boolean; runtime: Stamp; fields: Field[]; collections: Collection[]; collectionSizes: Record<string, number> }
 interface Edit { path: string; action: string; value?: unknown }
 interface Receipt { operationId: string; status: string; diskRevision: string; runtime: Stamp; note: string; fields: string[]; at: string; replayed: boolean }
@@ -68,6 +69,13 @@ function choices(field: Field) {
 function modelFields(index: number, fields: Field[]) {
   return fields.filter(field => advanced.value || basicModelFields.has(field.path.split('/').at(-1)!)
     || customConnections[index] && ['base-url', 'api-path'].includes(field.path.split('/').at(-1)!))
+}
+// 2026/11/04：已保存模型也使用同一供应商目录，选择已知型号时同步真实上下文容量。
+function selectModel(index: number, value: string) {
+  const route = modelCatalog.value.routes.find(item => item.id === modelGroups.value[index]?.id)
+  const capacity = route?.contextWindows?.[value]
+  const field = view.value?.fields.find(item => item.path === `/models/${index}/context-window-tokens`)
+  if (capacity && field) editField(field, String(capacity))
 }
 function appendModel(value: Record<string, unknown>, makeDefault: boolean) {
   structure.value = {path: '/models', action: 'APPEND', value}
@@ -250,6 +258,7 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
       </ElCard>
       <div v-if="view" class="settings-editor">
         <ElCard shadow="never"><h2>{{ view.name }}</h2>
+          <p v-if="view.description" class="config-description file-explanation">{{ view.description }}</p>
           <ElTag :type="view.runtime.current && view.runtime.revision === view.revision ? 'success' : 'warning'">{{ view.runtime.current && view.runtime.revision === view.revision ? '运行与磁盘一致' : '磁盘与运行状态不同' }}</ElTag>
           <!-- 2026/11/04：文件与字段说明直接显示，版本等技术细节仍由高级模式控制。 -->
           <p class="config-description">保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p v-if="advanced" class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
@@ -258,7 +267,7 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
         <ElCard v-if="modelMode" shadow="never"><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /><p v-if="structure" class="small muted">模型条目已加入草稿，保存后可继续编辑；模型配置不会在保存时自动应用。</p></ElCard>
         <ElCard v-for="group in modelMode ? modelGroups : []" :key="group.index" shadow="never" class="model-config-card"><div class="editor-heading"><h3>{{ modelCatalog.routes.find(route => route.id === group.id)?.name ?? (group.id || '未命名模型') }}</h3><ElButton type="danger" text :disabled="modelStructuralLocked" @click="remove({path: '/models', label: '模型', maximum: 64}, group.index)">删除模型</ElButton></div>
           <label class="small muted">自定义连接 <ElSwitch v-model="customConnections[group.index]" :disabled="locked" /></label>
-          <FileFieldEditor v-for="field in modelFields(group.index, group.fields)" :key="field.path" :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" />
+          <template v-for="field in modelFields(group.index, group.fields)" :key="field.path"><div v-if="field.path.endsWith('/model')" class="settings-field"><div><label>{{ field.label }}</label><p class="config-description">{{ displayField(field).description }}</p></div><ModelNamePicker :model-value="drafts[field.path]!.text" :names="modelCatalog.routes.find(route => route.id === group.id)?.models ?? []" :disabled="locked || fieldLocked(field.path)" :label="field.label" @update:model-value="value => editField(field, value)" @select="value => selectModel(group.index, value)" /></div><FileFieldEditor v-else :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" /></template>
           <ElAlert v-for="message in Object.entries(fieldErrors).filter(([path, value]) => path.startsWith(`/models/${group.index}/`) && value).map(([, value]) => value)" :key="message" :title="message" type="error" :closable="false" />
         </ElCard>
         <ElCard v-for="collection in modelMode ? [] : view.collections" :key="collection.path" shadow="never"><h3>{{ collection.label }} · {{ view.collectionSizes[collection.path] ?? 0 }} / {{ collection.maximum }}</h3>
