@@ -7,13 +7,19 @@ import java.util.List;
  * 模块明确声明文件表单、语义校验和无外部副作用的应用确认，不自动暴露所有 FileConfig。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：分别说明通用类型检查和模块专用语义预检的边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 public interface IFileSettingsAdapter {
+    /** @return 本适配器实际完成的预检范围说明 */
+    default String validationNote() {
+        return "原格式、环境占位符、字段及模块语义预检通过；尚未保存或应用。";
+    }
+
     /** @return 中文职责名 */
     String name();
     /** @return 原固定 FileConfig 类型 */

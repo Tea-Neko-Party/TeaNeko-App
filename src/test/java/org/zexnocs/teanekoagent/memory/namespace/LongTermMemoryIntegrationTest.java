@@ -47,11 +47,14 @@ import static org.mockito.Mockito.*;
 /**
  * 复用事务夹具检验从真实发言到长期画像、召回和本人维护的完整闭环。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：验证长期生成器保留宿主配置的更小输出上限。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.6.1-l
+ * @version 4.7.2-l
  */
 @Timeout(25)
 class LongTermMemoryIntegrationTest {
@@ -247,7 +250,10 @@ class LongTermMemoryIntegrationTest {
             }
         }
     }
-    /** 实际学习适配器保持统一门控与无工具请求，严格拒绝模型额外字段，释放自有实例。 */
+    /**
+     * 实际学习适配器保持统一门控与无工具请求，严格拒绝模型额外字段，释放自有实例。
+     * 2026/11/04：验证统一预算不扩大宿主模型的输出配置。
+     */
     @Test void usesGuardedModelAdapterAndStrictCandidateSchema() {
         try (var h = new Harness(); var registry = new AgentRegistry(); var control = ExecutionControl.create()) {
             h.medium("我喜欢喝茶"); var batch = h.claim();
@@ -260,7 +266,8 @@ class LongTermMemoryIntegrationTest {
             when(interactions.interact(any(), any(), any(), any(), any())).thenAnswer(call -> {
                 org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt prompt = call.getArgument(0);
                 assertTrue(Objects.requireNonNull(prompt.getOptions().getTools()).isEmpty());
-                assertEquals(3072, prompt.getOptions().getMaxTokens());
+                // 2026/11/04：整理不再硬限 3072，模型配置为 4096 时保留该更小上限。
+                assertEquals(4096, prompt.getOptions().getMaxTokens());
                 var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(output.get()).build()).build();
                 return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(answer), answer, List.of(), List.of(), Map.of()));
             });

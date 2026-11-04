@@ -2,6 +2,7 @@
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
+import DetailPanel from './DetailPanel.vue'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 
 interface Catalog { targetName: string; state: { state: string; connection: string; explanation: string }; commands: { usage: string; description: string; sendsMessages: boolean }[]; observedAt: string }
@@ -115,9 +116,10 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); original.value = 
 </script>
 
 <template>
+  <!-- 2026/11/04：收起常驻长说明，实际发送标记与操作回执保持可见。 -->
   <div class="command-console">
     <div class="section-title"><h2>{{ target.name }}</h2><ElButton :disabled="busy" @click="emit('selectTarget')">选择其他聊天</ElButton></div>
-    <ElAlert title="这是 TeaNeko 注册命令的管理入口。执行者是网页管理操作者，不是所选群的成员；原命令权限、客户端范围及平台状态仍会校验。" type="info" :closable="false" />
+    <DetailPanel title="指令台说明"><p>以网页管理员身份执行 TeaNeko 命令，继续检查原命令权限和平台连接。标注“会向真实聊天发送”的命令会产生外部消息。</p></DetailPanel>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElCard v-if="catalog" shadow="never" class="runtime-card"><div class="editor-heading"><h3>当前目标 · {{ catalog.targetName }}</h3><ElTag :type="catalog.state.state === 'READY' ? 'success' : 'warning'">{{ states[catalog.state.state] ?? catalog.state.state }}</ElTag></div><p>{{ catalog.state.explanation }}</p><p class="small muted">目录时刻：{{ new Date(catalog.observedAt).toLocaleString('zh-CN') }}；新受理需使用五分钟内的目录。下方最多显示 100 个明确声明的管理方法，最终仍按当前权限和作用域校验。</p><ElButton :disabled="locked" @click="run(load)">刷新目录与连接</ElButton></ElCard>
     <ElCard shadow="never" class="runtime-card"><h3>命令及用法</h3><ElEmpty v-if="catalog && !catalog.commands.length" description="没有已开放的管理命令；请检查本机 console-prefixes 与方法声明" />

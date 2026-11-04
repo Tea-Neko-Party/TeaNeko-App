@@ -17,11 +17,12 @@ import java.util.concurrent.CompletionStage;
  * 按平台、账号和聊天引用路由，不接受浏览器提交真实 scope、身份或存储类型。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：按真实目标查询适用配置目录，浏览器不提供内部命名空间。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @RestController
 @RequestMapping("/api/v1")
@@ -103,6 +104,21 @@ public final class ChatSettingsController {
     @GetMapping("/settings/sections")
     public List<ChatSettings.Section> sections(HttpServletRequest request, Authentication authentication) {
         return settings.sections(sessions.capture(request, authentication));
+    }
+
+    /**
+     * @param client 已注册平台
+     * @param account 原账号引用
+     * @param target 原聊天引用
+     * @param request 原请求
+     * @param authentication 真实管理员
+     * @return 此目标可登记和编辑的配置目录
+     */
+    @GetMapping("/clients/{client}/accounts/{account}/targets/{target}/settings")
+    public CompletionStage<List<ChatSettings.Section>> targetSections(@PathVariable String client,
+            @PathVariable String account, @PathVariable String target,
+            HttpServletRequest request, Authentication authentication) {
+        return settings.sections(client, account, target, sessions.capture(request, authentication));
     }
 
     /**

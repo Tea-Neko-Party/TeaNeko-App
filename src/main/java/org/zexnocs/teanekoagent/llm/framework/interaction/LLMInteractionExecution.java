@@ -32,10 +32,14 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ÿ������Ԥ��ģ�������ı��������������ȣ����Զ�����������ޡ�
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  * @see LLMCallLimits
  */
 public final class LLMInteractionExecution implements AutoCloseable {
@@ -170,6 +174,16 @@ public final class LLMInteractionExecution implements AutoCloseable {
                     prepared.setTools(options.getTools());
                     prepared.setToolChoice(options.getToolChoice());
                     estimate = Objects.requireNonNull(tokenEstimator.estimate(new LLMPrompt(messages, prepared)), "token 估算不能为空。");
+                }
+                // 2026/11/04：未设总配额也须执行模型上下文准入，拒绝发生在计次和外部请求之前。
+                if (prepared.findContextWindow().isPresent()) {
+                    if (estimate == null) {
+                        boolean preview = remaining(MODEL_REQUESTS) > 1 && remaining(TOOL_ROUNDS) > 0
+                                && remaining(TOOL_EXECUTIONS) > 0 && !tools.definitions().isEmpty();
+                        prepared.setTools(preview ? tools.definitions() : List.of());
+                        estimate = tokenEstimator.estimate(new LLMPrompt(messages, prepared));
+                    }
+                    prepared.findContextWindow().orElseThrow().requireFits(estimate.inputTokens(), prepared.getMaxTokens());
                 }
                 var effective = prepared;
                 var inputEstimate = estimate;

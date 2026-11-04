@@ -28,10 +28,14 @@ import java.util.concurrent.ScheduledExecutorService;
  * <br>2026/11/02：默认分层摘要启用时停用旧内存生成，避免重复消耗同一段聊天。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ȡ��ժҪĬ���� token ��ֻ��ȡ��ʽԤ�㡣
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.6.1-l
+ * @version 4.7.2-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentSummaryConfig {
@@ -67,7 +71,8 @@ public class AgentSummaryConfig {
                     environment.getProperty("tea-neko.agent.summary.max-input-bytes", Long.class, 131072L),
                     environment.getProperty("tea-neko.agent.summary.max-characters", Integer.class, 4000),
                     environment.getProperty("tea-neko.agent.summary.max-model-calls", Integer.class, 1),
-                    environment.getProperty("tea-neko.agent.summary.max-total-tokens", Long.class, 16384L),
+                    // 2026/11/04：只保留管理员显式声明的总 token 预算。
+                    environment.getProperty("tea-neko.agent.summary.max-total-tokens", Long.class),
                     Duration.ofSeconds(environment.getProperty("tea-neko.agent.summary.timeout-seconds", Long.class, 45L)),
                     Duration.ofSeconds(environment.getProperty("tea-neko.agent.summary.cooldown-seconds", Long.class, 60L)));
         }, mapper, executor, scheduler, Clock.systemUTC(), usage -> logger.info("Agent 摘要", "后台摘要结束，状态=" + usage.status()

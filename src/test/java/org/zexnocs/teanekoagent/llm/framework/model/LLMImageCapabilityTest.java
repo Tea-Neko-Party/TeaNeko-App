@@ -38,10 +38,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04���Ӿ�ģ�ͼо��������������������ѽ���������ȡƾ�ݡ�
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMImageCapabilityTest {
     private static final List<BiFunction<IAPIResponseService, ICredentialResolver, AbstractLLMModel>> MODELS = List.of(
@@ -135,7 +139,8 @@ class LLMImageCapabilityTest {
     void modelServiceValidatesTheEffectiveFileAndPromptModel() {
         var api = mock(IAPIResponseService.class);
         var credentials = mock(ICredentialResolver.class);
-        when(credentials.require("deepseek")).thenReturn(new LLMProviderAccess("fake-key", null, null));
+        // 2026/11/04：实际请求携带已解析参数读取同一代次凭据。
+        when(credentials.require(eq("deepseek"), any())).thenReturn(new LLMProviderAccess("fake-key", null, null));
         doAnswer(invocation -> new TaskFuture<>(mock(ILogger.class), "fake-http", new CompletableFuture<>()))
                 .when(api).addTask(any(), any(), eq(true), eq(true));
         var model = new DeepSeekChatModel(api, credentials);
@@ -147,6 +152,9 @@ class LLMImageCapabilityTest {
         var entry = new LLMModelFileConfigParameter();
         entry.setId("deepseek");
         entry.setModel("deepseek-v4-pro");
+        // 2026/11/04：视觉测试模型显式声明上下文与输出容量。
+        entry.setMaxTokens(2048);
+        entry.setContextWindowTokens(131072L);
         var config = new LLMModelFileConfig();
         config.setModels(List.of(entry));
         when(files.get(LLMModelFileConfig.class)).thenReturn(config);

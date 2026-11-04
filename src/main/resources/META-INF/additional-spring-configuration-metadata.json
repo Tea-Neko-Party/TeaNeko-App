@@ -11,6 +11,12 @@
   ],
   "properties": [
     {
+      "name": "tea-neko.web.frontend.port",
+      "type": "java.lang.Integer",
+      "defaultValue": 5173,
+      "description": "本机 Vite HTTPS/WSS 开发端口，仅在 web-dev 或单独启动 Vite 时使用，与后端端口分别监听。"
+    },
+    {
       "name": "tea-neko.agent.memory.maintenance.enabled",
       "type": "java.lang.Boolean",
       "defaultValue": true,

@@ -3,12 +3,14 @@ package org.zexnocs.teanekoclient.onebot.core;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
+import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekoapp.web.client.TeaNekoClientManagement;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -17,15 +19,28 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：指令台使用原账号确认及固定连接能力，状态限制继续生效。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：为真实聊天声明通用及 OneBot 专用配置的适用范围。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Component
 @TeaNekoClientManagement(OnebotTeaNekoClient.ID)
 public final class OnebotManagementAdapter implements IClientManagementAdapter {
+    /**
+     * 2026/11/04：复用平台原命名空间，通用配置与平台专用配置仍按真实目标限制。
+     * @param target 原目录解析的群聊或私聊
+     * @return 当前目标可使用的命名空间
+     */
+    @Override
+    public Set<String> configNamespaces(ChatTargets.Resolved target) {
+        return Set.of(TeaNekoConfigNamespaces.GENERAL,
+                target.kind().equals("GROUP") ? TeaNekoConfigNamespaces.GROUP : TeaNekoConfigNamespaces.PRIVATE,
+                target.kind().equals("GROUP") ? OnebotTeaNekoClient.GROUP_NAMESPACE : OnebotTeaNekoClient.PRIVATE_NAMESPACE);
+    }
+
     private @org.jspecify.annotations.Nullable OnebotConsoleBridge console;
 
     /**

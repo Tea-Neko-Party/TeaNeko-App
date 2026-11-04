@@ -9,13 +9,19 @@ import java.util.concurrent.CompletionStage;
  * 业务模块贡献中文字段及专用只读绑定，通用 Web 不反射选择存储类型或扩权。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：区分既有文本字段与通用 JSON 字段的写入协议。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 public interface IChatSettingsSection {
+    /** @return 是否通过完整 JSON 值协议提交字段，旧专用适配器默认保留文本协议 */
+    default boolean jsonValues() {
+        return false;
+    }
+
     /** @return 人可理解的业务名称 */
     String name();
 

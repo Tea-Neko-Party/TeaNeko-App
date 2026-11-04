@@ -15,6 +15,7 @@ import org.zexnocs.teanekoagent.agent.monitor.AgentRuntimeMonitor.Delivery;
 import org.zexnocs.teanekoagent.agent.trigger.AgentTriggerGate;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 
@@ -31,12 +32,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 将真实旁观消息及原 Core Timer 转为自主候选，定时状态只保存未来发生，不补跑旧任务。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Service
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "agent.proactive", categoryName = "Agent 主动活动", name = "自主候选扫描",
+        description = "定期扫描已确认目标，实际候选继续受原权限、预算与冷却约束。", controllable = false)
 public final class ProactiveCoordinator implements AutoCloseable {
     private final IConfigDataService configs;
     private final AgentScopeConfigManager manager;

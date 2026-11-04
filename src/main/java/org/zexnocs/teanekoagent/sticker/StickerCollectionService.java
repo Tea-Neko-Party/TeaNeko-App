@@ -8,6 +8,7 @@ import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
@@ -28,11 +29,16 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.6.2-l
+ * @version 4.7.1-l
  */
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "agent.stickers", categoryName = "Agent 素材", name = "表情包后台整理",
+        description = "按原租约处理采集、分析与文件回收，不阻塞普通聊天。", controllable = false)
 public final class StickerCollectionService implements AutoCloseable {
     private final StickerLibrary library;
     private final StickerExtensionRegistry registry;

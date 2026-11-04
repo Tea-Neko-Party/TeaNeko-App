@@ -6,7 +6,7 @@
 
 1. 准备 MySQL 与 Java 25。按实际环境配置 Spring datasource、账号及连接地址；默认驱动为 MySQL Connector/J，不把 JDBC URL 类型与其他数据库混用。
 2. 首次安装执行 `./gradlew copyTemplatesToConfig`，根据模板创建本地 config。已有部署先备份配置，核对复制任务的覆盖范围，不用模板覆盖真实凭据。
-3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、api-key、连接与 metadata，可使用 `${环境变量:默认值}`。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
+3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、max-tokens、真实 context-window-tokens、api-key、连接与 metadata；context-input-ratio 默认 0.8，可使用 `${环境变量:默认值}`。已有模型条目须补充容量声明，缺失时选定模型拒绝就绪。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
 4. 核对活动 Profile。当前 application 默认通过 springProfile 取 dev；生产启动须显式选择 prod 或实际部署 Profile，配置数据库及网络边界。启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
 5. 执行 `./gradlew bootJar`，以 `java -jar build/libs/TeaNeko-App-<实际版本>.jar --spring.profiles.active=prod` 启动。普通 plain.jar 不是可执行部署包。Spring 及客户端启动日志不得泄漏凭据。
 6. 在真实作用域执行 `/cfg reg agent`，再用 `/agent status` 检查登记；默认最低被动模式。先验证 `/agent chat 你好`，再按[平台说明](../../src/main/java/org/zexnocs/teanekoagent/adapter/platform/README.md)启用自动图文或 ACTIVE 候选。命令工具保持默认关闭，确需启用时由 OWNER 操作。

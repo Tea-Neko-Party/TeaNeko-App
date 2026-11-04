@@ -48,10 +48,14 @@ import java.util.stream.Collectors;
  * 同会话只运行一个、全局最多两个；容量不足不排队，所有来源由宿主固定。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04���˸��ѡ�����̳�ģ�������ȣ�������ʽ��Ԥ��ܾ���
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 public final class PersonalityLearningService implements IAgentPersonalityLearning, AutoCloseable {
     private final AgentAccessGate gate;
@@ -144,7 +148,9 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
                     .thenComposeAsync(fields -> {
                         if (fields.isEmpty()) { return CompletableFuture.completedStage(Outcome.SKIPPED); }
                         var runtime = result.access().flatMap(AgentAccessDecision::runtime).orElseThrow(); var options = runtime.modelOptions().toOptions();
-                        options.setMaxTokens(Math.min(options.findMaxTokens().orElse(512), 512)); options.setTools(List.of()); options.setToolChoice("none");
+                        // 2026/11/04：人格候选继承模型输出额度，完整性及字段容量仍由候选校验负责。
+                        options.setTools(List.of());
+                        options.setToolChoice("none");
                         var input = new LLMPrompt(prompt(request, result, fields), options, LLMOptionsPolicy.RESOLVED);
                         if (new LLMMessageCodec(mapper).signature(input.getMessages()).bytes() > policy.maxInputBytes()) { return CompletableFuture.completedStage(Outcome.SKIPPED); }
                         var context = new ToolInvocationContext(control.id(), new Entity(EntityId.random()).snapshot(), control);

@@ -5,12 +5,11 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
-import org.zexnocs.teanekocore.utils.ObjectFieldUtil;
+import org.zexnocs.teanekocore.framework.config.ConfigSchema;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
-import java.lang.reflect.Modifier;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -22,11 +21,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * 在原 EasyData 事务内统一配置版本、字段合并及幂等审计，不在网页先读后写。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：支持继承、别名及泛型字段，并分离文本与 JSON 值的事务编码。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Service
 public final class ConfigEditService {
@@ -91,12 +91,42 @@ public final class ConfigEditService {
      */
     public CompletionStage<ConfigEdits.Receipt> change(ConfigManager manager, String key, String actor,
                                                      ConfigEdits.Change change, Runnable guard) {
+        // 2026/11/04：旧文本调用保留原有 String 及 JSON 标量语义。
+        return change(manager, key, actor, change, guard, false);
+    }
+
+    /**
+     * @param manager 固定配置管理器
+     * @param key 已解析的真实目标
+     * @param actor 原受信操作者
+     * @param change 每个字段均使用完整 JSON 值的请求
+     * @param guard 实际提交前授权
+     * @return 包含空值、枚举和复杂类型校验的真实事务回执
+     */
+    public CompletionStage<ConfigEdits.Receipt> changeJson(ConfigManager manager, String key, String actor,
+            ConfigEdits.Change change, Runnable guard) {
+        return change(manager, key, actor, change, guard, true);
+    }
+
+    /**
+     * @param manager 固定管理器
+     * @param key 实际键
+     * @param actor 受信操作者
+     * @param change 原版本和字段请求
+     * @param guard 提交守卫
+     * @param jsonValues 是否使用明确的 JSON 值协议
+     * @return 原事务结果，编码方式参与幂等仲裁
+     */
+    private CompletionStage<ConfigEdits.Receipt> change(ConfigManager manager, String key, String actor,
+            ConfigEdits.Change change, Runnable guard, boolean jsonValues) {
         if (actor.isBlank() || actor.length() > 128 || key.isBlank() || key.length() > 256) {
             throw new IllegalArgumentException("配置操作者或目标无效。");
         }
         String actorDigest = StableDigest.sha256(actor);
-        String digest = StableDigest.sha256(key, change.expectedRevision(), change.action().name(),
+        String textDigest = StableDigest.sha256(key, change.expectedRevision(), change.action().name(),
                 mapper.writeValueAsString(new TreeMap<>(change.fields())));
+        // 2026/11/04：保留原文本请求摘要，既有保留期内回执仍可重放。
+        String digest = jsonValues ? StableDigest.sha256("JSON", textDigest) : textDigest;
         return run(manager, () -> {
             guard.run();
             var journalDto = data.getEasyDataFor(manager.storage(), "config.management.v1", manager.value()).atomic();
@@ -143,22 +173,36 @@ public final class ConfigEditService {
                         throw new ConfigEditConflictException();
                     }
                     var node = (ObjectNode) mapper.readTree(row.getValue());
-                    Object value = mapper.readValue(row.getValue(), manager.configType());
+                    var schema = new ConfigSchema(mapper, manager.configType());
+                    var defaultValues = jsonValues ? mapper.readTree(defaults(manager)) : null;
                     var checker = checkers.get(manager.fieldChecker());
                     for (var field : change.fields().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
-                        var declared = manager.configType().getDeclaredField(field.getKey());
-                        if (Modifier.isStatic(declared.getModifiers()) || Modifier.isFinal(declared.getModifiers())) {
+                        var declared = schema.require(field.getKey());
+                        if (!declared.editable()) {
                             throw new IllegalArgumentException("该配置字段不可写。");
                         }
+                        var parsed = !jsonValues && declared.type().hasRawClass(String.class)
+                                ? mapper.valueToTree(field.getValue()) : mapper.readTree(field.getValue());
+                        if (jsonValues) {
+                            ConfigSchema.validateValue(declared, parsed);
+                            if (parsed.isNull() && !declared.nullable()
+                                    && defaultValues != null && defaultValues.hasNonNull(declared.jsonName())) {
+                                throw new IllegalArgumentException("该配置字段没有声明允许空值。");
+                            }
+                        }
                         if (checker != null) {
-                            String invalid = checker.isValid(field.getKey(), field.getValue());
+                            String invalid = jsonValues ? checker.isValidJson(field.getKey(), parsed)
+                                    : checker.isValid(field.getKey(), field.getValue());
                             if (invalid != null) {
                                 throw new IllegalArgumentException(invalid);
                             }
                         }
-                        ObjectFieldUtil.Instance.setFieldValue(mapper, value, field.getKey(), field.getValue());
-                        node.set(field.getKey(), mapper.valueToTree(value).get(field.getKey()));
+                        Object typed = mapper.treeToValue(parsed, declared.type());
+                        declared.aliases().forEach(node::remove);
+                        node.set(declared.jsonName(), mapper.valueToTree(typed));
                     }
+                    // 2026/11/04：完整绑定保留构造器和 setter 合同；未知的其他字段仍在原树中保留。
+                    mapper.treeToValue(node, manager.configType());
                     guard.run();
                     row.setValue(mapper.writeValueAsString(node));
                     dto.save(row);

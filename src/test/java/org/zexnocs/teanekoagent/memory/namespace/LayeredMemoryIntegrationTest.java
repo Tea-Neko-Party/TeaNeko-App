@@ -32,14 +32,48 @@ import static org.mockito.Mockito.*;
 /**
  * 复用真实 EasyData 事务夹具验证短期采集、中期租约、恢复与迟到提交，外部模型不启动。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：验证结构化失败原因不泄漏原文，失败保留原消息并按租约退避。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.1-l
+ * @version 4.7.1-l
  */
 @Timeout(20)
 class LayeredMemoryIntegrationTest {
+    /**
+     * 后台模型失败保留实际终止状态，不记录包装异常中的私密原文。
+     */
+    @Test
+    void reportsSafeModelFailureWithoutAdvancingMemory() {
+        try (var harness = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
+            for (int i = 1; i <= 8; i++) {
+                harness.append(i);
+            }
+            var references = mock(IAgentMemoryReferences.class);
+            when(references.verify(reference)).thenReturn(CompletableFuture.completedStage(null));
+            var logger = mock(ILogger.class);
+            var failure = new CompletionException("不得输出的私密原文", new MemoryProcessingException(
+                    MemoryProcessingException.Reason.MODEL_RESULT,
+                    org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.TIMED_OUT));
+            try (var processor = new LayeredMemoryProcessor(harness.layers,
+                    (batch, control) -> CompletableFuture.failedStage(failure), references, () -> settings,
+                    ignored -> new LayeredMemoryPolicy(true, true, true), Runnable::run, timers,
+                    Clock.fixed(now, ZoneOffset.UTC), logger)) {
+                processor.drain().toCompletableFuture().join();
+                var message = org.mockito.ArgumentCaptor.forClass(String.class);
+                verify(logger).warn(eq("Agent 分层记忆"), message.capture());
+                assertTrue(message.getValue().contains("中期模型生成"));
+                assertTrue(message.getValue().contains("MODEL_RESULT"));
+                assertTrue(message.getValue().contains("TIMED_OUT"));
+                assertFalse(message.getValue().contains("不得输出"));
+                var view = harness.layers.read(reference, now, settings.retention()).toCompletableFuture().join();
+                assertEquals(0, view.compressedThrough());
+                assertEquals(8, view.recent().size());
+            }
+        }
+    }
+
     private final Instant now = Instant.parse("2026-11-02T00:00:00Z");
     private final AgentScope scope = new AgentScope("test", "群甲");
     private final MemoryNamespaceReference reference = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);

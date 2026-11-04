@@ -49,10 +49,14 @@ import static org.mockito.Mockito.*;
  * 集中验证真实会话、LLM 交互及后台摘要的生成、采用、失败和代次失效，不重复测试普通数据结构。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ʹ�ÿ�ѡ��ʽԤ����Լ��֤ժҪ�����볬ʱ��
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 @Timeout(20)
 class AgentSummaryIntegrationTest {
@@ -60,11 +64,13 @@ class AgentSummaryIntegrationTest {
     /**
      * 使用真实执行器和 LLM 循环，仅替换模型传输与已测试的配置/引用端口。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：摘要夹具使用可空显式总预算契约。
+     * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
      *
      * @author zExNocs
      * @date 2026/10/30
      * @since 4.5.0-l
-     * @version 4.5.0-l
+     * @version 4.7.2-l
      */
     private final class Harness implements AutoCloseable {
         final ObjectMapper mapper = new ObjectMapper();
@@ -79,7 +85,8 @@ class AgentSummaryIntegrationTest {
         final AtomicBoolean enabled = new AtomicBoolean(true);
         final AtomicReference<String> personalityId = new AtomicReference<>("原人格");
         final ConcurrentMap<AgentScope, Long> revisions = new ConcurrentHashMap<>();
-        final AtomicReference<AgentSummarySettings> settings = new AtomicReference<>(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096, Duration.ofSeconds(5), Duration.ZERO));
+        // 2026/11/04：测试显式声明整轮总预算，默认模型额度不再被业务缩小。
+        final AtomicReference<AgentSummarySettings> settings = new AtomicReference<>(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096L, Duration.ofSeconds(5), Duration.ZERO));
         final AgentConversationSummaryService summaries;
         final AgentService turns;
         final AgentConversationService mailbox;
@@ -211,10 +218,11 @@ class AgentSummaryIntegrationTest {
      */
     @Test void backgroundTimeoutAndOwnerCloseReleaseWork() throws Exception {
         try (var h = new Harness()) {
-            h.settings.set(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096, Duration.ofMillis(200), Duration.ZERO));
+            // 2026/11/04：显式总预算使用可空 Long 契约，超时测试仍保留原额度。
+            h.settings.set(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096L, Duration.ofMillis(200), Duration.ZERO));
             h.run("一"); h.run("二"); assertEquals(AgentRunResult.Status.SUCCESS, h.run("三").getValue().status()); h.awaitSummary();
             assertFalse(h.awaitUsage().accepted());
-            h.settings.set(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096, Duration.ofSeconds(5), Duration.ZERO));
+            h.settings.set(new AgentSummarySettings(true, 3, 1, Long.MAX_VALUE, 65536, 1000, 1, 4096L, Duration.ofSeconds(5), Duration.ZERO));
             assertEquals(AgentRunResult.Status.SUCCESS, h.run("四").getValue().status()); h.awaitSummary(); h.handle.close();
             assertFalse(h.awaitUsage().accepted());
         }

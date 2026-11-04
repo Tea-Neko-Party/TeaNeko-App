@@ -6,10 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMOptionBoundary;
+import org.zexnocs.teanekoagent.llm.framework.model.*;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 
@@ -21,18 +18,23 @@ import java.util.Optional;
 /**
  * 单个大语言模型适配器的文件配置项。
  * <br>用于把 YAML 中的默认调用参数转换为统一的 {@link LLMModelOptions}。
+ * <br>2026/11/04：显式声明模型上下文容量，输入比例默认百分之八十，输出额度统一取本配置。
  * <br>新增一个供应商适配器时，通常只需要在 {@code models} 列表中添加一项：
  * <pre>{@code
  * models:
  *   - id: "deepseek"
  *     model: "deepseek-v4-flash"
  *     max-tokens: 2048
+ *     context-window-tokens: "${MODEL_CONTEXT_WINDOW_TOKENS}"
+ *     context-input-ratio: 0.8
  * }</pre>
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.4.0
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 @Getter
 @Setter
@@ -94,6 +96,14 @@ public class LLMModelFileConfigParameter {
      */
     @Nullable
     private Integer maxTokens;
+
+    /** 2026/11/04：部署模型的真实上下文总容量，不能从模型名称推测。 */
+    @Nullable
+    private Long contextWindowTokens;
+
+    /** 2026/11/04：输入占上下文的最大比例，未填写时使用百分之八十。 */
+    @Nullable
+    private Double contextInputRatio;
 
     /**
      * 频率惩罚值。
@@ -180,7 +190,14 @@ public class LLMModelFileConfigParameter {
      * @return 合并后的模型调用参数
      * @throws LLMConfigurationException 当模型路由、凭据或本地配置不满足调用边界时
      */
-    public LLMModelOptions toOptions(ILLMModelOptions baseOptions) {
+    public LLMModelOptions toOptions(@Nullable ILLMModelOptions baseOptions) {
+        // 2026/11/04：选定模型必须提供完整容量声明，禁止回退为隐含输出常量。
+        if (maxTokens == null || maxTokens < 1 || contextWindowTokens == null) {
+            throw new LLMConfigurationException("模型配置必须填写正数 max-tokens 和 context-window-tokens。");
+        }
+        var context = new LLMContextWindow(contextWindowTokens,
+                contextInputRatio == null ? LLMContextWindow.DEFAULT_INPUT_RATIO : contextInputRatio);
+        context.maxInputTokens(maxTokens);
         LLMOptionBoundary.validateMetadata(metadata);
         if (metadata != null && metadata.keySet().stream().anyMatch(key ->
                 key != null && switch (key.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z0-9]", "")) {
@@ -202,6 +219,7 @@ public class LLMModelFileConfigParameter {
                 .model(blankToNull(model))
                 .thinking(thinking)
                 .maxTokens(maxTokens)
+                .contextWindow(context)
                 .frequencyPenalty(frequencyPenalty)
                 .temperature(temperature)
                 .topP(topP)

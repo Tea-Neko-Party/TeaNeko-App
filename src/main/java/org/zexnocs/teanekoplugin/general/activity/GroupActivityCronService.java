@@ -6,6 +6,7 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
 import org.zexnocs.teanekocore.database.configdata.exception.ConfigDataNotFoundException;
@@ -19,12 +20,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * 活跃度定时器服务。
  * <br>用于存储定时器，并在启动时加载所有的定时器缓存。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/03/18
  * @since 4.3.4
+ * @version 4.7.1-l
  */
 @RequiredArgsConstructor
 @Service
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "群活跃度定时扫描",
+        description = "按各聊天原 cron 扫描活跃度，已发起的异步业务继续执行。")
 public class GroupActivityCronService {
 
     /// scope ID → cron timer

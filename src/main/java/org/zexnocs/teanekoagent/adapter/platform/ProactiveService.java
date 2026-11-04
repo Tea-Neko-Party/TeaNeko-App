@@ -21,7 +21,6 @@ import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
@@ -46,10 +45,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04���������Լ̳�ģ�������ȣ�����������ʱ�޲��Ƴ����� token ��
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.6.2-l
+ * @version 4.7.2-l
  */
 @Service
 public final class ProactiveService implements AutoCloseable {
@@ -154,7 +157,8 @@ public final class ProactiveService implements AutoCloseable {
             }
         } catch (RuntimeException failure) { jobs.release(); return CompletableFuture.completedFuture(Delivery.FAILED); }
         ExecutionControl control;
-        try { control = ExecutionControl.withDeadline(new LLMCallLimits(1, 0, 0, 16_384L).newBudget(), clock.instant().plusSeconds(30), clock, scheduler); }
+        // 2026/11/04：取消隐含总 token 配额，实际请求按模型上下文能力准入。
+        try { control = ExecutionControl.withDeadline(new LLMCallLimits(1, 0, 0).newBudget(), clock.instant().plusSeconds(30), clock, scheduler); }
         catch (RuntimeException failure) { triggers.finish(ticket, false); jobs.release(); return CompletableFuture.completedFuture(Delivery.FAILED); }
         synchronized (active) { active.put(control.id(), control); if (closed) { control.cancel(); } }
         var delivered = new AtomicBoolean();
@@ -299,13 +303,13 @@ public final class ProactiveService implements AutoCloseable {
     }
 
     /**
-     * 只创建无工具、无命令的独立实例，模型输出请求上限为384。
+     * 2026/11/04：只创建无工具、无命令的独立实例，输出额度继承实际模型配置。
      * @return 当前自主实例
      */
     private synchronized AgentHandle instance() {
         if (closed) { throw new IllegalStateException("自主服务已关闭。"); }
         if (handle == null || handle.isClosed()) { handle = factory.create(new AgentDefinition("agent-proactive",
-                new LLMModelOptionsSnapshot(LLMModelOptions.builder().maxTokens(384).build()), Set.of(AgentActivity.PROACTIVE))); } return handle;
+                new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.PROACTIVE))); } return handle;
     }
 
     /** 取消本服务的独立控制并释放自有实例，不关闭任何共享执行器。 */

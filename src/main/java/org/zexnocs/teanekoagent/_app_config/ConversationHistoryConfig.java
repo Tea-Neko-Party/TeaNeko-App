@@ -14,6 +14,7 @@ import org.zexnocs.teanekoagent.agent.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.history.ConversationHistoryService;
 import org.zexnocs.teanekoagent.history.IConversationHistory;
 import org.zexnocs.teanekoagent.history.IHistoryStore;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
@@ -27,11 +28,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 历史组合根，默认构造无 I/O；清理使用既有调度器并限制同时一个批次。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：将原历史清理任务纳入记忆分类，只读展示。
  *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Configuration(proxyBeanMethods = false)
 public class ConversationHistoryConfig {
@@ -73,12 +75,16 @@ public class ConversationHistoryConfig {
     /**
      * 复用 Spring 已有定时设施，每次清理一百行，失败只记固定原因。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：声明历史清理分类，网页不控制原清理生命周期。
      *
      * @author zExNocs
      * @date 2026/10/30
      * @since 4.5.0-l
-     * @version 4.5.0-l
+     * @version 4.7.1-l
      */
+    // 2026/11/04：元数据从实际 Spring 方法的所属类型读取。
+    @TimerDisplay(category = "agent.memory", categoryName = "Agent 记忆", name = "会话历史清理",
+            description = "按原保留规则有界清理历史，异步事务完成情况仍由原存储服务确认。", controllable = false)
     public static final class Cleanup {
         private final IHistoryStore store;
         private final ILogger logger;

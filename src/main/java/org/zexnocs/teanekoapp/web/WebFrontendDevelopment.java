@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.logger.ILogger;
 
@@ -20,6 +21,7 @@ import java.util.concurrent.TimeUnit;
  *
  * 修改记录：<br>
  * 2026/11/04：提供前后端联合开发启动，直接运行 Node，避免 npm 命令包装进程滞留。
+ * <br>2026/11/04：向 Vite 传递实际后端端口和统一配置的前端端口。
  *
  * @author zExNocs
  * @date 2026/11/04
@@ -31,17 +33,25 @@ import java.util.concurrent.TimeUnit;
 public final class WebFrontendDevelopment implements DisposableBean {
     private final Path directory;
     private final ILogger logger;
+    private final Environment environment;
+    private final int port;
     private @Nullable Process frontend;
 
     /**
      * 固定本实例使用的前端目录和日志入口。
+     * 2026/11/04：使用 Spring 环境读取实际监听端口，支持 Profile 和启动参数覆盖。
      *
      * @param workingDirectory 应用工作目录，应为项目根目录
      * @param logger 宿主日志
+     * @param environment 当前生效的 Spring 环境
+     * @param port 本机前端开发端口
      */
-    public WebFrontendDevelopment(@Value("${user.dir}") String workingDirectory, ILogger logger) {
+    public WebFrontendDevelopment(@Value("${user.dir}") String workingDirectory, ILogger logger,
+                                  Environment environment, @Value("${tea-neko.web.frontend.port}") int port) {
         directory = Path.of(workingDirectory).resolve("frontend");
         this.logger = logger;
+        this.environment = environment;
+        this.port = port;
     }
 
     /**
@@ -62,14 +72,21 @@ public final class WebFrontendDevelopment implements DisposableBean {
         }
 
         // 2026/11/04：隔离标准输入，避免与后端争用控制台；输出仍沿用后端终端。
-        Process process = new ProcessBuilder("node", entry.toAbsolutePath().toString(), "--host", "127.0.0.1")
+        // 2026/11/04：就绪事件发生后读取真实端口，避免覆盖配置或随机后端端口时代理指向旧值。
+        int backendPort = environment.getRequiredProperty("local.server.port", Integer.class);
+        if (port < 1 || port > 65535 || port == backendPort) {
+            throw new IllegalStateException("前端开发端口必须为 1 至 65535 的整数，且不能与后端端口相同。");
+        }
+        var launcher = new ProcessBuilder("node", entry.toAbsolutePath().toString(), "--host", "127.0.0.1")
                 .directory(directory.toFile())
                 .redirectOutput(ProcessBuilder.Redirect.INHERIT)
-                .redirectError(ProcessBuilder.Redirect.INHERIT)
-                .start();
+                .redirectError(ProcessBuilder.Redirect.INHERIT);
+        launcher.environment().put("TEANEKO_BACKEND_PORT", Integer.toString(backendPort));
+        launcher.environment().put("TEANEKO_FRONTEND_PORT", Integer.toString(port));
+        Process process = launcher.start();
         frontend = process;
         process.onExit().thenAccept(this::exited);
-        logger.info(getClass().getName(), "已启动前端开发进程，请查看 Vite 输出并访问 https://localhost:5173/console/。");
+        logger.info(getClass().getName(), "已启动前端开发进程，请查看 Vite 输出并访问 https://localhost:" + port + "/console/。");
     }
 
     /**

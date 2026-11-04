@@ -111,10 +111,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：验证主动发言继承模型完整输出额度并保留系统身份隔离。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.6.2-l
+ * @version 4.7.2-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -843,7 +847,8 @@ class AgentCommandIntegrationTest {
                 try (coordinator) {
                     assertTrue(receiver.receive(source).toCompletableFuture().get(10, TimeUnit.SECONDS));
                     assertEquals(1, h.prompts.size()); assertTrue(h.prompts.getFirst().getOptions().getTools().isEmpty());
-                    assertTrue(h.prompts.getFirst().getOptions().getMaxTokens() <= 384);
+                    // 2026/11/04：主动发言使用离线模型的完整输出额度，不再限制为 384。
+                    assertEquals(1000, h.prompts.getFirst().getOptions().getMaxTokens());
                     var request = org.mockito.ArgumentCaptor.forClass(org.zexnocs.teanekoagent.agent.AgentRunRequest.class);
                     verify(turns).prepare(any(), request.capture(), any());
                     assertEquals(org.zexnocs.teanekoagent.agent.AgentActorContext.Origin.SYSTEM, request.getValue().actor().origin());

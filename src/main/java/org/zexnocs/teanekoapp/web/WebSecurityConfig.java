@@ -28,11 +28,13 @@ import java.util.Set;
  * <br>2026/11/03：网页聊天、成员与认证媒体读写纳入同一安全链。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：机器令牌目录、显式查看与修改沿用原会话及防伪边界。
+ * <br>2026/11/04：独立机器指标仅允许管理会话读取，不开放原 Actuator。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -57,9 +59,19 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/console/", "/console/index.html", "/console/assets/**",
                                 "/api/v1/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        // 2026/11/04：机器令牌使用独立管理员接口，不开放认证根文件下载。
+                        .requestMatchers(HttpMethod.GET, "/api/v1/client-tokens", "/api/v1/client-tokens/operations/*")
+                        .hasRole("WEB_ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/client-tokens/*/reveal",
+                                "/api/v1/client-tokens/*/actions/save", "/api/v1/client-tokens/actions/apply")
+                        .hasRole("WEB_ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/session", "/api/v1/console/overview",
+                                // 2026/11/04：机器观测通过原 HTTPS 与管理会话边界。
+                                "/api/v1/console/machine",
                                 "/api/v1/clients", "/api/v1/settings/sections", "/api/v1/clients/*/accounts",
                                 "/api/v1/clients/*/accounts/*/targets",
+                                // 2026/11/04：目录同样按真实客户端与聊天解析。
+                                "/api/v1/clients/*/accounts/*/targets/*/settings",
                                 "/api/v1/clients/*/accounts/*/targets/*/settings/*",
                                 // 2026/11/03：仅开放注册配置区和原编号回执，不提供任意文件下载。
                                 "/api/v1/file-configs", "/api/v1/file-configs/*", "/api/v1/file-configs/*/operations/*",

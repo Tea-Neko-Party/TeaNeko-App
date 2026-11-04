@@ -24,10 +24,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04���ļ����üо�����ģ�������ĺ����������
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMFileConfigBoundaryTest {
     private final IFileConfigService files = mock(IFileConfigService.class);
@@ -174,6 +178,9 @@ class LLMFileConfigBoundaryTest {
         var entry = new LLMModelFileConfigParameter();
         entry.setId(id);
         entry.setModel(model);
+        // 2026/11/04：离线模型显式提供输出额度与上下文能力。
+        entry.setMaxTokens(2048);
+        entry.setContextWindowTokens(131072L);
         return entry;
     }
 }

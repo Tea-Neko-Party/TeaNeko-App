@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.utils.VersionUtil;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.Command;
@@ -25,15 +26,20 @@ import java.util.concurrent.CompletionStage;
 /**
  * 状态命令，提供系统状态信息查询功能，包括 CPU 使用率、内存使用情况和磁盘使用情况。
  *
+ * <br>2026/11/04：声明系统监测分类，原报警采样任务只读展示。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
 @Command(value = {"/status"},
         permission = CommandPermission.ALL,
         scope = CommandScope.ALL)
+// 2026/11/04：只贡献原监测任务的分类，不开放网页暂停。
+@TimerDisplay(category = "core.maintenance", categoryName = "Core 维护", name = "系统负载监测",
+        description = "原状态命令定期检测 CPU 与内存阈值。", controllable = false)
 public class StatusCommand {
     /// CPU 使用率阈值
     private final static int CPU_THRESHOLD = 80;

@@ -29,9 +29,7 @@ import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.console.ClientConsole;
 import org.zexnocs.teanekoapp.web.console.ClientConsoleService;
 import org.zexnocs.teanekoapp.web.console.WebConsoleCommandController;
-import org.zexnocs.teanekoapp.web.files.FileSettings;
-import org.zexnocs.teanekoapp.web.files.FileSettingsService;
-import org.zexnocs.teanekoapp.web.files.WebFileSettingsController;
+import org.zexnocs.teanekoapp.web.files.*;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsController;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsErrors;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsService;
@@ -40,6 +38,7 @@ import org.zexnocs.teanekoclient.web.WebChatService;
 import org.zexnocs.teanekoclient.web.WebChatStore;
 import org.zexnocs.teanekoclient.web.WebImages;
 import org.zexnocs.teanekocore.database.configdata.ConfigEdits;
+import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -70,13 +69,78 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证启动令牌提示及网页日志隔离。
+ * <br>2026/11/04：验证机器令牌专用路由、空白策略与随机管理员令牌保持。
+ * <br>2026/11/04：机器采样端点通过同一真实管理会话与来源限制。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 新机器入口复用真实会话与防伪链，显式查看禁止缓存且绑定原候选秘密。
+     * @throws Exception 当 MVC 请求执行失败时
+     */
+    @Test
+    void machineTokenRoutesRequireSessionAndCsrf() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            fixture.mvc.perform(fixture.request("/api/v1/client-tokens", false)).andExpect(status().isUnauthorized());
+            var session = fixture.authenticate();
+            String reveal = "/api/v1/client-tokens/onebot/reveal";
+            fixture.mvc.perform(fixture.request(reveal, true).session(session)).andExpect(status().isForbidden());
+            verifyNoInteractions(fixture.machineTokens);
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString()).get("token").asString();
+            when(fixture.machineTokens.reveal(eq("onebot"), any())).thenReturn(
+                    java.util.concurrent.CompletableFuture.completedStage(new MachineTokens.Secret("v1", "machine-only")));
+            var shown = fixture.mvc.perform(fixture.request(reveal, true).session(session).header("X-CSRF-TOKEN", csrf))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(shown)).andExpect(status().isOk())
+                    .andExpect(header().string("Cache-Control", "no-store"))
+                    .andExpect(jsonPath("$.value").value("machine-only"));
+            var id = UUID.randomUUID();
+            when(fixture.machineTokens.save(eq("onebot"), any(), any())).thenAnswer(call -> {
+                MachineTokens.Change change = call.getArgument(1);
+                Runnable guard = call.getArgument(2);
+                guard.run();
+                assertEquals("short", change.value());
+                return java.util.concurrent.CompletableFuture.completedStage(new FileSettings.Receipt(id,
+                        "SAVED", "v2", new FileConfigDocument.Stamp("v1", 1, true),
+                        "已保存，尚未应用", List.of("onebot"), Instant.now(), false));
+            });
+            String body = fixture.mapper.writeValueAsString(Map.of("operationId", id, "expectedRevision", "v1", "action", "SET", "value", "short"));
+            var saved = fixture.mvc.perform(fixture.request("/api/v1/client-tokens/onebot/actions/save", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json").content(body))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(saved)).andExpect(status().isOk()).andExpect(jsonPath("$.status").value("SAVED"));
+        }
+    }
+
+    /**
+     * 机器策略换代撤销旧会话，仍可使用本次启动生成的管理员令牌重新登录。
+     * @throws Exception 当随机令牌文件不可读时
+     */
+    @Test
+    void blankMachinePolicyDoesNotRotateTheGeneratedAdminToken() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            fixture.file.setAdminToken("");
+            assertThrows(BadCredentialsException.class, () -> fixture.credentials.authenticate(
+                    UsernamePasswordAuthenticationToken.unauthenticated("admin", "wrong")));
+            String token = Files.readString(directory.resolve("runtime-admin-token"));
+            var authentication = fixture.credentials.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("admin", token));
+            fixture.file.setMachineTokens(Map.of("onebot", " \t "));
+            assertFalse(fixture.credentials.valid((WebCredentials.Principal) authentication.getPrincipal()));
+            assertTrue(fixture.credentials.machine("onebot", null));
+            assertTrue(fixture.credentials.machine("onebot", "Bearer arbitrary"));
+            assertFalse(fixture.credentials.machine("unknown", null));
+            assertTrue(fixture.credentials.authenticate(UsernamePasswordAuthenticationToken.unauthenticated("admin", token)).isAuthenticated());
+            assertEquals(token, Files.readString(directory.resolve("runtime-admin-token")));
+            fixture.file.setMachineTokens(Map.of("onebot", "a"));
+            assertTrue(fixture.credentials.machine("onebot", "Bearer a"));
+            assertFalse(fixture.credentials.machine("onebot", "Bearer b"));
+        }
+    }
+
     /** 2026/11/03：真实日志采集适配器默认不触发正文格式化，开启后认证字段仍隐藏。 */
     @Test
     void runtimeLogCaptureDoesNotFormatDefaultMessagesOrExposeCredentials() {
@@ -191,11 +255,13 @@ class WebConsoleSecurityTest {
      * 配置和时间可控，认证、会话与 CSRF 均为真实框架实现。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：装配机器令牌控制器并保留真实身份与防伪过滤器。
+     * <br>2026/11/04：注册纯 JDK 机器观测及其独立控制器，不启动业务服务。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.1-l
      */
     private static final class Fixture implements AutoCloseable {
         final WebSecurityFileConfig file = new WebSecurityFileConfig();
@@ -209,6 +275,8 @@ class WebConsoleSecurityTest {
         final ChatSettingsService settings = mock(ChatSettingsService.class);
         // 2026/11/03：文件业务由临时文件用例覆盖，这里验证实际 HTTP 鉴权和参数绑定。
         final FileSettingsService fileSettings = mock(FileSettingsService.class);
+        // 2026/11/04：机器文件事务由真实文件夹具覆盖，此处保留完整 MVC 安全链。
+        final MachineTokenService machineTokens = mock(MachineTokenService.class);
         // 2026/11/03：HTTP 用例验证真实安全链，领域提交另由事务夹具验证。
         final WebManagementCalls management = mock(WebManagementCalls.class);
         // 2026/11/03：真实持久执行另由事务夹具覆盖，HTTP 保留实际认证链。
@@ -240,8 +308,11 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("credentials", credentials);
                 factory.registerSingleton("clients", clients);
                 factory.registerSingleton("version", version);
+                // 2026/11/04：真实 MVC 绑定指标 DTO，值由本机 JDK 只读接口提供。
+                factory.registerSingleton("machineMonitor", new org.zexnocs.teanekocore.actuator.runtime.MachineMonitor());
                 factory.registerSingleton("settings", settings);
                 factory.registerSingleton("fileSettings", fileSettings);
+                factory.registerSingleton("machineTokens", machineTokens);
                 // 2026/11/03：将新路由纳入同一 MVC 容器，避免绕过框架鉴权。
                 factory.registerSingleton("management", management);
                 // 2026/11/03：指令台沿用同一入口，禁止旁路认证。
@@ -252,9 +323,10 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("chatImages", chatImages);
             });
             context.register(MvcConfiguration.class, WebSecurityConfig.class, WebConsoleController.class,
+                    WebMachineController.class,
                     MachineEndpoint.class, ChatSettingsController.class, ChatSettingsErrors.class, WebSessionGuard.class,
                     WebManagementController.class, WebFileSettingsController.class, WebConsoleCommandController.class,
-                    WebChatController.class);
+                    WebChatController.class, MachineTokenController.class);
             context.refresh();
             context.getBean(WebSecurityConfig.class).webSessionCookie().onStartup(servlet);
             assertTrue(servlet.getSessionCookieConfig().isSecure());
@@ -334,8 +406,11 @@ class WebConsoleSecurityTest {
     void loginProtectsRoutesOriginCsrfAndLogout() throws Exception {
         try (var fixture = new Fixture(directory)) {
             assertFalse(fixture.mapper.writeValueAsString(fixture.file.snapshot()).contains(TOKEN));
-            for (String path : List.of("/api/v1/auth/session", "/api/v1/console/overview", "/api/v1/clients",
+            // 2026/11/04：系统指标也不能通过匿名路径读取。
+            for (String path : List.of("/api/v1/auth/session", "/api/v1/console/overview", "/api/v1/console/machine", "/api/v1/clients",
                     "/api/v1/settings/sections", "/api/v1/clients/onebot/accounts", "/api/v1/file-configs", "/api/v1/file-configs/agent.models",
+                    // 2026/11/04：目标适用目录同样要求真实登录。
+                    "/api/v1/clients/onebot/accounts/a/targets/t/settings",
                     "/api/v1/clients/onebot/accounts/a/targets/t/settings/agent",
                     // 2026/11/03：指令台只读目录和原操作查询也必须登录。
                     "/api/v1/clients/onebot/accounts/a/targets/t/console",
@@ -357,6 +432,9 @@ class WebConsoleSecurityTest {
             var response = fixture.mvc.perform(fixture.request("/api/v1/console/overview", false).session(session))
                     .andExpect(status().isOk()).andReturn().getResponse();
             assertFalse(response.getContentAsString().contains(TOKEN));
+            // 2026/11/04：验证真实安全链下的新端点和字段序列化。
+            fixture.mvc.perform(fixture.request("/api/v1/console/machine", false).session(session))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.heapUsedBytes").isNumber());
             fixture.mvc.perform(fixture.request("/api/v1/not-registered", false).session(session))
                     .andExpect(status().isForbidden());
             var renewed = fixture.csrf(session);
@@ -376,6 +454,15 @@ class WebConsoleSecurityTest {
         try (var fixture = new Fixture(directory)) {
             var session = fixture.authenticate();
             String path = "/api/v1/clients/onebot/accounts/a/targets/t/settings/agent";
+            // 2026/11/04：新目录端点通过实际 MVC 异步绑定和安全链。
+            when(fixture.settings.sections(eq("onebot"), eq("a"), eq("t"), any()))
+                    .thenReturn(java.util.concurrent.CompletableFuture.completedStage(List.of(
+                            new org.zexnocs.teanekoapp.web.settings.ChatSettings.Section("agent", "Agent", "agent", "聊天助手"))));
+            var directory = fixture.mvc.perform(fixture.request(
+                    "/api/v1/clients/onebot/accounts/a/targets/t/settings", false).session(session))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(directory)).andExpect(status().isOk());
+            org.mockito.Mockito.clearInvocations(fixture.settings);
             var body = new ConfigEdits.Change(UUID.randomUUID(), "absent", ConfigEdits.Action.REGISTER, Map.of());
             String json = fixture.mapper.writeValueAsString(body);
             fixture.mvc.perform(fixture.request(path, true).session(session)

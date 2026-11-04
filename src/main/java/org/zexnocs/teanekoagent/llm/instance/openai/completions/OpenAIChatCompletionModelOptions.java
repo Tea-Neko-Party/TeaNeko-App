@@ -17,9 +17,14 @@ import java.util.Optional;
  * <br>该类同时作为第三方 OpenAI 兼容服务的扩展基类，供应商专用字段可通过 {@code body.} 和
  * {@code header.} metadata 前缀透传。
  *
+ * <br>2026/11/04������ģ�������Ŀ��գ���Ӧ�������ֶα��ֶ�����
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
+ * @version 4.7.2-l
  */
 @Getter
 @Setter
@@ -229,6 +234,8 @@ public class OpenAIChatCompletionModelOptions extends LLMModelOptions {
         source.findModel().ifPresent(target::setModel);
         source.findThinking().ifPresent(target::setThinking);
         source.findMaxTokens().ifPresent(target::setMaxTokens);
+        // 2026/11/04：供应商参数转换继续保留本地上下文准入快照。
+        source.findContextWindow().ifPresent(target::setContextWindow);
         source.findFrequencyPenalty().ifPresent(target::setFrequencyPenalty);
         source.findTemperature().ifPresent(target::setTemperature);
         source.findTopP().ifPresent(target::setTopP);

@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoagent.memory.layered;
 
 import org.springframework.scheduling.annotation.Scheduled;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
@@ -16,11 +17,16 @@ import java.util.function.BooleanSupplier;
  * 在原业务域串行维护各记忆端口，不调用模型，不关闭借用执行器，不重叠启动新批次。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.6.1-l
+ * @version 4.7.1-l
  */
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "agent.memory", categoryName = "Agent 记忆", name = "记忆数据维护",
+        description = "维护已装配记忆端口的保留窗口，不调用模型。", controllable = false)
 public final class MemoryMaintenanceService implements AutoCloseable {
     private final List<IMemoryMaintenance> stores;
     private final BooleanSupplier enabled;

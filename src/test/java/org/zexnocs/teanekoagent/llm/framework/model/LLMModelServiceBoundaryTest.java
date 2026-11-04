@@ -29,12 +29,36 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04����ֱ֤��ģ�͵��õ������ı߽�����������ȡ�
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMModelServiceBoundaryTest {
+    /** 2026/11/04：直接调用也按模型上下文拒绝超限输入，且不会修改配置输出上限。 */
+    @Test
+    void rejectsContextBeforeDirectProviderCall() {
+        var options = LLMModelOptions.builder().provider(route.id()).model("file-model").maxTokens(2000)
+                .contextWindow(new LLMContextWindow(10000, 0.8)).build();
+        when(files.getDefaultOptions(eq(route), any())).thenReturn(options);
+        var estimator = mock(org.zexnocs.teanekoagent.llm.framework.interaction.ILLMTokenEstimator.class);
+        when(estimator.estimate(any())).thenReturn(new org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenEstimate(8001, "fixed-v1"));
+        service.installContextEstimator(estimator);
+        assertThrows(org.zexnocs.teanekocore.actuator.execution.BudgetExceededException.class,
+                () -> service.call(new LLMPrompt(List.of())));
+        verify(model, never()).call(any(ILLMPrompt.class));
+        assertEquals(2000, options.getMaxTokens());
+        when(estimator.estimate(any())).thenReturn(new org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenEstimate(8000, "fixed-v1"));
+        service.call(new LLMPrompt(List.of()));
+        var capture = org.mockito.ArgumentCaptor.forClass(ILLMPrompt.class);
+        verify(model).call(capture.capture());
+        assertEquals(2000, capture.getValue().getOptions().getMaxTokens());
+    }
+
     private final IBeanScanner scanner = mock(IBeanScanner.class);
     private final ILLMFileConfigService files = mock(ILLMFileConfigService.class);
     private final IDefaultModelResolver defaults = mock(IDefaultModelResolver.class);

@@ -25,14 +25,16 @@ import java.util.concurrent.CompletionStage;
  * Agent 字段的中文业务投影，空间绑定保持专用管理边界，不经通用字段写入。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：专用投影归入 Agent 分组，记忆绑定仍不经通用字段改写。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Component
-@TeaNekoChatSettings("agent")
+// 2026/11/04：Agent 专用投影明确归入独立配置分组。
+@TeaNekoChatSettings(value = "agent", group = "agent")
 @PluginOwned("teaneko.agent")
 public final class AgentChatSettingsSection implements IChatSettingsSection {
     private final ObjectMapper mapper;

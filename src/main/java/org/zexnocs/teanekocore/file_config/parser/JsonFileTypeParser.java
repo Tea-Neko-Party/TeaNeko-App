@@ -15,14 +15,24 @@ import java.nio.file.Path;
 /**
  * 用于解析 {@link FileConfigType#JSON} 的解析器。
  * <br>2026/11/03：支持原始文档局部编辑，并拒绝重复键。
+ * <br>2026/11/04：通用表单复用本 JSON 解析器的命名与类型元数据。
  *
  * @author zExNocs
  * @date 2026/03/13
  * @since 4.2.0
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @FileTypeParser(FileConfigType.JSON)
 public class JsonFileTypeParser implements IFileDocumentParser {
+    /**
+     * @param type 原注册配置类型
+     * @return 与本 JSON 映射一致的字段定义
+     */
+    @Override
+    public org.zexnocs.teanekocore.framework.config.ConfigSchema schema(Class<? extends IFileConfigData> type) {
+        return new org.zexnocs.teanekocore.framework.config.ConfigSchema(objectMapper, type);
+    }
+
     /// object mapper，支持注释。
     private final ObjectMapper objectMapper = JsonMapper.builder()
             // 2026/11/03：文件编辑和原加载共享无重复键的节点合同。

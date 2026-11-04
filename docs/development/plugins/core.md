@@ -48,6 +48,10 @@ chain.next() 返回代表同步调用结果，后置逻辑不自动等待 Callab
 
 需要完整异步结果转换时使用下述 OperationPipeline；不必把所有 ITaskStage 改成异步接口。命令仍须返回 CompletionStage<?>，通常为 CompletionStage<Void>，并等待实际业务与反馈。
 
+## 定时展示
+
+4.7.1-l 提供 `@TimerDisplay` 方法/类型声明和注册端元数据，原 Timer 与 Spring 调度保持独立。分类、只读边界、手动注册及观测来源扩展见[定时展示与分类](management.md#定时展示与分类)。
+
 ## 类型化异步环绕
 
 OperationPipeline<I,O> 接受 PluginRegistry、有序 Binding<I,O> 列表和 shortCircuit 开关。每个 Binding 声明 pluginId、局部 id、order 和 AsyncInterceptor；执行时传入 input、借用 ExecutionControl 与实际 AsyncOperation。

@@ -58,10 +58,14 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * <br>2026/11/03：复用冷轮次用例验证实际活动节点，不把模型结果当作平台发送。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：验证跨轮次完整输出额度与显式共享预算拒绝。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.7.0-l
+ * @version 4.7.2-l
  */
 class AgentServiceTest {
     /** 验证冷句柄准备不读取配置，启动前取消会释放资源并阻止迟到启动。 */
@@ -561,15 +565,20 @@ class AgentServiceTest {
         assertEquals(0, result.join().budgetUsage().get(TOTAL_TOKENS).used());
     }
 
-    /** 验证共享 token 余额沿派生轮次保留，收紧后的输出上限进入实际模型端口。 */
+    /** 2026/11/04：共享预算沿派生轮次保留，完整输出不能容纳时拒绝后续请求。 */
     @Test void inheritedTokenBudgetIsNotResetAcrossRuns() {
-        try (var parent = runtime.parent(new LLMCallLimits(3, 2, 6, 18L))) {
+        try (var parent = runtime.parent(new LLMCallLimits(3, 2, 6, 27L))) {
             var handle = agent(); var first = service.run(handle, request(AgentActivity.SERVICE), parent).toCompletableFuture();
-            runtime.runAll(); assertEquals(13, requireOptions(prompts.getFirst()).getMaxTokens()); reply(response());
+            runtime.runAll(); assertEquals(20, requireOptions(prompts.getFirst()).getMaxTokens()); reply(response());
             assertEquals(SUCCESS, first.join().status());
             var second = service.run(handle, request(AgentActivity.SERVICE), parent).toCompletableFuture(); runtime.runAll();
-            assertEquals(11, requireOptions(prompts.getLast()).getMaxTokens()); reply(response());
+            assertEquals(20, requireOptions(prompts.getLast()).getMaxTokens()); reply(response());
             assertEquals(SUCCESS, second.join().status()); assertEquals(4, parent.budget().used(TOTAL_TOKENS));
+            var third = service.run(handle, request(AgentActivity.SERVICE), parent).toCompletableFuture();
+            runtime.runAll();
+            assertEquals(org.zexnocs.teanekoagent.agent.AgentRunResult.Status.BUDGET_EXCEEDED, third.join().status());
+            assertEquals(2, prompts.size());
+            assertEquals(4, parent.budget().used(TOTAL_TOKENS));
             assertDoesNotThrow(parent::checkActive);
         }
     }

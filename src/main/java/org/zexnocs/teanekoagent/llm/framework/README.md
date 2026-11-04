@@ -140,6 +140,8 @@ models:
     model: "deepseek-v4-flash"
     temperature: 0.7
     max-tokens: 2048
+    context-window-tokens: "${DEEPSEEK_CONTEXT_WINDOW_TOKENS}"
+    context-input-ratio: 0.8
     metadata:
       deepseek.reasoningEffort: "medium"
       deepseek.topLogprobs: 5
@@ -147,6 +149,9 @@ models:
 
   - id: "openai"
     model: "gpt-5.5"
+    max-tokens: 2048
+    context-window-tokens: "${OPENAI_CONTEXT_WINDOW_TOKENS}"
+    context-input-ratio: 0.8
     metadata:
       openai.reasoningEffort: "medium"
       openai.reasoningSummary: "auto"

@@ -6,11 +6,9 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
-import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Instant;
 import java.util.*;
@@ -24,16 +22,18 @@ import java.util.concurrent.Semaphore;
  * 不管理任意路径，不把磁盘与运行状态假定为同一个事务。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：受限机器令牌用例复用相同的文件回执恢复规则。
+ * <br>2026/11/04：专用与自动文件投影共享原文档事务和授权，不自动允许新发现的类型。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Service
 public final class FileSettingsService {
     private static final String ACTOR = StableDigest.sha256("web.local-admin");
-    private final AnnotatedBeanRegistry<String, IFileSettingsAdapter> adapters;
+    private final FileSettingsDirectory adapters;
     private final IFileConfigService files;
     private final PluginRegistry plugins;
     private final FileConfigOperations operations;
@@ -41,31 +41,19 @@ public final class FileSettingsService {
     private final Semaphore slots = new Semaphore(16);
 
     /**
-     * @param scanner 原 Bean 扫描器
+     * @param adapters 专用与自动投影目录
      * @param files 原配置入口
      * @param plugins 原插件代次
      * @param operations 私有持久账本
      * @param executor 借用文件业务执行域
      */
-    public FileSettingsService(IBeanScanner scanner, IFileConfigService files, PluginRegistry plugins,
+    public FileSettingsService(FileSettingsDirectory adapters, IFileConfigService files, PluginRegistry plugins,
             FileConfigOperations operations, @Qualifier("virtualExecutor") Executor executor) {
         this.files = files;
         this.plugins = plugins;
         this.operations = operations;
         this.executor = executor;
-        adapters = new AnnotatedBeanRegistry<>(scanner, TeaNekoFileSettings.class, IFileSettingsAdapter.class, annotation -> {
-            if (!annotation.value().matches("[a-z][a-z0-9_.-]{0,63}") || annotation.version() != 1) {
-                throw new IllegalArgumentException("文件管理区标识或协议版本无效。");
-            }
-            return annotation.value();
-        });
-        var types = new HashSet<Class<?>>();
-        for (var entry : adapters.entries().values()) {
-            if (entry.bean().type() == WebSecurityFileConfig.class || !types.add(entry.bean().type())) {
-                throw new IllegalArgumentException("认证根配置不可网页编辑，且同一文件类型只能有一个管理区。");
-            }
-            FileSettingsPolicy.validateSchema(entry.bean());
-        }
+        this.adapters = adapters;
     }
 
     /**
@@ -115,7 +103,7 @@ public final class FileSettingsService {
     public CompletionStage<Map<String, String>> validate(String id, FileSettings.Change change, Runnable guard) {
         return run(id, guard, (lease, document) -> {
             candidate(document, lease, change);
-            return Map.of("status", "VALID", "message", "原格式、环境占位符、字段及模块语义预检通过；尚未保存或应用。");
+            return Map.of("status", "VALID", "message", lease.adapter().validationNote());
         });
     }
 
@@ -281,13 +269,14 @@ public final class FileSettingsService {
     }
 
     /**
+     * 2026/11/04：供同包受限文件用例复用，不扩大普通文件编辑白名单。
      * @param journal 原账本
      * @param operation 原编号
      * @param entry 原阶段
      * @param document 当前实际文档
      * @return 原结果或明确恢复状态
      */
-    private static FileSettings.Receipt recover(FileConfigOperations.Session journal, UUID operation,
+    static FileSettings.Receipt recover(FileConfigOperations.Session journal, UUID operation,
             FileConfigOperations.Entry entry, FileConfigDocument document) {
         var result = entry.receipt();
         if (result.status().equals("PREPARED")) {

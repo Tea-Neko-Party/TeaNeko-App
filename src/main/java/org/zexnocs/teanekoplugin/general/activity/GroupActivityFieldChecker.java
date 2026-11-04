@@ -1,19 +1,52 @@
 package org.zexnocs.teanekoplugin.general.activity;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.scheduling.support.CronExpression;
 import org.zexnocs.teanekocore.database.configdata.api.IConfigFieldChecker;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
+import tools.jackson.databind.JsonNode;
 
 import java.time.Duration;
 
 /**
  * 用于检测设置 {@link GroupActivityData} 部分域是否合理。
+ * <br>2026/11/04：完整规则列表逐项校验，允许按原配置合同以空值关闭定时触发。
  *
  * @author zExNocs
  * @date 2026/03/18
  * @since 4.3.4
+ * @version 4.7.1-l
  */
 public class GroupActivityFieldChecker implements IConfigFieldChecker {
+    /**
+     * 2026/11/04：网页整字段编辑与原单条规则指令共享校验，不将 JSON 列表当作一条表达式。
+     * @param field 实际字段名
+     * @param value 完整 JSON 候选
+     * @return 不合法时的说明，合法时为空
+     */
+    @Override
+    public @Nullable String isValidJson(String field, JsonNode value) {
+        if (field.equals("cron") && value.isNull()) {
+            return null;
+        }
+        if (field.equals("rules")) {
+            if (!value.isArray()) {
+                return "活跃度规则必须是字符串列表。";
+            }
+            for (var item : value) {
+                if (!item.isString()) {
+                    return "活跃度规则必须是字符串。";
+                }
+                String invalid = checkRules(item.stringValue());
+                if (invalid != null) {
+                    return invalid;
+                }
+            }
+            return null;
+        }
+        return IConfigFieldChecker.super.isValidJson(field, value);
+    }
+
     /**
      * 检测当前域的设置值是否合理。
      * <br>如果合理则返回

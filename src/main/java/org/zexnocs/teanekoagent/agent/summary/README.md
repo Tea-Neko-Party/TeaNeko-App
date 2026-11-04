@@ -19,14 +19,15 @@ tea-neko.agent.summary.trigger-bytes=32768
 tea-neko.agent.summary.max-input-bytes=131072
 tea-neko.agent.summary.max-characters=4000
 tea-neko.agent.summary.max-model-calls=1
-tea-neko.agent.summary.max-total-tokens=16384
+# 默认不设独立总 token 配额；需要时显式配置，额度不足拒绝调用。
+# tea-neko.agent.summary.max-total-tokens=16384
 tea-neko.agent.summary.timeout-seconds=45
 tea-neko.agent.summary.cooldown-seconds=60
 ```
 
-轮数或协议字节达到阈值后尝试生成，始终保留最近完整轮次；触发轮数须大于保留轮数。摘要默认独立最多一次模型请求且不开放工具，次数仍经过原 LLM 交互预算；总 token 使用原保守估算和供应商报告结算，不等同费用。输出 token 受原模型设置及 1024 上限共同约束，正文另受 max-characters 限制。后台超时最多五分钟，冷却最多一天；配置懒读取，非法值产生固定失败诊断，不阻断前台答案。
+轮数或协议字节达到阈值后尝试生成，始终保留最近完整轮次；触发轮数须大于保留轮数。摘要默认独立最多一次模型请求且不开放工具，次数仍经过原 LLM 交互预算。输出 token 统一取所选模型的 `max-tokens`，正文另受 max-characters 限制；默认不设隐含总 token 配额，显式配额使用保守估算及供应商报告结算，不等同费用。后台超时最多五分钟，冷却最多一天；配置懒读取，非法值产生固定失败诊断，不阻断前台答案。
 
-实际输入同时受完整协议字节和 token 预检约束；容量不足时仅选择更短的完整旧前缀，不截断轮次或工具往返。如果一个完整旧轮次也无法放入预算，则跳过本次生成。窗口容量、触发阈值、保留轮数及 token 预算需要配合；过小的窗口可能达不到阈值。
+实际输入同时受完整协议字节和模型上下文预检约束；容量不足时仅选择更短的完整旧前缀，不截断轮次或工具往返。如果一个完整旧轮次也无法放入上下文，则跳过本次生成。显式总预算不足时仍由交互层拒绝，不缩减配置输出额度。窗口容量、触发阈值及保留轮数需要配合；过小的窗口可能达不到阈值。
 
 ## 执行与采用
 

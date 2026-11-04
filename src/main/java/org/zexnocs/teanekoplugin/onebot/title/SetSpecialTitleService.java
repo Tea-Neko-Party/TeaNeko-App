@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoclient.onebot.sender.group.SetGroupSpecialTitleSender;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.database.easydata.debug.DebugEasyData;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
@@ -18,12 +19,17 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 设置特殊头衔服务。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.1
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Service("setSpecialTitleService")
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "client.maintenance", categoryName = "客户端维护", name = "每日头衔限制清理",
+        description = "按原规则重置当日头衔设置限制。", controllable = false)
 public class SetSpecialTitleService {
     public static final String DEBUG_NAMESPACE = "头衔修改";
 

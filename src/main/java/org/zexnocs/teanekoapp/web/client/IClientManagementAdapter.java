@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp.web.client;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -11,13 +12,22 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：指令台由平台明确贡献就绪状态和固定连接能力。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：由客户端声明真实目标适用的配置命名空间，未知实现默认不开放配置。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 public interface IClientManagementAdapter {
+    /**
+     * @param target 已由本客户端解析的真实聊天
+     * @return 可在该目标登记的配置命名空间，默认没有
+     */
+    default Set<String> configNamespaces(ChatTargets.Resolved target) {
+        return Set.of();
+    }
+
     /**
      * 2026/11/03：发现管理适配器不代表可以执行命令。
      * @param target 原服务端解析目标

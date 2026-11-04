@@ -49,10 +49,14 @@ import java.util.stream.Collectors;
  * 失败不修改窗口，成功结果仍须由邮箱核对覆盖指纹后采用，不写长期事实或用户画像。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ժҪ����̳�ģ�����ã�����ѡȡ���������ı�������ʽԤ�㲻���Ծܾ���
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 public final class AgentConversationSummaryService implements IAgentConversationSummaries, AutoCloseable {
     private final AgentAccessGate gate;
@@ -155,12 +159,16 @@ public final class AgentConversationSummaryService implements IAgentConversation
                 || window.turns().size() < settings.triggerTurns() && window.bytes() < settings.triggerBytes()) { return; }
         if (base != null && !valid(base, stamp, reference, projection.input().personality().identity(), clock.instant())) { return; }
         var runtime = result.access().flatMap(AgentAccessDecision::runtime).orElseThrow(); var options = runtime.modelOptions().toOptions();
-        options.setMaxTokens(Math.min(options.findMaxTokens().orElse(1024), 1024)); options.setTools(List.of()); options.setToolChoice("none");
-        var estimator = new JsonLLMTokenEstimator(mapper); long reserveOutput = Math.min(options.getMaxTokens(), settings.maxTokens() / 2);
+        // 2026/11/04：完整继承模型输出额度，输入窗口按模型上下文比例选择。
+        options.setTools(List.of());
+        options.setToolChoice("none");
+        var estimator = new JsonLLMTokenEstimator(mapper);
+        long inputLimit = options.findContextWindow()
+                .map(context -> context.maxInputTokens(options.getMaxTokens())).orElse(Long.MAX_VALUE);
         var selected = new ArrayList<>(window.turns().subList(0, window.turns().size() - settings.keepTurns()));
         List<ILLMMessage> messages = prompt(base, selected, settings.maxCharacters());
         while (!selected.isEmpty() && (codec.signature(messages).bytes() > settings.maxInputBytes()
-                || estimator.estimate(new LLMPrompt(messages, options, LLMOptionsPolicy.RESOLVED)).inputTokens() >= settings.maxTokens() - reserveOutput)) {
+                || estimator.estimate(new LLMPrompt(messages, options, LLMOptionsPolicy.RESOLVED)).inputTokens() > inputLimit)) {
             selected.removeLast(); messages = prompt(base, selected, settings.maxCharacters());
         }
         if (selected.isEmpty()) { return; }

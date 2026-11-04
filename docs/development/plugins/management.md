@@ -39,7 +39,11 @@ ManagementContext 的 subject、scopeRef 来自已认证适配器，requestId �
 
 Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验，namespace/人格绑定走专用用例。4.7.0-l 的 ConfigEditService 在同一原 EasyData 事务中完成版本检查、局部合并、幂等和审计，不在 Controller 先读版本再无条件覆盖。
 
-聊天设置扩展实现 IChatSettingsSection，标记 @TeaNekoChatSettings("稳定区标识") 并注册 Spring Bean，复用 scanner。声明中文字段视图、固定 ConfigManager 和字段白名单，配置区须列入本地 settings-sections 且所属 @PluginOwned 插件启用。不得通过普通字段开放凭据或特殊绑定。平台由 IClientManagementAdapter 贡献 accounts、targets、resolve、discover；resolve 校验平台/账号/目标关系，实际提交用 ClientManagementDirectory.guard 复核插件代次。已发布 HTTP 路径和边界见[聊天设置](../web-console.md#聊天设置)。
+4.7.1-l 起，已启用 `@ConfigManager` 经原 scanner 自动生成通用表单，默认属于 `general` 组。为管理器提供中文 description，为字段提供 `@Description`；元数据使用原 ObjectMapper，支持继承、泛型、别名、标量及集合/对象 JSON。通用入口通过 `ConfigEditService.changeJson` 提交完整 JSON 值，字符串必须是 JSON 字符串；旧命令与专用适配器保持原文本协议。字段校验器可覆写 `isValidJson` 处理集合等结构化值，默认适配原标量校验。敏感字段不导出，也不允许普通修改。
+
+复杂或受限配置实现 `IChatSettingsSection`，标记 `@TeaNekoChatSettings(value = "原管理器标识", group = "agent或自定义分组")` 并注册 Spring Bean。它必须对应实际已启用管理器，并优先于该管理器的通用投影；重复键明确报错。保留命名空间等特殊绑定的专用用例，不借通用字段放开。配置区须由本地 `settings-sections` 或 `settings-groups` 明确允许，且所属 `@PluginOwned` 插件启用。
+
+平台由 `IClientManagementAdapter` 贡献 accounts、targets、resolve、discover；resolve 校验平台/账号/目标关系，`configNamespaces(resolved)` 声明此目标适用的配置命名空间，默认空集。OneBot 声明通用及对应群聊/私聊、平台配置，网页平台只声明通用及相应群聊/私聊配置。实际事务前重新核对适用范围、授权及插件代次，不把浏览器提交的值作为适用范围。已发布 HTTP 路径见[聊天设置](../web-console.md#聊天设置)。
 
 图库请求与视图定义在 StickerManagement，业务服务为 StickerManagementService，四项资源为自动注册的 StickerManagementResources Bean。例如先通过 stickers 查询得到 id/revision，再提交 Change(UUID.randomUUID(),id,revision,Action.PIN,null,null)。超时后保留同一 operationId 查询 stickers.operation；在保留窗口内使用完全相同请求重放亦可，不能生成新 ID 猜测上次是否提交。
 
@@ -55,11 +59,34 @@ Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验�
 
 ## 文件配置扩展
 
-Spring Bean 实现 `IFileSettingsAdapter`，标记 `@TeaNekoFileSettings("稳定配置区")`，由原 scanner 注册。声明固定配置类型、中文字段、秘密标记、集合上限和应用方式；同一区键或文件类型重复会拒绝装配。该区还须加入本机 `file-sections` 白名单，`@PluginOwned` 继续限制实际使用。认证根配置禁止注册。
+非敏感文件默认可通过原解析器的 `IFileDocumentParser.schema` 自动投影，默认要求重启；自定义解析器未提供元数据时不会生成表单。需要敏感字段、集合增删或明确热应用契约时，Spring Bean 实现 `IFileSettingsAdapter`，标记 `@TeaNekoFileSettings("稳定配置区")`，由原 scanner 注册并覆盖同类型通用投影。声明固定类型、中文字段、秘密标记、集合上限和应用方式；重复键或同类型专用适配器冲突会拒绝装配。所有区仍须加入本机 `file-sections` 白名单，`@PluginOwned` 继续限制实际使用。认证根配置禁止普通注册。
 
 `validateDocument` 检查未展开文档的结构歧义，`validate` 复用模块候选校验；两者不发布缓存。`applicationFor` 可根据固定资源变更要求重启；`verifyApplied` 通过原模块只读入口确认本次发布。钩子同步执行，不联网、不发送消息、不触发模型或迁移，不持锁等待异步结果，也不申请其他配置类型锁。不能可靠确认热应用的模块声明 RESTART。
 
 原解析器实现 `IFileDocumentParser` 后才支持受限原树操作。插件不能从请求取得文件路径或 Java 类型，不导出候选对象、原文及隐藏字段；实际保存、版本检查、私有账本和权限复核统一由宿主执行。完整回执与文件系统边界见[文件配置说明](../web-console-files.md)。
+
+## 定时展示与分类
+
+在任务方法或所属类型添加 `@TimerDisplay`，声明稳定 category、中文 categoryName、name、description、visible 和 controllable。方法声明优先于类型声明；同一分类键必须使用同一名称，冲突明确报错。`visible = false` 只隐藏管理观测，不取消任务；`controllable = false` 同时关闭网页动作和服务端 Core 门禁写入。
+
+```java
+/**
+ * 按插件原业务入口统计日报。
+ * @return 原定时任务结果
+ */
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "日报统计",
+        description = "按原规则统计日报，已开始的业务继续完成。")
+public EmptyTaskResult dailySummary() {
+    // 仍通过原插件业务端口完成统计。
+    return EmptyTaskResult.INSTANCE;
+}
+```
+
+使用原 `ITimerService.registerBy...(..., this::dailySummary, ...)` 即可解析声明。lambda 可从实现方法所属类型取得类级声明；动态包装无法确认来源时归为未分类。手动构建 `TimerTaskConfig` 可用 `.presentation(new TimerPresentation(...))` 显式提供不可变元数据，自定义 `ITimerTaskConfig` 可覆写 `getPresentation()`。展示声明在实际注册时冻结，不从浏览器改写。
+
+Spring `@Scheduled` 继续使用原注解处理器，目录按实际注册对象关联 `ScheduledMethodRunnable` 的方法，始终只读。当前 Spring 的结果观测包装没有公开解包接口，关联适配集中在 `SpringTimerViewSource`；升级框架时保留真实注册任务测试，结构变化应明确定位，不能改用名称匹配。观测状态不冒充方法启动的异步业务终态。
+
+需要观测其他调度器时，Spring Bean 实现 `ITimerViewSource`，经原 scanner 发现；source 标识须唯一且不能占用 core。`snapshot(limit)` 只贡献有界、动作为空的实际注册快照；自行维持同一活任务的稳定 UUID，不在查询时创建任务、触发业务或接管生命周期。分类、规则、状态及名称过滤由原目录在分页前统一执行；原全局管理权限仍生效。
 
 ## 后续业务资源与页面
 

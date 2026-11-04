@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoclient.web;
 
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekoapp.web.client.TeaNekoClientManagement;
@@ -16,15 +17,27 @@ import java.util.concurrent.CompletionStage;
  * 网页平台按账号与聊天加入原配置、Agent 管理导航，不将 HTTP 服务存在当作浏览器在线。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：网页聊天声明通用配置适用范围，不开放其他平台专用配置。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Component
 @TeaNekoClientManagement(WebTeaNekoClient.ID)
 public final class WebManagementAdapter implements IClientManagementAdapter {
+    /**
+     * 2026/11/04：网页目标只声明通用命名空间，不借用其他客户端的专用配置。
+     * @param target 服务端已登记的网页聊天
+     * @return 当前群聊或私聊允许的通用命名空间
+     */
+    @Override
+    public Set<String> configNamespaces(ChatTargets.Resolved target) {
+        return Set.of(TeaNekoConfigNamespaces.GENERAL,
+                target.kind().equals("GROUP") ? TeaNekoConfigNamespaces.GROUP : TeaNekoConfigNamespaces.PRIVATE);
+    }
+
     private final WebChatStore store;
 
     /** @param store 原持久网页目录 */

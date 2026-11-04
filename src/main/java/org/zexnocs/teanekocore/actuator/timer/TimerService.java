@@ -23,11 +23,12 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 管理定时器的服务。
  * <br>2026/11/03：注册真实目录，触发与管理暂停共用门禁。
+ * <br>2026/11/04：先验证展示声明再纳入实际调度，调度循环只读展示。
  *
  * @author zExNocs
  * @date 2026/02/14
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Service
 public class TimerService implements ITimerService {
@@ -62,16 +63,19 @@ public class TimerService implements ITimerService {
      */
     @Override
     public void register(ITimer<?> timer) {
-        timers.add(timer);
-        // 2026/11/03：只登记原调度器实际持有的计时器。
+        // 2026/11/04：声明冲突时不能留下已执行但管理注册失败的计时器。
         if (directory != null) {
             directory.register(timer);
         }
+        timers.add(timer);
     }
 
     // --------------- 计时器循环 -----------------
     /** 2026/11/03：原循环使用管理门禁，暂停不会撤销已经提交的任务。 */
     @Async("timerScheduler")
+    // 2026/11/04：调度循环不能被网页暂停，否则全部业务计时器都会停止。
+    @TimerDisplay(category = "core.maintenance", categoryName = "Core 维护", name = "Core 定时调度循环",
+            description = "驱动原 Core Timer；这里只观测 Spring 方法调用，不代表业务任务已完成。", controllable = false)
     @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}")
     public void timerLoop() {
         // 获得当前的时间戳。

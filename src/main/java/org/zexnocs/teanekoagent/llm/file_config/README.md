@@ -19,11 +19,17 @@ models:
     base-url: "${DEEPSEEK_BASE_URL:}"
     api-path: "${DEEPSEEK_API_PATH:}"
     max-tokens: "${DEEPSEEK_MAX_TOKENS:2048}"
+    context-window-tokens: "${DEEPSEEK_CONTEXT_WINDOW_TOKENS}"
+    context-input-ratio: 0.8
     metadata:
       deepseek.reasoningEffort: "${DEEPSEEK_REASONING_EFFORT:medium}"
 ```
 
 OpenAI、Kimi 或自定义适配器使用同样的条目结构。default-model-id 为空时独立宿主须在 Options 指定供应商。main-config.yml 只保留 Agent 本地总开关。供应商 ID 使用小写字母、数字及连字符；api 为旧 YAML 的 api-path 别名。
+
+每个实际使用的模型须填写正数 `max-tokens` 和真实的 `context-window-tokens`；容量按当前部署声明，不根据模型名称推测。`context-input-ratio` 可省略，默认 0.8，允许范围为大于零且不超过一。最终输入估算上限为 `min(floor(context-window-tokens × context-input-ratio), context-window-tokens − max-tokens)`；例如总容量 100000、输入比例 0.8、输出 10000 时，输入最多估算为 80000。输出改为 30000 时输入最多 70000，输出参数仍保持 30000。
+
+容量与比例只用于本地准入，随本轮参数快照冻结，不进入供应商请求字段。默认估算按完整消息、工具及透明状态的 UTF-8 JSON 字节加开销计算，是保守估算而非供应商 tokenizer；应用安装自定义估算器时，直接调用与交互调用共用同一口径。超出上下文或显式总预算时在请求前拒绝，不自动缩减 `max-tokens`。后台记忆、摘要、人格、表情分析和主动发言不再额外覆盖模型输出额度；正文长度及字段容量继续独立校验。
 
 所有 YAML FileConfig 的字符串值、嵌套对象/列表和 metadata 都支持 `${变量名}` 与 `${变量名:默认值}`，优先级由 Spring Environment 决定；无 Spring 直接实例化解析器时使用标准系统属性及环境变量。先解析 YAML 再替换字符串节点，因此环境值中的换行、冒号等不会注入新的 YAML 字段。字段名不展开；数字和布尔字段由目标类型转换，metadata 中无明确目标类型的值仍为字符串，不猜测数字或结构。
 
@@ -42,7 +48,10 @@ OpenAI、Kimi 或自定义适配器使用同样的条目结构。default-model-i
 | `models[].model` | 模型服务要求显式填写的供应商模型名称。 |
 | `default-model-id` | 同文件的默认路由，不再从 main-config.yml 读取。 |
 | `models[].api-key/base-url/api-path` | 只供凭据端口读取，不合入普通 Options、Prompt 或业务组件。 |
-| 通用参数 | thinking、max-tokens、temperature 等只覆盖显式声明的值。 |
+| `models[].max-tokens` | 必需的正数输出 token 上限，不得超过上下文总容量。 |
+| `models[].context-window-tokens` | 必需的正数上下文总容量，按实际部署能力声明。 |
+| `models[].context-input-ratio` | 默认 0.8 的输入比例，同时为完整输出额度保留空间。 |
+| 通用参数 | thinking、temperature 等只覆盖显式声明的值。 |
 | `metadata` | 非敏感供应商参数；认证字段会被拒绝，包含嵌套和 header/body 形式。 |
 
 调用时依次合并：代码 base options → 本地模型条目 → 单次 Prompt options，最终 provider 固定为实际注册路由 ID。

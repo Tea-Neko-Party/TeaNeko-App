@@ -2,6 +2,7 @@
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import {ApiError, request} from './api'
+import DetailPanel from './DetailPanel.vue'
 
 export interface AgentTarget { client: string; account: string; target: string; name: string }
 interface Evidence { id: string; revision: number; subjectId: string; text: string; kind: string; locked: boolean; createdAt: string; updatedAt: string; time: unknown; client: string; sourceScope: string }
@@ -256,12 +257,12 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
 </script>
 
 <template>
+  <!-- 2026/11/04：收起重复说明，活动状态与待确认操作继续直接展示。 -->
   <div class="agent-workspace">
     <div class="section-title">
       <h2>{{ target.name }}</h2>
       <ElButton @click="emit('selectTarget')">选择其他聊天</ElButton>
       </div>
-    <p class="small muted">本地管理员的独立管理入口 · 共享记忆、画像与人格分别管理</p>
     <div class="agent-tabs" role="tablist" aria-label="Agent 管理分区">
       <button v-for="item in [{ id: 'activity', name: '活动时间线' }, { id: 'layers', name: '短中长期记忆' }, { id: 'memory', name: '记忆证据' }, { id: 'profile', name: '用户画像' }, { id: 'personality', name: '人格与补正' }, { id: 'schedules', name: '持久计划' }]" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="choosePanel(item.id)">{{ item.name }}</button>
       </div>
@@ -287,7 +288,7 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
       </label>
       <ElButton :loading="busy" @click="run(loadActivity)">刷新活动</ElButton>
       </div>
-      <ElAlert title="模型成功与平台交付分开记录。阶段返回不等于平台已发送；这里是有界进程窗口，重启不保留历史。" type="info" :closable="false" />
+      <DetailPanel title="活动说明"><p>模型完成与消息发送分别记录；进程重启后清空此活动窗口。</p></DetailPanel>
       <p v-if="timeline" class="small muted">窗口开始 {{ date(timeline.startedAt) }} · {{ timeline.truncated ? '更早节点已超出窗口' : '当前窗口尚未截断' }} · 页面最多保留三百个节点</p>
       <ElEmpty v-if="!events.length" description="当前聊天尚无可观察活动" />
       <ElCard v-for="[id, items] in runs" :key="id" shadow="never" class="activity-run">

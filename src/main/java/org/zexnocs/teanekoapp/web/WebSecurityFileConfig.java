@@ -10,6 +10,7 @@ import org.zexnocs.teanekocore.file_config.api.FileConfigType;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 
 import java.net.URI;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -23,11 +24,14 @@ import java.util.Map;
  * <br>2026/11/03：网页聊天容量作为独立非秘密文件区，认证根配置保持本地管理。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：机器令牌允许短值及空白放行，管理员凭据继续独立校验。
+ * <br>2026/11/04：统一空白机器令牌快照，并提供仅替换机器策略的比较入口。
+ * <br>2026/11/04：配置分组须由本地显式授权，并参与会话代次及受限应用比较。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Getter
 @Setter
@@ -47,6 +51,9 @@ public class WebSecurityFileConfig implements IFileConfigData {
     // 2026/11/03：发现与授权分开，默认只开放 Agent 的明确字段。
     @NonNull
     private List<String> settingsSections = List.of("agent");
+    // 2026/11/04：旧配置不会因发现更多管理器而自动开放普通配置分组。
+    @NonNull
+    private List<String> settingsGroups = List.of();
     // 2026/11/03：认证根配置不进入文件编辑白名单，文件类型仍由本地适配器固定。
     @NonNull
     private List<String> fileSections = List.of("agent.main", "agent.models", "agent.personality", "agent.expression",
@@ -71,8 +78,12 @@ public class WebSecurityFileConfig implements IFileConfigData {
     public Snapshot snapshot() {
         if (idleMinutes < 5 || idleMinutes > 120 || absoluteHours < 1 || absoluteHours > 24
                 || trustedProxies.size() > 16 || machineTokens.size() > 16 || settingsSections.size() > 16
-                || settingsSections.stream().anyMatch(value -> !value.matches("[a-z][a-z0-9_.-]{0,63}"))
+                // 2026/11/04：配置键保留已有管理器的大小写；授权仍按精确标识匹配。
+                || settingsSections.stream().anyMatch(value -> !value.matches("[a-zA-Z][a-zA-Z0-9_.-]{0,63}"))
                 || settingsSections.stream().distinct().count() != settingsSections.size()
+                || settingsGroups.size() > 16
+                || settingsGroups.stream().anyMatch(value -> !value.matches("[a-zA-Z][a-zA-Z0-9_.-]{0,63}"))
+                || settingsGroups.stream().distinct().count() != settingsGroups.size()
                 || fileSections.size() > 32 || fileSections.stream().anyMatch(value ->
                 !value.matches("[a-z][a-z0-9_.-]{0,63}"))
                 || fileSections.stream().distinct().count() != fileSections.size()
@@ -98,15 +109,21 @@ public class WebSecurityFileConfig implements IFileConfigData {
                 if (!id.matches("[a-z][a-z0-9_-]{0,63}")) {
                     throw new IllegalArgumentException("机器客户端标识无效。");
                 }
-                validateSecret(secret);
-                if (secret.equals(adminToken)) {
+                // 2026/11/04：空白机器令牌显式放行；非空值允许 1～256 字符，不包含内部空白。
+                if (secret.length() > 256 || !secret.isBlank() && secret.chars().anyMatch(Character::isWhitespace)) {
+                    throw new IllegalArgumentException("机器令牌最多二百五十六字符，非空令牌不能包含空白。");
+                }
+                if (!secret.isBlank() && secret.equals(adminToken)) {
                     throw new IllegalArgumentException("机器凭据必须与管理员令牌分开配置。");
                 }
             });
         }
+        // 2026/11/04：空白策略归一化，握手证明和后续收发使用完全相同的值。
+        var normalizedTokens = new LinkedHashMap<String, String>();
+        machineTokens.forEach((id, secret) -> normalizedTokens.put(id, secret.isBlank() ? "" : secret));
         return new Snapshot(enabled, adminToken, publicOrigin, List.copyOf(trustedProxies),
-                Map.copyOf(machineTokens), List.copyOf(settingsSections), List.copyOf(fileSections), List.copyOf(managementResources),
-                List.copyOf(consolePrefixes), idleMinutes, absoluteHours);
+                Map.copyOf(normalizedTokens), List.copyOf(settingsSections), List.copyOf(fileSections), List.copyOf(managementResources),
+                List.copyOf(consolePrefixes), idleMinutes, absoluteHours, List.copyOf(settingsGroups));
     }
 
     /**
@@ -126,6 +143,8 @@ public class WebSecurityFileConfig implements IFileConfigData {
      * <br>2026/11/03：固定指令台前缀，修改后撤销旧会话。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：比较机器策略以外的认证根设置，阻止网页顺带应用本机其他改动。
+     * <br>2026/11/04：配置分组参与认证代次与受限应用比较，不默认开放新分组。
      *
      * @param enabled 是否启用控制面
      * @param adminToken 根令牌，空值触发本次启动生成
@@ -138,10 +157,11 @@ public class WebSecurityFileConfig implements IFileConfigData {
      * @param consolePrefixes 本地明确允许的指令台前缀
      * @param idleMinutes 空闲期限
      * @param absoluteHours 绝对期限
+     * @param settingsGroups 本地允许的配置分组
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.1-l
      */
     @JsonIgnoreType
     public record Snapshot(boolean enabled, @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String adminToken,
@@ -149,7 +169,17 @@ public class WebSecurityFileConfig implements IFileConfigData {
                            @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) Map<String, String> machineTokens,
                            List<String> settingsSections, List<String> fileSections, List<String> managementResources,
                            List<String> consolePrefixes,
-                           int idleMinutes, int absoluteHours) {
+                           int idleMinutes, int absoluteHours, List<String> settingsGroups) {
+        /**
+         * 2026/11/04：只替换机器策略，其余认证根字段保持原值。
+         * @param tokens 已校验且归一化的机器令牌
+         * @return 用于确认受限应用范围的快照
+         */
+        public Snapshot withMachineTokens(Map<String, String> tokens) {
+            return new Snapshot(enabled, adminToken, publicOrigin, trustedProxies, Map.copyOf(tokens),
+                    settingsSections, fileSections, managementResources, consolePrefixes, idleMinutes, absoluteHours, settingsGroups);
+        }
+
         /** @return 不含配置和令牌的说明 */
         @Override
         @NonNull

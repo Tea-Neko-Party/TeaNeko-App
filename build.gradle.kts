@@ -101,12 +101,28 @@ val webBuild = tasks.register<Exec>("webBuild") {
     workingDir(layout.projectDirectory.dir("frontend"))
     commandLine(if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm", "run", "build")
     inputs.dir("frontend/src")
-    inputs.files("frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts", "frontend/package-lock.json")
+    // 2026/11/04：统一端口配置及读取器变更后重新校验前端构建。
+    inputs.files("frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts", "frontend/dev-ports.ts",
+        "frontend/package-lock.json", "src/main/resources/application.properties")
     outputs.dir(layout.buildDirectory.dir("generated/web/console"))
 }
 
+// 2026/11/04：类路径启动与 JAR 共用实际构建版本，唯一输入仍为原版本管理器。
+val generateVersionInfo = tasks.register<WriteProperties>("generateVersionInfo") {
+    group = "build"
+    description = "生成当前构建的运行版本资源"
+    destinationFile.set(layout.buildDirectory.file("generated/version/teaneko-version.properties"))
+    encoding = "UTF-8"
+    property("version", provider { versionProject.version.toString() })
+}
+
+// 2026/11/04：同时登记资源目录，Gradle 类路径和 IDE 导入使用同一份生成结果。
+sourceSets.named("main") {
+    resources.srcDir(generateVersionInfo.map { it.destinationFile.get().asFile.parentFile })
+}
+
 tasks.named<ProcessResources>("processResources") {
-    dependsOn(webBuild)
+    dependsOn(webBuild, generateVersionInfo)
     from(layout.buildDirectory.dir("generated/web")) {
         into("static")
     }
@@ -259,10 +275,7 @@ tasks {
     withType<BootRun> {
         // 2026/11/02：允许类路径中的 Netty 等依赖加载本地库，匹配 JDK 25 的原生访问要求。
         jvmArgs("--enable-native-access=ALL-UNNAMED")
-        // 注入版本号
-        doFirst {
-            systemProperty("version", versionProject.version.toString())
-        }
+        // 2026/11/04：运行版本由 processResources 生成，不再由启动参数声明。
 
         // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
         systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")

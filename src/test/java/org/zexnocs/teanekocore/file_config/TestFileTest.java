@@ -13,10 +13,14 @@ import java.io.IOException;
 
 /**
  * file 写入测试
+ * <br>2026/11/04：删除测试文件后重新加载缓存，避免旧缓存触发磁盘版本并发保护。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/03/13
  * @since 4.2.0
+ * @version 4.7.2-l
  */
 @SpringBootTest(classes = TeaNekoAppApplication.class)
 public class TestFileTest {
@@ -41,12 +45,14 @@ public class TestFileTest {
     }
 
     /**
-     * 删除原有的文件
+     * 删除原有测试文件，并同步刷新该测试宿主的缓存状态。
+     * 2026/11/04：写入前重新加载，保留生产代码对旧缓存覆盖磁盘的拒绝。
      *
      */
     @BeforeEach
     public void setup() {
         DefaultTestFileConfig.delete();
+        iFileConfigService.reload();
     }
 
     /**

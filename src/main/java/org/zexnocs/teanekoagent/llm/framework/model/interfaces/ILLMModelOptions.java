@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.llm.framework.model.interfaces;
 
+import org.zexnocs.teanekoagent.llm.framework.model.LLMContextWindow;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
 
 import java.util.List;
@@ -9,12 +10,24 @@ import java.util.Optional;
 /**
  * 大语言模型请求参数接口。
  * <br>提供通用参数读取方法，并通过 Optional 风格方法支持供应商按需合并参数。
+ * <br>2026/11/04：传递模型上下文准入策略，保持供应商请求字段独立。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/03/23
  * @since 4.4.0
+ * @version 4.7.2-l
  */
 public interface ILLMModelOptions {
+    /**
+     * 2026/11/04：读取随有效模型配置固定的本地上下文策略。
+     * @return 显式上下文声明，未提供时为空
+     */
+    default Optional<LLMContextWindow> findContextWindow() {
+        return Optional.empty();
+    }
+
     /**
      * 获取模型所属的供应商级适配器 ID。
      * <br>例如 {@code openai}、{@code deepseek}。

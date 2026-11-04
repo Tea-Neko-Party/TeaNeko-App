@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.schedule;
 
 import org.zexnocs.teanekoagent.agent.AgentActorContext;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 
 import java.time.Clock;
@@ -20,11 +21,16 @@ import static org.zexnocs.teanekoagent.schedule.AgentScheduledTask.Status.*;
  * 不默认安装动作或权限实现，不以保存的创建者信息代替当前权限。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "agent.schedule", categoryName = "Agent 计划任务", name = "持久计划扫描",
+        description = "派发数据库中的持久计划，单条计划仍在聊天工作区管理。", controllable = false)
 public final class AgentScheduleService implements AutoCloseable {
     private final EasyDataScheduleStore store;
     private final Clock clock;

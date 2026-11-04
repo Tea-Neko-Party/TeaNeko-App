@@ -65,6 +65,8 @@ models:
   - id: "openai"
     model: "gpt-5.5"
     max-tokens: 2048
+    context-window-tokens: "${OPENAI_CONTEXT_WINDOW_TOKENS}"
+    context-input-ratio: 0.8
     metadata:
       openai.organization: ""
       openai.project: ""

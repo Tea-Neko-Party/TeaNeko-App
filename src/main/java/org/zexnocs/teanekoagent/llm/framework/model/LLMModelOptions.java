@@ -13,10 +13,14 @@ import java.util.Optional;
 /**
  * 大语言模型请求参数的通用实现类。
  * <br>用于在不同模型供应商之间传递统一的模型参数和扩展数据。
+ * <br>2026/11/04：复制与合并模型上下文策略，保留本次调用的容量快照。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/05/15
  * @since 4.4.0
+ * @version 4.7.2-l
  */
 @Getter
 @Setter
@@ -51,6 +55,10 @@ public class LLMModelOptions implements ILLMModelOptions {
      */
     @Nullable
     private Integer maxTokens;
+
+    /** 2026/11/04：模型本地上下文能力及输入比例，不写入供应商请求正文。 */
+    @Nullable
+    private LLMContextWindow contextWindow;
 
     /**
      * 频率惩罚值。
@@ -157,6 +165,8 @@ public class LLMModelOptions implements ILLMModelOptions {
                 .model(options.findModel().orElse(null))
                 .thinking(options.findThinking().orElse(null))
                 .maxTokens(options.findMaxTokens().orElse(null))
+                // 2026/11/04：通用接口复制保留不可变的模型上下文声明。
+                .contextWindow(options.findContextWindow().orElse(null))
                 .frequencyPenalty(options.findFrequencyPenalty().orElse(null))
                 .temperature(options.findTemperature().orElse(null))
                 .topP(options.findTopP().orElse(null))
@@ -210,6 +220,8 @@ public class LLMModelOptions implements ILLMModelOptions {
                 .model(overrides.findModel().orElse(base.model))
                 .thinking(overrides.findThinking().orElse(base.thinking))
                 .maxTokens(overrides.findMaxTokens().orElse(base.maxTokens))
+                // 2026/11/04：只有显式上下文覆盖才替换原模型策略。
+                .contextWindow(overrides.findContextWindow().orElse(base.contextWindow))
                 .frequencyPenalty(overrides.findFrequencyPenalty().orElse(base.frequencyPenalty))
                 .temperature(overrides.findTemperature().orElse(base.temperature))
                 .topP(overrides.findTopP().orElse(base.topP))
@@ -415,6 +427,15 @@ public class LLMModelOptions implements ILLMModelOptions {
     @Override
     public Optional<Integer> findMaxTokens() {
         return Optional.ofNullable(maxTokens);
+    }
+
+    /**
+     * 2026/11/04：返回随模型配置固定的不可变上下文能力。
+     * @return 显式策略，未装配时为空
+     */
+    @Override
+    public Optional<LLMContextWindow> findContextWindow() {
+        return Optional.ofNullable(contextWindow);
     }
 
     /**

@@ -1,10 +1,13 @@
 package org.zexnocs.teanekoagent.memory.layered;
 
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+
 import java.time.Duration;
 
 /**
  * 分层记忆的本地工作量和时限，作用域权限由原配置独立决定。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：统一输入估算、输出上限与后台交互总预算，避免固定额度阻塞合法批次。
  *
  * @param enabled 是否启用分层记忆
  * @param triggerMessages 自动压缩触发消息数
@@ -14,13 +17,26 @@ import java.time.Duration;
  * @param timeout 模型及提交观察总时限
  * @param retention 中期保留期
  * @param triggerBytes 原始消息字节触发阈值
+ * <br>2026/11/04���Ƴ������� token ��ģ����������ҵ�����������ֱ�Լ����
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.1-l
+ * @version 4.7.2-l
  */
 public record LayeredMemorySettings(boolean enabled, int triggerMessages, int keepMessages, int batchMessages,
                                     int maxInputBytes, Duration timeout, Duration retention, int triggerBytes) {
+    /**
+     * 2026/11/04：保留一次无工具请求约束，输入及输出 token 容量由实际模型配置决定。
+     *
+     * @return 不含隐式 token 配额的单次模型调用预算
+     */
+    public LLMCallLimits modelCallLimits() {
+        return new LLMCallLimits(1, 0, 0);
+    }
+
     /**
      * 沿用默认字节触发的显式宿主构造。
      * @param enabled 总开关

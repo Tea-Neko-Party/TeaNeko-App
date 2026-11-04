@@ -12,11 +12,12 @@ import java.util.UUID;
  * 配置事务的明确请求、版本快照和无正文审计，不依赖 HTTP 或 Agent。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：字段标识允许合法下划线，仍不接受任意 JSON 指针。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 public final class ConfigEdits {
     /** 禁止实例化数据命名空间。 */
@@ -51,6 +52,7 @@ public final class ConfigEdits {
     /**
      * 有界原子写请求。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：允许合法下划线字段标识，保持请求大小限制。
      *
      * @param operationId 持久幂等标识
      * @param expectedRevision 调用者已确认的原版本
@@ -59,10 +61,11 @@ public final class ConfigEdits {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.1-l
      */
     public record Change(UUID operationId, String expectedRevision, Action action, Map<String, String> fields) {
         /**
+         * 2026/11/04：字段标识允许下划线，但仍不接受路径或任意属性表达式。
          * @param operationId 幂等标识
          * @param expectedRevision 原版本
          * @param action 动作
@@ -74,7 +77,7 @@ public final class ConfigEdits {
             fields = Map.copyOf(fields);
             if (expectedRevision == null || expectedRevision.isBlank() || expectedRevision.length() > 128
                     || fields.size() > 64 || fields.entrySet().stream().anyMatch(entry ->
-                    !entry.getKey().matches("[a-zA-Z][a-zA-Z0-9]{0,63}") || entry.getValue().length() > 8192)
+                    !entry.getKey().matches("[a-zA-Z][a-zA-Z0-9_]{0,63}") || entry.getValue().length() > 8192)
                     || fields.values().stream().mapToInt(String::length).sum() > 65536
                     || action != Action.PATCH && !fields.isEmpty() || action == Action.PATCH && fields.isEmpty()) {
                 throw new IllegalArgumentException("配置操作的版本、字段或正文长度无效。");

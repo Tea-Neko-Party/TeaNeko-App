@@ -30,10 +30,7 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.ConcurrentModificationException;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -44,13 +41,49 @@ import static org.mockito.Mockito.*;
  * 使用真实 YAML、文件锁、原子移动和私有账本验证关键保存与恢复路径，不启动机器人。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：自动类型投影与明确的热更新适配器共享真实文件事务。
+ *
+ * <br>2026/11/04：模型文件与表单夹具提供必需的上下文及输出容量声明。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.2-l
  */
 class FileSettingsIntegrationTest {
+    /**
+     * 自动表单使用真实 YAML 命名并保守要求重启；专用合同可以确认原模块的热更新。
+     * @throws Exception 当临时文件操作失败时
+     */
+    @Test
+    void discoversRawFileSchemaAndKeepsHotApplyExplicit() throws Exception {
+        var fixture = new Fixture(root);
+        var security = fixture.files.get(WebSecurityFileConfig.class);
+        security.setFileSections(List.of("file.runtime.observability"));
+        var view = result(fixture.service.read("file.runtime.observability", () -> {}));
+        assertEquals("RESTART", view.application());
+        assertTrue(view.fields().stream().anyMatch(field -> field.path().equals("/max-runs")));
+        var saved = result(fixture.service.save("file.runtime.observability", new FileSettings.Change(UUID.randomUUID(),
+                view.revision(), List.of(new FileSettings.Edit("/max-runs", "SET", mapper.valueToTree(1500)))), () -> {}));
+        assertEquals("RESTART_REQUIRED", result(fixture.service.apply("file.runtime.observability",
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> {})).status());
+        assertEquals(1000, fixture.files.get(org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class).getMaxRuns());
+        var runtime = new RuntimeFileSettingsAdapter(fixture.parsers);
+        var declarations = new LinkedHashMap<>(fixture.scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class));
+        declarations.put("runtime", new IndependentPair<>(RuntimeFileSettingsAdapter.class.getAnnotation(TeaNekoFileSettings.class), runtime));
+        when(fixture.scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class)).thenReturn(declarations);
+        doReturn(RuntimeFileSettingsAdapter.class).when(fixture.scanner).getBeanClass(runtime);
+        security.setFileSections(List.of("core.runtime"));
+        var service = new FileSettingsService(new FileSettingsDirectory(fixture.scanner, fixture.classes, fixture.parsers),
+                fixture.files, mock(PluginRegistry.class), fixture.journal, Runnable::run);
+        var current = result(service.read("core.runtime", () -> {}));
+        assertEquals("APPLIED", result(service.apply("core.runtime",
+                new FileSettings.Application(UUID.randomUUID(), current.revision()), () -> {})).status());
+        assertEquals(1500, fixture.files.get(org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class).getMaxRuns());
+    }
+
     @TempDir Path root;
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -192,7 +225,8 @@ class FileSettingsIntegrationTest {
         var fixture = new Fixture(root);
         var view = result(fixture.service.read("agent.models", () -> {}));
         assertFalse(mapper.writeValueAsString(view).contains("first-key"));
-        var inserted = mapper.readTree("{\"id\":\"second\",\"provider\":\"deepseek\",\"model\":\"other-model\",\"api-key\":\"second-key\"}");
+        // 2026/11/04：新增模型条目同时提供必需的输出额度及真实容量声明。
+        var inserted = mapper.readTree("{\"id\":\"second\",\"provider\":\"deepseek\",\"model\":\"other-model\",\"max-tokens\":2048,\"context-window-tokens\":131072,\"api-key\":\"second-key\"}");
         var change = new FileSettings.Change(UUID.randomUUID(), view.revision(), List.of(
                 new FileSettings.Edit("/models", "APPEND", inserted)));
         var receipt = result(fixture.service.save("agent.models", change, () -> {}));
@@ -220,16 +254,24 @@ class FileSettingsIntegrationTest {
     /**
      * 所有写入均限制到 JUnit 临时目录，使用原扫描契约和真实配置服务。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：共用实际文件解析器，支持自动目录与专用热应用适配器。
+     * <br>2026/11/04：测试模型文件显式声明上下文容量和输出额度。
+     * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.2-l
      */
     private final class Fixture {
+        // 2026/11/04：自动元数据与文件服务共用扫描器，避免测试另一套命名策略。
+        final FileTypeScanner parsers;
+        final IClassScanner classes;
         final Path path;
         final FileConfigService files;
         final FileConfigOperations journal;
+        // 2026/11/04：专用与自动投影使用同一实际解析器目录。
+        final FileSettingsDirectory directory;
         final Adapter adapter = new Adapter();
         final IBeanScanner scanner = mock(IBeanScanner.class);
         final FileSettingsService service;
@@ -242,17 +284,20 @@ class FileSettingsIntegrationTest {
             var environment = new StandardEnvironment();
             environment.getPropertySources().addFirst(new MapPropertySource("测试环境", Map.of("TEST_SECRET", "测试环境秘密")));
             var parser = new YAMLFileTypeParser(environment);
-            var parsers = mock(FileTypeScanner.class);
+            parsers = mock(FileTypeScanner.class);
             when(parsers.get(FileConfigType.YAML)).thenReturn(parser);
-            var classes = mock(IClassScanner.class);
+            classes = mock(IClassScanner.class);
             when(classes.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class)).thenReturn(Map.of(
                     Value.class, Value.class.getAnnotation(FileConfig.class), WebSecurityFileConfig.class, WebSecurityFileConfig.class.getAnnotation(FileConfig.class),
-                    LLMModelFileConfig.class, LLMModelFileConfig.class.getAnnotation(FileConfig.class)));
+                    LLMModelFileConfig.class, LLMModelFileConfig.class.getAnnotation(FileConfig.class),
+                    org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class,
+                    org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class.getAnnotation(FileConfig.class)));
             var config = directory.resolve("config");
             Files.createDirectories(config.resolve("agent"));
             path = config.resolve("value.yml");
             Files.writeString(path, "name: 原名称\nsecret: '${TEST_SECRET}'\nunknown: {保留: 未知字段}\nmetadata: 不应回显的值\n");
-            Files.writeString(config.resolve("agent/model.yml"), "default-model-id: deepseek\nmodels:\n  - id: deepseek\n    model: test-model\n    api-key: first-key\n");
+            // 2026/11/04：文件换代夹具声明容量，继续验证旧参数不可获取新凭据。
+            Files.writeString(config.resolve("agent/model.yml"), "default-model-id: deepseek\nmodels:\n  - id: deepseek\n    model: test-model\n    max-tokens: 2048\n    context-window-tokens: 131072\n    api-key: first-key\n");
             files = new FileConfigService(parsers, classes, mock(ILogger.class), config);
             files.reload();
             files.get(WebSecurityFileConfig.class).setFileSections(List.of("test.value", "agent.models"));
@@ -263,6 +308,7 @@ class FileSettingsIntegrationTest {
             doReturn(Adapter.class).when(scanner).getBeanClass(adapter);
             doReturn(AgentFileSettings.Models.class).when(scanner).getBeanClass(modelAdapter);
             journal = new FileConfigOperations(mapper, directory.resolve("journal"));
+            this.directory = new FileSettingsDirectory(scanner, classes, parsers);
             service = service(journal);
         }
 
@@ -273,7 +319,7 @@ class FileSettingsIntegrationTest {
         FileSettingsService service(FileConfigOperations operations) {
             var plugins = mock(PluginRegistry.class);
             when(plugins.isEnabled("teaneko.agent")).thenReturn(true);
-            return new FileSettingsService(scanner, files, plugins, operations, Runnable::run);
+            return new FileSettingsService(directory, files, plugins, operations, Runnable::run);
         }
     }
 

@@ -2,6 +2,8 @@
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
+import DetailPanel from './DetailPanel.vue'
+import {useConsolePreferences} from './console-preferences'
 
 interface Stamp { revision: string; generation: number; current: boolean }
 interface Field { path: string; label: string; description: string; kind: string; secret: boolean; configured: boolean; source: string; value: unknown }
@@ -12,6 +14,7 @@ interface Edit { path: string; action: string; value?: unknown }
 interface Receipt { operationId: string; status: string; diskRevision: string; runtime: Stamp; note: string; fields: string[]; at: string; replayed: boolean }
 interface Pending { id: string; action: 'save' | 'apply'; body: { operationId: string; expectedRevision: string; edits?: Edit[] } }
 const emit = defineEmits<{ expired: [] }>()
+const {advanced} = useConsolePreferences()
 const sections = ref<Section[]>([])
 const view = ref<View>()
 const busy = ref(false)
@@ -39,6 +42,15 @@ function resetDrafts() {
   structure.value = undefined
   appendText.value = '{}'
   appendPath.value = ''
+}
+
+// 2026/11/04：普通字段直接编辑，恢复原文时撤销该字段变更；秘密仍必须显式选择动作。
+function editField(field: Field, text: string) {
+  const draft = drafts[field.path]!
+  draft.text = text
+  if (field.secret) return
+  const original = field.value == null ? '' : typeof field.value === 'string' ? field.value : JSON.stringify(field.value, null, 2)
+  draft.action = text === original ? 'KEEP' : 'SET'
 }
 
 async function run(action: () => Promise<void>) {
@@ -167,8 +179,8 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
 </script>
 
 <template>
+  <!-- 2026/11/04：直接编辑普通字段，秘密动作保持显式，原提交确认流程继续可见。 -->
   <div class="file-settings">
-    <ElAlert title="只编辑本地允许的配置区。秘密不回显；保存与应用分别执行，认证根配置须在本机管理。" type="info" :closable="false" />
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="success" :closable="false" />
     <div class="settings-columns">
@@ -178,31 +190,29 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
       </ElCard>
       <div v-if="view" class="settings-editor">
         <ElCard shadow="never"><h2>{{ view.name }}</h2>
-          <p class="small muted">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }} · {{ view.runtime.current ? '最近加载成功' : '尚未加载成功' }}</p>
-          <p class="small revision">磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
           <ElTag :type="view.runtime.current && view.runtime.revision === view.revision ? 'success' : 'warning'">{{ view.runtime.current && view.runtime.revision === view.revision ? '运行与磁盘一致' : '磁盘与运行状态不同' }}</ElTag>
-          <p class="small muted">移除声明会恢复模板或类型默认行为。环境占位符按运行进程环境解析；预检不验证远端 API 密钥是否有效。</p>
+          <DetailPanel title="文件与应用说明"><p>保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p></DetailPanel>
           <div v-for="field in view.fields" :key="field.path" class="settings-field">
-            <div><label :for="`file-${field.path}`">{{ field.label }}</label><p class="small muted">{{ field.description }}</p><span class="field-source">{{ field.path }} · {{ field.source }}{{ field.secret ? (field.configured ? ' · 已声明（值已隐藏）' : ' · 未声明') : '' }}</span></div>
+            <div><label :for="`file-${field.path}${field.secret && drafts[field.path]!.action !== 'REPLACE_SECRET' ? '-action' : ''}`">{{ field.label }}</label><span v-if="field.secret" class="field-source"> · {{ field.configured ? '已配置' : '未配置' }}</span><DetailPanel title="说明"><p>{{ field.description }}</p><span class="field-source">{{ field.path }} · {{ field.source }}</span></DetailPanel></div>
             <div class="file-input">
-              <ElSelect v-model="drafts[field.path]!.action" :aria-label="`${field.label}修改方式`" :disabled="locked || fieldLocked(field.path)">
+              <ElSelect v-show="advanced || field.secret || !['KEEP', 'SET'].includes(drafts[field.path]!.action)" :id="`file-${field.path}-action`" v-model="drafts[field.path]!.action" :aria-label="`${field.label}修改方式`" :disabled="locked || fieldLocked(field.path)">
                 <ElOption label="保持原值" value="KEEP" />
                 <ElOption v-if="!field.secret" label="设置新值" value="SET" /><ElOption v-if="!field.secret" label="移除声明" value="REMOVE" />
                 <ElOption v-if="field.secret" label="替换秘密" value="REPLACE_SECRET" /><ElOption v-if="field.secret" label="清除秘密" value="CLEAR_SECRET" />
               </ElSelect>
-              <ElInput :id="`file-${field.path}`" v-model="drafts[field.path]!.text" :type="field.secret ? 'password' : field.kind === 'JSON' ? 'textarea' : 'text'" :rows="3" :disabled="locked || fieldLocked(field.path) || !['SET', 'REPLACE_SECRET'].includes(drafts[field.path]!.action)" :placeholder="field.secret ? '保持原值时留空；替换时输入新值或环境模板' : '原始值，支持环境占位符'" autocomplete="off" :aria-label="field.label" />
+              <ElInput v-if="!field.secret || drafts[field.path]!.action === 'REPLACE_SECRET'" :id="`file-${field.path}`" :model-value="drafts[field.path]!.text" @update:model-value="value => editField(field, value)" :type="field.secret ? 'password' : field.kind === 'JSON' ? 'textarea' : 'text'" :rows="3" :disabled="locked || fieldLocked(field.path) || !['KEEP', 'SET', 'REPLACE_SECRET'].includes(drafts[field.path]!.action)" :placeholder="field.secret ? '新令牌或环境占位符' : '支持环境占位符'" autocomplete="off" :aria-label="field.label" />
             </div>
           </div>
         </ElCard>
         <ElCard v-for="collection in view.collections" :key="collection.path" shadow="never"><h3>{{ collection.label }} · {{ view.collectionSizes[collection.path] ?? 0 }} / {{ collection.maximum }}</h3>
-          <p class="small muted">集合增删需单独保存；新增对象只允许已开放的字段。模型示例：{"id":"new-model","model":"模型名称"}；人格示例：{"id":"new-character","display-name":"显示名称"}。</p>
-          <div class="editor-actions"><ElButton v-for="index in (view.collectionSizes[collection.path] ?? 0)" :key="index" :disabled="locked || !!structure" @click="remove(collection, index - 1)">删除第 {{ index }} 项</ElButton>
+          <DetailPanel title="条目编辑说明"><p>集合增删需单独保存。模型示例：{"id":"new-model","model":"模型名称"}；人格示例：{"id":"new-character","display-name":"显示名称"}。</p></DetailPanel>
+          <div class="editor-actions"><template v-if="advanced"><ElButton v-for="index in (view.collectionSizes[collection.path] ?? 0)" :key="index" :disabled="locked || !!structure" @click="remove(collection, index - 1)">删除第 {{ index }} 项</ElButton></template>
             <ElButton :disabled="locked || !!structure || (view.collectionSizes[collection.path] ?? 0) >= collection.maximum" @click="appendPath = collection.path">新增条目</ElButton></div>
           <div v-if="appendPath === collection.path" class="file-append"><ElInput v-model="appendText" type="textarea" :rows="5" aria-label="新增配置条目 JSON" :disabled="locked" /><ElButton :disabled="locked" @click="append">加入本次修改</ElButton></div>
         </ElCard>
         <ElCard v-if="dirty" shadow="never"><h3>本次修改</h3><ul><li v-for="line in summary" :key="line" class="small revision">{{ line }}</li></ul><p class="small muted">保存将重新排版 YAML，原注释不会保留。未修改的值、环境模板和未知配置项保留。</p></ElCard>
         <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>原操作尚待确认</h3><p class="small revision">操作编号：{{ pending.body.operationId }}</p><p class="small muted">连接中断不代表写入失败。先查询原回执；如尚无记录，可使用原请求重试。</p><ElButton :disabled="busy" @click="query">查询原操作</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton></ElCard>
-        <div class="editor-actions"><ElButton :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">保存到磁盘</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用当前磁盘版本' }}</ElButton><ElButton :disabled="busy" @click="discard">重新读取 / 放弃草稿</ElButton></div>
+        <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">保存到磁盘</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton :disabled="busy" @click="discard">{{ dirty ? '放弃修改' : '重新读取' }}</ElButton></div>
         <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ statusNames[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>{{ new Date(receipt.at).toLocaleString('zh-CN') }}{{ receipt.replayed ? ' · 原结果重放' : '' }} · 历史回执不代表当前进程或磁盘仍是同一状态。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
       </div>
     </div>

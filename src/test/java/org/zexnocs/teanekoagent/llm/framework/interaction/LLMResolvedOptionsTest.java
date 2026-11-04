@@ -42,10 +42,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04�������������ȸ����ڼ䱣�����������ȣ���ʽԤ�㲻������������
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMResolvedOptionsTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -201,13 +205,14 @@ class LLMResolvedOptionsTest {
 
     /**
      * 验证真实工具往返中，配置热更新和原始 DTO 修改均不能改变本轮参数；token 预检也保留策略。
-     * @param tokenBudget 是否开启总 token 准入和输出上限收紧
+     * 2026/11/04：显式预算覆盖完整输出，禁止预算层缩小本轮已固定参数。
+     * @param tokenBudget 是否开启总 token 准入
      */
     @ParameterizedTest @ValueSource(booleans = {false, true})
     void interactionPinsOptionsAcrossToolRound(boolean tokenBudget) {
         var pinned = resolved();
         clearInvocations(files, defaults);
-        var limits = new LLMCallLimits(3, 2, 6, tokenBudget ? 18L : null);
+        var limits = new LLMCallLimits(3, 2, 6, tokenBudget ? 100L : null);
         var settings = new LLMInteractionSettings(limits, LLMInteractionSettings.defaults().modelTimeout(),
                 LLMInteractionSettings.defaults().toolTimeout(), LLMInteractionSettings.defaults().turnTimeout());
         var service = new LLMInteractionService(models, () -> settings, runtime, runtime.scheduler,
@@ -243,8 +248,8 @@ class LLMResolvedOptionsTest {
                 assertEquals(Map.of("vendor.pinned", List.of("原值")), actual.getMetadata());
             }
             if (tokenBudget) {
-                assertEquals(13, adapter.received.getFirst().getMaxTokens());
-                assertEquals(11, adapter.received.getLast().getMaxTokens());
+                assertEquals(20, adapter.received.getFirst().getMaxTokens());
+                assertEquals(20, adapter.received.getLast().getMaxTokens());
             }
             verifyNoInteractions(files, defaults);
         }

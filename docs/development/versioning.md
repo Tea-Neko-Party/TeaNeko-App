@@ -4,6 +4,12 @@
 
 发布内容以 [版本日志](../changelog/README.md) 为准。4.5.0-l、4.6.0-l 与 4.6.2-l 已按功能、兼容及验收边界整理；generateGitChangelog 仍会写入同名文件，重新执行前须备份并审阅，避免用自动提交列表覆盖已整理内容。该任务只统计 HEAD 中已有提交，未提交的功能不会自动进入日志。
 
+## 运行版本
+
+4.7.1-l 起，`generateVersionInfo` 根据同一版本管理器生成 `teaneko-version.properties`，由 `processResources` 自动依赖并进入产物。JAR 优先读取自身清单，普通类路径读取生成资源，不读取工作目录中的源码版本文件，也不接受 `app.version` 或启动参数覆盖。
+
+Gradle `classes`、`bootRun`、`jar`、`bootJar` 自动准备资源。IDE 直接编译时先执行 `generateVersionInfo` 并同步 Gradle；完全绕过资源构建的裸类路径仍显示 `dev`。生成资源不提交 Git，不作为第二份手工版本号维护；升级/回退仍通过原发布流程进行。
+
 ## 入口与隔离
 
 | 任务 | 行为 |

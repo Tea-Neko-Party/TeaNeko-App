@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
@@ -34,12 +35,17 @@ import java.util.concurrent.locks.ReentrantLock;
 /**
  * 签到服务
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Service
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "每日签到缓存重置",
+        description = "每天按原规则清空当日签到标记，不能从网页暂停日切。", controllable = false)
 public class SignInService {
     /// 存储签到数据的命名空间
     public static final String NAMESPACE = "sign_in";

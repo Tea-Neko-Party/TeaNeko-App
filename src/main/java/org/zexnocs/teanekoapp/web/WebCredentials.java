@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoapp.web;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,11 +33,13 @@ import java.util.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：启动时输出控制台地址、登录令牌及片段式快捷链接。
+ * <br>2026/11/04：启动失败报告具体阶段，机器空白令牌允许任意认证头。
+ * <br>2026/11/04：机器策略变更撤销会话代次，但保留本次启动的随机管理员令牌。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Service
 public final class WebCredentials implements AuthenticationProvider {
@@ -70,9 +73,13 @@ public final class WebCredentials implements AuthenticationProvider {
      */
     @EventListener
     public synchronized void ready(ApplicationReadyEvent event) {
+        // 2026/11/04：固定阶段说明定位失败，不记录可能含凭据的原异常消息或异常链。
+        String phase = "安全配置校验";
         try {
             if (settings().enabled()) {
+                phase = "根凭据准备及受限文件写入";
                 var active = current();
+                phase = "启动登录提示读取";
                 String token = active.settings().adminToken();
                 if (token.isEmpty()) {
                     token = Files.readString(directory.resolve("runtime-admin-token"), StandardCharsets.UTF_8);
@@ -85,7 +92,10 @@ public final class WebCredentials implements AuthenticationProvider {
             }
         } catch (RuntimeException | IOException failure) {
             event.getApplicationContext().getBean(ILogger.class).error(getClass().getName(),
-                    "Web 安全配置或受限令牌文件不可用，管理入口保持关闭。");
+                    "Web 初始化失败。原因=" + (failure instanceof IOException ? "TOKEN_FILE_READ"
+                            : phase.equals("安全配置校验") ? "SECURITY_CONFIG_INVALID" : "CREDENTIAL_PREPARATION_FAILED")
+                            + "，阶段=" + phase + "，异常类型=" + failure.getClass().getSimpleName()
+                            + "。请检查 config/web/security.yml 或 data/web 的权限；后续请求仍按实际配置校验。");
         }
     }
 
@@ -98,6 +108,7 @@ public final class WebCredentials implements AuthenticationProvider {
     }
 
     /**
+     * 2026/11/04：非管理员秘密变更只更新代次，不重新生成本次启动的随机秘密。
      * @return 当前可用认证状态
      * @throws IllegalStateException 当控制面关闭或凭据准备失败时
      */
@@ -108,6 +119,10 @@ public final class WebCredentials implements AuthenticationProvider {
             throw new IllegalStateException("Web 控制台尚未启用。");
         }
         if (state == null || !state.settings().equals(settings)) {
+            if (state != null && settings.adminToken().isEmpty() && state.settings().adminToken().isEmpty()) {
+                state = new State(settings, UUID.randomUUID(), state.hash());
+                return state;
+            }
             String secret = settings.adminToken();
             if (secret.isEmpty()) {
                 byte[] bytes = new byte[32];
@@ -175,6 +190,7 @@ public final class WebCredentials implements AuthenticationProvider {
     }
 
     /**
+     * 2026/11/04：已声明客户端的空白令牌允许任意值或缺省认证头，未声明客户端仍拒绝。
      * @param client 路径中明确的机器客户端
      * @param authorization 独立机器凭据头
      * @return 当前配置是否允许该握手
@@ -185,6 +201,10 @@ public final class WebCredentials implements AuthenticationProvider {
             return true;
         }
         String secret = config.machineTokens().get(client);
+        // 2026/11/04：空白只作用于明确声明的客户端，不扩大为所有客户端匿名接入。
+        if (secret != null && secret.isBlank()) {
+            return true;
+        }
         return secret != null && authorization != null && authorization.startsWith("Bearer ")
                 && MessageDigest.isEqual(digest(secret), digest(authorization.substring(7)));
     }
@@ -216,7 +236,7 @@ public final class WebCredentials implements AuthenticationProvider {
      * @return 是否只接受本登录表单的令牌类型
      */
     @Override
-    public boolean supports(Class<?> authentication) {
+    public boolean supports(@NonNull Class<?> authentication) {
         return UsernamePasswordAuthenticationToken.class.isAssignableFrom(authentication);
     }
 

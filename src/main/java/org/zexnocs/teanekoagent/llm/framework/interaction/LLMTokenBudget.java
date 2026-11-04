@@ -14,11 +14,14 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * 将 LLM 的输入估算与输出上限适配到 Core 通用预留；局部预算不能扩大宿主总额度。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：完整预留模型输出额度，预算不足拒绝且不自动调低请求上限。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 final class LLMTokenBudget {
     private final ResourceBudget parent;
@@ -49,27 +52,27 @@ final class LLMTokenBudget {
     }
 
     /**
-     * 按最新剩余额度收紧输出上限并预留输入加最大输出，必须在当前阶段受控临界区内调用。
+     * 2026/11/04：完整预留输入加模型配置输出，额度不足时拒绝，不修改本次输出上限。
      * @param estimate 已在临界区外完成的输入估算
      * @param options 本次私有且已解析的模型参数
      * @return 两级预留，实际模型调用尚未发起
-     * @throws BudgetExceededException 当输入与至少一个输出 token 无法容纳时
+     * @throws BudgetExceededException 当输入与完整输出额度无法容纳时
      * @throws LLMConfigurationException 当模型缺少正输出上限时
      */
     Held reserve(LLMTokenEstimate estimate, LLMModelOptions options) {
         int configured = options.findMaxTokens().orElseThrow(() -> new LLMConfigurationException("启用 token 预算时必须配置模型输出上限。"));
         if (configured < 1) { throw new LLMConfigurationException("模型输出上限必须为正数。"); }
         long available = Math.min(parent.remaining(TOTAL_TOKENS), local.remaining(TOTAL_TOKENS));
-        if (estimate.inputTokens() >= available) {
+        // 2026/11/04：先检查加法边界，防止估算溢出导致错误准入。
+        long units = estimate.inputTokens() > Long.MAX_VALUE - configured
+                ? Long.MAX_VALUE : estimate.inputTokens() + configured;
+        if (estimate.inputTokens() > Long.MAX_VALUE - configured || units > available) {
             var budget = local.remaining(TOTAL_TOKENS) <= parent.remaining(TOTAL_TOKENS) ? local : parent;
-            throw exceeded(budget, estimate.inputTokens() == Long.MAX_VALUE ? Long.MAX_VALUE : estimate.inputTokens() + 1);
+            throw exceeded(budget, units);
         }
-        int output = (int) Math.min(configured, available - estimate.inputTokens());
-        long units = estimate.inputTokens() + output;
         var global = parent.reserve(TOTAL_TOKENS, units);
         try {
             var own = local.reserve(TOTAL_TOKENS, units);
-            options.setMaxTokens(output);
             return new Held(global, own, units, estimate.method());
         } catch (RuntimeException failure) {
             global.close();

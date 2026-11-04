@@ -7,6 +7,7 @@ import org.zexnocs.teanekoclient.onebot.core.OnebotTeaNekoClient;
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotMessageData;
 import org.zexnocs.teanekoclient.onebot.sender.private_.LikeSender;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.command.api.*;
@@ -24,10 +25,12 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 /**
  * 点赞指令，允许用户给自己的资料卡点赞，并且可以选择加入到每天凌晨1点的定时点赞队列中。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Description("""
         让机器人给你个人资料卡点赞。
@@ -37,6 +40,9 @@ import java.util.concurrent.ConcurrentLinkedQueue;
         scope = CommandScope.ALL,
         permission = CommandPermission.ALL,
         supportedClients = {OnebotTeaNekoClient.class})
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "定时点赞",
+        description = "按原登记队列执行每日点赞。")
 public class LikeCommand {
     /// 数据库相关常量
     public static final String DATABASE_NAMESPACE = "like_command";

@@ -1,6 +1,8 @@
 ---
 # 默认路由、模型参数、凭据、连接与 metadata 统一在本文件配置。
 # 必须为选定路由填写实际模型名；空列表不会自动回退到代码中的模型名。
+# 2026/11/04：每个启用模型须填写 max-tokens 和真实 context-window-tokens；输入占比默认 0.8。
+# 输入估算不超过上下文占比，且输入加完整输出须能放入总容量；超限拒绝，不自动降低输出。
 # 调用参数、凭据、连接和 metadata 统一放在同一条模型配置中。
 # Core YAML 解析器支持 ${变量名} 和 ${变量名:默认值}；字符串占位符建议加引号。
 # 空默认值允许未使用的供应商先不配置密钥，实际调用时才检查所选供应商。
@@ -15,6 +17,8 @@ models: []
 #     base-url: "${DEEPSEEK_BASE_URL:}"
 #     api-path: "${DEEPSEEK_API_PATH:}"
 #     max-tokens: "${DEEPSEEK_MAX_TOKENS:2048}"
+#     context-window-tokens: "${DEEPSEEK_CONTEXT_WINDOW_TOKENS}"
+#     context-input-ratio: 0.8
 #     metadata:
 #       deepseek.reasoningEffort: "${DEEPSEEK_REASONING_EFFORT:medium}"
 #   - id: "openai"
@@ -23,9 +27,13 @@ models: []
 #     base-url: "${OPENAI_BASE_URL:}"
 #     api-path: "${OPENAI_API_PATH:}"
 #     max-tokens: 2048
+#     context-window-tokens: "${OPENAI_CONTEXT_WINDOW_TOKENS}"
+#     context-input-ratio: 0.8
 #   - id: "kimi"
 #     model: "${KIMI_MODEL:YOUR_DEPLOYED_MODEL}"
 #     api-key: "${KIMI_API_KEY:}"
 #     base-url: "${KIMI_BASE_URL:}"
 #     api-path: "${KIMI_API_PATH:}"
 #     max-tokens: 2048
+#     context-window-tokens: "${KIMI_CONTEXT_WINDOW_TOKENS}"
+#     context-input-ratio: 0.8

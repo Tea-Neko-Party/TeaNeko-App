@@ -27,10 +27,14 @@ import java.util.concurrent.ScheduledExecutorService;
  * <br>2026/11/03：观察式人格已装配时停止旧逐轮模型分析，关闭观察后保留回退入口。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ȡ���˸�ѧϰĬ���� token ��ֻ��ȡ��ʽԤ�㡣
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.6.1-l
+ * @version 4.7.2-l
  */
 @Configuration(proxyBeanMethods = false)
 public class PersonalityLearningConfig {
@@ -61,7 +65,8 @@ public class PersonalityLearningConfig {
                 Duration.ofSeconds(environment.getProperty("tea-neko.agent.personality-learning.cooldown-seconds", Long.class, 300L)),
                 Duration.ofSeconds(environment.getProperty("tea-neko.agent.personality-learning.timeout-seconds", Long.class, 45L)),
                 environment.getProperty("tea-neko.agent.personality-learning.max-model-calls", Integer.class, 1),
-                environment.getProperty("tea-neko.agent.personality-learning.max-total-tokens", Long.class, 16384L),
+                // 2026/11/04：取消默认总 token 配额，显式配置继续执行拒绝准入。
+                environment.getProperty("tea-neko.agent.personality-learning.max-total-tokens", Long.class),
                 environment.getProperty("tea-neko.agent.personality-learning.max-input-bytes", Long.class, 131072L),
                 Duration.ofDays(environment.getProperty("tea-neko.agent.personality-learning.retention-days", Long.class, 30L))),
                 mapper, executor, scheduler, Clock.systemUTC(), report -> logger.info("Agent 人格学习", "后台候选结束，状态=" + report.outcome()

@@ -21,9 +21,11 @@ group scope 的格式由正则 `(.+)-group@(.+)` 解析。解析后会通过 `Te
 
 | 来源 | 行为 |
 |---|---|
-| Spring 配置 `app.version` | 如果存在且不是 `unknown`，直接返回该值。 |
-| Jar manifest | 如果 `app.version` 为 `unknown`，尝试读取 `TeaNekoAppApplication.class.getPackage().getImplementationVersion()`。 |
-| 开发环境 | 如果前两者都不可用，返回 `dev`。 |
+| JAR 清单 | 优先读取当前应用产物的 `Implementation-Version`。 |
+| 构建生成资源 | 普通类路径读取 `teaneko-version.properties`，由原版本管理器生成，源头仍是根目录 `version.properties`。 |
+| 裸类路径 | 既无清单也无生成资源时返回 `dev`；已有资源损坏时明确失败。 |
+
+4.7.1-l 起不再从 `app.version` 或 `-Dversion` 覆盖运行版本。Gradle `classes`、`bootRun` 和 JAR 构建都会生成资源；IDE 直接编译时先执行 `generateVersionInfo` 并同步 Gradle 资源目录。
 
 # 四. 注意事项
 

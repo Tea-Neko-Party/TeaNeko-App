@@ -5,6 +5,8 @@ import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMTokenEstimator;
+import org.zexnocs.teanekoagent.llm.framework.interaction.JsonLLMTokenEstimator;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.*;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
@@ -21,14 +23,29 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>2026/11/02：模型插件调用接入归属及异步结果版本守卫。
  *
  * 2026/11/03：同步构造模型请求时固定文件代次，拒绝旧参数使用新凭据。
+ * <br>2026/11/04：所有调用路径在请求前按模型上下文容量及完整输出额度执行准入。
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.7.0-l
+ * @version 4.7.2-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
+    // 2026/11/04：默认使用统一保守估算；应用安装自定义估算器时与交互服务共用口径。
+    private ILLMTokenEstimator contextEstimator = new JsonLLMTokenEstimator(new tools.jackson.databind.ObjectMapper());
+
+    /**
+     * 2026/11/04：复用应用的输入估算器，直接调用与交互调用采用相同容量口径。
+     * @param estimator 已装配的输入估算器
+     */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installContextEstimator(ILLMTokenEstimator estimator) {
+        contextEstimator = estimator;
+    }
+
     private org.zexnocs.teanekoagent.llm.file_config.@org.jspecify.annotations.Nullable LLMFileConfigurationEpoch fileEpoch;
 
     /**
@@ -240,6 +257,11 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
             throw new IllegalArgumentException("模型不支持当前输入参数：" + modelId);
         }
         LLMInputValidator.validate(prompt.getMessages(), model.getCapabilities(options.getModel()));
+        // 2026/11/04：直调与工具循环均检查完整输入，额度不足不改变 max-tokens。
+        options.findContextWindow().ifPresent(context -> {
+            var input = contextEstimator.estimate(new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED));
+            context.requireFits(input.inputTokens(), options.getMaxTokens());
+        });
         return options;
     }
 

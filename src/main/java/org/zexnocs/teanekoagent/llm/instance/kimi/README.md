@@ -24,6 +24,8 @@ models:
   - id: "kimi"
     model: "kimi-k2.6"
     max-tokens: 4096
+    context-window-tokens: "${KIMI_CONTEXT_WINDOW_TOKENS}"
+    context-input-ratio: 0.8
     thinking: true
     metadata:
       kimi.thinkingKeep: true

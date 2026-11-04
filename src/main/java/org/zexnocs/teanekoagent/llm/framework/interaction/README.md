@@ -48,7 +48,9 @@ tea-neko:
 
 启用后，在模型阶段的异步工作中调用 `ILLMModelService.resolveOptions` 取得真实合并参数；此预检不发起模型请求。必须有正数 maxTokens，缺失时返回 `CONFIGURATION_ERROR`。`ILLMTokenEstimator` 在执行控制临界区外估算固定消息、工具定义和透明状态；默认 `JsonLLMTokenEstimator` 按 UTF-8 JSON 长度加固定开销计数，流式统计长度，不保存额外正文副本或执行工具。可替换为具体模型的本地 tokenizer，不得偷偷发起额外供应商计数请求。
 
-预留总量为输入估算加输出上限。输出上限取模型配置与两级剩余额度减输入估算的较小值，至少留一个输出 token；不够时在调用模型端口前拒绝，不扣模型次数。Core 原子预留同时约束并行交互的在途请求；模型次数最终未取得时退还尚未使用的预留。
+预留总量为输入估算加模型配置的完整输出上限。任一级剩余额度不足时在调用模型端口前拒绝，不扣模型次数、不调整 `max-tokens`。Core 原子预留同时约束并行交互的在途请求；模型次数最终未取得时退还尚未使用的预留。
+
+即使未设置整轮总 token 配额，每次请求仍按有效模型的 `context-window-tokens` 和 `context-input-ratio`（默认 0.8）预检输入，并为完整输出额度保留空间。工具结果回填后的下一次模型请求重新估算；直接模型调用同样检查容量。超限通过 `BUDGET_EXCEEDED` 和 `llm.context-input-tokens` 维度报告，不进入供应商调用。模型容量与配置方式见[本地模型配置](../../file_config/README.md)。
 
 成功响应有合法 usage 时按 `max(totalTokens, promptTokens + completionTokens)` 结算，退还未用预留或补记超出估算的量，不重复加算 reasoningTokens。原始字段仍保留在响应。已发起的失败、取消、超时或缺失/非法 usage 保守保留本次全部预留，并在 `ModelAttempt.tokenUsage` 中标为 `ESTIMATED`；算法标识和预留量可观察。未启用预算且缺失报告时 tokenUsage 为空，表示未知，不表示零消耗。迟到响应不能再次结算或退还已经交付的估算。
 

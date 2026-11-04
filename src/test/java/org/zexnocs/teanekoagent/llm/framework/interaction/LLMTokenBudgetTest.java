@@ -1,11 +1,14 @@
 package org.zexnocs.teanekoagent.llm.framework.interaction;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMContextWindow;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
@@ -41,12 +44,50 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04����֤�������Ԥ�������������������Ӷ�Ȳ���ʱ�ܾ��Ҳ����������
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMTokenBudgetTest {
+    /**
+     * 2026/11/04：工具回填使后续输入超限时，独立于显式总预算拒绝新请求，原输出参数不变。
+     * @param tokenBudget 是否同时声明整轮总 token 配额
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void rejectsContextGrowthBeforeNextAttemptWithoutClampingOutput(boolean tokenBudget) {
+        when(estimator.estimate(any())).thenReturn(new LLMTokenEstimate(10, "fixed-v1"), new LLMTokenEstimate(11, "fixed-v1"));
+        var options = LLMModelOptions.builder().provider("test").model("test").maxTokens(20)
+                .contextWindow(new LLMContextWindow(100, 0.1)).build();
+        try (var parent = parent(tokenBudget ? 1000L : null)) {
+            var trusted = new ToolInvocationContext(UUID.randomUUID(),
+                    EntitySnapshot.of(EntityId.random(), ComponentPatch.empty()), parent);
+            var bindings = new LLMToolSet(new ObjectMapper(), List.of(new LLMToolBinding(
+                    LLMTool.builder().name("work").build(), (call, context) -> {
+                        effects.incrementAndGet();
+                        return CompletableFuture.completedStage("工具回填后输入增长");
+                    })));
+            var prompt = new LLMPrompt(LLMUserMessage.builder()
+                    .contents(new LLMContentListBuilder().addText("离线输入").build()).build(), options);
+            var pending = service.interact(prompt, bindings, trusted, settings(tokenBudget ? 1000L : null));
+            runtime.runAll();
+            assertEquals(20, prompts.getFirst().getOptions().getMaxTokens());
+            reply(response(15, call("a")));
+            var result = pending.toCompletableFuture().join();
+            assertEquals(BUDGET_EXCEEDED, result.status());
+            assertEquals(LLMContextWindow.INPUT_TOKENS, result.rejectedBudget().orElseThrow());
+            assertEquals(1, result.modelAttempts());
+            assertEquals(1, effects.get());
+            assertEquals(1, prompts.size());
+            assertEquals(20, options.getMaxTokens());
+        }
+    }
+
     private final InteractionRuntime runtime = new InteractionRuntime();
     private final ILLMModelService models = mock(ILLMModelService.class);
     private final List<ILLMPrompt> prompts = new ArrayList<>();
@@ -153,17 +194,15 @@ class LLMTokenBudgetTest {
         }
     }
 
-    /** 验证局部上限收紧实际模型输出参数，不能扩大父总额度。 */
-    @Test void clampsOutputToRemainingLocalBudget() {
+    /** 2026/11/04：局部额度不足时拒绝，不再把完整输出上限从二十缩为七。 */
+    @Test void rejectsInsufficientLocalBudgetWithoutChangingOutput() {
         try (var parent = parent(100L)) {
             var pending = start(parent, 17L); runtime.runAll();
-            assertEquals(7, prompts.getLast().getOptions().getMaxTokens());
-            assertEquals(17, parent.budget().used(TOTAL_TOKENS));
-            reply(response(12));
             var result = pending.toCompletableFuture().join();
-            assertEquals(SUCCESS, result.status());
-            assertEquals(12, result.budgetUsage().get(TOTAL_TOKENS).used());
-            assertEquals(12, parent.budget().used(TOTAL_TOKENS));
+            assertEquals(BUDGET_EXCEEDED, result.status());
+            assertEquals(0, result.modelAttempts());
+            assertTrue(prompts.isEmpty());
+            assertEquals(0, parent.budget().used(TOTAL_TOKENS));
         }
     }
 
@@ -249,33 +288,36 @@ class LLMTokenBudgetTest {
         }
     }
 
-    /** 验证局部未配置 token 限额时仍继承宿主上限，不能通过新交互重置。 */
+    /** 2026/11/04：省略局部额度仍受父预算约束，不能缩小输出或用新交互绕过拒绝。 */
     @Test void omittedLocalLimitStillInheritsParentBudget() {
         try (var parent = parent(25L)) {
             var first = start(parent, null); runtime.runAll();
-            assertEquals(15, prompts.getLast().getOptions().getMaxTokens());
-            reply(response(25, call("a")));
             assertEquals(BUDGET_EXCEEDED, first.toCompletableFuture().join().status());
             var second = start(parent, null); runtime.runAll();
             assertEquals(BUDGET_EXCEEDED, second.toCompletableFuture().join().status());
-            assertEquals(1, prompts.size());
+            assertEquals(0, prompts.size());
             assertEquals(0, effects.get());
+            assertEquals(0, parent.budget().used(TOTAL_TOKENS));
         }
     }
 
-    /** 验证并行交互的在途预留共同占用父额度，后发请求不能越过限额。 */
+    /** 2026/11/04：在途完整预留阻止额度不足的并发请求，结算退款后新请求可重新准入。 */
     @Test void simultaneousInteractionsShareInFlightReservations() {
         try (var parent = parent(50L)) {
             var first = start(parent, null); var second = start(parent, null);
             runtime.runAll();
-            assertEquals(50, parent.budget().used(TOTAL_TOKENS));
+            assertEquals(30, parent.budget().used(TOTAL_TOKENS));
             assertEquals(20, prompts.get(0).getOptions().getMaxTokens());
-            assertEquals(10, prompts.get(1).getOptions().getMaxTokens());
+            assertEquals(BUDGET_EXCEEDED, second.toCompletableFuture().join().status());
             var third = start(parent, null); runtime.runAll();
             assertEquals(BUDGET_EXCEEDED, third.toCompletableFuture().join().status());
-            replies.get(0).complete(response(10)); replies.get(1).complete(response(10));
+            replies.getFirst().complete(response(10));
             assertEquals(SUCCESS, first.toCompletableFuture().join().status());
-            assertEquals(SUCCESS, second.toCompletableFuture().join().status());
+            var afterRefund = start(parent, null);
+            runtime.runAll();
+            assertEquals(20, prompts.getLast().getOptions().getMaxTokens());
+            reply(response(10));
+            assertEquals(SUCCESS, afterRefund.toCompletableFuture().join().status());
             assertEquals(20, parent.budget().used(TOTAL_TOKENS));
             assertEquals(2, prompts.size());
         }
@@ -358,16 +400,14 @@ class LLMTokenBudgetTest {
         }
     }
 
-    /** 验证接近 Long.MAX_VALUE 的输入预留不溢出，实际报告仍可正确退款。 */
+    /** 2026/11/04：输入加完整输出发生长整型溢出时拒绝，不把输出缩为一个 token。 */
     @Test void largeTokenEstimateCannotOverflowAdmission() {
         when(estimator.estimate(any())).thenReturn(new LLMTokenEstimate(Long.MAX_VALUE - 1, "large-v1"));
         try (var parent = parent(Long.MAX_VALUE)) {
             var pending = start(parent, Long.MAX_VALUE); runtime.runAll();
-            assertEquals(1, prompts.getLast().getOptions().getMaxTokens());
-            assertEquals(Long.MAX_VALUE, parent.budget().used(TOTAL_TOKENS));
-            reply(response(20));
-            assertEquals(SUCCESS, pending.toCompletableFuture().join().status());
-            assertEquals(20, parent.budget().used(TOTAL_TOKENS));
+            assertEquals(BUDGET_EXCEEDED, pending.toCompletableFuture().join().status());
+            assertTrue(prompts.isEmpty());
+            assertEquals(0, parent.budget().used(TOTAL_TOKENS));
         }
     }
 

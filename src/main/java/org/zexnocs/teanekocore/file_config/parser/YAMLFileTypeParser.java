@@ -29,14 +29,24 @@ import java.nio.file.Path;
  * 在 YAML 节点解析后展开环境占位符，避免环境值被当作额外 YAML 结构注入。
  * 支持字符串、嵌套对象及数组值，不改写属性名；缺失必需变量时拒绝本次加载。
  * <br>2026/11/03：提供不展开环境值的原文档编辑能力，拒绝重复键。
+ * <br>2026/11/04：通用表单沿用本解析器的 Kebab 命名、别名与泛型合同。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.1
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @FileTypeParser(FileConfigType.YAML)
 public class YAMLFileTypeParser implements IFileDocumentParser {
+    /**
+     * @param type 原注册配置类型
+     * @return 与本 YAML 映射一致的字段定义
+     */
+    @Override
+    public org.zexnocs.teanekocore.framework.config.ConfigSchema schema(Class<? extends IFileConfigData> type) {
+        return new org.zexnocs.teanekocore.framework.config.ConfigSchema(objectMapper, type);
+    }
+
     private final Environment environment;
 
     /** 使用标准系统属性及环境变量，供无 Spring 宿主直接调用。 */

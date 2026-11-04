@@ -30,10 +30,14 @@ import java.util.Objects;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ģ�ͱ����ṩ������������������������á�
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.2-l
  */
 public final class AgentFileSettings {
     /** 禁止实例化贡献命名空间。 */
@@ -155,11 +159,12 @@ public final class AgentFileSettings {
     /**
      * 统一模型文件表单，凭据、连接及扩展参数只以保护字段替换。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：上下文容量与输入比例表单归入 v4.7.2-l。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.7.2-l
      */
     @Component
     @PluginOwned("teaneko.agent")
@@ -177,6 +182,9 @@ public final class AgentFileSettings {
                     secret("/models/*/api-key", "API 密钥", "TEXT"), secret("/models/*/base-url", "服务地址", "TEXT"),
                     secret("/models/*/api-path", "接口路径", "TEXT"), secret("/models/*/api", "旧接口路径别名", "TEXT"),
                     field("/models/*/thinking", "启用思考", "BOOLEAN"), field("/models/*/max-tokens", "最大输出 token", "NUMBER"),
+                    // 2026/11/04：模型容量与默认输入比例和其他模型参数共同保存、应用。
+                    field("/models/*/context-window-tokens", "上下文总 token 容量", "NUMBER"),
+                    field("/models/*/context-input-ratio", "输入上下文占比（默认 0.8）", "NUMBER"),
                     field("/models/*/temperature", "采样温度", "NUMBER"), field("/models/*/top-p", "概率采样阈值", "NUMBER"),
                     field("/models/*/frequency-penalty", "频率惩罚", "NUMBER"), field("/models/*/presence-penalty", "存在惩罚", "NUMBER"),
                     field("/models/*/response-format", "响应格式", "JSON"), field("/models/*/stop-words", "停止词", "JSON"),

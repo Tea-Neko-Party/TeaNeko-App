@@ -19,16 +19,18 @@ import java.util.concurrent.ExecutionException;
  * <br>2026/11/03：网页聊天、媒体与成员接口同样使用原脱敏错误边界。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：机器令牌专用接口沿用安全错误映射，不回显原文或秘密。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 // 2026/11/03：聊天、领域管理及文件入口使用相同的脱敏失败合同。
 @RestControllerAdvice(assignableTypes = {ChatSettingsController.class,
         org.zexnocs.teanekoapp.web.WebManagementController.class,
         org.zexnocs.teanekoapp.web.files.WebFileSettingsController.class,
+        org.zexnocs.teanekoapp.web.files.MachineTokenController.class,
         org.zexnocs.teanekoapp.web.console.WebConsoleCommandController.class,
         org.zexnocs.teanekoapp.web.chat.WebChatController.class})
 public final class ChatSettingsErrors {

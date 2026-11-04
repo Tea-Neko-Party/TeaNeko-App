@@ -8,10 +8,15 @@ import org.zexnocs.teanekoagent.adapter.config.AgentScopeFieldChecker;
 import org.zexnocs.teanekoagent.adapter.web.AgentChatSettingsSection;
 import org.zexnocs.teanekoagent.adapter.web.EasyDataChatTargetStore;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
+import org.zexnocs.teanekoapp.web.settings.ChatSettingsDirectory;
 import org.zexnocs.teanekocore.database.configdata.*;
+import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
+import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import tools.jackson.databind.node.ObjectNode;
 
 import java.util.*;
@@ -29,14 +34,105 @@ import static org.mockito.Mockito.*;
  * 复用事务数据库夹具验证配置并发、审计回滚与聊天映射，不连接真实数据库。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：验证继承泛型、别名、空值、敏感字段及显式 JSON 类型约束。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.1-l
  */
 @Timeout(20)
 class ConfigEditIntegrationTest {
+    /** 验证真实配置事务与通用投影使用相同的字段身份和泛型。 */
+    @Test
+    void genericJsonFieldsPreserveTypesAliasesAndSecretBoundaries() {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var registration = new ConfigDataRegisterService(mock(ILogger.class), db.easyDataService);
+            var edits = editor(db, registration);
+            var manager = ComplexManager.class.getAnnotation(ConfigManager.class);
+            edits.changeJson(manager, KEY, "admin", new ConfigEdits.Change(UUID.randomUUID(), "absent",
+                    ConfigEdits.Action.REGISTER, Map.of()), ALLOWED).toCompletableFuture().join();
+            var before = edits.read(manager, KEY, ALLOWED).toCompletableFuture().join();
+            edits.changeJson(manager, KEY, "admin", patch(before.revision(), Map.of("items", "[{\"name\":\"茶\",\"weight\":3}]",
+                    "note", "null", "count", "2")), ALLOWED).toCompletableFuture().join();
+            var current = edits.read(manager, KEY, ALLOWED).toCompletableFuture().join();
+            var parsed = db.mapper.readValue(current.json(), ComplexData.class);
+            assertEquals(3, parsed.items.getFirst().weight);
+            assertTrue(db.mapper.readTree(current.json()).has("items-list"));
+            assertFalse(db.mapper.readTree(current.json()).has("items"));
+            assertThrows(CompletionException.class, () -> edits.changeJson(manager, KEY, "admin",
+                    patch(current.revision(), Map.of("count", "2.5")), ALLOWED).toCompletableFuture().join());
+            assertThrows(CompletionException.class, () -> edits.changeJson(manager, KEY, "admin",
+                    patch(current.revision(), Map.of("items", "null")), ALLOWED).toCompletableFuture().join());
+            assertThrows(CompletionException.class, () -> edits.changeJson(manager, KEY, "admin",
+                    patch(current.revision(), Map.of("secret", "\"new-secret\"")), ALLOWED).toCompletableFuture().join());
+            assertEquals(current, edits.read(manager, KEY, ALLOWED).toCompletableFuture().join());
+            var scanner = mock(IBeanScanner.class);
+            var bean = new ComplexManager();
+            when(scanner.getBeansWithAnnotation(ConfigManager.class)).thenReturn(Map.of("complex", new IndependentPair<>(manager, bean)));
+            doReturn(ComplexManager.class).when(scanner).getBeanClass(bean);
+            var section = new ChatSettingsDirectory(scanner, db.mapper).entries().get("complex").section();
+            var view = section.view(new ChatTargets.Resolved("test", "a", "t", KEY, "测试群", "GROUP", "1", false),
+                    new ConfigEdits.Snapshot(true, "test", "{\"oldItems\":[{\"name\":\"茶\",\"weight\":4}],\"secret\":\"不能回显\"}"))
+                    .toCompletableFuture().join();
+            assertFalse(db.mapper.writeValueAsString(view).contains("不能回显"));
+            assertTrue(view.fields().stream().filter(field -> field.name().equals("items")).findFirst().orElseThrow().value().contains("4"));
+        }
+    }
+
+    /**
+     * 泛型父配置，别名与可空字段必须由实际解析器识别。
+     * @param <T> 真实条目类型
+     * @author zExNocs
+     * @date 2026/11/04
+     * @since 4.7.1-l
+     * @version 4.7.1-l
+     */
+    public static class GenericData<T> implements IConfigData {
+        @Description("条目列表")
+        @com.fasterxml.jackson.annotation.JsonProperty("items-list")
+        @com.fasterxml.jackson.annotation.JsonAlias("oldItems")
+        public List<T> items = new ArrayList<>();
+        @Description("说明")
+        public @org.jspecify.annotations.Nullable String note;
+    }
+
+    /**
+     * 配置实际类型用于测试敏感写入边界。
+     * @author zExNocs
+     * @date 2026/11/04
+     * @since 4.7.1-l
+     * @version 4.7.1-l
+     */
+    public static class ComplexData extends GenericData<Item> {
+        public int count = 1;
+        @com.fasterxml.jackson.annotation.JsonProperty(access = com.fasterxml.jackson.annotation.JsonProperty.Access.WRITE_ONLY)
+        public String secret = "默认秘密";
+    }
+
+    /**
+     * 具有数值字段的真实泛型条目。
+     * @author zExNocs
+     * @date 2026/11/04
+     * @since 4.7.1-l
+     * @version 4.7.1-l
+     */
+    public static class Item {
+        public String name = "";
+        public int weight;
+    }
+
+    /**
+     * 测试声明仍使用原专用存储及配置注册合同。
+     * @author zExNocs
+     * @date 2026/11/04
+     * @since 4.7.1-l
+     * @version 4.7.1-l
+     */
+    @ConfigManager(value = "complex", description = "复杂配置", configType = ComplexData.class, namespaces = "test",
+            storage = org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyDataObject.class)
+    public static class ComplexManager {}
+
     private static final ConfigManager MANAGER = AgentScopeConfigManager.class.getAnnotation(ConfigManager.class);
     private static final String KEY = "onebot-group@123";
     private static final Runnable ALLOWED = () -> {};

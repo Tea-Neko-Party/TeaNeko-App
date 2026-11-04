@@ -15,6 +15,7 @@ import org.zexnocs.teanekoclient.onebot.utils.AvatarUtils;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotContentListBuilder;
 import org.zexnocs.teanekoclient.onebot.utils.OnebotScopeIdUtils;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.utils.ChinaDateUtil;
@@ -33,13 +34,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 用于管理、缓存群聊入群请求审核服务。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.3
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Service("GroupRequestService")
 @RequiredArgsConstructor
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "client.maintenance", categoryName = "客户端维护", name = "过期入群请求清理",
+        description = "回收已过期的原平台入群审核请求。", controllable = false)
 public class GroupRequestReviewService {
     private final static String TASK_NAMESPACE = "group-request-service-cleaner";
     /// 用于注册自动清理过期请求的定时器，单位为毫秒。默认为 1 小时。

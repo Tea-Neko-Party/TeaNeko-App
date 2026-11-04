@@ -57,10 +57,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04����֤�Ӿ�������������ģ�����õ������ȡ�
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.6.2-l
+ * @version 4.7.2-l
  */
 @Timeout(15)
 class StickerAssetsAndModelTest {
@@ -96,7 +100,10 @@ class StickerAssetsAndModelTest {
             when(interactions.interact(any(),any(),any(),any(),any())).thenAnswer(call->{
                 ILLMPrompt prompt=call.getArgument(0);LLMInteractionSettings limits=call.getArgument(3);
                 assertEquals(1,limits.limits().maxModelCalls());assertEquals(0,limits.limits().maxToolCalls());assertTrue(Objects.requireNonNull(prompt.getOptions().getTools()).isEmpty());
-                assertEquals(2048,prompt.getOptions().getMaxTokens());assertTrue(prompt.getMessages().getLast().getContents().stream().anyMatch(c->c.getContentPart() instanceof ImageLLMContentPart));
+                // 2026/11/04：视觉生成保留模型配置的完整输出额度。
+                assertEquals(4096, prompt.getOptions().getMaxTokens());
+                assertTrue(prompt.getMessages().getLast().getContents().stream()
+                        .anyMatch(c -> c.getContentPart() instanceof ImageLLMContentPart));
                 var answer=LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(text.get()).build()).build();return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS,List.of(answer),answer,List.of(),List.of(),Map.of()));
             });
             var beans=context.getBeanFactory();beans.registerSingleton("data",db.data);beans.registerSingleton("mapper",db.mapper);beans.registerSingleton("files",files);beans.registerSingleton("configs",configs);

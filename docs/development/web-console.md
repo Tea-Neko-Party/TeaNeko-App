@@ -1,8 +1,20 @@
 # Web 控制台部署与开发
 
-当前开发版本：4.7.0-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)及[独立网页聊天](web-console-chat.md)。交付记录见[归档计划](../plan/old/4.7.0-web-console.md)。
+当前开发版本：4.7.1-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，本补丁完成范围见[归档记录](../plan/old/4.7.1-web-operations.md)。
+
+## 界面与模式
+
+浅色背景为 `#F5F3ED`。登录页只需填写管理员令牌；“令牌在哪里？”可展开帮助。桌面侧栏可收起，手机通过左上角按钮打开导航。
+
+右上角选择“简洁 / 高级”，默认简洁。常用 Agent 字段优先显示，其余可通过“展开其余配置”查看；说明、字段来源和技术信息按需展开。高级模式提供注销、文件字段特殊编辑和完整诊断信息。切换模式不清除草稿、筛选或待确认请求，已生效的详细日志筛选仍显示提示。
+
+本地配置的普通字段可直接修改，恢复原文即撤销该字段变更；秘密字段须明确选择替换或清除。保存到磁盘后仍需单独应用，原操作结果不明时先查询回执。
+
+主题支持跟随系统、浅色和深色，点击主题按钮依次切换。主题、界面模式和桌面侧栏偏好保存在当前浏览器，和登录令牌分开；浏览器禁用存储时仍可临时切换。
 
 ## 构建与入口
+
+概览新增机器状态卡片，显示系统/程序 CPU、物理内存和 JVM 堆用量。页面可见时每 5 秒更新，切换页面、隐藏或退出时停止请求。首次 CPU 建立基准，JDK 无法提供的值显示暂不可用；详细口径见[机器指标](web-console-runtime.md#机器指标)。
 
 构建需要 JDK 25、Node 22.12 或以上版本及 npm；运行已打包 JAR 不需要 Node。前端使用 Vue 3、TypeScript 6、Vite 和 Element Plus，锁文件固定经过核验的组合；当前 Vue 类型检查工具未兼容 TypeScript 7，不能仅升级该依赖就假设构建可用。
 
@@ -11,6 +23,8 @@
 ```
 
 processResources 依赖 webBuild，后者按锁文件 npm ci、类型检查和生产构建；静态资源进入 JAR 的 static/console。只改前端时可运行 `.\gradlew.bat webBuild`。前端没有独立应用版本来源，页面从后端读取 version.properties 对应版本。
+
+4.7.1-l 起，Gradle 同时通过 `generateVersionInfo` 生成运行版本资源；JAR 优先读取清单，普通类路径读取生成资源。IntelliJ 使用 Gradle 构建即可；若使用 IDE 直接编译，先执行 `.\gradlew.bat generateVersionInfo` 并同步 Gradle。界面显示实际构建版本，修改源码的版本文件后需重新构建；`app.version` 或 `-Dversion` 不再覆盖它。实际部署版本切换仍未提供。
 
 入口为 `https://你的域名/console/`。静态登录页面可公开，但 API、日志/配置猜测路径及未知入口默认拒绝。ManagementGateway 仅公开本地白名单中的聊天与实例资源，仍保持原显式授权要求。
 
@@ -31,8 +45,9 @@ trusted-proxies:
 machine-tokens:
   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
 settings-sections: ['agent']
+settings-groups: ['general']
 console-prefixes: ['/console']
-file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'onebot.main', 'web.chat']
+file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'onebot.main', 'web.chat', 'core.runtime']
 management-resources:
   - 'teaneko.agent:activity'
   - 'teaneko.agent:layers'
@@ -46,13 +61,15 @@ management-resources:
 
 public-origin 必须是完整 HTTPS 来源，不带路径或末尾斜线。直接 TLS 可留空 trusted-proxies；反向代理只填真实传输地址，必须覆盖 X-Forwarded-Proto 和 X-Forwarded-Host，不能转发客户端自报的值。登录来源严格匹配，不能以不同域名或端口交替访问。转发 IP 不用于放宽登录限流。
 
-管理员令牌及机器令牌至少三十二字符，建议使用至少三十二字节随机秘密；长度不能证明随机性。两类令牌必须不同。安全配置标为敏感，凭据不供普通序列化导出，没有网页修改认证根配置的入口。
+管理员令牌须为三十二至二百五十六字符且不含空白。机器令牌允许 0～256 字符，非空值不得包含空白，也不能与管理员令牌相同；可以使用短值。明确配置 `onebot: ''` 或纯空白值表示该客户端允许任意令牌及缺省认证头，完全省略客户端则拒绝连接。安全配置不供普通导出；“客户端 → 机器令牌”仅允许管理员显式查看、局部修改和应用机器凭据，完整认证根仍在本机管理。详见[客户端与机器令牌](web-console-clients.md)。
 
 没有配置管理员令牌时，本次实例生成一次四十三字符随机值，保存在 data/web/runtime-admin-token。仅服务账户能访问文件/目录；不能设置可靠权限时拒绝开放管理入口。重启生成新值，普通同值重载保留当前随机值；配置错误或环境变量展开失败不进入匿名模式。
 
 2026/11/04：启用 Web 后，后端启动 INFO 日志输出网站地址、当前登录令牌和 `https://你的域名/console/#token=令牌` 快捷链接。启动登录信息不进入网页日志窗口；后端日志包含管理员凭据，应按凭据管理其访问权限。推荐使用片段形式；同时兼容 `?token=令牌`，查询形式可能被服务器或代理访问日志记录。
 
-启用 Web 后，所有已注册 /ws/{client} 机器握手要求各自配置的 Bearer 凭据和 HTTPS/WSS，不能使用管理会话代替。OneBot 实现须配置对应反向 WSS 地址和 Authorization 凭据；未配置则拒绝连接。握手后每次实际收发继续复核，密钥变更、启用 Web 或配置不可用会停止旧连接的后续收发；已经受理的业务不会被宣称回滚。关闭 Web 是显式恢复旧机器接入方式，不应在公网以此代替正确配置凭据。
+启用 Web 后，已注册 /ws/{client} 机器入口须使用 HTTPS/WSS，并满足该客户端的机器令牌策略，不能使用管理会话代替。OneBot 须配置对应反向 WSS 地址；非空令牌使用 Authorization Bearer 头，明确空白放行时可不提供该头。握手后每次实际收发继续复核，令牌变更或配置不可用会使原证明失效；已受理的业务不宣称回滚。
+
+启动失败日志包含阶段及固定原因：`SECURITY_CONFIG_INVALID` 表示安全配置校验失败，`CREDENTIAL_PREPARATION_FAILED` 表示根凭据准备或受限文件写入失败，`TOKEN_FILE_READ` 表示启动提示读取失败。根据阶段检查 `config/web/security.yml`、环境变量及 `data/web` 权限，不通过异常原文导出秘密。
 
 ## 浏览器会话
 
@@ -64,6 +81,8 @@ public-origin 必须是完整 HTTPS 来源，不带路径或末尾斜线。直�
 
 ## 前端开发
 
+2026/11/04：端口统一在 `src/main/resources/application.properties` 的 `server.port`（后端）和 `tea-neko.web.frontend.port`（本机 Vite）配置。两者不能相同。联合启动将 Spring 实际监听端口和前端配置传给 Node；独立 Vite 读取该文件中的十进制端口值，也支持 `TEANEKO_BACKEND_PORT`、`TEANEKO_FRONTEND_PORT` 环境变量覆盖。HTTP/WSS 目标及转发 Host 自动派生，不再手改代理端口。修改前端端口后，仍需将安全配置的 `public-origin` 和访问地址改为实际 HTTPS 来源。以下地址使用默认值。
+
 先确保后端原有数据库及应用配置可启动，在安全配置中使用：
 
 ```yaml
@@ -72,7 +91,9 @@ public-origin: 'https://localhost:5173'
 trusted-proxies: ['127.0.0.1']
 ```
 
-机器客户端仍需另配 machine-tokens。
+机器客户端仍需另配 machine-tokens。本地 OneBot 使用 `wss://localhost:5173/ws/onebot`，由 Vite 转发到 `ws://127.0.0.1:6691/ws/onebot`，客户端携带配置的机器 Bearer 令牌。开发自签证书须被该机器客户端信任；浏览器接受证书不代表 OneBot 客户端也会信任。正式部署使用受信任证书。
+
+`6691` 默认提供 HTTP，不直接提供 TLS；不要连接 `wss://localhost:6691/ws/onebot`，否则客户端会报 `WRONG_VERSION_NUMBER`，后端会报 HTTP 方法包含 `0x16 0x03` 等无效字符。这是 TLS 握手被普通 HTTP 端口解析，发生在令牌验证之前。
 
 ### 随后端自动启动前端
 
@@ -103,7 +124,7 @@ npm ci
 npm run dev
 ```
 
-访问 https://localhost:5173/console/，接受仅本地开发使用的自签证书。Vite 仅绑定本机，将 /api/ 同源代理到 127.0.0.1:6691；改变后端端口时同步修改开发代理。生产不运行 Vite，使用正式 TLS 和 JAR 中的静态产物。
+访问 https://localhost:5173/console/，接受仅本地开发使用的自签证书。Vite 仅绑定本机，将 `/api/` 和 `/ws/` 代理到统一配置的后端端口。生产不运行 Vite，使用正式 TLS 和 JAR 中的静态产物。
 
 ## 客户端扩展
 
@@ -115,13 +136,23 @@ describe 返回中文平台名、状态、实际连接数、说明、观测时�
 
 ## 验证与实机待办
 
-首批只新增三项核心安全测试，使用实际 Spring Security/MVC、会话及 CSRF，覆盖认证、来源、未知入口、轮换/期限、私有随机文件、机器独立认证与持续收发拒绝；复用原 OneBot 生命周期用例。前端执行严格类型检查和生产构建；页面布局另用本机浏览器及离线 API 契约夹具核验，不将其称为真实后端端到端验收。
+已完成管理认证、配置/文件事务、机器令牌、分层记忆、任务分类、机器指标和平台生命周期的定向回归，并通过前端类型/生产构建、本机浏览器夹具及实际 JAR 核对。完整范围和证据见[补丁验证记录](../plan/old/4.7.1-web-operations-validation.md)，不代替以下部署检查。
 
-仍需操作者在部署环境验证正式证书、可信代理头与后端端口保护、真实浏览器 Cookie/空闲过期、机器 WSS 握手及换密钥、多连接实际行为，以及 MySQL/JPA 上网页聊天的并发/重启、原模型视觉和逐段表达。默认网页记忆共享时，实机演练前应明确测试 namespace。不启动真实机器人、模型或 MySQL 来完成离线开发，也不把离线通过表示为这些实机项目已通过。
+- [ ] 正式证书、可信代理头、后端端口保护、浏览器 Cookie 与空闲过期。
+- [ ] 实际机器 WSS 握手、短值/空白/缺省策略、换密钥后旧连接拒绝及多连接行为。
+- [ ] 服务账户文件权限、原子替换、环境变量；普通配置授权和 `core.runtime` 保存/应用。
+- [ ] MySQL/JPA 上配置与网页聊天的并发、回执恢复和重启；真实模型视觉、分层记忆与逐段表达。
+- [ ] 实际部署产物版本、CPU/内存口径及页面隐藏后的刷新停止。
+
+默认网页记忆共享，实机演练前应明确测试 namespace。以上项目尚未执行，发布及部署仍单独确认。
 
 ## 聊天设置
 
-进入“聊天设置”，依次选择 OneBot、机器人账号或历史目录、群聊/私聊和目标。字段按中文职责分组，展示当前值、类型默认值、来源与共享影响。未登记时只预览默认值；“登记并启用 Agent”明确提交默认值，再编辑字段。注销只删除配置，不删除记忆、人格、历史或图库。
+进入“聊天配置”，依次选择平台、机器人账号或历史目录、群聊/私聊和目标。“Agent 配置”和“其他功能配置”分别管理；普通配置按原 `@ConfigManager` 自动发现，字段说明来自 `@Description`。没有说明时显示真实字段名。先选择配置类型，未登记时只预览默认值；点击“登记此配置”提交该类型默认值，再编辑字段。注销仅删除这一配置。
+
+布尔、数字和枚举使用对应控件，集合与对象使用 JSON；字符串与空值分开，不把文字 `null` 当空值。保存仍经过原字段校验器和完整类型绑定。支持继承字段、泛型和实际序列化别名；敏感字段只显示受保护提示。命名空间、人格绑定等专用管理约束继续保留。
+
+切换平台、账号、聊天或配置类型时，可保留当前草稿及待确认请求；返回时恢复原值与原版本，保存仍可能遇到版本冲突。草稿只在当前页面内存保留，刷新或退出会丢失；切换简洁/高级模式不会丢失。
 
 目录合并真实消息元数据、已登记配置和明确请求的平台联系人查询，不保存聊天正文。无法确认账号的旧配置放在“历史配置（账号未归属）”，不猜测归属。目录存于 Agent 专用表的 agent.chat-directory.v1 域，每个平台至多 32 个账号、8192 个目标；页面每次至多加载 50 项，搜索仅筛选已加载名称与号码。
 
@@ -129,11 +160,13 @@ describe 返回中文平台名、状态、实际连接数、说明、观测时�
 
 同一平台的多个账号可能共享同一群配置，同一 TeaNeko UUID 的私聊配置可能跨平台共享；界面会提示影响，不改变原隔离规则。记忆空间来自权威绑定端口，只读，切换仍走专用记忆管理。类型默认值和未保存预览不冒充全部运行时继承结果。
 
-写入使用原 ConfigManager、Agent 专用 EasyData 和字段校验器，只合并已开放的修改字段并保留未知字段。预期版本在持锁事务中检查，冲突返回 409，不自动覆盖。原 `/cfg` 字段写入也在事务内合并当前行；索引删除遇到快照变化时拒绝，防止旧缓存覆盖新值。
+写入使用原 ConfigManager 声明的业务 EasyData 和字段校验器，Agent 仍使用专用表；只合并已开放的修改字段并保留未知字段。预期版本在持锁事务中检查，冲突返回 409，不自动覆盖。原 `/cfg` 字段写入也在事务内合并当前行；索引删除遇到快照变化时拒绝，防止旧缓存覆盖新值。
 
 配置与操作回执同事务提交；会话、白名单及插件代次在事务中复核。回执只保存操作者/目标摘要、字段名、动作、时间与版本，不保存字段值。每管理器保留 24 小时、最多 512 项，窗口满拒绝新写入。当前本地管理员是同一个管理主体，尚无多自然人审计身份。
 
-失败或断开不能证明未提交。页面保留原 operationId，可查询或原样重试；不同参数不能复用同一编号。可明确放弃草稿并回读当前值，这不会撤销已提交操作；保留期之外不能依赖原编号重试。settings-sections 默认只开放 agent，变更白名单须修改本地安全配置。
+失败或断开不能证明未提交。页面保留原 operationId，可查询或原样重试；不同参数不能复用同一编号。可明确放弃草稿并回读当前值，这不会撤销已提交操作；保留期之外不能依赖原编号重试。
+
+`settings-sections` 默认仅有 `agent`，`settings-groups` 默认空。上面的示例明确允许 `general` 组；这会允许该组内今后新增且适用于目标的配置。需要逐项授权时保持分组为空，把实际管理器标识加入 `settings-sections`。修改后按本机流程重载安全配置并重新登录。配置是否出现在当前聊天还取决于客户端声明的适用命名空间及插件状态；网页不能提交命名空间来绕过筛选。
 
 | 已发布 HTTP 路由 | 用途 |
 | --- | --- |
@@ -141,6 +174,7 @@ describe 返回中文平台名、状态、实际连接数、说明、观测时�
 | POST /api/v1/clients/{client}/actions/discover | 当前授权下刷新目录 |
 | GET /api/v1/clients/{client}/accounts/{account}/targets | after、kind 过滤的目标页 |
 | GET /api/v1/settings/sections | 当前允许的设置区 |
+| GET /api/v1/clients/{client}/accounts/{account}/targets/{target}/settings | 当前真实聊天适用的配置区 |
 | GET /api/v1/clients/{client}/accounts/{account}/targets/{target}/settings/{section} | 中文字段与实际版本 |
 | POST 同一设置路径 | operationId、expectedRevision、action、fields；动作 REGISTER、PATCH、UNREGISTER |
 | GET 同一设置路径/operations/{operationId} | 当前管理主体的原回执 |

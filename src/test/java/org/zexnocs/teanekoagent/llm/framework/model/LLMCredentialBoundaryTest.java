@@ -27,10 +27,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04����֤�о���ʽ����ģ�������ĺ����������
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 class LLMCredentialBoundaryTest {
     private static final String SECRET = "test-only-secret";
@@ -77,6 +81,7 @@ class LLMCredentialBoundaryTest {
                     base-url: "${TEST_BASE:https://default.test}"
                     api: "${TEST_PATH:/default}"
                     max-tokens: "${TEST_TOKENS:2048}"
+                    context-window-tokens: 131072
                     thinking: "${TEST_THINKING:true}"
                     metadata:
                       vendor:
@@ -175,6 +180,9 @@ class LLMCredentialBoundaryTest {
      */
     private LLMModelFileConfigParameter configure(String key) {
         var entry = new LLMModelFileConfigParameter(); entry.setId("deepseek"); entry.setModel("offline-model"); entry.setApiKey(key);
+        // 2026/11/04：认证夹具只增加离线容量声明，凭据仍走原安全边界。
+        entry.setMaxTokens(2048);
+        entry.setContextWindowTokens(131072L);
         var config = new LLMModelFileConfig(); config.setModels(List.of(entry));
         when(files.requireCurrent(LLMModelFileConfig.class)).thenReturn(config); return entry;
     }

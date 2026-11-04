@@ -8,6 +8,7 @@ import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekoplugin.general.servant.GroupSeniorServantRule;
@@ -25,13 +26,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * 惩罚地活跃度的服务。
  *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.3.4
- * @version 4.5.0-l
+ * @version 4.7.1-l
  */
 @Service
 @RequiredArgsConstructor
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "活跃度惩罚缓存清理",
+        description = "回收已处理或不再适用的惩罚记录。", controllable = false)
 public class GroupActivityPunishService {
     /// 惩罚的豁免时间。
     private final static Duration EXEMPTION_TIME = Duration.ofDays(7);

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {onBeforeUnmount, onMounted, reactive, ref} from 'vue'
+import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {
   ElAlert,
   ElButton,
@@ -13,9 +13,10 @@ import {
   ElTag
 } from 'element-plus'
 import {ApiError, request} from './api'
+import DetailPanel from './DetailPanel.vue'
 
-interface Timer { id: string; name: string; state: string; revision: number; rule: { kind: string; rule: string; nextFire?: string; waiting: boolean; zone: string }; actions: string[] }
-interface TimerPage { items: Timer[]; next: string; more: boolean; limited: boolean }
+interface Timer { id: string; name: string; state: string; revision: number; rule: { kind: string; rule: string; nextFire?: string; waiting: boolean; zone: string }; actions: string[]; category: string; categoryName: string; description: string; source: string }
+interface TimerPage { items: Timer[]; next: string; more: boolean; limited: boolean; categories: {id: string; name: string}[] }
 interface Run { id: string; name: string; state: string; stage: string; createdAt: string; startedAt?: string; finishedAt?: string }
 interface RunPage { instance: string; startedAt: string; items: Run[]; next: number; reset: boolean; more: boolean; dropped: number }
 interface Log { sequence: number; at: string; level: string; namespace: string; message: string; requestId: string; scope: string; plugin: string }
@@ -35,10 +36,16 @@ const logs = ref<LogPage>()
 const displayedLogs = ref<Log[]>([])
 const runState = ref('')
 const runSearch = ref('')
+// 2026/11/04：已应用筛选与编辑中的条件分开，自动刷新沿用同一查询，变更重置游标。
+const timerFilters = reactive({category: '', kind: '', state: '', search: ''})
+const appliedTimers = ref({...timerFilters})
+const ruleNames: Record<string, string> = {FIXED_RATE: '固定频率', FIXED_DELAY: '完成后间隔', SMART_RATE: '智能间隔', CRON: 'Cron 日程', CUSTOM: '自定义规则'}
 const pending = ref<Pending>()
 const receipt = ref<Receipt>()
 const filters = reactive({ level: '', namespace: '', text: '', requestId: '', scope: '', plugin: '', from: '', through: '' })
 const applied = ref({ ...filters })
+// 2026/11/04：折叠详细筛选后仍提示实际生效的条件，不把隐藏控件当作清空。
+const detailedFiltersActive = computed(() => [applied.value.namespace, applied.value.requestId, applied.value.scope, applied.value.plugin, applied.value.from, applied.value.through].some(Boolean))
 const stateNames: Record<string, string> = { ACTIVE: '等待触发', PAUSED: '网页已暂停', SOURCE_PAUSED: '来源已暂停', REMOVED: '已移除', UNKNOWN: '状态未知', QUEUED: '排队中', RUNNING: '同步执行中', WAITING_RESULT: '等待外部结果', SUCCESS: '原任务成功', FAILED: '原任务失败' }
 const date = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未确认'
 let interval: ReturnType<typeof setInterval> | undefined
@@ -63,7 +70,15 @@ async function run(action: () => Promise<void>) {
 }
 
 async function loadTimers(more = false) {
-  timers.value = await call<TimerPage>('runtime', query('TIMERS', { after: more ? timers.value?.next ?? '' : '' }))
+  timers.value = await call<TimerPage>('runtime', query('TIMERS', {...appliedTimers.value, after: more ? timers.value?.next ?? '' : ''}))
+}
+
+async function applyTimerFilters(category = timerFilters.category) {
+  if (busy.value) return
+  timerFilters.category = category
+  appliedTimers.value = {...timerFilters}
+  auto.value = false
+  await run(() => loadTimers())
 }
 
 async function loadRuns(more = false) {
@@ -144,6 +159,7 @@ onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('bef
 </script>
 
 <template>
+  <!-- 2026/11/04：日志详细筛选按需展开，已应用条件保留可见提示。 -->
   <div class="runtime-view">
     <div class="agent-tabs" role="tablist" aria-label="运行管理分区"><button v-for="item in [{ id: 'timers', name: '定时规则' }, { id: 'runs', name: 'Core 任务' }, { id: 'logs', name: '运行日志' }]" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="select(item.id)">{{ item.name }}</button></div>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
@@ -151,28 +167,45 @@ onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('bef
     <div class="editor-actions"><ElButton :disabled="busy" @click="run(refresh)">刷新当前页</ElButton><label class="small muted">每 5 秒刷新 <ElSwitch v-model="auto" :disabled="!!pending" /></label></div>
     <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>定时器操作尚待确认</h3><p class="small revision">{{ pending.change.operationId }}</p><p class="small muted">中断不代表没有执行，先查原回执。回执只在原进程保留。</p><ElButton :disabled="busy" @click="operation">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><ElButton :disabled="busy" @click="discard">重新读取并放弃原请求</ElButton></ElCard>
     <template v-if="panel === 'timers'">
-      <p class="muted small">这里是原 Core 调度器的真实注册规则。暂停只阻止后续触发；等待上个任务完成时不编造倒计时。Agent 持久计划在对应聊天的 Agent 工作区查看。</p>
+      <!-- 2026/11/04：分类来源于服务端完整观测窗口，所有过滤在分页前执行。 -->
+      <div class="timer-category-filters" role="group" aria-label="定时任务分类">
+        <ElButton :type="appliedTimers.category === '' ? 'primary' : 'default'" :disabled="busy" @click="applyTimerFilters('')">全部分类</ElButton>
+        <ElButton v-for="category in timers?.categories ?? []" :key="category.id" :type="appliedTimers.category === category.id ? 'primary' : 'default'" :disabled="busy" @click="applyTimerFilters(category.id)">{{ category.name }}</ElButton>
+      </div>
+      <div class="agent-toolbar">
+        <label>规则类型<ElSelect v-model="timerFilters.kind" aria-label="定时规则类型" placeholder="全部规则" :disabled="busy"><ElOption label="全部规则" value="" /><ElOption v-for="(name, kind) in ruleNames" :key="kind" :label="name" :value="kind" /></ElSelect></label>
+        <label>运行状态<ElSelect v-model="timerFilters.state" aria-label="定时规则状态" placeholder="全部状态" :disabled="busy"><ElOption label="全部状态" value="" /><ElOption v-for="state in ['ACTIVE', 'RUNNING', 'PAUSED', 'SOURCE_PAUSED', 'REMOVED', 'UNKNOWN']" :key="state" :label="stateNames[state]" :value="state" /></ElSelect></label>
+        <label>任务名称<ElInput v-model="timerFilters.search" aria-label="定时规则名称" maxlength="256" clearable @keyup.enter="applyTimerFilters()" /></label>
+        <ElButton :disabled="busy" @click="applyTimerFilters()">筛选规则</ElButton>
+      </div>
+      <DetailPanel title="定时规则说明"><p>暂停只阻止后续触发，已开始任务继续执行。Spring 与关键维护任务只读；状态只反映原调度方法，不表示后台模型或数据库事务已完成。Agent 的单条持久计划在对应聊天工作区管理。</p></DetailPanel>
       <ElAlert v-if="timers?.limited" title="已达到目录观测上限，当前列表不代表全部计时器。" type="warning" :closable="false" />
       <ElCard v-for="timer in timers?.items ?? []" :key="timer.id" shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ timer.name }}</h3><ElTag>{{ stateNames[timer.state] ?? timer.state }}</ElTag></div>
-        <p>{{ timer.rule.rule }}</p><p class="small muted">{{ timer.rule.waiting ? '等待上个原任务完成' : timer.state === 'ACTIVE' ? `预计触发：${date(timer.rule.nextFire)}` : '暂停或未知状态下不承诺下一次触发' }}{{ timer.rule.zone ? ` · ${timer.rule.zone}` : '' }}</p>
-        <p class="small revision">计时器 {{ timer.id }} · 门禁版本 {{ timer.revision }}</p><div class="editor-actions"><ElButton v-if="timer.actions.includes('PAUSE')" :disabled="busy || !!pending" @click="change(timer, true)">暂停后续触发</ElButton><ElButton v-if="timer.actions.includes('RESUME')" :disabled="busy || !!pending" @click="change(timer, false)">恢复后续触发</ElButton></div>
+        <div class="timer-category-filters"><ElTag type="info">{{ timer.categoryName }}</ElTag><ElTag v-if="!timer.actions.length" type="info">只读</ElTag><span class="small muted">{{ timer.source === 'core' ? 'Core Timer' : timer.source === 'spring' ? 'Spring 定时任务' : '扩展调度' }}</span></div>
+        <p v-if="timer.description" class="small muted">{{ timer.description }}</p>
+        <p>{{ timer.rule.rule }}</p><p class="small muted">{{ timer.rule.waiting ? '等待上个原任务完成' : timer.state === 'ACTIVE' && timer.rule.nextFire ? `预计触发：${date(timer.rule.nextFire)}` : '下次触发时间未确认' }}{{ timer.rule.zone ? ` · ${timer.rule.zone}` : '' }}</p>
+        <div class="editor-actions"><ElButton v-if="timer.actions.includes('PAUSE')" :disabled="busy || !!pending" @click="change(timer, true)">暂停</ElButton><ElButton v-if="timer.actions.includes('RESUME')" :disabled="busy || !!pending" @click="change(timer, false)">恢复</ElButton></div><DetailPanel><p class="small revision">计时器 {{ timer.id }}<template v-if="timer.source === 'core'"> · 门禁版本 {{ timer.revision }}</template></p></DetailPanel>
       </ElCard>
-      <ElEmpty v-if="timers && !timers.items.length" description="本页没有已注册定时器" /><ElButton v-if="timers?.more" :disabled="busy" @click="auto = false; run(() => loadTimers(true))">下一页规则</ElButton>
+      <ElEmpty v-if="timers && !timers.items.length" description="当前筛选没有匹配的定时规则" /><ElButton v-if="timers?.more" :disabled="busy" @click="auto = false; run(() => loadTimers(true))">下一页规则</ElButton>
     </template>
     <template v-else-if="panel === 'runs'">
-      <ElAlert title="这里跟踪原 Core Task 回执。指令提交任务结束不表示外层模型、发送或业务链已结束；这些结果请查看 Agent 活动时间线。当前不提供无法确认物理停止的通用强制取消。" type="info" :closable="false" />
+      <DetailPanel title="任务状态说明"><p>这里只跟踪 Core 任务。完整模型交互与消息发送进度请查看 Agent 活动时间线。</p></DetailPanel>
       <div class="agent-toolbar"><label>任务状态<ElSelect v-model="runState" aria-label="任务状态"><ElOption label="全部状态" value="" /><ElOption v-for="state in ['QUEUED', 'RUNNING', 'WAITING_RESULT', 'SUCCESS', 'FAILED']" :key="state" :label="stateNames[state]" :value="state" /></ElSelect></label><label>任务名称<ElInput v-model="runSearch" maxlength="256" aria-label="任务名称筛选" /></label><ElButton :disabled="busy" @click="run(() => loadRuns())">筛选任务</ElButton></div>
       <p v-if="runs" class="small muted">进程窗口始于 {{ date(runs.startedAt) }} · 已淘汰 {{ runs.dropped }} 项；窗口不保存到数据库。</p>
       <ElCard v-for="item in runs?.items ?? []" :key="item.id" shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ item.name }}</h3><ElTag>{{ stateNames[item.state] ?? item.state }}</ElTag></div><p>{{ item.stage }}</p><p class="small muted">注册：{{ date(item.createdAt) }}<br />开始：{{ date(item.startedAt) }}<br />原回执结束：{{ date(item.finishedAt) }}</p><p class="small revision">{{ item.id }}</p></ElCard>
       <ElEmpty v-if="runs && !runs.items.length" description="当前窗口没有匹配任务" /><ElButton v-if="runs?.more" :disabled="busy" @click="auto = false; run(() => loadRuns(true))">读取更早任务</ElButton>
     </template>
     <template v-else>
-      <p class="small muted">采集应用就绪后的实际日志。结构化请求号、聊天标识与插件字段仅在来源提供时可筛选，不从正文猜测。页面最多显示最近读取的 300 条，窗口不是持久日志档案。</p>
+      <DetailPanel title="日志窗口说明"><p>显示启动后的最近日志，页面最多保留 300 条。请求号、聊天与插件筛选依赖来源提供的结构化字段。</p></DetailPanel>
       <div class="log-filters"><label>等级<ElSelect v-model="filters.level" aria-label="日志等级"><ElOption label="全部等级" value="" /><ElOption v-for="level in ['TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR']" :key="level" :label="level" :value="level" /></ElSelect></label>
-        <label>来源包含<ElInput v-model="filters.namespace" maxlength="256" aria-label="日志来源" /></label><label>正文包含<ElInput v-model="filters.text" maxlength="256" aria-label="日志正文筛选" /></label><label>请求号<ElInput v-model="filters.requestId" maxlength="256" /></label><label>聊天标识<ElInput v-model="filters.scope" maxlength="256" /></label><label>插件标识<ElInput v-model="filters.plugin" maxlength="256" /></label><label>起始时间（本机时区）<input v-model="filters.from" type="datetime-local" /></label><label>结束时间（本机时区）<input v-model="filters.through" type="datetime-local" /></label></div>
+        <label>正文包含<ElInput v-model="filters.text" maxlength="256" aria-label="日志正文筛选" /></label></div>
+      <DetailPanel title="更多筛选"><div class="log-filters">
+        <label>来源包含<ElInput v-model="filters.namespace" maxlength="256" aria-label="日志来源" /></label><label>请求号<ElInput v-model="filters.requestId" maxlength="256" aria-label="日志请求号" /></label><label>聊天标识<ElInput v-model="filters.scope" maxlength="256" aria-label="日志聊天标识" /></label><label>插件标识<ElInput v-model="filters.plugin" maxlength="256" aria-label="日志插件标识" /></label><label>起始时间（本机时区）<input v-model="filters.from" type="datetime-local" /></label><label>结束时间（本机时区）<input v-model="filters.through" type="datetime-local" /></label>
+      </div></DetailPanel>
+      <p v-if="detailedFiltersActive" class="active-filter-note">已应用详细筛选，可在“更多筛选”中调整。</p>
       <ElButton :disabled="busy" @click="applyFilters">应用日志筛选</ElButton>
       <p v-if="logs" class="small muted">当前窗口最多 {{ logs.policy.maxLogs }} 条 / {{ logs.policy.retentionMinutes }} 分钟 · 丢弃或淘汰 {{ logs.dropped }} 条。</p>
-      <ElAlert v-if="logs && !logs.policy.captureMessages" title="当前只采集等级与来源。需要正文时，在本机 config/runtime/observability.yml 开启 capture-messages 并重载；不要让业务日志输出裸秘密或私密消息。" type="info" :closable="false" />
+      <ElAlert v-if="logs && !logs.policy.captureMessages" title="当前只采集等级与来源。可在本地配置的“任务与日志观测”中开启日志正文采集，保存后应用；也可在本机修改 config/runtime/observability.yml 并重载。" type="info" :closable="false" />
       <ElCard v-for="log in displayedLogs" :key="`${logs?.instance}-${log.sequence}`" shadow="never" class="runtime-card"><div class="editor-heading"><strong>{{ log.level }}</strong><time class="small muted">{{ date(log.at) }}</time></div><p class="small revision">{{ log.namespace }}</p><pre class="log-message">{{ log.message }}</pre><p v-if="log.requestId || log.scope || log.plugin" class="small revision">{{ log.requestId }} {{ log.scope }} {{ log.plugin }}</p></ElCard>
       <ElEmpty v-if="logs && !displayedLogs.length" description="当前扫描页没有匹配日志" /><ElButton :disabled="busy" @click="run(() => loadLogs())">{{ logs?.more ? '继续读取日志' : '读取最新日志' }}</ElButton>
     </template>

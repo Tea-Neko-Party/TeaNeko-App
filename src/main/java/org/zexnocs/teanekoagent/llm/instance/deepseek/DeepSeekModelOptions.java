@@ -17,10 +17,14 @@ import java.util.Optional;
  * <br>该类在通用 {@link LLMModelOptions} 基础上补充 DeepSeek create chat completion API 的专用参数。
  * <br>2026/11/02：修正推理强度说明，统一映射顶层 reasoning_effort。
  *
+ * <br>2026/11/04������ģ�������Ŀ��գ���Ӧ�������ֶα��ֶ�����
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/06/09
  * @since 4.4.1
- * @version 4.6.0-l
+ * @version 4.7.2-l
  */
 @Getter
 @Setter
@@ -174,6 +178,8 @@ public class DeepSeekModelOptions extends LLMModelOptions {
         overrides.findModel().ifPresent(result::setModel);
         overrides.findThinking().ifPresent(result::setThinking);
         overrides.findMaxTokens().ifPresent(result::setMaxTokens);
+        // 2026/11/04：供应商参数转换继续保留本地上下文准入快照。
+        overrides.findContextWindow().ifPresent(result::setContextWindow);
         overrides.findFrequencyPenalty().ifPresent(result::setFrequencyPenalty);
         overrides.findTemperature().ifPresent(result::setTemperature);
         overrides.findTopP().ifPresent(result::setTopP);

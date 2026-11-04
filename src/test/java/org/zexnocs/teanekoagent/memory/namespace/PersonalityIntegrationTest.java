@@ -57,10 +57,14 @@ import static org.mockito.Mockito.*;
  * 复用既有事务夹具验证人格实际生效、共享补正、切换回滚和旧轮失效，不增加数据结构镜像测试。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04��ʹ�ÿ�ѡ��ʽԤ����Լ��֤�˸�ѧϰ�볬ʱ��
+ *
+ * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.7.2-l
  */
 @Timeout(20)
 class PersonalityIntegrationTest {
@@ -90,11 +94,13 @@ class PersonalityIntegrationTest {
     /**
      * 组合实际配置适配、事务存储、人格源与 Agent/LLM；仅替换文件/模型传输。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/04：人格夹具使用可空显式总预算契约。
+     * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
      *
      * @author zExNocs
      * @date 2026/11/01
      * @since 4.5.0-l
-     * @version 4.5.0-l
+     * @version 4.7.2-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
@@ -110,7 +116,8 @@ class PersonalityIntegrationTest {
         final AtomicReference<AgentConversationOptions> options = new AtomicReference<>(AgentConversationOptions.defaults());
         final AtomicLong bindingRevision = new AtomicLong(1);
         final AtomicReference<PersonalityLearningSettings> learningPolicy = new AtomicReference<>(new PersonalityLearningSettings(true,
-                Duration.ofMinutes(5), Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+                // 2026/11/04：只为本用例显式声明总 token 预算。
+                Duration.ofMinutes(5), Duration.ofSeconds(5), 1, 16384L, 131072, Duration.ofDays(30)));
         final BlockingQueue<CompletableFuture<ILLMResult>> pending = new LinkedBlockingQueue<>();
         final BlockingQueue<PersonalityLearningService.Report> reports = new LinkedBlockingQueue<>();
         final PersonalityLearningService learner;
@@ -398,7 +405,8 @@ class PersonalityIntegrationTest {
      */
     @Test void learningAndApplicationSwitchesAndCandidateBoundaryStayIndependent() throws Exception {
         try (var h = new Harness(true); var control = ExecutionControl.create()) {
-            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+            // 2026/11/04：显式总预算使用可空 Long 契约，原学习行为保持可观察。
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384L, 131072, Duration.ofDays(30)));
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var disabled = h.awaitLearning();
             h.settings.get(scope.scopeId()).setPersonalityLearningEnabled(false);
             disabled.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"迟到表达\",\"confidence\":1}"));
@@ -422,10 +430,12 @@ class PersonalityIntegrationTest {
      */
     @Test void timeoutChangedNamespaceAndOwnerCloseRejectBackgroundWork() throws Exception {
         try (var h = new Harness(true)) {
-            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofMillis(300), 1, 16384, 131072, Duration.ofDays(30)));
+            // 2026/11/04：超时用例保留显式总预算。
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofMillis(300), 1, 16384L, 131072, Duration.ofDays(30)));
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); h.awaitLearning();
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
-            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384, 131072, Duration.ofDays(30)));
+            // 2026/11/04：恢复原时限时仍保留用例显式总预算。
+            h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384L, 131072, Duration.ofDays(30)));
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var stale = h.awaitLearning();
             h.bindingRevision.incrementAndGet(); h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
             stale.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"旧空间候选\",\"confidence\":1}"));
