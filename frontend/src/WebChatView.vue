@@ -24,6 +24,7 @@ import {useConsolePreferences} from './console-preferences'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 import AgentWorkspaceView from './AgentWorkspaceView.vue'
 import ChatSettingsView from './ChatSettingsView.vue'
+import AgentChatStatus from './AgentChatStatus.vue'
 
 interface Profile { id: string; uuid: string; name: string }
 interface Member { profile: string; card: string; role: string }
@@ -484,6 +485,15 @@ function beforeUnload(event: BeforeUnloadEvent) {
 }
 
 watch([roomOpen, roomId, sender], () => void loadCommands())
+// 2026/11/04：从房间管理子页返回时重读启用状态，不占用发送锁，也不重置输入草稿。
+watch(roomTab, async (tab, previous) => {
+  if (tab !== 'messages' || !['chat-config', 'agent'].includes(previous) || !roomOpen.value) return
+  try { await context() }
+  catch (failure) {
+    error.value = failure instanceof Error ? failure.message : '聊天配置读取未完成。'
+    if (failure instanceof ApiError && failure.status === 401) emit('expired')
+  }
+})
 watch(text, (value, previous) => {
   completionIndex.value = 0
   completionDismissed.value = false
@@ -522,7 +532,7 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
         <ElButton type="primary" :disabled="blocked || !roomName.trim() || !selectedProfiles.length || roomKind === 'PRIVATE' && selectedProfiles.length !== 1" @click="administrative('chat/rooms', { operationId: operationId(), kind: roomKind, name: roomName, profiles: [...selectedProfiles] }, '创建网页聊天')">创建聊天</ElButton>
       </div>
     </ElDialog>
-    <div v-if="roomOpen && room" class="web-room-heading"><button class="icon-button" aria-label="返回聊天室列表" title="返回聊天室列表" @click="backToRooms"><ConsoleIcon name="back" /></button><h2>{{ room.name }}</h2><ElTag>{{ room.kind === 'GROUP' ? '群聊' : '私聊' }}</ElTag></div>
+    <div v-if="roomOpen && room" class="web-room-heading"><button class="icon-button" aria-label="返回聊天室列表" title="返回聊天室列表" @click="backToRooms"><ConsoleIcon name="back" /></button><h2>{{ room.name }}</h2><ElTag>{{ room.kind === 'GROUP' ? '群聊' : '私聊' }}</ElTag><AgentChatStatus :target="roomTarget(room)" :active="active && roomOpen && roomTab === 'messages'" :enabled="!!settings?.registered && settings.fields.some(field => field.name === 'enabled' && field.value === 'true')" @expired="emit('expired')" /></div>
     <ElTabs v-if="home" v-show="roomOpen" v-model="roomTab" class="web-chat-tabs" @tab-change="value => { if (value === 'chat-config' || value === 'agent') openRoomPage(value) }">
       <ElTabPane label="聊天" name="messages" class="web-conversation">
         <ElEmpty v-if="!room" description="创建一个私聊或模拟群后开始；每个档案只对应一个私聊" />

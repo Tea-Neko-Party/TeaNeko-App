@@ -9,6 +9,6 @@
 - `WebMessageFactory` / `WebImages`：认证图片与原生图文映射，不读取任意地址或路径。
 - `WebManagementAdapter` / `WebChatFileSettings`：接入原聊天管理和容量文件热更新。
 
-Agent 侧的 `WebAgentTools` 与 `WebExpressionClient` 分别负责当前聊天引用图像查询、共享素材及客户端表情。客户端层不依赖 Agent Store。
+本客户端的 `agent` 子包通过 `WebAgentTools` 与 `WebExpressionClient` 提供当前聊天引用图像查询、共享素材及客户端表情适配，主动实现 Agent 契约；`controller` 子包承载网页聊天和命令目录 HTTP 入口。Agent 层不引用具体 Web 实现，客户端也不直接操作 Agent Store。
 
 具体操作、HTTP、容量、重连、安全与插件边界只维护在[网页聊天说明](../../../../../../../docs/development/web-console-chat.md)。

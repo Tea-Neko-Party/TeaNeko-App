@@ -1,13 +1,15 @@
 package org.zexnocs.teanekoplugin.agent_example;
 
-import org.zexnocs.teanekoagent.agent.AgentDefinition;
-import org.zexnocs.teanekoagent.agent.IAgentToolSource;
-import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekoagent.plugin.AgentFeature;
 import org.zexnocs.teanekoagent.plugin.AgentPluginContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekocore.framework.composition.*;
 import org.zexnocs.teanekocore.plugin.operation.OperationPipeline;
 
@@ -22,10 +24,13 @@ import java.util.concurrent.CompletionStage;
  * 完整示例能力：实例时区组件、轮次时间组件、System、工具及异步资料环绕。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
+ * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 public final class ExampleClockFeature implements AgentFeature {
     public static final String KEY = "example.clock:clock";
@@ -53,12 +58,15 @@ public final class ExampleClockFeature implements AgentFeature {
     @Override public ComponentPatch instanceComponents(AgentDefinition definition) { return ComponentPatch.builder().put(ZONE, "Asia/Shanghai").build(); }
     /** @return 准入后执行的资料准备 System */
     @Override public List<SystemContribution> systems() { return List.of(new SystemContribution(Phase.BEFORE_PROMPT, new ClockSystem(clock))); }
-    /** @return 没有参数的真实工具绑定，时区来自可信组件 */
+    /**
+     * 2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+     * @return 没有参数的真实工具绑定，时区来自可信组件
+     */
     @Override public IAgentToolSource tools() {
         var definition = LLMTool.builder().name("example_clock_now").description("查询当前实例时区的时间。")
                 .parameters(AbstractLLMFunctionParameter.object(null, Map.of(), List.of())).build();
         var binding = new LLMToolBinding(definition, (call, trusted) -> {
-            trusted.control().checkActive(); var zone = ZoneId.of(trusted.bindings().require(ZONE));
+            trusted.getControl().checkActive(); var zone = ZoneId.of(trusted.bindings().require(ZONE));
             var started = trusted.bindings().require(STARTED_AT);
             return CompletableFuture.completedStage("当前时间：" + clock.instant().atZone(zone) + "；本轮开始：" + started.atZone(zone));
         });

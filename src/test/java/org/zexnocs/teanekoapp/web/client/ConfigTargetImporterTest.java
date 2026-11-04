@@ -1,7 +1,9 @@
 package org.zexnocs.teanekoapp.web.client;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.adapter.config.AgentScopeConfigManager;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsDirectory;
@@ -23,10 +25,12 @@ import static org.mockito.Mockito.*;
 /**
  * 验证旧 Agent 空目录游标不会掩盖迁移后的通用群聊和私聊配置。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.6-l
- * @version 4.7.6-l
+ * @version 4.8.0-l
  */
 class ConfigTargetImporterTest {
     /** 2026/11/04：原管理器各自读其存储，目录不猜测机器人账号，不重复导入已完成分页。 */

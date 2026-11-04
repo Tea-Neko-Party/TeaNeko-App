@@ -32,10 +32,12 @@ import java.util.Set;
  * <br>2026/11/04：独立机器指标仅允许管理会话读取，不开放原 Actuator。
  * <br>2026/11/04：模型样板、指令目录及房间准备继续执行管理员会话和防伪规则。
  *
+ * <br>2026/11/04：组件和工具目录仅向管理员开放。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.0-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -71,6 +73,8 @@ public class WebSecurityConfig {
                                 "/api/v1/console/machine",
                                 // 2026/11/04：说明与模型样板仅允许管理员读取。
                                 "/api/v1/clients", "/api/v1/commands", "/api/v1/model-configurations",
+                                // 2026/11/04：组件与工具目录仅允许管理员访问，其余路径仍默认拒绝。
+                                "/api/v1/agent/catalog/components", "/api/v1/agent/catalog/tools",
                                 "/api/v1/settings/sections", "/api/v1/clients/*/accounts",
                                 "/api/v1/clients/*/accounts/*/targets",
                                 // 2026/11/04：目录同样按真实客户端与聊天解析。

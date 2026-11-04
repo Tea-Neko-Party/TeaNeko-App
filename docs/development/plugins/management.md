@@ -49,7 +49,7 @@ Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验�
 
 图库请求与视图定义在 StickerManagement，业务服务为 StickerManagementService，四项资源为自动注册的 StickerManagementResources Bean。例如先通过 stickers 查询得到 id/revision，再提交 Change(UUID.randomUUID(),id,revision,Action.PIN,null,null)。超时后保留同一 operationId 查询 stickers.operation；在保留窗口内使用完全相同请求重放亦可，不能生成新 ID 猜测上次是否提交。
 
-图库幂等回执与目录写入在同一 DTO 根事务，保留 24 小时且最多 512 项；冲突或窗口满拒绝，授权在执行及返回时复核。DELETE 保留拒绝同图自动复活的墓碑，RESTORE 才解除；REFRESH 要求明确已登记分析区域，只借用 SYSTEM 视觉活动和原有预算，不把管理身份变成聊天 USER。各动作和预览/刷新文件占用的完整约束见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md#全局管理-spi)。
+图库幂等回执与目录写入在同一 DTO 根事务，保留 24 小时且最多 512 项；冲突或窗口满拒绝，授权在执行及返回时复核。DELETE 保留拒绝同图自动复活的墓碑，RESTORE 才解除；REFRESH 要求明确已登记分析区域，只借用 SYSTEM 视觉活动和原有预算，不把管理身份变成聊天 USER。各动作和预览/刷新文件占用的完整约束见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#全局管理-spi)。
 
 ## 客户端指令台扩展
 
@@ -96,11 +96,15 @@ v4.7.5-l 的房间准备通过 `@WebRoomPreparation(id = "唯一标识")` Spring
 
 异步消息监听器在同步通知阶段用 `event.trackProcessing(stage)` 登记实际处理链，不阻塞 Core 事件线程。网页通知结束后等待这些阶段，失败仍传播为未确认回执；不能在通知封闭后追加。仅登记监听器自己负责的业务，不把无限后台任务加入本轮。
 
-模型配置扩展放在供应商的 LLM 目录：Spring Bean 实现 `ILLMConfigurationAdapter` 并声明 `@LLMConfigurationAdapter(id = "实际注册路由")`。`describe()` 返回公开模板，地址及路径复用该供应商原常量，具体模型与真实容量可编辑。注册目录同时检查真实 `ILLMModelService` 和模板/模型的插件启用状态；重复路由、协议版本和模板标识不一致明确失败。模板禁止包含运行密钥或其他用户私有配置。
+模型配置扩展放在供应商的 LLM 目录：Spring Bean 实现 `ILLMConfigurationAdapter` 并声明 `@LLMConfigurationAdapter(id = "实际协议标识", icon = "/console/models/图标文件")`。`describe()` 返回公开模板，地址及路径复用该供应商原常量，具体模型与真实容量可编辑。图标可省略，前端使用名称缩写；本地图标放在 `frontend/public/models/` 并随程序构建。注册目录同时检查真实 `ILLMModelService` 和模板/模型的插件启用状态；重复协议标识、协议版本和模板标识不一致明确失败。模板禁止包含运行密钥或其他用户私有配置。
+
+v4.7.7-l 将文件条目的唯一配置路由 `id` 与实际协议 `adapter` 分开，同一协议可配置多次。运行时使用所选配置路由读取参数、连接和凭据，不将其他路由的密钥借给它；旧条目未声明 `adapter` 时继续使用同名协议。新增协议实现须保留该路由绑定，可复用已有模型基类与凭据边界；完整配置及聊天切换见[模型配置](../web-console-models.md)。
 
 凭据输入方式通过 `@LLMCredentialInput(id = "唯一标识")` 和 `ILLMCredentialInput` 贡献名称、说明、输入正则、掩码及编码前后缀；前端自动发现，手动模式原样写入，环境变量模式生成 `${变量名}`。扩展编码必须已被 Core 文件解析器或对应凭据消费端支持，页面描述不等于新增解析能力。查看公开样板仍要求原 `agent.models` 文件区授权，保存/应用沿用原文件服务、版本、回执、CSRF 和秘密保护。操作说明见[模型配置](../web-console-models.md)。
 
 指令目录由 Core `CommandCatalog` 投影实际扫描方法、`@Description` 参数说明、`@DefaultValue`、权限、scope 及客户端声明。网页补全使用持久房间与真实成员生成的原 `CommandData`，继续调用原权限与范围服务，排除仅管理来源和不兼容原始平台类型的方法。全局说明与成员补全不执行方法、不赋予角色；实际分发仍复核所有原规则。
+
+应用层 `ChatIdentityService` 从真实消息事件持久记录公开聊天与成员资料，业务可用 `name(client, scope)` 或 `member(client, scope, uuid)` 查询；群内名片按客户端和聊天隔离，昵称不作为身份或授权证明。目录和 Agent 工作区复用这些名称，不需要插件重复建立缓存。
 
 ## 后续业务资源与页面
 

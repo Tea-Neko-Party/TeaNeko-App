@@ -1,21 +1,25 @@
 package org.zexnocs.teanekoagent.plugin;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.agent.AgentComponents;
-import org.zexnocs.teanekoagent.agent.AgentDefinition;
-import org.zexnocs.teanekoagent.agent.AgentRunRequest;
-import org.zexnocs.teanekoagent.agent.IAgentToolSource;
-import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.agent.prompt.AgentPromptException;
-import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
-import org.zexnocs.teanekoagent.agent.prompt.AgentPromptInput;
-import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.AgentComponents;
+import org.zexnocs.teanekoagent.component.AgentGuardedSystem;
+import org.zexnocs.teanekoagent.component.AgentPluginSelection;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
 import org.zexnocs.teanekoagent.plugin.event.AgentDecisionEvent;
 import org.zexnocs.teanekoagent.plugin.event.AgentEventContext;
 import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
 import org.zexnocs.teanekoagent.plugin.event.AgentToolsSelectingEvent;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
+import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
+import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
@@ -36,14 +40,22 @@ import java.util.function.Supplier;
  * <br>2026/11/02：合并注解工具自动能力，原能力拥有的工具不重复装配。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：组件目录接入原 ECS 管线，新装配只选择明确能力。
+ *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/04：按能力自报的组件要求装配客户端扩展，不硬编码平台能力。
+ * <br>2026/11/05：补充实例装配拒绝未注册组件的异常契约。
+ * <br>2026/11/05：展开本次装配校验中的多语句和分支，保持执行顺序。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 @Service
 public final class AgentPluginRuntime {
-    public static final ComponentKey<AgentPluginSelection> SELECTION = ComponentKey.of("agent.plugin-selection", AgentPluginSelection.class);
+    // 2026/11/04：保留原公开键入口；真实组件声明及系统实现统一移入 component。
+    public static final ComponentKey<AgentPluginSelection> SELECTION = AgentComponents.PLUGIN_SELECTION;
     private final PluginRegistry plugins;
     private final Map<String, AgentFeature> features;
     private final Set<ComponentKey<?>> components;
@@ -57,48 +69,84 @@ public final class AgentPluginRuntime {
      * @param contributions 原能力
      * @param events 懒事件端口
      * @param annotations 注解工具目录
+     * @param componentRegistry 可序列化组件目录，与原能力使用同一执行器
      */
     @org.springframework.beans.factory.annotation.Autowired
     public AgentPluginRuntime(PluginRegistry plugins, List<AgentFeature> contributions, ObjectProvider<IEventService> events,
-            ObjectProvider<org.zexnocs.teanekoagent.tool.TeaNekoAgentToolRegistry> annotations) {
-        this(plugins, annotations.getIfAvailable() == null ? contributions : annotations.getObject().combine(contributions), events);
+            ObjectProvider<org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry> annotations,
+            ObjectProvider<org.zexnocs.teanekoagent.component.AgentComponentRegistry> componentRegistry) {
+        // 2026/11/04：组件系统与旧插件来源使用同一声明、版本及写入范围校验。
+        this(plugins, combineComponents(annotations.getIfAvailable() == null ? contributions
+                : annotations.getObject().combine(contributions), componentRegistry.getIfAvailable()), events);
     }
 
     /**
-     * 校验完整能力目录，拒绝重名及跨边界写入；不执行初始化回调。
+     * @param existing 原能力目录
+     * @param registry 显式组件类型目录
+     * @return 2026/11/04：统一执行目录，不改变原业务 Bean 的拥有关系
+     */
+    private static List<AgentFeature> combineComponents(List<AgentFeature> existing,
+            org.zexnocs.teanekoagent.component.@org.jspecify.annotations.Nullable AgentComponentRegistry registry) {
+        var values = new ArrayList<>(existing);
+        if (registry != null) {
+            values.addAll(registry.contributions());
+        }
+        return List.copyOf(values);
+    }
+
+    /**
+     * 2026/11/05：逐项校验完整能力目录，拒绝重名及跨边界写入；不执行初始化回调。
      * @param plugins 插件目录
      * @param contributions 所有能力贡献
      * @param events 延迟事件入口，避免扫描构造环
      * @throws IllegalArgumentException 当能力、依赖或组件声明无效时
      */
-    public AgentPluginRuntime(PluginRegistry plugins, List<AgentFeature> contributions, ObjectProvider<IEventService> events) {
-        this.plugins = plugins; this.events = events;
-        var values = new TreeMap<String, AgentFeature>(); var keys = new HashSet<ComponentKey<?>>();
+    public AgentPluginRuntime(PluginRegistry plugins, List<AgentFeature> contributions,
+            ObjectProvider<IEventService> events) {
+        this.plugins = plugins;
+        this.events = events;
+        var values = new TreeMap<String, AgentFeature>();
+        var keys = new HashSet<ComponentKey<?>>();
         var sourceNames = new HashSet<String>();
         for (var feature : contributions) {
             plugins.requireRegistered(feature.pluginId());
-            if (!feature.id().matches("[a-z][a-z0-9-]{0,31}") || values.putIfAbsent(feature.key(), feature) != null) {
+            if (!feature.id().matches("[a-z][a-z0-9.-]{0,79}") || values.putIfAbsent(feature.key(), feature) != null) {
                 throw new IllegalArgumentException("Agent 能力标识无效或重复：" + feature.key());
             }
             for (var key : feature.components()) {
-                if (!key.id().startsWith(feature.componentPrefix())) { throw new IllegalArgumentException("插件组件必须使用自有命名空间：" + key.id()); }
+                if (!key.id().startsWith(feature.componentPrefix())) {
+                    throw new IllegalArgumentException("插件组件必须使用自有命名空间：" + key.id());
+                }
                 keys.add(key);
             }
+            // 2026/11/04：组件要求使用稳定标识；不存在的装配不会自动启用该能力。
+            if (feature.assemblyRequirements().stream().anyMatch(id -> !id.matches("[a-z][a-z0-9.-]{0,79}"))) {
+                throw new IllegalArgumentException("Agent 能力声明了无效组件要求：" + feature.key());
+            }
             for (var name : feature.promptNames()) {
-                if (!name.matches("[a-z][a-z0-9_]{0,47}") || !sourceNames.add(name)) { throw new IllegalArgumentException("插件资料来源名无效或重复：" + name); }
+                if (!name.matches("[a-z][a-z0-9_]{0,47}") || !sourceNames.add(name)) {
+                    throw new IllegalArgumentException("插件资料来源名无效或重复：" + name);
+                }
             }
             for (var contribution : feature.systems()) {
                 var descriptor = contribution.system().descriptor();
-                if (!descriptor.id().startsWith(feature.componentPrefix()) || !feature.components().containsAll(descriptor.writes())) {
+                if (!descriptor.id().startsWith(feature.componentPrefix())
+                        || !feature.components().containsAll(descriptor.writes())) {
                     throw new IllegalArgumentException("插件 System 越过自有写入边界：" + descriptor.id());
                 }
             }
             feature.promptInterceptors().forEach(binding -> {
-                if (!binding.pluginId().equals(feature.pluginId())) { throw new IllegalArgumentException("能力不能冒用其他插件的拦截器归属。"); }
+                if (!binding.pluginId().equals(feature.pluginId())) {
+                    throw new IllegalArgumentException("能力不能冒用其他插件的拦截器归属。");
+                }
             });
         }
-        features = Collections.unmodifiableMap(values); components = Set.copyOf(keys); promptNames = Set.copyOf(sourceNames);
-        for (var feature : features.values()) { validateDependencies(feature.key(), new HashSet<>()); }
+        features = Collections.unmodifiableMap(values);
+        components = Set.copyOf(keys);
+        promptNames = Set.copyOf(sourceNames);
+        for (var feature : features.values()) {
+            validateDependencies(feature.key(), new HashSet<>());
+        }
     }
 
     /**
@@ -119,15 +167,46 @@ public final class AgentPluginRuntime {
 
     /**
      * 选择默认与显式能力并展开依赖；显式能力不可用时拒绝，默认禁用能力不自动路由。
+     * 2026/11/05：明确未注册组件及能力的拒绝条件。
      * @param definition 实例声明
      * @return 按能力 ID 排序的版本快照
+     * @throws IllegalArgumentException 当装配包含未注册组件或能力时
      */
     public AgentPluginSelection select(AgentDefinition definition) {
         var selected = new TreeMap<String, PluginRegistry.Token>();
-        for (var feature : features.values()) {
-            if (feature.defaultEnabled() && plugins.isEnabled(feature.pluginId())) { selectFeature(feature.key(), selected); }
+        // 2026/11/04：独立宿主同样拒绝未注册组件，不默默降级为纯模型。
+        if (!definition.assembly().legacy()) {
+            for (var id : definition.assembly().parameters().keySet()) {
+                boolean registered = features.values().stream().anyMatch(feature ->
+                        feature instanceof org.zexnocs.teanekoagent.component.AgentComponentFeature component
+                                && component.componentId().equals(id));
+                if (!registered) {
+                    throw new IllegalArgumentException("Agent 装配引用未注册组件：" + id);
+                }
+            }
         }
-        definition.features().forEach(key -> selectFeature(key, selected)); return new AgentPluginSelection(selected);
+        for (var feature : features.values()) {
+            // 2026/11/04：新装配只选择显式组件；旧实例保留历史默认能力。
+            if (definition.assembly().legacy() && feature.defaultEnabled() && plugins.isEnabled(feature.pluginId())) {
+                selectFeature(feature.key(), selected);
+            } else if (!definition.assembly().legacy()
+                    && feature instanceof org.zexnocs.teanekoagent.component.AgentComponentFeature component
+                    && definition.assembly().has(component.componentId())) {
+                selectFeature(feature.key(), selected);
+            } else if (!definition.assembly().legacy() && feature.defaultEnabled()
+                    && !feature.assemblyRequirements().isEmpty()
+                    && feature.assemblyRequirements().stream().allMatch(definition.assembly()::has)
+                    && plugins.isEnabled(feature.pluginId())) {
+                // 2026/11/04：客户端主动声明组件要求，Agent 不依赖任何具体客户端能力。
+                selectFeature(feature.key(), selected);
+            } else if (!definition.assembly().legacy() && definition.assembly().has("tool")
+                    && feature.defaultEnabled() && feature.assemblyRequirements().isEmpty()
+                    && feature.promptNames().isEmpty() && plugins.isEnabled(feature.pluginId())) {
+                selectFeature(feature.key(), selected);
+            }
+        }
+        definition.features().forEach(key -> selectFeature(key, selected));
+        return new AgentPluginSelection(selected);
     }
 
     /**
@@ -206,7 +285,10 @@ public final class AgentPluginRuntime {
         var systems = new ArrayList<IEntitySystem>();
         for (var id : ids) {
             for (var contribution : features.get(id).systems()) {
-                if (contribution.phase() == phase) { systems.add(new GuardedSystem(contribution.system())); }
+                if (contribution.phase() == phase) {
+                    // 2026/11/04：装配器仅提供版本检查，不再内嵌 ECS 系统类型。
+                    systems.add(new AgentGuardedSystem(contribution.system(), this::check));
+                }
             }
         }
         return SystemPipeline.compile(systems);
@@ -380,33 +462,6 @@ public final class AgentPluginRuntime {
     private AgentPromptInput sourceInput(AgentPromptInput input, Set<String> names) {
         var fragments = input.fragments().stream().filter(value -> names == null ? !promptNames.contains(value.name()) : names.contains(value.name())).toList();
         return new AgentPromptInput(input.original(), fragments, input.omittedFragments(), input.personality(), input.summary(), input.plugins());
-    }
-
-    /**
-     * 原 System 的调用适配，不改变描述和业务状态。
-     * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
-     * @author zExNocs
-     * @date 2026/11/02
-     * @since 4.6.0-l
-     * @version 4.6.0-l
-     */
-    private final class GuardedSystem implements IEntitySystem {
-        private final IEntitySystem delegate;
-        /** @param delegate 原 System */
-        private GuardedSystem(IEntitySystem delegate) { this.delegate = delegate; }
-        /** @return 原声明 */
-        @Override public SystemDescriptor descriptor() { return delegate.descriptor(); }
-        /**
-         * 执行前后检查本轮选择。
-         * @param context 原上下文
-         * @return 完整步骤阶段
-         * @throws Exception 当原 System 同步失败时
-         */
-        @Override public CompletionStage<SystemResult> execute(SystemContext context) throws Exception {
-            var selection = context.snapshot().require(SELECTION); check(selection);
-            return delegate.execute(context).thenApply(result -> { check(selection); return result; });
-        }
     }
 
     /**

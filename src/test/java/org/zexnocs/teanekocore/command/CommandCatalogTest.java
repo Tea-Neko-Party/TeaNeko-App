@@ -27,10 +27,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：验证显示名称独立于命令前缀和原权限。
  *
+ * <br>2026/11/04：验证主指令默认规则和方法有效权限组的独立投影。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.6-l
+ * @version 4.7.7-l
  */
 class CommandCatalogTest {
     /** 2026/11/04：作用域、权限、原始数据类型与管理来源共同限定补全目录。 */
@@ -56,6 +58,13 @@ class CommandCatalogTest {
         assertEquals("/example echo <text>", allowed.getFirst().usage());
         // 2026/11/04：中文显示名独立于调用前缀和权限过滤。
         assertEquals("测试目录", allowed.getFirst().displayName());
+        // 2026/11/04：主规则与方法有效规则分开投影，权限组差异不改变原授权服务。
+        assertEquals("MEMBER", allowed.getFirst().defaultPermission());
+        assertEquals("OWNER", allowed.getFirst().permission());
+        assertEquals(List.of("example.default"), allowed.getFirst().defaultPackages());
+        assertEquals(List.of("example.echo"), allowed.getFirst().permissionPackages());
+        assertEquals(List.of("ICommandClient"), allowed.getFirst().defaultClients());
+        assertEquals(allowed.getFirst().defaultClients(), allowed.getFirst().clients());
         assertEquals("需要回显的文字", allowed.getFirst().parameters().getFirst().description());
         assertEquals(3, catalog.list(null, () -> {}).size());
         when(permissions.hasPermission(any(), any(SubCommand.class), any())).thenReturn(false);
@@ -67,25 +76,28 @@ class CommandCatalogTest {
         assertTrue(catalog.list(null, () -> {}).isEmpty());
     }
 
-/**
+    /**
      * 只有回显入口适合本测试的普通原始数据，其他入口保留各自类型与管理边界。
      *
      * 修改记录：<br>
      * 2026/11/04：声明测试显示名，验证前缀与展示分离。
      *
+     * <br>2026/11/04：声明不同成员及权限组，覆盖真实扫描的继承语义。
+     *
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.5-l
-     * @version 4.7.6-l
+     * @version 4.7.7-l
      */
-    @Command(displayName = "测试目录", value = {"/example", "/例子"}, permission = CommandPermission.MEMBER)
+    @Command(displayName = "测试目录", value = {"/example", "/例子"}, permission = CommandPermission.MEMBER, permissionPackage = "example.default")
     @Description("测试命令的完整说明。")
     public static class Example {
         /**
          * @param text 回显参数
          * @return 已完成的测试阶段
          */
-        @SubCommand({"echo", "回显"})
+        // 2026/11/04：方法声明不同成员及权限组，用真实扫描核对覆盖规则。
+        @SubCommand(value = {"echo", "回显"}, permission = CommandPermission.OWNER, permissionPackage = "example.echo")
         @Description("回显文字；示例：/example echo 你好。")
         public CompletionStage<Void> echo(@Description("需要回显的文字") String text) {
             return CompletableFuture.completedStage(null);

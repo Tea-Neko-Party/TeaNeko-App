@@ -7,6 +7,7 @@ import org.zexnocs.teanekoapp.web.WebSessionGuard;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
+import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 import org.zexnocs.teanekocore.database.configdata.ConfigEdits;
 
 import java.util.List;
@@ -19,12 +20,17 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：按真实目标查询适用配置目录，浏览器不提供内部命名空间。
  *
+ * <br>2026/11/04：提供受原会话和客户端约束保护的聊天名称读取。
+ * <br>2026/11/05：通过端点声明接入统一安全错误映射。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.8.0-l
  */
 @RestController
+// 2026/11/05：主动接入统一安全错误映射，保持原认证与 HTTP 路径。
+@WebManagedEndpoint
 @RequestMapping("/api/v1")
 public final class ChatSettingsController {
     private static final String TARGET = "/clients/{client}/accounts/{account}/targets/{target}/settings/{section}";
@@ -93,6 +99,27 @@ public final class ChatSettingsController {
         return clients.invoke(client, adapter -> adapter.targets(account, after, kind)).thenApply(value -> {
             guard.run();
             return value;
+        });
+    }
+
+    /**
+     * 2026/11/04：只返回当前真实目标的显示名称，不把内部配置键导出给浏览器。
+     * @param client 已注册客户端
+     * @param account 原账号引用
+     * @param target 原聊天引用
+     * @param request 当前请求
+     * @param authentication 真实管理员
+     * @return 最新名称
+     */
+    @GetMapping("/clients/{client}/accounts/{account}/targets/{target}")
+    public CompletionStage<java.util.Map<String, String>> target(@PathVariable String client,
+            @PathVariable String account, @PathVariable String target, HttpServletRequest request,
+            Authentication authentication) {
+        var guard = clients.guard(client, sessions.capture(request, authentication));
+        guard.run();
+        return clients.invoke(client, adapter -> adapter.resolve(account, target)).thenApply(resolved -> {
+            guard.run();
+            return java.util.Map.of("name", resolved.name());
         });
     }
 

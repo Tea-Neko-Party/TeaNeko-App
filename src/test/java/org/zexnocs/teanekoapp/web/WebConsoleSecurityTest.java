@@ -1,10 +1,18 @@
 package org.zexnocs.teanekoapp.web;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.web.server.servlet.Session;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.MapPropertySource;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.ResourcePropertySource;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.http.server.ServletServerHttpRequest;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.mock.web.MockServletContext;
@@ -24,7 +32,6 @@ import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
 import org.zexnocs.teanekoapp.client.GuardedClientWebSocketHandler;
 import org.zexnocs.teanekoapp.utils.VersionUtil;
-import org.zexnocs.teanekoapp.web.chat.WebChatController;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.console.ClientConsole;
 import org.zexnocs.teanekoapp.web.console.ClientConsoleService;
@@ -37,9 +44,13 @@ import org.zexnocs.teanekoclient.web.WebChat;
 import org.zexnocs.teanekoclient.web.WebChatService;
 import org.zexnocs.teanekoclient.web.WebChatStore;
 import org.zexnocs.teanekoclient.web.WebImages;
+import org.zexnocs.teanekoclient.web.controller.WebChatController;
+import org.zexnocs.teanekoclient.web.controller.WebCommandCatalogController;
 import org.zexnocs.teanekocore.database.configdata.ConfigEdits;
 import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
+import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URLEncoder;
@@ -74,12 +85,35 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/04：已关闭 Agent 资料映射为明确的业务冲突状态。
  * <br>2026/11/04：房间准备、成员指令补全和模型样板沿用真实会话及防伪检查。
  *
+ * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
+ *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/05：通过真实扫描发现业务错误映射并验证原 MVC 安全链。
+ * <br>2026/11/05：验证项目配置覆盖开发期会话落盘默认值，登录身份不跨实例恢复。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.0-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 2026/11/05：按实际资源绑定容器会话配置，防止 DevTools 默认值重新开启会话落盘。
+     *
+     * @throws java.io.IOException 当项目配置资源不可读时
+     */
+    @Test
+    void disablesSessionPersistenceDespiteDevelopmentDefaults() throws java.io.IOException {
+        var environment = new MockEnvironment();
+        environment.getPropertySources().addLast(new ResourcePropertySource(
+                "project", new ClassPathResource("application.properties")));
+        environment.getPropertySources().addLast(new MapPropertySource(
+                "devtools", Map.of("server.servlet.session.persistent", true)));
+
+        var session = Binder.get(environment).bind("server.servlet.session", Session.class).get();
+        assertFalse(session.isPersistent());
+    }
+
     /**
      * 2026/11/04：新目录只能由管理员读取，房间准备和成员补全必须具有真实会话及 CSRF。
      * @throws Exception 当隔离 MVC 执行失败时
@@ -87,7 +121,9 @@ class WebConsoleSecurityTest {
     @Test
     void roomAndCatalogRoutesRetainSessionAndCsrfBoundaries() throws Exception {
         try (var fixture = new Fixture(directory)) {
-            for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations")) {
+            // 2026/11/04：组件和工具文档与其他管理员目录共享真实认证边界。
+            for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations",
+                    "/api/v1/agent/catalog/components", "/api/v1/agent/catalog/tools")) {
                 fixture.mvc.perform(fixture.request(path, false)).andExpect(status().isUnauthorized());
             }
             var session = fixture.authenticate();
@@ -97,13 +133,16 @@ class WebConsoleSecurityTest {
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(List.of()));
             when(fixture.fileSettings.read(eq("agent.models"), any()))
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
-            when(fixture.modelTemplates.describe()).thenReturn(new org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.Catalog(List.of(), List.of()));
+            when(fixture.modelTemplates.describe()).thenReturn(new org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory.Catalog(List.of(), List.of()));
             when(fixture.chat.open(eq("room"), any()))
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
             for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations")) {
                 var result = fixture.mvc.perform(fixture.request(path, false).session(session))
                         .andExpect(request().asyncStarted()).andReturn();
                 fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+            }
+            for (String path : List.of("/api/v1/agent/catalog/components", "/api/v1/agent/catalog/tools")) {
+                fixture.mvc.perform(fixture.request(path, false).session(session)).andExpect(status().isOk());
             }
             for (String suffix : List.of("open", "commands")) {
                 String path = "/api/v1/chat/rooms/room/" + suffix;
@@ -129,8 +168,8 @@ class WebConsoleSecurityTest {
                     .get("token").asString();
             when(fixture.management.invoke(anyString(), anyString(), anyString(), anyString(), any(), any()))
                     .thenAnswer(ignored -> java.util.concurrent.CompletableFuture.failedStage(
-                            new org.zexnocs.teanekoagent.agent.prompt.AgentPromptException(
-                                    org.zexnocs.teanekoagent.agent.prompt.AgentPromptException.Reason.DISABLED)));
+                            new org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException(
+                                    org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException.Reason.DISABLED)));
             var result = fixture.mvc.perform(fixture.request(
                             "/api/v1/clients/web/accounts/web-bot/targets/room/management/teaneko.agent:personality", true)
                     .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
@@ -322,10 +361,13 @@ class WebConsoleSecurityTest {
      * <br>2026/11/04：注册纯 JDK 机器观测及其独立控制器，不启动业务服务。
      * <br>2026/11/04：模型与指令目录使用隔离业务替身，保留真实 MVC 安全链。
      *
+     * <br>2026/11/04：组件与工具目录接入原认证夹具，继续验证匿名访问拒绝。
+     * <br>2026/11/05：注册真实错误映射扫描器，不绕过管理端点声明。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.5-l
+     * @version 4.8.0-l
      */
     private static final class Fixture implements AutoCloseable {
         final WebSecurityFileConfig file = new WebSecurityFileConfig();
@@ -352,7 +394,7 @@ class WebConsoleSecurityTest {
         // 2026/11/04：目录及成员权限另由核心用例验证，此处核对完整 HTTP 安全边界。
         final org.zexnocs.teanekocore.command.CommandCatalog commandCatalog = mock(org.zexnocs.teanekocore.command.CommandCatalog.class);
         final org.zexnocs.teanekoclient.web.WebCommandCatalog memberCommands = mock(org.zexnocs.teanekoclient.web.WebCommandCatalog.class);
-        final org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.class);
+        final org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory.class);
 
         /**
          * @param path 本测试拥有的私有目录
@@ -393,14 +435,23 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("commandCatalog", commandCatalog);
                 factory.registerSingleton("memberCommands", memberCommands);
                 factory.registerSingleton("modelTemplates", modelTemplates);
+                // 2026/11/04：真实目录控制器只读取无秘密元数据，夹具不加载模型或配置文件。
+                factory.registerSingleton("componentDirectory", mock(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class));
+                factory.registerSingleton("toolDirectory", mock(org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.class));
+                factory.registerSingleton("pluginRegistry", mock(org.zexnocs.teanekocore.plugin.PluginRegistry.class));
+                factory.registerSingleton("modelSelection", mock(org.zexnocs.teanekoagent.integration.config.AgentModelSelection.class));
                 factory.registerSingleton("virtualExecutor", (java.util.concurrent.Executor) Runnable::run);
+                // 2026/11/05：业务错误映射经真实扫描发现，继续由原 MVC 链处理异步失败。
+                factory.registerSingleton("webFailureScanner", new BeanScanner(context, mock(ILogger.class)));
             });
             context.register(MvcConfiguration.class, WebSecurityConfig.class, WebConsoleController.class,
                     WebMachineController.class,
                     MachineEndpoint.class, ChatSettingsController.class, ChatSettingsErrors.class, WebSessionGuard.class,
                     WebManagementController.class, WebFileSettingsController.class, WebConsoleCommandController.class,
                     WebChatController.class, MachineTokenController.class, WebCommandCatalogController.class,
-                    org.zexnocs.teanekoagent.adapter.web.ModelConfigurationController.class);
+                    org.zexnocs.teanekoagent.integration.web.ModelConfigurationController.class,
+                    org.zexnocs.teanekoagent.integration.web.AgentComponentController.class,
+                    org.zexnocs.teanekoagent.integration.web.AgentWebFailureMapper.class);
             context.refresh();
             context.getBean(WebSecurityConfig.class).webSessionCookie().onStartup(servlet);
             assertTrue(servlet.getSessionCookieConfig().isSecure());

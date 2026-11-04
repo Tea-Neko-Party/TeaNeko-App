@@ -133,7 +133,8 @@ public final class CommandCatalog {
                 Arrays.stream(command.supportedClients()).map(Class::getSimpleName).toList(),
                 command.mode() == Command.CommandMode.REGEX, method.isAnnotationPresent(ManagementCommand.class),
                 command.permission().name(), command.scope().name(), List.of(command.permissionPackage()),
-                List.of(packages.length == 0 ? command.permissionPackage() : packages)));
+                List.of(packages.length == 0 ? command.permissionPackage() : packages),
+                Arrays.stream(command.supportedClients()).map(Class::getSimpleName).toList()));
     }
 
     /**
@@ -165,7 +166,7 @@ public final class CommandCatalog {
      */
     public record Argument(String name, String type, String description, boolean optional, String defaultValue) {}
 
-/**
+    /**
      * 一个真实命令方法的目录项，查看不代表可以执行。
      * 修改记录：<br>
      * 2026/11/04：增加中文显示名，调用前缀和权限合同保持独立。
@@ -190,6 +191,7 @@ public final class CommandCatalog {
      * @param defaultScope 主指令范围要求
      * @param defaultPackages 主指令权限组
      * @param permissionPackages 当前方法有效权限组
+     * @param defaultClients 主指令客户端声明，用于独立展示主规则及方法差异
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.5-l
@@ -199,5 +201,5 @@ public final class CommandCatalog {
                         String insertion, String usage, String introduction, String description,
                         List<Argument> parameters, String permission, String scope, List<String> clients,
                         boolean regex, boolean management, String defaultPermission, String defaultScope,
-                        List<String> defaultPackages, List<String> permissionPackages) {}
+                        List<String> defaultPackages, List<String> permissionPackages, List<String> defaultClients) {}
 }

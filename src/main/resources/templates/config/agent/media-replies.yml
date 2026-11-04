@@ -6,11 +6,8 @@ max-categories: 2
 cooldown-turns: 3
 # 必须完整提供某类全部当前可用项，超过此预算返回 complete=false。
 max-category-characters: 7800
-# 当前 client 的明确目录，ID 与描述应按实际客户端版本核实；可增删，最多64项。
-native-faces:
-  onebot:
-    '14': 微笑
-    '5': 流泪
-    '32': 疑问
-    '76': 赞
-    '66': 爱心
+# 2026/11/05：省略 native-faces 时由客户端提供默认目录；按 client 配置时每个目录最多64项。
+# 显式 native-faces: {} 保持原禁用行为；配置 onebot: {} 也会关闭该客户端目录。
+# native-faces:
+#   onebot:
+#     '14': 微笑

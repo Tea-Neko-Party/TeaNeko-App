@@ -26,6 +26,13 @@ const scheduleStates: Record<string, string> = { ACTIVE: '等待执行', RUNNING
 
 const props = defineProps<{ target: AgentTarget; active: boolean; embedded?: boolean }>()
 const emit = defineEmits<{ expired: []; selectTarget: [] }>()
+const targetName = ref(props.target.name)
+/** 2026/11/04：刷新名称使用真实目标引用，迟到结果不能替换其他聊天名称。 */
+async function refreshName() {
+  const selected = props.target
+  const result = await request<{name: string}>(`clients/${encodeURIComponent(selected.client)}/accounts/${encodeURIComponent(selected.account)}/targets/${encodeURIComponent(selected.target)}`)
+  if (props.target.client === selected.client && props.target.account === selected.account && props.target.target === selected.target) targetName.value = result.name
+}
 const panel = ref('activity')
 const busy = ref(false)
 const error = ref('')
@@ -89,6 +96,7 @@ async function canLeave(): Promise<boolean> {
 defineExpose({ canLeave })
 
 async function loadActivity() {
+  await refreshName()
   let result = await call<Timeline>('activity', { after: timeline.value?.next ?? 0, limit: 100 })
   if (result.reset || timeline.value && timeline.value.instance !== result.instance) {
     if (timeline.value && timeline.value.instance !== result.instance) result = await call<Timeline>('activity', { after: 0, limit: 100 })
@@ -127,8 +135,8 @@ async function loadPersonality() {
 }
 
 async function loadSchedules(more = false) {
-  const result = await call<Schedules>('schedules', { action: 'READ', after: more ? schedules.value?.next ?? '' : '', revision: 0 })
-  schedules.value = result
+  // 2026/11/05：读取结果直接更新视图，去除无额外用途的中间变量。
+  schedules.value = await call<Schedules>('schedules', { action: 'READ', after: more ? schedules.value?.next ?? '' : '', revision: 0 })
 }
 
 async function loadPanel() {
@@ -242,7 +250,9 @@ function beforeUnload(event: BeforeUnloadEvent) {
   if (pending.value || dirty.value) { event.preventDefault(); event.returnValue = '' }
 }
 
-watch(() => props.target, () => {
+// 2026/11/04：显示名刷新和父组件重新渲染不重置同一聊天的编辑状态。
+watch(() => JSON.stringify([props.target.client, props.target.account, props.target.target]), () => {
+  targetName.value = props.target.name
   events.value = []; timeline.value = undefined; memory.value = undefined; profile.value = undefined; personality.value = undefined; layers.value = undefined; profileLearned.value = undefined
   namespace.value = ''; personalityKey.value = ''; receipt.value = undefined; notice.value = ''; error.value = ''
   schedules.value = undefined
@@ -262,7 +272,7 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
   <!-- 2026/11/04：收起重复说明，活动状态与待确认操作继续直接展示。 -->
   <div class="agent-workspace">
     <div v-if="!embedded" class="section-title">
-      <h2>{{ target.name }}</h2>
+      <h2>{{ targetName }}</h2>
       <ElButton @click="emit('selectTarget')">选择其他聊天</ElButton>
       </div>
     <div class="agent-tabs" role="tablist" aria-label="Agent 管理分区">

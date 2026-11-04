@@ -3,7 +3,12 @@ package org.zexnocs.teanekoapp.web.settings;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.zexnocs.teanekoapp.web.error.IWebFailureMapper;
+import org.zexnocs.teanekoapp.web.error.WebFailureMapping;
+import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditConflictException;
+import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
+import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.ConcurrentModificationException;
 import java.util.Map;
@@ -22,23 +27,28 @@ import java.util.concurrent.ExecutionException;
  * <br>2026/11/04：机器令牌专用接口沿用安全错误映射，不回显原文或秘密。
  * <br>2026/11/04：已关闭资料、过期绑定及暂不可用状态使用明确的安全响应。
  * <br>2026/11/04：指令说明及模型样板接口复用同一脱敏错误边界。
+ * <br>2026/11/04：通过端点标记和异常映射声明解耦上层控制器及业务异常。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.0-l
  */
-// 2026/11/03：聊天、领域管理及文件入口使用相同的脱敏失败合同。
-@RestControllerAdvice(assignableTypes = {ChatSettingsController.class,
-        org.zexnocs.teanekoapp.web.WebManagementController.class,
-        // 2026/11/04：只读扩展目录同样不向网页返回原异常或秘密。
-        org.zexnocs.teanekoapp.web.WebCommandCatalogController.class,
-        org.zexnocs.teanekoagent.adapter.web.ModelConfigurationController.class,
-        org.zexnocs.teanekoapp.web.files.WebFileSettingsController.class,
-        org.zexnocs.teanekoapp.web.files.MachineTokenController.class,
-        org.zexnocs.teanekoapp.web.console.WebConsoleCommandController.class,
-        org.zexnocs.teanekoapp.web.chat.WebChatController.class})
+// 2026/11/04：控制器主动选择安全错误合同，App 不再引用上层控制器类型。
+@RestControllerAdvice(annotations = WebManagedEndpoint.class)
 public final class ChatSettingsErrors {
+    private final AnnotatedBeanRegistry<Class<? extends Throwable>, IWebFailureMapper> mappings;
+
+    /**
+     * 2026/11/04：使用原扫描器校验业务映射接口及异常类型唯一性。
+     * @param scanner 当前容器的扩展扫描器
+     * @throws IllegalArgumentException 当同一异常类型声明多个映射时
+     */
+    public ChatSettingsErrors(IBeanScanner scanner) {
+        mappings = new AnnotatedBeanRegistry<>(scanner, WebFailureMapping.class,
+                IWebFailureMapper.class, WebFailureMapping::type);
+    }
+
     /**
      * @param failure 原异步或参数错误
      * @return 安全固定说明与明确冲突状态
@@ -50,15 +60,12 @@ public final class ChatSettingsErrors {
                 && root.getCause() != null; i++) {
             root = root.getCause();
         }
-        // 2026/11/04：功能关闭是可操作的业务状态，不再映射为不明服务器错误。
-        if (root instanceof org.zexnocs.teanekoagent.agent.prompt.AgentPromptException prompt) {
-            return switch (prompt.reason()) {
-                case DISABLED -> error(409, "AGENT_FEATURE_DISABLED",
-                        "此聊天尚未登记或启用 Agent 相关功能，请先在聊天配置中登记并启用。");
-                case CHANGED -> error(409, "AGENT_REFERENCE_CHANGED", "资料绑定或代次已变化，请重新读取。");
-                case UNAVAILABLE -> error(503, "AGENT_REFERENCE_UNAVAILABLE", "资料暂不可用，请检查人格或记忆配置。");
-                case INPUT_TOO_LARGE -> error(400, "AGENT_INPUT_TOO_LARGE", "本次输入超过资料容量限制，请缩短内容。");
-            };
+        // 2026/11/04：最近的已声明异常类型优先，不依赖扫描顺序或中央业务分支。
+        for (Class<?> type = root.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
+            var mapping = mappings.entries().get(type.asSubclass(Throwable.class));
+            if (mapping != null) {
+                return mapping.bean().map(root);
+            }
         }
         // 2026/11/03：文件版本冲突同样禁止自动覆盖。
         if (root instanceof ConfigEditConflictException || root instanceof ConcurrentModificationException) {

@@ -14,6 +14,7 @@ import RuntimeView from './RuntimeView.vue'
 import CommandConsoleView from './CommandConsoleView.vue'
 // 2026/11/04：指令说明和模型文件分别保留页面及编辑生命周期。
 import CommandsView from './CommandsView.vue'
+import AgentApiDocsView from './AgentApiDocsView.vue'
 import WebChatView from './WebChatView.vue'
 import type {Overview, Platform, Session} from './api'
 import {ApiError, login, logout, request} from './api'
@@ -65,7 +66,7 @@ const settingsView = ref<InstanceType<typeof ChatSettingsView>>()
 const agentPickerOpen = ref(false)
 const tokensOpened = ref(false)
 const selectedClient = ref('')
-const title = computed(() => ({ overview: '运行概览', platforms: '客户端', session: '当前会话', settings: '聊天配置', agent: 'Agent 工作区', files: '本地配置', models: '模型配置', commands: '指令一览', runtime: '任务与日志', console: '指令台', chat: '网页聊天' })[page.value])
+const title = computed(() => ({ overview: '运行概览', platforms: '客户端', session: '当前会话', settings: '聊天配置', agent: 'Agent 工作区', files: '本地配置', models: '模型配置', commands: '指令一览', components: '组件与系统', tools: '工具目录', runtime: '任务与日志', console: '指令台', chat: '网页聊天' })[page.value])
 const connectionCount = computed(() => platforms.value.reduce((total, item) => total + item.connections, 0))
 const date = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未更新'
 
@@ -232,6 +233,7 @@ onMounted(() => run(refresh, true))
         <FileSettingsView v-if="filesOpened" v-show="page === 'files'" @expired="clearSession" />
         <FileSettingsView v-if="modelsOpened" v-show="page === 'models'" model-mode @expired="clearSession" />
         <CommandsView v-if="commandsOpened" v-show="page === 'commands'" @expired="clearSession" />
+          <AgentApiDocsView v-if="page === 'components' || page === 'tools'" :mode="page" @expired="clearSession" />
         <RuntimeView v-if="runtimeOpened" v-show="page === 'runtime'" :active="page === 'runtime'" @expired="clearSession" />
         <CommandConsoleView v-if="consoleTarget" ref="consoleView" v-show="page === 'console'" :target="consoleTarget" :active="page === 'console'" @expired="clearSession" @select-target="openSettings()" />
         <ElEmpty v-if="page === 'console' && !consoleTarget" description="先选择要管理的聊天">

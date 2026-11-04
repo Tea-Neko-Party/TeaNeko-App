@@ -1,22 +1,24 @@
 package org.zexnocs.teanekocore.api_response;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
-import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.llm.framework.model.*;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.IDefaultModelResolver;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
-import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
-import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatModel;
-import org.zexnocs.teanekoagent.llm.instance.kimi.KimiChatModel;
-import org.zexnocs.teanekoagent.llm.instance.openai.completions.OpenAIChatCompletionsModel;
-import org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesModel;
+import org.zexnocs.teanekoagent.component.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.component.llm.framework.model.*;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ICredentialResolver;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.IDefaultModelResolver;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModel;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMModel;
+import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatModel;
+import org.zexnocs.teanekoagent.component.llm.instance.kimi.KimiChatModel;
+import org.zexnocs.teanekoagent.component.llm.instance.openai.completions.OpenAIChatCompletionsModel;
+import org.zexnocs.teanekoagent.component.llm.instance.openai.responses.OpenAIResponsesModel;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -47,10 +49,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.5.0-l
+ * @version 4.8.0-l
  */
 class LLMExecutionIntegrationTest {
     private static final List<BiFunction<IAPIResponseService, ICredentialResolver, AbstractLLMModel>> MODELS = List.of(

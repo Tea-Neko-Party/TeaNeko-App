@@ -1,12 +1,15 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.agent.prompt.IAgentPromptSource;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.plugin.AgentFeature;
 import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
+import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.plugin.PluginDescriptor;
 import org.zexnocs.teanekocore.plugin.PluginModule;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
@@ -20,10 +23,13 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/02：独立注册注解提供者，保留插件能力与停用边界。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/05：资料和留言工具独立注册，继续组合为原插件能力。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class InfoAgentPlugin {
@@ -46,11 +52,30 @@ public class InfoAgentPlugin {
     }
 
     /**
-     * 2026/11/02：保留原安装能力，使用公共注解方法解析器。
+     * 2026/11/05：提供独立留言工具，复用共享业务服务。
+     * @param source 资料及权限服务
+     * @return 留言工具 Bean
+     */
+    @Bean
+    public InfoUserMessagesTool infoUserMessagesTool(InfoAgentTools source) {
+        return new InfoUserMessagesTool(source);
+    }
+
+    /**
+     * 2026/11/05：保留原安装能力，组合真实 Bean 的独立注解入口。
      * @param source 已注册的注解提供者
+     * @param messages 独立留言工具
+     * @param mapper 项目 JSON 转换器
+     * @param executor 借用业务执行器
      * @return 默认安装的资料工具能力
      */
-    @Bean public AgentFeature infoAgentFeature(InfoAgentTools source) {
-        return new SourceAgentFeature(ID, "user-info", true, source, IAgentPromptSource.empty());
+    @Bean
+    public AgentFeature infoAgentFeature(InfoAgentTools source, InfoUserMessagesTool messages, ObjectMapper mapper,
+            @Qualifier("virtualExecutor") ExecutorService executor) {
+        return new SourceAgentFeature(ID, "user-info", true, (definition, request, runtime) -> {
+            var selected = new java.util.ArrayList<>(source.select(definition, request, runtime));
+            selected.addAll(TeaNekoAgentToolMethods.select(messages, definition, request, runtime, null, mapper, executor));
+            return java.util.List.copyOf(selected);
+        }, IAgentPromptSource.empty());
     }
 }

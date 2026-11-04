@@ -32,7 +32,7 @@ Gradle `classes`、`bootRun`、`jar`、`bootJar` 自动准备资源。IDE 直接
 
 ```powershell
 git diff
-git add -- src/main/java/org/zexnocs/teanekoagent/adapter/command/README.md
+git add -- src/main/java/org/zexnocs/teanekoagent/integration/command/README.md
 git diff --cached
 .\gradlew.bat agentGitPreview -PagentBump=minor
 .\gradlew.bat agentGitUpdate -PagentBump=minor "-PagentCommitMessage=feat: 更新 Agent 功能"

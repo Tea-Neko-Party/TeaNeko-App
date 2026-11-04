@@ -2,13 +2,15 @@
 import ConsoleIcon from './ConsoleIcon.vue'
 
 // 2026/11/04：模型与指令目录独立导航，普通本地配置不重复显示模型。
-export type ConsolePage = 'overview' | 'platforms' | 'settings' | 'agent' | 'files' | 'models' | 'commands' | 'runtime' | 'console' | 'chat' | 'session'
+export type ConsolePage = 'overview' | 'platforms' | 'settings' | 'agent' | 'files' | 'models' | 'commands' | 'components' | 'tools' | 'runtime' | 'console' | 'chat' | 'session'
 
 defineProps<{page: ConsolePage; collapsed?: boolean; settingsAvailable: boolean; version?: string}>()
 const emit = defineEmits<{select: [page: ConsolePage]}>()
 const groups: {name: string; pages: {id: ConsolePage; label: string}[]}[] = [
-  {name: '日常', pages: [{id: 'overview', label: '运行概览'}, {id: 'platforms', label: '客户端'}, {id: 'chat', label: '网页聊天'}, {id: 'commands', label: '指令一览'}]},
+  {name: '日常', pages: [{id: 'overview', label: '运行概览'}, {id: 'platforms', label: '客户端'}, {id: 'chat', label: '网页聊天'}]},
   {name: '管理', pages: [{id: 'settings', label: '聊天配置'}, {id: 'agent', label: 'Agent 工作区'}, {id: 'models', label: '模型配置'}, {id: 'files', label: '本地配置'}, {id: 'runtime', label: '任务与日志'}, {id: 'console', label: '指令台'}]},
+  // 2026/11/04：API 目录按使用职责提供二级入口。
+  {name: 'API 文档', pages: [{id: 'commands', label: '指令一览'}, {id: 'components', label: '组件与系统'}, {id: 'tools', label: '工具目录'}]},
 ]
 </script>
 

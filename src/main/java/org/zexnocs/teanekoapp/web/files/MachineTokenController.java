@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.zexnocs.teanekoapp.web.WebSessionGuard;
+import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
@@ -12,12 +13,17 @@ import java.util.concurrent.CompletionStage;
 /**
  * 管理员专用机器令牌入口，所有读写禁止缓存，显式查看同样要求防伪校验。
  *
+ * 修改记录：<br>
+ * 2026/11/05：通过端点声明接入统一安全错误映射。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.0-l
  */
 @RestController
+// 2026/11/05：主动接入统一安全错误映射，保持原认证与 HTTP 路径。
+@WebManagedEndpoint
 @RequestMapping("/api/v1/client-tokens")
 public final class MachineTokenController {
     private final MachineTokenService service;

@@ -101,6 +101,8 @@ val webBuild = tasks.register<Exec>("webBuild") {
     workingDir(layout.projectDirectory.dir("frontend"))
     commandLine(if (System.getProperty("os.name").startsWith("Windows")) "npm.cmd" else "npm", "run", "build")
     inputs.dir("frontend/src")
+    // 2026/11/04：供应商图标等公开资源变更也必须重新构建并进入发布产物。
+    inputs.dir("frontend/public")
     // 2026/11/04：统一端口配置及读取器变更后重新校验前端构建。
     inputs.files("frontend/index.html", "frontend/tsconfig.json", "frontend/vite.config.ts", "frontend/dev-ports.ts",
         "frontend/package-lock.json", "src/main/resources/application.properties")

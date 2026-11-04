@@ -1,10 +1,12 @@
 package org.zexnocs.teanekoapp.web;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.StaticListableBeanFactory;
-import org.zexnocs.teanekoagent.adapter.web.AgentConsole;
-import org.zexnocs.teanekoagent.adapter.web.AgentConsoleResources;
-import org.zexnocs.teanekoagent.adapter.web.AgentConsoleService;
+import org.zexnocs.teanekoagent.integration.web.AgentConsole;
+import org.zexnocs.teanekoagent.integration.web.AgentConsoleResources;
+import org.zexnocs.teanekoagent.integration.web.AgentConsoleService;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
@@ -39,10 +41,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.0-l
  */
 class WebManagementCallsTest {
     /** 伪造同文本上下文仍无权访问；在途会话撤销后不能返回成功或保留可用能力。 */

@@ -2,7 +2,7 @@
 // 2026/11/04：重新读取采用统一图标，放弃修改仍明确显示动作文字。
 import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
-import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElSwitch, ElTag} from 'element-plus'
+import {ElAlert, ElButton, ElCard, ElDialog, ElEmpty, ElInput, ElMessageBox, ElSwitch, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
 import {useConsolePreferences} from './console-preferences'
 import type {FileField as Field} from './FileFieldEditor.vue'
@@ -10,6 +10,7 @@ import FileFieldEditor from './FileFieldEditor.vue'
 import type {ModelCatalog} from './ModelTemplateEditor.vue'
 import ModelTemplateEditor from './ModelTemplateEditor.vue'
 import ModelNamePicker from './ModelNamePicker.vue'
+import ModelIcon from './ModelIcon.vue'
 
 interface Stamp { revision: string; generation: number; current: boolean }
 interface Collection { path: string; label: string; maximum: number }
@@ -33,18 +34,27 @@ const drafts = reactive<Record<string, { action: string; text: string }>>({})
 const structure = ref<Edit>()
 // 2026/11/04：模型专页复用同一文件事务与回执，只改变模型字段的呈现和样板创建方式。
 const modelCatalog = ref<ModelCatalog>({routes: [], inputs: []})
+const modelDialogOpen = ref(false)
+const editingModelIndex = ref(0)
 const customConnections = reactive<Record<number, boolean>>({})
 const fieldErrors = reactive<Record<string, string>>({})
 const rootFields = computed(() => props.modelMode ? view.value?.fields.filter(field => !field.path.startsWith('/models/')) ?? [] : view.value?.fields ?? [])
 const modelGroups = computed(() => Array.from({length: view.value?.collectionSizes['/models'] ?? 0}, (_, index) => ({index,
   fields: view.value!.fields.filter(field => field.path.startsWith(`/models/${index}/`)),
-  id: String(view.value!.fields.find(field => field.path === `/models/${index}/id`)?.value ?? '')})))
+  id: modelValue(index, 'id'), adapter: modelValue(index, 'adapter') || modelValue(index, 'id')})))
+const editingGroup = computed(() => modelGroups.value.find(group => group.index === editingModelIndex.value))
+function modelValue(index: number, name: string) {
+  return drafts[`/models/${index}/${name}`]?.text ?? String(view.value?.fields.find(field => field.path === `/models/${index}/${name}`)?.value ?? '')
+}
+function modelType(adapter: string) { return modelCatalog.value.routes.find(route => route.id === adapter) }
+function editModel(index: number) { editingModelIndex.value = index; modelDialogOpen.value = true }
 const configuredRoutes = computed(() => modelGroups.value.map(group => group.id))
 const modelStructuralLocked = computed(() => locked.value || !!structure.value || Object.entries(drafts).some(([path, value]) => path.startsWith('/models/') && value.action !== 'KEEP'))
-const basicModelFields = new Set(['id', 'model', 'api-key', 'max-tokens', 'context-window-tokens', 'context-input-ratio'])
+const basicModelFields = new Set(['id', 'adapter', 'model', 'api-key', 'max-tokens', 'context-window-tokens', 'context-input-ratio'])
 const modelHelp: Record<string, string> = {
   'default-model-id': '自然对话与后台任务使用此默认路由。选择后仍需保存并应用。',
-  id: '选择已经注册到 TeaNeko 的协议适配器；同一适配器在文件中保留一个路由。',
+  id: '唯一配置路由；同一类型可以添加多条，标识不能重复。',
+  adapter: '该路由实际使用的协议适配器；旧条目未填写时使用同名适配器。',
   model: '供应商的具体模型名称。可使用适配器默认模型，也可填写兼容的自定义模型。',
   'api-key': '原密钥不会回显；替换时可手动输入，或选择环境变量并只填写变量名。',
   'max-tokens': '本路由每次模型调用的最大输出额度。业务模块直接使用此值，不另设隐含上限。',
@@ -62,8 +72,8 @@ function displayField(field: Field): Field {
 }
 function choices(field: Field) {
   if (!props.modelMode) return undefined
-  if (field.path === '/default-model-id') return modelCatalog.value.routes.filter(route => configuredRoutes.value.includes(route.id)).map(route => ({value: route.id, label: route.name}))
-  if (field.path.endsWith('/id')) return modelCatalog.value.routes.map(route => ({value: route.id, label: route.name}))
+  if (field.path === '/default-model-id') return modelGroups.value.map(group => ({value: group.id, label: `${group.id} · ${modelValue(group.index, 'model')}`}))
+  if (field.path.endsWith('/adapter')) return modelCatalog.value.routes.map(route => ({value: route.id, label: route.name}))
   return undefined
 }
 function modelFields(index: number, fields: Field[]) {
@@ -72,7 +82,7 @@ function modelFields(index: number, fields: Field[]) {
 }
 // 2026/11/04：已保存模型也使用同一供应商目录，选择已知型号时同步真实上下文容量。
 function selectModel(index: number, value: string) {
-  const route = modelCatalog.value.routes.find(item => item.id === modelGroups.value[index]?.id)
+  const route = modelType(modelGroups.value[index]?.adapter ?? '')
   const capacity = route?.contextWindows?.[value]
   const field = view.value?.fields.find(item => item.path === `/models/${index}/context-window-tokens`)
   if (capacity && field) editField(field, String(capacity))
@@ -264,12 +274,16 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
           <p class="config-description">保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p v-if="advanced" class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
           <FileFieldEditor v-for="field in rootFields" :key="field.path" :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" />
         </ElCard>
-        <ElCard v-if="modelMode" shadow="never"><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /><p v-if="structure" class="small muted">模型条目已加入草稿，保存后可继续编辑；模型配置不会在保存时自动应用。</p></ElCard>
-        <ElCard v-for="group in modelMode ? modelGroups : []" :key="group.index" shadow="never" class="model-config-card"><div class="editor-heading"><h3>{{ modelCatalog.routes.find(route => route.id === group.id)?.name ?? (group.id || '未命名模型') }}</h3><ElButton type="danger" text :disabled="modelStructuralLocked" @click="remove({path: '/models', label: '模型', maximum: 64}, group.index)">删除模型</ElButton></div>
+        <div v-if="modelMode" class="editor-heading model-directory-toolbar"><h3>已添加模型 · {{ modelGroups.length }}</h3><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /></div><p v-if="modelMode && structure" class="small muted">模型条目已加入草稿，保存后可继续编辑；模型配置不会在保存时自动应用。</p>
+        <!-- 2026/11/04：摘要目录不挂载全部表单；仅编辑选中模型，原文件草稿与事务保持统一。 -->
+        <div v-if="modelMode" class="model-config-grid"><button v-for="group in modelGroups" :key="group.index" class="model-summary-card" :disabled="locked" @click="editModel(group.index)"><div class="model-summary-heading"><ModelIcon :icon="modelType(group.adapter)?.icon" :name="modelType(group.adapter)?.name ?? group.adapter" /><strong>{{ group.id || '未命名路由' }}</strong><ElTag v-if="drafts['/default-model-id']?.text === group.id" size="small" type="success">默认</ElTag></div><p>{{ modelValue(group.index, 'model') || '尚未填写型号' }}</p><small class="muted">{{ modelType(group.adapter)?.name ?? group.adapter }} · 输出 {{ modelValue(group.index, 'max-tokens') }} token</small><small class="muted">上下文 {{ modelValue(group.index, 'context-window-tokens') }} token</small></button></div>
+        <ElDialog v-model="modelDialogOpen" title="编辑模型" width="min(760px, 95vw)" :close-on-click-modal="false"><p class="small muted">本弹窗编辑草稿，完成后在页面保存并应用。</p>
+        <ElCard v-for="group in editingGroup ? [editingGroup] : []" :key="group.index" shadow="never" class="model-config-card"><div class="editor-heading"><h3>{{ modelType(group.adapter)?.name ?? (group.id || '未命名模型') }}</h3><ElButton type="danger" text :disabled="modelStructuralLocked" @click="remove({path: '/models', label: '模型', maximum: 64}, group.index); modelDialogOpen = false">删除模型</ElButton></div>
           <label class="small muted">自定义连接 <ElSwitch v-model="customConnections[group.index]" :disabled="locked" /></label>
-          <template v-for="field in modelFields(group.index, group.fields)" :key="field.path"><div v-if="field.path.endsWith('/model')" class="settings-field"><div><label>{{ field.label }}</label><p class="config-description">{{ displayField(field).description }}</p></div><ModelNamePicker :model-value="drafts[field.path]!.text" :names="modelCatalog.routes.find(route => route.id === group.id)?.models ?? []" :disabled="locked || fieldLocked(field.path)" :label="field.label" @update:model-value="value => editField(field, value)" @select="value => selectModel(group.index, value)" /></div><FileFieldEditor v-else :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" /></template>
+          <template v-for="field in modelFields(group.index, group.fields)" :key="field.path"><div v-if="field.path.endsWith('/model')" class="settings-field"><div><label>{{ field.label }}</label><p class="config-description">{{ displayField(field).description }}</p></div><ModelNamePicker :model-value="drafts[field.path]!.text" :names="modelType(group.adapter)?.models ?? []" :disabled="locked || fieldLocked(field.path)" :label="field.label" @update:model-value="value => editField(field, value)" @select="value => selectModel(group.index, value)" /></div><FileFieldEditor v-else :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" /></template>
           <ElAlert v-for="message in Object.entries(fieldErrors).filter(([path, value]) => path.startsWith(`/models/${group.index}/`) && value).map(([, value]) => value)" :key="message" :title="message" type="error" :closable="false" />
         </ElCard>
+        <template #footer><ElButton type="primary" @click="modelDialogOpen = false">完成编辑</ElButton></template></ElDialog>
         <ElCard v-for="collection in modelMode ? [] : view.collections" :key="collection.path" shadow="never"><h3>{{ collection.label }} · {{ view.collectionSizes[collection.path] ?? 0 }} / {{ collection.maximum }}</h3>
           <p class="config-description">集合增删需单独保存。新增条目应包含本模块必填字段；模型样板请到“模型配置”选择。</p>
           <div class="editor-actions"><template v-if="advanced"><ElButton v-for="index in (view.collectionSizes[collection.path] ?? 0)" :key="index" :disabled="locked || !!structure" @click="remove(collection, index - 1)">删除第 {{ index }} 项</ElButton></template>

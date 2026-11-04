@@ -26,10 +26,12 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/04：提供受授权保护的登记状态读取，不为目录查询构造默认配置或导出字段值。
  * <br>2026/11/04：支持可信模块原子初始化尚未登记的配置，保留已有记录及用户关闭决定。
  *
+ * <br>2026/11/04：在版本仲裁和行锁内处理明确的秘密保留请求。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.0-l
  */
 @Service
 public final class ConfigEditService {
@@ -231,6 +233,10 @@ public final class ConfigEditService {
                         }
                         var parsed = !jsonValues && declared.type().hasRawClass(String.class)
                                 ? mapper.valueToTree(field.getValue()) : mapper.readTree(field.getValue());
+                        // 2026/11/04：版本匹配和行锁内合并模块明确的秘密保留请求，不把原值交给浏览器。
+                        if (checker != null) {
+                            parsed = checker.prepareJson(field.getKey(), parsed, node.get(declared.jsonName()));
+                        }
                         if (jsonValues) {
                             ConfigSchema.validateValue(declared, parsed);
                             if (parsed.isNull() && !declared.nullable()
@@ -239,8 +245,7 @@ public final class ConfigEditService {
                             }
                         }
                         if (checker != null) {
-                            String invalid = jsonValues ? checker.isValidJson(field.getKey(), parsed)
-                                    : checker.isValid(field.getKey(), field.getValue());
+                            String invalid = checker.isValidJson(field.getKey(), parsed);
                             if (invalid != null) {
                                 throw new IllegalArgumentException(invalid);
                             }

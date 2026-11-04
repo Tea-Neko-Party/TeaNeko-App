@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoplugin.agent_example;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.zexnocs.teanekoagent.agent.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.plugin.event.AgentPromptPreparingEvent;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
@@ -12,10 +14,12 @@ import org.zexnocs.teanekocore.plugin.PluginOwned;
  * 与示例配置使用同一启用条件，避免配置关闭后监听器仍进入扫描。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 @PluginOwned("example.clock")
 @EventListener

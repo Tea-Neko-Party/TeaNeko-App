@@ -1,13 +1,16 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.agent.AgentActivity;
-import org.zexnocs.teanekoagent.agent.AgentComponents;
-import org.zexnocs.teanekoagent.agent.AgentDefinition;
-import org.zexnocs.teanekoagent.agent.AgentRunRequest;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.component.AgentComponents;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.DefaultTeaNekoContentListBuilder;
 import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
@@ -41,25 +44,34 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/02：注解绑定提前拒绝类型溢出，权限撤销停止交互。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
+ *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/05：经独立工具入口验证原资料及留言权限。
+ *
+ * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 class InfoAgentToolsTest {
     private final UUID target = UUID.randomUUID();
     private final ObjectMapper mapper = new ObjectMapper();
     private final PersonalInfoService personal = mock(PersonalInfoService.class);
     private final MessageBoardInfoService messages = mock(MessageBoardInfoService.class);
-    private final NativeCommandBridge sources = mock(NativeCommandBridge.class);
     private final TeaNekoUserData actor = TeaNekoUserData.builder().uuid(UUID.randomUUID()).userIdInPlatform("user")
             .nickname("用户").groupId("group").role(CommandPermission.MEMBER).build();
     private final AgentDefinition definition = new AgentDefinition("资料工具", new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.values()));
     private final AgentRunRequest request;
     private final InfoAgentTools tools;
 
-    /** 装配真实公开资料服务与宿主来源，不建立新的业务或存储实现。 */
+    /**
+     * 装配真实公开资料服务与宿主来源，不建立新的业务或存储实现。
+     * 2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+     */
     InfoAgentToolsTest() {
+        var sources = mock(NativeCommandBridge.class);
         var client = mock(ITeaNekoClient.class); when(client.getClientId()).thenReturn("fake");
         var data = TeaNekoMessageData.builder().client(client).userData(actor).scopeId("scope").messageId("message")
                 .messageType(TeaNekoMessageType.GROUP).time(Instant.parse("2026-11-02T00:00:00Z"))
@@ -73,6 +85,18 @@ class InfoAgentToolsTest {
                 new MessageBoardInfoData("最新留言", UUID.randomUUID(), Instant.parse("2026-11-02T00:00:00Z"))));
         var info = new InfoService(mock(RandomUtil.class), personal, messages, coins);
         tools = new InfoAgentTools(info, messages, sources, mapper, Runnable::run);
+    }
+
+    /**
+     * 2026/11/05：组合单工具提供者，不改变原用例的真实来源和业务权限。
+     * 2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+     * @return 当前请求可使用的工具绑定
+     */
+    private List<LLMToolBinding> select() {
+        return java.util.stream.Stream.of(tools, new InfoUserMessagesTool(tools))
+                .flatMap(provider -> TeaNekoAgentToolMethods.select(
+                        provider, definition, request, null, null, mapper, Runnable::run).stream())
+                .toList();
     }
 
     /**
@@ -111,12 +135,13 @@ class InfoAgentToolsTest {
      */
     private void assertRevoked(List<LLMToolBinding> selected, String arguments) {
         var failure = assertThrows(java.util.concurrent.CompletionException.class, () -> invoke(selected, InfoAgentTools.MESSAGES, arguments));
-        assertInstanceOf(org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException.class, failure.getCause());
+        assertInstanceOf(org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException.class, failure.getCause());
     }
 
     /** 普通用户能按 UUID 查询现有公开资料，不获得完整留言列表或平台写入能力。 */
     @Test void publicInfoReadsExistingProfileAndCoinsByUuid() {
-        var selected = tools.select(definition, request, null);
+        // 2026/11/05：使用组合后的真实注解入口。
+        var selected = select();
         assertEquals(List.of(InfoAgentTools.INFO), selected.stream().map(value -> value.definition().getName()).toList());
         assertTrue(selected.getFirst().supportsClient("其他客户端"));
         var result = execute(selected, InfoAgentTools.INFO, "{\"uuid\":\"" + target + "\"}");
@@ -126,7 +151,9 @@ class InfoAgentToolsTest {
 
     /** 2026/11/02：留言查询使用稳定分页，读取过程中撤销权限后不得交付已经取到的正文。 */
     @Test void debugMessagePagesAreBoundedAndRecheckPermissionAfterRead() {
-        actor.setRole(CommandPermission.DEBUG); var selected = tools.select(definition, request, null);
+        // 2026/11/05：独立留言工具仍按真实 DEBUG 来源选入。
+        actor.setRole(CommandPermission.DEBUG);
+        var selected = select();
         var args = "{\"uuid\":\"" + target + "\",\"limit\":1}";
         var result = execute(selected, InfoAgentTools.MESSAGES, args);
         assertEquals("最新留言", result.path("messages").get(0).path("message").stringValue());
@@ -139,7 +166,9 @@ class InfoAgentToolsTest {
 
     /** 2026/11/02：旧绑定不能绕过权限变化，非法 UUID 和溢出分页在读取业务前拒绝。 */
     @Test void revokedPermissionAndInvalidArgumentsNeverReachMessageService() {
-        actor.setRole(CommandPermission.DEBUG); var selected = tools.select(definition, request, null);
+        // 2026/11/05：撤权覆盖独立入口保留的执行复核。
+        actor.setRole(CommandPermission.DEBUG);
+        var selected = select();
         clearInvocations(messages, personal);
         var invalid = invoke(selected, InfoAgentTools.MESSAGES, "{\"uuid\":\"" + target + "\",\"offset\":4294967296}");
         assertEquals(ToolInvocationResult.Status.FAILED, invalid.status());

@@ -1,11 +1,12 @@
 # 插件开发入口
 
-适用版本：v4.6.0-l，宿主插件 SPI 版本为 1。
+适用版本：v4.8.0-l，宿主插件 SPI 版本为 1。
 
 | 要开发的内容 | 阅读文档 |
 | --- | --- |
 | 插件入口、依赖、启停、命令、事件、同步任务阶段、通用异步拦截 | [Core 插件](core.md) |
 | Agent 工具、组件、System、资料、可监听事件、异步链、模型和任务动作 | [Agent 插件](agent.md) |
+| 可序列化组件、独立参数、系统阶段和聊天装配表单 | [可装配组件](agent-components.md) |
 | 通过 Spring Bean 与注解新增工具、参数、client 和异步图像结果 | [注解式工具](agent-tools.md) |
 | 为未来 Web 提供配置表单、查询和管理操作 | [管理扩展](management.md) |
 
@@ -17,4 +18,4 @@
 
 本地配置 `tea-neko.plugins.example.enabled=true` 只负责装配示例模块；实例还须在 AgentDefinition.features 显式加入 `example.clock:clock`。默认聊天实例不会因此获得示例能力；宿主需用插件化 AgentFactory 创建选择该能力的实例，再通过原 Agent 服务执行。实际模型、scope 配置、原生权限与平台回执仍需自己的运行环境。
 
-Java 插件当前依赖 TeaNeko App 的普通 JAR及必要依赖，编译使用 JDK 25。先在同仓库实现并验证，再作为依赖接入；公共 SPI 仍位于原包内，本版没有独立发布 Maven SDK 工件。不依赖私有实现、反射方法名或 Bean 扫描顺序来实现扩展。
+Java 插件当前依赖 TeaNeko App 的普通 JAR 及必要依赖，编译使用 JDK 25。先在同仓库实现并验证，再作为依赖接入；本版没有独立发布 Maven SDK 工件。v4.8.0-l 的 Agent 包迁移需要同步更新 import 并重新编译，按[项目分层](../project-layers.md)选择扩展位置，不依赖私有实现、反射方法名或 Bean 扫描顺序。

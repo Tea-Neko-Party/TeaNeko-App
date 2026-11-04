@@ -317,8 +317,46 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .command-section .command-detail { margin-bottom: 16px; }
 .embedded-settings-columns { grid-template-columns: minmax(0, 1fr); }
 .web-chat-tabs .runtime-card .editor-actions { margin: 18px 0 24px; }
-.model-name-picker { display: grid; gap: 8px; }
-.model-name-picker > label { display: flex; align-items: center; gap: 8px; }
+/* 2026/11/04：型号输入与手动开关同行，模型目录以摘要卡片呈现。 */
+.model-name-picker { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.model-name-picker > label { display: flex; align-items: center; gap: 8px; order: 2; white-space: nowrap; }
+.model-name-picker > .el-input, .model-name-picker > .el-select { flex: 1; min-width: 0; order: 1; }
+.model-template-grid, .model-config-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); gap: 16px; }
+.model-template-button, .model-summary-card { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 14px; padding: 18px; text-align: left; cursor: pointer; }
+.model-template-button { display: flex; align-items: center; gap: 12px; }
+.model-template-button > .muted { margin-left: auto; }
+.model-summary-card:hover, .model-template-button:hover { border-color: var(--accent); background: var(--surface-soft); }
+.model-summary-card small { display: block; line-height: 1.8; }
+.model-summary-card strong, .model-summary-card p { overflow-wrap: anywhere; }
+.model-summary-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.model-icon { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px; border-radius: 10px; background: white; padding: 6px; color: #263144; }
+.model-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* 2026/11/04：不同规则分组具有稳定底色，成员等级与客户端名称保留独立文字颜色。 */
+.command-title, .command-rules, .command-packages { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.command-title { justify-content: space-between; margin: 12px 0 18px; }
+.command-title h2 { margin: 0; }
+.command-rules { margin: 14px 0; }
+.command-rules:empty { display: none; }
+.command-rule { display: inline-flex; align-items: center; gap: 8px; padding: 7px 11px; border-radius: 9px; color: #20242a; flex-wrap: wrap; }
+.command-rule small { color: #57606a; }
+.command-rule b { font-size: 13px; font-weight: 600; }
+.rule-scope { background: #e8eef5; }
+.rule-member { background: #f3eaf0; }
+.rule-client { background: #e5f1eb; }
+.command-rule .value-admin, .command-rule .value-group { color: #1c57a2; }
+.command-rule .value-owner, .command-rule .value-private { color: #7340a5; }
+.command-rule .value-debug { color: #ba3037; }
+.command-packages { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.command-introduction { white-space: pre-wrap; font-size: 13px; color: var(--muted); line-height: 1.9; margin: 16px 0; }
+.command-filters { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.command-filters .el-select { width: 190px; }
+.agent-chat-status { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; margin-left: auto; }
+.agent-chat-status i { width: 7px; height: 7px; border-radius: 50%; background: #7f8b80; }
+.agent-chat-status.processing { color: var(--accent); }
+.agent-chat-status.processing i { background: currentColor; animation: agent-status-pulse 1.4s ease-in-out infinite; }
+.agent-chat-status.unavailable { color: #a34c34; }
+@keyframes agent-status-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .agent-chat-status.processing i { animation: none; } }
 .file-explanation, .config-description { white-space: pre-line; }
 /* 2026/11/04：模型编辑按路由分卡，样板表单在窄屏自动换行。 */
 .model-settings-columns { grid-template-columns: minmax(0, 1fr); }
@@ -385,3 +423,26 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .machine-details dd { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 1200px) { .machine-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .machine-grid { grid-template-columns: 1fr; } .machine-details { grid-template-columns: 1fr; } }
+
+/* 2026/11/04：组件装配与 API 目录沿用主题色，卡片保持低密度并适配窄屏。 */
+.settings-field:has(.agent-assembly-editor) { grid-template-columns: minmax(0, 1fr); }
+.assembly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.assembly-card, .api-docs-card { border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--surface); min-width: 0; }
+.assembly-card.is-installed { border-color: var(--el-color-primary-light-5); }
+.assembly-card p { line-height: 1.7; margin: 10px 0; }
+.assembly-card-heading, .assembly-card-actions, .api-docs-card header { display: flex; gap: 12px; justify-content: space-between; align-items: center; }
+.assembly-card-actions { min-height: 34px; }
+.assembly-parameters { display: grid; gap: 18px; }
+.assembly-parameters label { display: flex; flex-direction: column; gap: 8px; font-weight: 500; }
+.assembly-number-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.assembly-parameters .el-input-number { width: 100%; }
+.assembly-json { max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+.api-docs-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); gap: 16px; }
+.api-docs-card { line-height: 1.7; overflow-wrap: anywhere; }
+.api-docs-card header { flex-wrap: wrap; justify-content: flex-start; }
+.api-docs-card h3 { margin: 0; font-size: 16px; }
+.api-docs-card h4 { margin-bottom: 8px; font-size: 13px; }
+.api-docs-field { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+.api-docs-field > * + * { margin-left: 8px; }
+.api-docs-field p { margin: 6px 0 0; }
+@media (max-width: 520px) { .assembly-number-row { grid-template-columns: 1fr; } }

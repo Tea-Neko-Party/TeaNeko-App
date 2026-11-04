@@ -1,11 +1,15 @@
 package org.zexnocs.teanekoagent.plugin;
 
-import org.zexnocs.teanekoagent.schedule.AgentScheduleService;
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import org.zexnocs.teanekoagent.component.schedule.AgentScheduleService;
 import java.util.Objects;
 
 /**
  * 插件贡献的持久任务动作，沿用原调度、真实身份与副作用回执。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
  * @param pluginId 所属插件
  * @param id 持久动作 ID，发布后保持兼容
@@ -13,7 +17,7 @@ import java.util.Objects;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 public record AgentTaskAction(String pluginId, String id, AgentScheduleService.Action action) {
     /**

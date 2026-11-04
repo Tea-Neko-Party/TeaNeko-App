@@ -31,10 +31,12 @@ import java.nio.file.Path;
  * <br>2026/11/03：提供不展开环境值的原文档编辑能力，拒绝重复键。
  * <br>2026/11/04：通用表单沿用本解析器的 Kebab 命名、别名与泛型合同。
  *
+ * <br>2026/11/04：受保护结构化配置复用 Core 环境变量解析，不回写模板。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.1
- * @version 4.7.1-l
+ * @version 4.8.0-l
  */
 @FileTypeParser(FileConfigType.YAML)
 public class YAMLFileTypeParser implements IFileDocumentParser {
@@ -140,6 +142,20 @@ public class YAMLFileTypeParser implements IFileDocumentParser {
             for (int i = 0; i < array.size(); i++) { array.set(i, resolve(array.path(i))); }
         }
         return node;
+    }
+
+    /**
+     * 2026/11/04：受保护的结构化配置复用 Core 环境展开，不修改原模板。
+     * @param document 已解析的独立配置树
+     * @return 完成字符串占位符展开的新树
+     * @throws IllegalArgumentException 当环境变量缺失或循环时，不附带秘密原值
+     */
+    public JsonNode resolveDocument(JsonNode document) {
+        try {
+            return resolve(document.deepCopy());
+        } catch (RuntimeException failure) {
+            throw new IllegalArgumentException("配置环境占位符不可用，请检查必需变量。");
+        }
     }
 
     /**

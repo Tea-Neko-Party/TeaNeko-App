@@ -1,17 +1,19 @@
 package org.zexnocs.teanekoapp.web.files;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
-import org.zexnocs.teanekoagent.adapter.web.AgentFileSettings;
-import org.zexnocs.teanekoagent.llm._app_config.FileLLMCredentialResolver;
-import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigService;
-import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigurationEpoch;
-import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.component.llm.configuration.FileLLMCredentialResolver;
+import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigService;
+import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigurationEpoch;
+import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
 import org.zexnocs.teanekocore.file_config.FileTypeScanner;
@@ -37,6 +39,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+// 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
+
 /**
  * 使用真实 YAML、文件锁、原子移动和私有账本验证关键保存与恢复路径，不启动机器人。
  *
@@ -49,10 +53,14 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：验证原文件类型说明及字段注解通过秘密保护投影。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ *
+ * <br>2026/11/05：适配模型专属 configuration 包，保留原凭据和文件边界验证。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.6-l
+ * @version 4.8.0-l
  */
 class FileSettingsIntegrationTest {
     /**

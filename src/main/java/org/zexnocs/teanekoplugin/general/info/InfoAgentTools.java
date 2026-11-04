@@ -1,17 +1,19 @@
 package org.zexnocs.teanekoplugin.general.info;
 
-import org.zexnocs.teanekoagent.adapter.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.agent.AgentActorContext;
-import org.zexnocs.teanekoagent.agent.AgentDefinition;
-import org.zexnocs.teanekoagent.agent.AgentRunRequest;
-import org.zexnocs.teanekoagent.agent.IAgentToolSource;
-import org.zexnocs.teanekoagent.agent.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
-import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolContext;
-import org.zexnocs.teanekoagent.tool.TeaNekoAgentToolMethods;
-import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentTool;
-import org.zexnocs.teanekoagent.tool.api.TeaNekoAgentToolClass;
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolContext;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
+import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
 import org.zexnocs.teanekocore.framework.description.Description;
@@ -28,10 +30,13 @@ import java.util.concurrent.Executor;
  * <br>2026/11/02：采用自动注解参数与条件复核，保留公开资料和 DEBUG 留言边界。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/05：留言工具独立声明，仍复用原生来源权限和有界投影。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.6.0-l
+ * @version 4.8.0-l
  */
 @TeaNekoAgentToolClass(value = "user-info", pluginId = InfoAgentPlugin.ID, toolPackage = "general.info", managedByFeature = true)
 public final class InfoAgentTools implements IAgentToolSource {
@@ -57,14 +62,14 @@ public final class InfoAgentTools implements IAgentToolSource {
     }
 
     /**
-     * 工具不限制客户端，完整留言工具只对当前真实 DEBUG 来源可见。
+     * 2026/11/05：选择本类公开资料工具；完整留言由插件配置组合独立入口。
      * @param definition 当前实例定义
      * @param request 固定请求与真实发起者
      * @param runtime 本轮运行设置
      * @return 可见与实际执行一致的工具绑定
      */
     @Override public List<LLMToolBinding> select(AgentDefinition definition, AgentRunRequest request, AgentRuntimeSnapshot runtime) {
-        // 2026/11/02：显式能力与自动目录共用注解元数据。
+        // 2026/11/05：本类仅编译公开资料，完整插件能力在 InfoAgentPlugin 中组合。
         return TeaNekoAgentToolMethods.select(this, definition, request, runtime, null, mapper, executor);
     }
 
@@ -88,7 +93,7 @@ public final class InfoAgentTools implements IAgentToolSource {
      * @param context 宿主注入的固定上下文
      * @return 有界留言页或固定错误信封
      */
-    @TeaNekoAgentTool(value = MESSAGES, condition = "canReadMessages")
+    // 2026/11/05：独立留言工具转发本服务，保持读取前后真实 DEBUG 复核。
     @Description("分页读取该 UUID 收到的留言板留言、留言者 UUID 和留言时间；不是聊天记录，需要真实 DEBUG 权限。")
     public String userMessages(@Description("目标用户完整的 TeaNeko UUID，不是 QQ 号或消息 ID。") String uuid,
             @DefaultValue("0") @Description("起始偏移，默认 0，最大 10000。") int offset,

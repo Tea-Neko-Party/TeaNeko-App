@@ -6,6 +6,7 @@
 |:---:|---|
 | `ITeaUserService` / `TeaUserService` | 管理 `clientId + platformUserId -> UUID` 和反向查询。 |
 | `ITeaUserCoinService` / `TeaUserCoinService` | 基于 item data 服务获取用户金币数据 DTO。 |
+| `ChatIdentityService` / `ChatIdentityObserver` | 从真实消息事件持久观察聊天名、昵称、群名片及平台资料，供目录和业务读取，不参与身份或权限判定。 |
 
 # 二. 用户映射
 
@@ -53,6 +54,8 @@ iItemDataService.get("tea-user", userId, "coin");
 | `getOrCreate(...)` 无映射或 UUID 非法 | 写入新的随机 UUID，再返回当前存储值。 |
 
 # 六. 注意事项
+
+v4.7.7-l 的公开资料保存在通用 EasyData 的 `teaneko.identity` 域，按 client 和原 scope 定位聊天，成员资料额外按 TeaNeko UUID 区分。`name(client, scope)` 返回已知聊天名，`member(client, scope, uuid)` 返回公开成员快照；尚未观察时分别返回空字符串和空 Optional。空名称不会清除已知名称，迟到消息不会覆盖新资料，不保存消息正文、角色或令牌。不同群的同一成员保留各自群名片；这些资料不能替代 TeaUser 映射或真实权限检查。
 
 | 项 | 说明 |
 |---|---|

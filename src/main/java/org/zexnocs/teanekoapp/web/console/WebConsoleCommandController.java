@@ -4,6 +4,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 import org.zexnocs.teanekoapp.web.WebSessionGuard;
+import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 
@@ -11,13 +12,16 @@ import java.util.concurrent.CompletionStage;
  * 指令台只接收平台、账号及服务端聊天引用，不接收用户、角色或任意平台 JSON。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/05：通过端点声明接入统一安全错误映射。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.0-l
  */
 @RestController
+// 2026/11/05：主动接入统一安全错误映射，保持原认证与 HTTP 路径。
+@WebManagedEndpoint
 @RequestMapping("/api/v1/clients/{client}/accounts/{account}/targets/{target}/console")
 public final class WebConsoleCommandController {
     private final ClientConsoleService service;

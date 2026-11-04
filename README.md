@@ -33,7 +33,7 @@ TeaNeko App 是专注于多平台聊天机器人的架构，允许扩展平台�
 
 版本升级、更新日志及独立 Agent Git 提交入口见 [版本操作说明](docs/development/versioning.md)。
 
-v4.6.0-l 的插件开发见 [插件指南](docs/development/plugins/README.md)，按 Core、Agent 和管理扩展划分，包含已编译的工具、组件、System、事件与异步环绕示例。
+插件开发见 [插件指南](docs/development/plugins/README.md)，按 Core、Agent 和管理扩展划分，包含工具、组件、System、事件与异步环绕示例。v4.8.0-l 的依赖方向、完整组件目录及客户端迁移见[项目分层](docs/development/project-layers.md)。
 
 版本功能与升级说明见 [发布日志](docs/changelog/README.md)，当前计划及已完成记录见 [计划索引](docs/plan/README.md)。
 
@@ -87,6 +87,8 @@ Web 默认关闭，提供 Agent、聊天配置、本地文件配置、任务、�
 网页聊天按房间进入，私聊首次登记默认启用 Agent（已有关闭决定保留，仍需总开关和模型就绪）；聊天页输入 `/` 可按所选成员权限补全指令与子指令，完整说明见“指令一览”。“模型配置”独立展示供应商样板、自定义连接及手动/环境变量密钥输入，保存与应用分开，见[模型配置教程](docs/development/web-console-models.md)。
 
 聊天配置分为 Agent 与其他功能，管理员可按平台和聊天直接登记、修改、注销适用且已启用的配置，无需本地 `settings-sections` 或 `settings-groups` 放行。Agent 工作区使用独立的平台、账号和聊天选择器。任务与日志观测配置仍可通过 `file-sections` 中的 `core.runtime` 开放，保存后单独应用。
+
+v4.8.0-l 起，Agent 可按聊天装配组件。新登记默认只有 LLM；需要上下文、记忆、人格或工具时，在聊天设置中安装相应组件。已有登记保留原行为。LLM 可选系统模型或当前聊天私有配置；侧栏“API 文档”提供指令、组件/系统和工具说明，详见[装配教程](docs/development/agent-composition.md)。
 
 右上角“外观设置”可预览和保存网页背景、前景文字与强调色，配色只保存在当前浏览器，支持恢复默认。刷新及目录更新使用带动作提示的图标按钮；详细操作见[控制台说明](docs/development/web-console.md)。
 
@@ -155,6 +157,8 @@ Active profiles 表示本次启用的配置环境；未显示时可在 Modify op
 启用 Web 后，后端启动 INFO 日志会显示网站地址、当前登录令牌和带 `#token=...` 的快捷链接。随机令牌同时保存在 `data/web/runtime-admin-token`，重启后更新；后端日志含管理员凭据，应限制其访问权限，启动凭据不会进入网页日志窗口。
 
 快捷链接会自动填入令牌并移除当前地址中的令牌，仍需点击登录；也兼容 `?token=...`，推荐使用不发送给服务器的 `#token=...`。勾选“在此浏览器保存令牌”并成功登录后，下次访问会自动填入；取消勾选并成功登录即可清除。随机令牌变更后需要重新登录并更新保存值。
+
+服务端登录会话不写入磁盘，后端重启或开发热重启后需重新登录；浏览器保存的令牌不受影响。聊天记录、Agent 记忆与配置仍正常存储在数据库中。
 
 ### 生产环境启动
 

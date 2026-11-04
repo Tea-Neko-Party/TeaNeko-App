@@ -1,6 +1,6 @@
 # 第三批类别选图与独立发送记录
 
-日期：2026/11/03。当前状态统一见[实施入口](agent-expression-stickers.md)；运行配置、工具与客户端扩展统一见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/sticker/README.md)，本页只保存交付与验收事实。
+日期：2026/11/03。当前状态统一见[实施入口](agent-expression-stickers.md)；运行配置、工具与客户端扩展统一见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md)，本页只保存交付与验收事实。
 
 - 新增默认 media-replies 能力，显式依赖 expression；按真实 client/scope 提供类别与原生目录。没有实际保留资源资料时不安装目录工具，保持默认自主发言零工具合同。
 - sticker_list 采用原注解注册与参数绑定；每轮最多两个类别、每类全部当前可用 ID/revision/描述。目录超出结果或已知输入预算时返回空项与 complete=false，不以截断内容冒充完整；可改选另一个完整类别。

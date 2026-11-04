@@ -18,6 +18,7 @@ import type {Platform} from './api'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
+import AgentAssemblyEditor from './AgentAssemblyEditor.vue'
 import {useConsolePreferences} from './console-preferences'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 
@@ -56,6 +57,8 @@ const busy = ref(false)
 const error = ref('')
 const notice = ref('')
 const pending = ref<Change>()
+// 2026/11/04：不允许在组件 JSON 编辑尚未完成时提交其他配置。
+const assemblyValid = ref(true)
 const lastReceipt = ref<Receipt>()
 // 2026/11/04：未提交内容按真实目标与配置区分别保留，仅保存在当前组件内存。
 interface Draft {view: View; values: Record<string, string>; pending?: Change; receipt?: Receipt}
@@ -66,7 +69,7 @@ const draftKey = () => JSON.stringify([client.value, account.value, selected.val
 // 2026/11/04：简洁模式只收起 Agent 的次要选项，编辑值仍保留在完整草稿中。
 const {advanced} = useConsolePreferences()
 const showAllFields = ref(false)
-const commonFields = new Set(['enabled', 'personalityId', 'mode', 'historyCaptureEnabled', 'memoryLearningEnabled', 'personalityLearningEnabled', 'expressionEnabled'])
+const commonFields = new Set(['enabled', 'components', 'mode'])
 const displayedFields = computed(() => view.value?.fields.filter(field => section.value !== 'agent' || advanced.value || showAllFields.value || commonFields.has(field.name)) ?? [])
 const hiddenCount = computed(() => (view.value?.fields.length ?? 0) - displayedFields.value.length)
 const hiddenDirtyCount = computed(() => view.value?.fields.filter(field => field.editable && values.value[field.name] !== field.value && !displayedFields.value.includes(field)).length ?? 0)
@@ -140,6 +143,8 @@ function stash() {
 }
 
 async function restoreOrRead() {
+  // 2026/11/04：已序列化草稿不携带上一组件弹窗尚未完成的输入状态。
+  assemblyValid.value = true
   const saved = drafts.get(draftKey())
   if (saved) {
     view.value = saved.view
@@ -176,6 +181,7 @@ function setNull(field: Field, checked: boolean) {
 }
 
 function clearEditor() {
+  assemblyValid.value = true
   // 2026/11/04：切换聊天时清除上一聊天的登记标记，全局目录的状态仍为未知。
   sections.value = catalog.value
   selected.value = undefined
@@ -215,7 +221,13 @@ async function chooseAccount(value: string) {
 
 async function readView() {
   const current = await request<View>(targetPath())
+  assemblyValid.value = true
   view.value = current
+  // 2026/11/04：保留原引用和草稿身份，只刷新当前目标的已知显示名称。
+  if (selected.value) {
+    selected.value = {...selected.value, name: current.targetName}
+    targets.value = targets.value.map(item => item.ref === selected.value!.ref ? {...item, name: current.targetName} : item)
+  }
   // 2026/11/04：登记、注销或重新读取后即刻更新排序，以服务端当前状态为准。
   sections.value = sections.value.map(item => item.id === current.section ? {...item, registered: current.registered} : item)
   values.value = Object.fromEntries(current.fields.map(field => [field.name, field.value]))
@@ -447,10 +459,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <ElCard v-for="group in groups" :key="group" shadow="never" class="field-group"><h3>{{ group }}</h3>
             <div v-for="field in fieldsIn(group)" :key="field.name" class="settings-field">
               <div><label :for="'field-' + field.name">{{ field.label }}</label>
-                <p class="config-description">{{ field.description }}</p><span class="field-source">{{ field.source }} · 默认：{{ defaultLabel(field) }}</span></div>
+                <p class="config-description">{{ field.description }}</p><span v-if="field.kind !== 'ASSEMBLY'" class="field-source">{{ field.source }} · 默认：{{ defaultLabel(field) }}</span></div>
               <div class="config-field-input">
               <ElCheckbox v-if="field.jsonValue && field.nullable && field.kind !== 'JSON'" :model-value="values[field.name] === 'null'" :disabled="busy || !view.registered || !field.editable || !!pending" @update:model-value="value => setNull(field, !!value)">不设置（null）</ElCheckbox>
-              <ElSwitch v-if="field.kind === 'BOOLEAN'" :id="'field-' + field.name" :model-value="values[field.name] === 'true'"
+              <AgentAssemblyEditor v-if="field.kind === 'ASSEMBLY'" :model-value="values[field.name] ?? field.value" :disabled="busy || !!pending" @update:model-value="value => updateValue(field, value)" @expired="emit('expired')" @validity="value => assemblyValid = value" />
+              <ElSwitch v-else-if="field.kind === 'BOOLEAN'" :id="'field-' + field.name" :model-value="values[field.name] === 'true'"
                 @update:model-value="value => updateValue(field, !!value)" :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null'" />
               <ElSelect v-else-if="field.kind === 'SELECT'" :id="'field-' + field.name" :model-value="displayValue(field)" @update:model-value="value => updateValue(field, String(value))"
                 :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null'">
@@ -466,7 +479,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <ElButton v-if="hiddenCount" text @click="showAllFields = true">展开其余 {{ hiddenCount }} 项配置</ElButton>
           <ElButton v-else-if="showAllFields && !advanced && section === 'agent'" text @click="showAllFields = false">仅显示常用配置</ElButton>
           <div class="editor-actions">
-            <ElButton type="primary" :disabled="busy || !dirty || !!pending" @click="submit('PATCH')">保存修改</ElButton>
+            <ElButton type="primary" :disabled="busy || !dirty || !!pending || !assemblyValid" @click="submit('PATCH')">保存修改</ElButton>
             <RefreshButton :disabled="busy || !!pending" @click="reload" label="重新读取" />
             <ElButton v-show="advanced" type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">注销登记</ElButton>
             <span v-if="dirty" class="small muted">有未保存的修改{{ hiddenDirtyCount ? `（${hiddenDirtyCount} 项已折叠）` : '' }}</span>
