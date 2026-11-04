@@ -2,13 +2,15 @@
 // 2026/11/04：重新读取采用统一图标，放弃修改仍明确显示动作文字。
 import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
-import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElTag} from 'element-plus'
+import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElSwitch, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
-import DetailPanel from './DetailPanel.vue'
 import {useConsolePreferences} from './console-preferences'
+import type {FileField as Field} from './FileFieldEditor.vue'
+import FileFieldEditor from './FileFieldEditor.vue'
+import type {ModelCatalog} from './ModelTemplateEditor.vue'
+import ModelTemplateEditor from './ModelTemplateEditor.vue'
 
 interface Stamp { revision: string; generation: number; current: boolean }
-interface Field { path: string; label: string; description: string; kind: string; secret: boolean; configured: boolean; source: string; value: unknown }
 interface Collection { path: string; label: string; maximum: number }
 interface Section { id: string; name: string; application: string }
 interface View extends Section { revision: string; exists: boolean; runtime: Stamp; fields: Field[]; collections: Collection[]; collectionSizes: Record<string, number> }
@@ -16,6 +18,7 @@ interface Edit { path: string; action: string; value?: unknown }
 interface Receipt { operationId: string; status: string; diskRevision: string; runtime: Stamp; note: string; fields: string[]; at: string; replayed: boolean }
 interface Pending { id: string; action: 'save' | 'apply'; body: { operationId: string; expectedRevision: string; edits?: Edit[] } }
 const emit = defineEmits<{ expired: [] }>()
+const props = withDefaults(defineProps<{modelMode?: boolean}>(), {modelMode: false})
 const {advanced} = useConsolePreferences()
 const sections = ref<Section[]>([])
 const view = ref<View>()
@@ -27,6 +30,51 @@ const receipt = ref<Receipt>()
 const pending = ref<Pending>()
 const drafts = reactive<Record<string, { action: string; text: string }>>({})
 const structure = ref<Edit>()
+// 2026/11/04：模型专页复用同一文件事务与回执，只改变模型字段的呈现和样板创建方式。
+const modelCatalog = ref<ModelCatalog>({routes: [], inputs: []})
+const customConnections = reactive<Record<number, boolean>>({})
+const fieldErrors = reactive<Record<string, string>>({})
+const rootFields = computed(() => props.modelMode ? view.value?.fields.filter(field => !field.path.startsWith('/models/')) ?? [] : view.value?.fields ?? [])
+const modelGroups = computed(() => Array.from({length: view.value?.collectionSizes['/models'] ?? 0}, (_, index) => ({index,
+  fields: view.value!.fields.filter(field => field.path.startsWith(`/models/${index}/`)),
+  id: String(view.value!.fields.find(field => field.path === `/models/${index}/id`)?.value ?? '')})))
+const configuredRoutes = computed(() => modelGroups.value.map(group => group.id))
+const modelStructuralLocked = computed(() => locked.value || !!structure.value || Object.entries(drafts).some(([path, value]) => path.startsWith('/models/') && value.action !== 'KEEP'))
+const basicModelFields = new Set(['id', 'model', 'api-key', 'max-tokens', 'context-window-tokens', 'context-input-ratio'])
+const modelHelp: Record<string, string> = {
+  'default-model-id': '自然对话与后台任务使用此默认路由。选择后仍需保存并应用。',
+  id: '选择已经注册到 TeaNeko 的协议适配器；同一适配器在文件中保留一个路由。',
+  model: '供应商的具体模型名称。可使用适配器默认模型，也可填写兼容的自定义模型。',
+  'api-key': '原密钥不会回显；替换时可手动输入，或选择环境变量并只填写变量名。',
+  'max-tokens': '本路由每次模型调用的最大输出额度。业务模块直接使用此值，不另设隐含上限。',
+  'context-window-tokens': '具体模型的真实上下文总容量，计入输入与输出；更换模型后请一并核对。',
+  'context-input-ratio': '输入最多占上下文的比例，默认 0.8；同时仍为完整输出额度预留空间。',
+  'base-url': '自定义服务的基础地址。原地址不会回显；保持原值可继续使用已有声明。',
+  'api-path': '相对于基础地址的接口路径；供应商样板已经提供默认值。',
+  metadata: '供应商扩展参数，使用 JSON 对象。凭据和连接设置应使用各自字段。',
+}
+
+function displayField(field: Field): Field {
+  if (!props.modelMode) return field
+  const name = field.path.split('/').at(-1)!
+  return {...field, description: modelHelp[name] ?? field.description}
+}
+function choices(field: Field) {
+  if (!props.modelMode) return undefined
+  if (field.path === '/default-model-id') return modelCatalog.value.routes.filter(route => configuredRoutes.value.includes(route.id)).map(route => ({value: route.id, label: route.name}))
+  if (field.path.endsWith('/id')) return modelCatalog.value.routes.map(route => ({value: route.id, label: route.name}))
+  return undefined
+}
+function modelFields(index: number, fields: Field[]) {
+  return fields.filter(field => advanced.value || basicModelFields.has(field.path.split('/').at(-1)!)
+    || customConnections[index] && ['base-url', 'api-path'].includes(field.path.split('/').at(-1)!))
+}
+function appendModel(value: Record<string, unknown>, makeDefault: boolean) {
+  structure.value = {path: '/models', action: 'APPEND', value}
+  if (makeDefault && drafts['/default-model-id']) {
+    drafts['/default-model-id'] = {action: 'SET', text: String(value.id)}
+  }
+}
 const appendPath = ref('')
 const appendText = ref('{}')
 const dirty = computed(() => !!structure.value || Object.values(drafts).some(item => item.action !== 'KEEP'))
@@ -44,6 +92,7 @@ function resetDrafts() {
   structure.value = undefined
   appendText.value = '{}'
   appendPath.value = ''
+  for (const path of Object.keys(fieldErrors)) delete fieldErrors[path]
 }
 
 // 2026/11/04：普通字段直接编辑，恢复原文时撤销该字段变更；秘密仍必须显式选择动作。
@@ -73,6 +122,10 @@ async function confirm(message: string): Promise<boolean> {
 async function load(id: string) {
   view.value = await request<View>(`file-configs/${encodeURIComponent(id)}`)
   resetDrafts()
+  if (props.modelMode) {
+    modelCatalog.value = {routes: [], inputs: []}
+    modelCatalog.value = await request<ModelCatalog>('model-configurations')
+  }
 }
 
 async function select(id: string) {
@@ -81,6 +134,8 @@ async function select(id: string) {
 }
 
 function edits(): Edit[] {
+  const inputError = Object.values(fieldErrors).find(value => value)
+  if (inputError) throw new Error(inputError)
   const result = Object.entries(drafts).filter(([, item]) => item.action !== 'KEEP').map(([path, item]) => {
     const field = view.value!.fields.find(value => value.path === path)!
     if (item.action === 'REMOVE' || item.action === 'CLEAR_SECRET') return { path, action: item.action }
@@ -175,7 +230,10 @@ function beforeUnload(event: BeforeUnloadEvent) {
 
 onMounted(() => {
   window.addEventListener('beforeunload', beforeUnload)
-  void run(async () => { sections.value = await request<Section[]>('file-configs'); if (sections.value[0]) await load(sections.value[0].id) })
+  void run(async () => {
+    sections.value = (await request<Section[]>('file-configs')).filter(section => props.modelMode ? section.id === 'agent.models' : section.id !== 'agent.models')
+    if (sections.value[0]) await load(sections.value[0].id)
+  })
 })
 onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload); pending.value = undefined; resetDrafts() })
 </script>
@@ -185,29 +243,26 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
   <div class="file-settings">
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="success" :closable="false" />
-    <div class="settings-columns">
-      <ElCard shadow="never" class="target-list"><h2>本地配置</h2>
+    <div class="settings-columns" :class="{'model-settings-columns': modelMode}">
+      <ElCard v-if="!modelMode" shadow="never" class="target-list"><h2>本地配置</h2>
         <button v-for="section in sections" :key="section.id" class="target-button" :class="{ selected: view?.id === section.id }" :disabled="busy" @click="select(section.id)"><strong>{{ section.name }}</strong><span>{{ section.application === 'RESTART' ? '保存后需重启' : '支持本进程应用' }}</span></button>
         <ElEmpty v-if="!sections.length && !busy" description="没有已开放的配置区" />
       </ElCard>
       <div v-if="view" class="settings-editor">
         <ElCard shadow="never"><h2>{{ view.name }}</h2>
           <ElTag :type="view.runtime.current && view.runtime.revision === view.revision ? 'success' : 'warning'">{{ view.runtime.current && view.runtime.revision === view.revision ? '运行与磁盘一致' : '磁盘与运行状态不同' }}</ElTag>
-          <DetailPanel title="文件与应用说明"><p>保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p></DetailPanel>
-          <div v-for="field in view.fields" :key="field.path" class="settings-field">
-            <div><label :for="`file-${field.path}${field.secret && drafts[field.path]!.action !== 'REPLACE_SECRET' ? '-action' : ''}`">{{ field.label }}</label><span v-if="field.secret" class="field-source"> · {{ field.configured ? '已配置' : '未配置' }}</span><DetailPanel title="说明"><p>{{ field.description }}</p><span class="field-source">{{ field.path }} · {{ field.source }}</span></DetailPanel></div>
-            <div class="file-input">
-              <ElSelect v-show="advanced || field.secret || !['KEEP', 'SET'].includes(drafts[field.path]!.action)" :id="`file-${field.path}-action`" v-model="drafts[field.path]!.action" :aria-label="`${field.label}修改方式`" :disabled="locked || fieldLocked(field.path)">
-                <ElOption label="保持原值" value="KEEP" />
-                <ElOption v-if="!field.secret" label="设置新值" value="SET" /><ElOption v-if="!field.secret" label="移除声明" value="REMOVE" />
-                <ElOption v-if="field.secret" label="替换秘密" value="REPLACE_SECRET" /><ElOption v-if="field.secret" label="清除秘密" value="CLEAR_SECRET" />
-              </ElSelect>
-              <ElInput v-if="!field.secret || drafts[field.path]!.action === 'REPLACE_SECRET'" :id="`file-${field.path}`" :model-value="drafts[field.path]!.text" @update:model-value="value => editField(field, value)" :type="field.secret ? 'password' : field.kind === 'JSON' ? 'textarea' : 'text'" :rows="3" :disabled="locked || fieldLocked(field.path) || !['KEEP', 'SET', 'REPLACE_SECRET'].includes(drafts[field.path]!.action)" :placeholder="field.secret ? '新令牌或环境占位符' : '支持环境占位符'" autocomplete="off" :aria-label="field.label" />
-            </div>
-          </div>
+          <!-- 2026/11/04：文件与字段说明直接显示，版本等技术细节仍由高级模式控制。 -->
+          <p class="config-description">保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p v-if="advanced" class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
+          <FileFieldEditor v-for="field in rootFields" :key="field.path" :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" />
         </ElCard>
-        <ElCard v-for="collection in view.collections" :key="collection.path" shadow="never"><h3>{{ collection.label }} · {{ view.collectionSizes[collection.path] ?? 0 }} / {{ collection.maximum }}</h3>
-          <DetailPanel title="条目编辑说明"><p>集合增删需单独保存。模型示例：{"id":"new-model","model":"模型名称"}；人格示例：{"id":"new-character","display-name":"显示名称"}。</p></DetailPanel>
+        <ElCard v-if="modelMode" shadow="never"><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /><p v-if="structure" class="small muted">模型条目已加入草稿，保存后可继续编辑；模型配置不会在保存时自动应用。</p></ElCard>
+        <ElCard v-for="group in modelMode ? modelGroups : []" :key="group.index" shadow="never" class="model-config-card"><div class="editor-heading"><h3>{{ modelCatalog.routes.find(route => route.id === group.id)?.name ?? (group.id || '未命名模型') }}</h3><ElButton type="danger" text :disabled="modelStructuralLocked" @click="remove({path: '/models', label: '模型', maximum: 64}, group.index)">删除模型</ElButton></div>
+          <label class="small muted">自定义连接 <ElSwitch v-model="customConnections[group.index]" :disabled="locked" /></label>
+          <FileFieldEditor v-for="field in modelFields(group.index, group.fields)" :key="field.path" :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" />
+          <ElAlert v-for="message in Object.entries(fieldErrors).filter(([path, value]) => path.startsWith(`/models/${group.index}/`) && value).map(([, value]) => value)" :key="message" :title="message" type="error" :closable="false" />
+        </ElCard>
+        <ElCard v-for="collection in modelMode ? [] : view.collections" :key="collection.path" shadow="never"><h3>{{ collection.label }} · {{ view.collectionSizes[collection.path] ?? 0 }} / {{ collection.maximum }}</h3>
+          <p class="config-description">集合增删需单独保存。新增条目应包含本模块必填字段；模型样板请到“模型配置”选择。</p>
           <div class="editor-actions"><template v-if="advanced"><ElButton v-for="index in (view.collectionSizes[collection.path] ?? 0)" :key="index" :disabled="locked || !!structure" @click="remove(collection, index - 1)">删除第 {{ index }} 项</ElButton></template>
             <ElButton :disabled="locked || !!structure || (view.collectionSizes[collection.path] ?? 0) >= collection.maximum" @click="appendPath = collection.path">新增条目</ElButton></div>
           <div v-if="appendPath === collection.path" class="file-append"><ElInput v-model="appendText" type="textarea" :rows="5" aria-label="新增配置条目 JSON" :disabled="locked" /><ElButton :disabled="locked" @click="append">加入本次修改</ElButton></div>
@@ -217,6 +272,7 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
         <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">保存到磁盘</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton v-if="dirty" :disabled="busy" @click="discard">放弃修改</ElButton><RefreshButton v-else :disabled="busy" label="重新读取配置文件" @click="discard" /></div>
         <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ statusNames[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>{{ new Date(receipt.at).toLocaleString('zh-CN') }}{{ receipt.replayed ? ' · 原结果重放' : '' }} · 历史回执不代表当前进程或磁盘仍是同一状态。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
       </div>
+      <ElEmpty v-else-if="modelMode && !busy" description="模型配置区尚未开放，请检查文件配置区及插件设置" />
     </div>
   </div>
 </template>

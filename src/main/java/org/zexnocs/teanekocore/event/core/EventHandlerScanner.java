@@ -17,11 +17,12 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 扫描事件处理器的类。
  * <br>2026/11/02：相同优先级按 Bean 名及方法签名确定稳定监听顺序。
+ * <br>2026/11/04：根据实际事件类型合并父类监听器，未被类扫描覆盖的客户端事件也能进入通用消息链。
  *
  * @author zExNocs
  * @date 2026/02/17
  * @since 4.0.0
- * @version 4.6.0-l
+ * @version 4.7.5-l
  * @see EventHandler
  * @see EventListener
  */
@@ -266,6 +267,13 @@ public class EventHandlerScanner extends AbstractScanner {
         if (eventClass == null) {
             return Collections.emptyList();
         }
-        return Collections.unmodifiableList(eventHandlerMap.getOrDefault(eventClass, List.of()));
+        // 2026/11/04：运行时沿真实继承关系取监听器，去重并保持原优先级和稳定顺序。
+        var handlers = new TreeSet<>(eventHandlerMap.getOrDefault(eventClass, List.of()));
+        Class<?> parent = eventClass.getSuperclass();
+        while (parent != null && IEvent.class.isAssignableFrom(parent)) {
+            handlers.addAll(eventHandlerMap.getOrDefault(parent.asSubclass(IEvent.class), List.of()));
+            parent = parent.getSuperclass();
+        }
+        return List.copyOf(handlers);
     }
 }

@@ -34,11 +34,12 @@ import java.util.stream.Collectors;
  * <br>2026/11/02：私聊普通图文使用独立原生信号直接触发。
  * <br>2026/11/03：入站失败补充不含原文和密钥的异常类型及代码位置。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：向原消息事件登记实际回复完成阶段，允许网页观察异步失败。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.6.1-l
+ * @version 4.7.5-l
  */
 @EventListener
 public final class NativeAgentReceiver {
@@ -119,7 +120,10 @@ public final class NativeAgentReceiver {
     public void onMessage(TeaNekoMessageReceiveEvent<?> event) {
         var data = event.getData();
         if (data == null || event.isCancelled()) { return; }
-        receive(data).whenComplete((sent, failure) -> {
+        // 2026/11/04：登记真实模型与交付链，原事件通知线程继续保持非阻塞。
+        var work = receive(data);
+        event.trackProcessing(work);
+        work.whenComplete((sent, failure) -> {
             if (failure != null) { logger.error("Agent 自动入站", "自动消息未完成；已开始的外部动作不表示已撤销，不自动重试。"
                     + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure)); }
         });

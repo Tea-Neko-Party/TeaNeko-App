@@ -21,15 +21,19 @@ import java.util.concurrent.ExecutionException;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：机器令牌专用接口沿用安全错误映射，不回显原文或秘密。
  * <br>2026/11/04：已关闭资料、过期绑定及暂不可用状态使用明确的安全响应。
+ * <br>2026/11/04：指令说明及模型样板接口复用同一脱敏错误边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.7.5-l
  */
 // 2026/11/03：聊天、领域管理及文件入口使用相同的脱敏失败合同。
 @RestControllerAdvice(assignableTypes = {ChatSettingsController.class,
         org.zexnocs.teanekoapp.web.WebManagementController.class,
+        // 2026/11/04：只读扩展目录同样不向网页返回原异常或秘密。
+        org.zexnocs.teanekoapp.web.WebCommandCatalogController.class,
+        org.zexnocs.teanekoagent.adapter.web.ModelConfigurationController.class,
         org.zexnocs.teanekoapp.web.files.WebFileSettingsController.class,
         org.zexnocs.teanekoapp.web.files.MachineTokenController.class,
         org.zexnocs.teanekoapp.web.console.WebConsoleCommandController.class,

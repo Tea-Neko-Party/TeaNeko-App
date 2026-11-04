@@ -30,11 +30,12 @@ import java.util.Set;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：机器令牌目录、显式查看与修改沿用原会话及防伪边界。
  * <br>2026/11/04：独立机器指标仅允许管理会话读取，不开放原 Actuator。
+ * <br>2026/11/04：模型样板、指令目录及房间准备继续执行管理员会话和防伪规则。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.5-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -68,7 +69,9 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/session", "/api/v1/console/overview",
                                 // 2026/11/04：机器观测通过原 HTTPS 与管理会话边界。
                                 "/api/v1/console/machine",
-                                "/api/v1/clients", "/api/v1/settings/sections", "/api/v1/clients/*/accounts",
+                                // 2026/11/04：说明与模型样板仅允许管理员读取。
+                                "/api/v1/clients", "/api/v1/commands", "/api/v1/model-configurations",
+                                "/api/v1/settings/sections", "/api/v1/clients/*/accounts",
                                 "/api/v1/clients/*/accounts/*/targets",
                                 // 2026/11/04：目录同样按真实客户端与聊天解析。
                                 "/api/v1/clients/*/accounts/*/targets/*/settings",
@@ -84,6 +87,8 @@ public class WebSecurityConfig {
                                 "/api/v1/chat/rooms/*/operations/*", "/api/v1/chat/rooms/*/media",
                                 "/api/v1/chat/rooms/*/media/*").hasRole("WEB_ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/v1/chat/rooms", "/api/v1/chat/profiles",
+                                // 2026/11/04：房间准备与成员命令目录仍要求管理会话和 CSRF。
+                                "/api/v1/chat/rooms/*/open", "/api/v1/chat/rooms/*/commands",
                                 "/api/v1/chat/rooms/*/members", "/api/v1/chat/rooms/*/messages",
                                 "/api/v1/chat/rooms/*/media").hasRole("WEB_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/chat/rooms/*/media/*").hasRole("WEB_ADMIN")

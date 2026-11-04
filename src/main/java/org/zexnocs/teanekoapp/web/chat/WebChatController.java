@@ -23,15 +23,28 @@ import java.util.concurrent.CompletionStage;
  * 网页聊天仅通过原认证会话和 CSRF；图片读取、档案与消息查询同样授权。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：房间打开操作完成模块默认配置准备，沿用原会话与防伪校验。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.5-l
  */
 @RestController
 @RequestMapping("/api/v1/chat")
 public final class WebChatController {
+    /**
+     * @param room 已保存的房间引用
+     * @param request 当前请求
+     * @param authentication 当前真实认证
+     * @return 完成模块准备的房间
+     */
+    @PostMapping("/rooms/{room}/open")
+    public CompletionStage<WebChat.RoomView> open(@PathVariable String room, HttpServletRequest request,
+                                                Authentication authentication) {
+        return service.open(room, sessions.capture(request, authentication));
+    }
+
     private final WebChatService service;
     private final WebChatStore store;
     private final WebImages images;

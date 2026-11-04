@@ -1,6 +1,6 @@
 # 网页聊天
 
-当前版本为 4.7.4-l。登录控制台后进入“网页聊天”，点击顶部“创建私聊”或“创建模拟群”，填写名称并选择已有档案；成功后自动进入新聊天。创建按钮、会话标签与选择框分行留白；“档案与成员”的档案、群成员字段和保存操作分别排列，手机端自动纵向展开。网页使用独立 `web` client，消息交给现有命令、事件和 Agent 链；没有另建模型循环。
+当前版本为 4.7.5-l。登录后进入“网页聊天”，在私聊/群聊目录点击房间卡片即可进入聊天室，也可创建私聊或模拟群。聊天室的“聊天”页只保留消息和输入区；上方切换会话设置、成员与图片。返回按钮回到房间目录，同一房间草稿仍保留。网页使用独立 `web` client，消息交给现有命令、事件和 Agent 链。
 
 ## 使用
 
@@ -12,7 +12,9 @@
 
 群聊可打开“提及 TeaNeko”；机器人身份固定为 `web-bot`，会正确识别正在提及自己。原客户端命令可以直接输入，继续执行原权限、作用域和插件限制。
 
-创建聊天不会自动登记 Agent。页面显示当前 Agent、历史、摘要、长期学习和人格学习开关；点击“聊天设置”直达当前网页会话，登记后显示可修改字段。只有实际已启用的 Agent 才处理自然语言，私聊无需提及，群聊沿用提及、引用、称呼及主动模式规则。“活动与记忆”直达同一聊天的工作区，无需重新选择。网页平台的“更新已知目录”只重读持久档案，不发起外部联系人发现。
+网页私聊在创建、进入或提交消息时，为尚未登记的聊天原子登记并启用 Agent；已有记录（包括明确关闭）保持原值，群聊仍需手动启用。本地 Agent 总开关、模型就绪、预算和插件状态继续生效。进入“会话设置”可查看开关并直接打开当前聊天的“聊天设置”或“活动与记忆”；无需重新选择。私聊无需提及，群聊沿用提及、引用、称呼及主动模式规则。
+
+简洁模式以作者和正文摘要展示引用，点击可定位并突出原消息；原消息已离开当前窗口时明确提示。高级模式额外显示消息 ID 和引用 ID。输入 `/` 显示当前发言档案有权使用的指令，主指令后空格继续补全子指令；方向键选择，Tab/Enter 填入，Escape 关闭，Ctrl+Enter 仍用于发送。补全不执行命令，执行时仍由原分发器复核。独立“指令一览”展示所有已启用命令的说明、示例、参数、权限及客户端条件，管理员查看目录不会改变网页成员权限。
 
 记忆 namespace 继续沿用原默认共享规则，同一网页档案在不同群使用同一 TeaNeko UUID；人格默认按实际聊天作用域独立。界面中的模拟群不会自动成为隔离记忆的沙箱，需要隔离时通过原 namespace 管理显式新建并绑定。网页聊天记录与 Agent 历史、三层记忆分别管理。
 
@@ -23,9 +25,9 @@
 | 回执 | 实际含义 |
 | --- | --- |
 | PERSISTED | 入站消息已提交，尚未证明事件通知、模型或回复完成 |
-| DISPATCHED | 原入站事件已通知，异步命令和 Agent 业务可能仍在执行 |
+| DISPATCHED | 原入站事件与已登记的命令/Agent 处理阶段已结束；是否实际回复以聊天消息为准 |
 | REJECTED | 原消息事件被取消；不推定已启动业务回滚 |
-| INDETERMINATE | 通知结果或原工作拥有者无法确认，不自动重放 |
+| INDETERMINATE | 事件通知、业务处理失败或原工作拥有者无法确认；查看活动与模型配置，不自动重放 |
 
 每个消息操作使用原 UUID、聊天、档案、正文、图片、引用和服务端观察时刻，参数摘要与目标一起绑定。同编号重复提交只返回原事实，不重复触发事件；修改目标或参数会拒绝。新请求的观察时刻需在五分钟内。入站回执保留一天，每个聊天最多 512 项，全实例最多 4096 项；满时拒绝新受理。档案、聊天和成员管理回执单独保留一天、最多 256 项，旧创建编号不能覆盖仍存在的档案或聊天。
 
@@ -58,8 +60,8 @@ max-media: 64
 
 允许范围依次为 1–128、1–32、50–2000、1–128。`web.chat` 文件区可通过原文件配置页面保存并独立热应用；旧安全文件的 `file-sections` 需手动加入该区。下调容量不删除既有档案、聊天或图片，消息窗口在后续追加时裁剪。
 
-平台通过 `@TeaNekoClient("web")` 和工具箱注册，管理适配器通过 `@TeaNekoClientManagement("web")` 发现；原配置区与管理网关无需新增平台分支。插件可以监听 `WebMessageReceiveEvent`，或者监听通用 `TeaNekoMessageReceiveEvent<?>` 后筛选 client。Agent 工具沿用 `@TeaNekoAgentToolClass(client = "web")`，表达沿用 `@TeaNekoExpressionClient("web")`。从历史查询取得的原生对象只读，不能取得新的发送能力。
+平台通过 `@TeaNekoClient("web")` 和工具箱注册，管理适配器通过 `@TeaNekoClientManagement("web")` 发现。插件可以监听 `WebMessageReceiveEvent` 或通用 `TeaNekoMessageReceiveEvent<?>`；运行时沿实际事件继承关系合并监听器，不要求子事件先被类扫描发现。同一处理器只调用一次。同步监听器可调用 `event.trackProcessing(stage)` 登记实际异步业务，网页在通知结束后统一等待，禁止结束后追加；其他未登记的后台任务不计入该回执。房间准备扩展见[管理插件指南](plugins/management.md#网页房间与模型配置扩展)。Agent 工具沿用 `@TeaNekoAgentToolClass(client = "web")`，表达沿用 `@TeaNekoExpressionClient("web")`。历史对象保持只读。
 
-HTTP 入口为 `/api/v1/chat` 下的 GET/POST `rooms`、POST `profiles`、POST `rooms/{room}/members`、GET/POST `rooms/{room}/messages`、GET `rooms/{room}/operations/{UUID}`，以及该聊天的 GET/POST `media`、GET/DELETE `media/{id}`。上传使用 `application/octet-stream` 和查询参数 `operation`。所有目标必须已由服务端登记。
+HTTP 入口为 `/api/v1/chat` 下的 GET/POST `rooms`、POST `profiles`、POST `rooms/{room}/open`、POST `rooms/{room}/commands`（`profile` 为房间已有成员）、POST `rooms/{room}/members`、GET/POST `rooms/{room}/messages`、GET `rooms/{room}/operations/{UUID}`，以及该聊天的 GET/POST `media`、GET/DELETE `media/{id}`。上传使用 `application/octet-stream` 和查询参数 `operation`。所有目标必须已由服务端登记，写请求继续要求 CSRF。全局指令目录位于 GET `/api/v1/commands`。
 
 离线验证使用原事务夹具、真实 Spring/scanner 平台装配、MVC 安全链及本机浏览器契约夹具，不调用真实模型或数据库。部署前仍须验证 MySQL/JPA、多浏览器并发、正式证书/代理、登录撤权、模型视觉能力及实际分段表达；清单见[控制台部署](web-console.md#验证与实机待办)。

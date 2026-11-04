@@ -40,15 +40,49 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证网页目录刷新复用本地账号并继续执行管理授权。
+ * <br>2026/11/04：验证事件通知结束后仍等待真实业务阶段，失败回执不冒充回复成功。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.7.5-l
  */
 @Timeout(20)
 class WebChatIntegrationTest {
     private static final Runnable ALLOWED = () -> {};
+
+    /** 2026/11/04：网页已保存不等于 Agent 已结束，业务失败必须反映在同一操作回执中。 */
+    @Test
+    void dispatchReceiptWaitsForBusinessCompletion() {
+        try (var db = new NamespaceDatabaseFixture(); var root = new Root(db, Runnable::run)) {
+            var work = new CompletableFuture<Void>();
+            doAnswer(call -> {
+                var event = assertInstanceOf(WebMessageReceiveEvent.class, call.getArgument(0));
+                event.trackProcessing(work);
+                return TaskFuture.fromStage(mock(ILogger.class), "测试通知完成", CompletableFuture.completedStage(new TaskResult<Void>(true, null)));
+            }).when(root.events).pushEventWithFuture(any());
+            var room = root.room("PRIVATE", "阶段测试");
+            // 2026/11/04：补全上下文由真实房间成员投影，不能借用管理员身份或发送能力。
+            var commands = mock(org.zexnocs.teanekocore.command.CommandCatalog.class);
+            when(commands.list(any(), any())).thenAnswer(call -> {
+                org.zexnocs.teanekocore.command.CommandData<?> source = call.getArgument(0);
+                assertEquals(CommandPermission.MEMBER, source.getPermission());
+                var data = assertInstanceOf(WebMessageData.class, source.getRawData());
+                assertThrows(SecurityException.class, () -> data.getMessageSender().addTextMessage("不能执行预览").send());
+                return List.of();
+            });
+            var catalog = new WebCommandCatalog(root.store, root.context.getBean(WebMessageFactory.class),
+                    new TeaNekoCommandConverter(root.scopes), commands, Runnable::run);
+            assertTrue(catalog.list(room.id(), WebChat.DEFAULT_PROFILE, ALLOWED).toCompletableFuture().join().isEmpty());
+            assertThrows(CompletionException.class, () -> catalog.list(room.id(), "not-a-member", ALLOWED).toCompletableFuture().join());
+            var send = new WebChat.Send(UUID.randomUUID(), WebChat.DEFAULT_PROFILE, "你好", false, "", "", Instant.now());
+            root.service.submit(room.id(), send, ALLOWED).toCompletableFuture().join();
+            assertEquals("PERSISTED", root.service.operation(room.id(), send.operationId(), ALLOWED).toCompletableFuture().join().status());
+            work.completeExceptionally(new IllegalStateException("测试业务失败。"));
+            assertEquals("INDETERMINATE", root.service.operation(room.id(), send.operationId(), ALLOWED).toCompletableFuture().join().status());
+            verify(root.events, times(1)).pushEventWithFuture(any());
+        }
+    }
 
     /**
      * @param width 测试图片宽度

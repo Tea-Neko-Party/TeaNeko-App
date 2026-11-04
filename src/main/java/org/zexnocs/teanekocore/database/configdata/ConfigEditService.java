@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.database.configdata;
 
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekocore.database.configdata.api.IConfigData;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
@@ -22,11 +23,13 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：支持继承、别名及泛型字段，并分离文本与 JSON 值的事务编码。
+ * <br>2026/11/04：提供受授权保护的登记状态读取，不为目录查询构造默认配置或导出字段值。
+ * <br>2026/11/04：支持可信模块原子初始化尚未登记的配置，保留已有记录及用户关闭决定。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.5-l
  */
 @Service
 public final class ConfigEditService {
@@ -61,6 +64,51 @@ public final class ConfigEditService {
             var row = registration.getDto(manager).atomic().find(key, EasyDataLock.READ);
             return row == null ? new ConfigEdits.Snapshot(false, "absent", defaults(manager))
                     : new ConfigEdits.Snapshot(true, revision(row), row.getValue());
+        });
+    }
+
+    /**
+     * 2026/11/04：通过原事务 DTO 判断真实配置行是否存在，不创建或启用配置。
+     *
+     * @param manager 本地已声明管理器
+     * @param key 已解析的真实配置键
+     * @param guard 当前调用方授权与客户端范围复核
+     * @return 当前事务中实际观察到的登记状态
+     */
+    public CompletionStage<Boolean> registered(ConfigManager manager, String key, Runnable guard) {
+        return run(manager, () -> {
+            guard.run();
+            boolean registered = registration.getDto(manager).atomic().find(key, EasyDataLock.READ) != null;
+            guard.run();
+            return registered;
+        });
+    }
+
+    /**
+     * 2026/11/04：仅供模块提供可信初值，不覆盖已登记配置；序列化在提交前固定。
+     *
+     * @param manager 本地声明的管理器
+     * @param key 服务端已解析的配置键
+     * @param initial 模块创建的同类型初值，不接受浏览器提交的任意对象
+     * @param guard 生命周期与调用方授权复核
+     * @return 本次创建时为真，原记录已存在时为假
+     * @throws IllegalArgumentException 当配置键或初值类型不符合声明时
+     */
+    public CompletionStage<Boolean> initializeIfAbsent(ConfigManager manager, String key, IConfigData initial,
+                                                     Runnable guard) {
+        if (key.isBlank() || key.length() > 256 || !manager.configType().isInstance(initial)) {
+            throw new IllegalArgumentException("配置初始化的目标或类型无效。");
+        }
+        String json = mapper.writeValueAsString(initial);
+        return run(manager, () -> {
+            guard.run();
+            var dto = registration.getDto(manager).atomic();
+            if (dto.find(key, EasyDataLock.WRITE) != null) {
+                return false;
+            }
+            guard.run();
+            dto.save(dto.create(key, json));
+            return true;
         });
     }
 

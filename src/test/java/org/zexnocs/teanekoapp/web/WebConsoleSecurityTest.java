@@ -72,13 +72,50 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/04：验证机器令牌专用路由、空白策略与随机管理员令牌保持。
  * <br>2026/11/04：机器采样端点通过同一真实管理会话与来源限制。
  * <br>2026/11/04：已关闭 Agent 资料映射为明确的业务冲突状态。
+ * <br>2026/11/04：房间准备、成员指令补全和模型样板沿用真实会话及防伪检查。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.7.5-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 2026/11/04：新目录只能由管理员读取，房间准备和成员补全必须具有真实会话及 CSRF。
+     * @throws Exception 当隔离 MVC 执行失败时
+     */
+    @Test
+    void roomAndCatalogRoutesRetainSessionAndCsrfBoundaries() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations")) {
+                fixture.mvc.perform(fixture.request(path, false)).andExpect(status().isUnauthorized());
+            }
+            var session = fixture.authenticate();
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString()).get("token").asString();
+            when(fixture.commandCatalog.list(isNull(), any())).thenReturn(List.of());
+            when(fixture.memberCommands.list(eq("room"), eq("member"), any()))
+                    .thenReturn(java.util.concurrent.CompletableFuture.completedStage(List.of()));
+            when(fixture.fileSettings.read(eq("agent.models"), any()))
+                    .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
+            when(fixture.modelTemplates.describe()).thenReturn(new org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.Catalog(List.of(), List.of()));
+            when(fixture.chat.open(eq("room"), any()))
+                    .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
+            for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations")) {
+                var result = fixture.mvc.perform(fixture.request(path, false).session(session))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+            }
+            for (String suffix : List.of("open", "commands")) {
+                String path = "/api/v1/chat/rooms/room/" + suffix;
+                fixture.mvc.perform(fixture.request(path, true).session(session)).andExpect(status().isForbidden());
+                var result = fixture.mvc.perform(fixture.request(path, true).session(session).header("X-CSRF-TOKEN", csrf)
+                                .contentType("application/json").content("{\"profile\":\"member\"}"))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isOk());
+            }
+        }
+    }
+
     /**
      * 2026/11/04：已关闭资料经真实认证与防伪链返回可操作业务状态，不再误报服务器故障。
      *
@@ -283,11 +320,12 @@ class WebConsoleSecurityTest {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：装配机器令牌控制器并保留真实身份与防伪过滤器。
      * <br>2026/11/04：注册纯 JDK 机器观测及其独立控制器，不启动业务服务。
+     * <br>2026/11/04：模型与指令目录使用隔离业务替身，保留真实 MVC 安全链。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.1-l
+     * @version 4.7.5-l
      */
     private static final class Fixture implements AutoCloseable {
         final WebSecurityFileConfig file = new WebSecurityFileConfig();
@@ -311,6 +349,10 @@ class WebConsoleSecurityTest {
         final WebChatService chat = mock(WebChatService.class);
         final WebChatStore chatStore = mock(WebChatStore.class);
         final WebImages chatImages = mock(WebImages.class);
+        // 2026/11/04：目录及成员权限另由核心用例验证，此处核对完整 HTTP 安全边界。
+        final org.zexnocs.teanekocore.command.CommandCatalog commandCatalog = mock(org.zexnocs.teanekocore.command.CommandCatalog.class);
+        final org.zexnocs.teanekoclient.web.WebCommandCatalog memberCommands = mock(org.zexnocs.teanekoclient.web.WebCommandCatalog.class);
+        final org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.class);
 
         /**
          * @param path 本测试拥有的私有目录
@@ -347,12 +389,18 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("chat", chat);
                 factory.registerSingleton("chatStore", chatStore);
                 factory.registerSingleton("chatImages", chatImages);
+                // 2026/11/04：使用测试拥有的同步执行域，不启动真实模型和平台。
+                factory.registerSingleton("commandCatalog", commandCatalog);
+                factory.registerSingleton("memberCommands", memberCommands);
+                factory.registerSingleton("modelTemplates", modelTemplates);
+                factory.registerSingleton("virtualExecutor", (java.util.concurrent.Executor) Runnable::run);
             });
             context.register(MvcConfiguration.class, WebSecurityConfig.class, WebConsoleController.class,
                     WebMachineController.class,
                     MachineEndpoint.class, ChatSettingsController.class, ChatSettingsErrors.class, WebSessionGuard.class,
                     WebManagementController.class, WebFileSettingsController.class, WebConsoleCommandController.class,
-                    WebChatController.class, MachineTokenController.class);
+                    WebChatController.class, MachineTokenController.class, WebCommandCatalogController.class,
+                    org.zexnocs.teanekoagent.adapter.web.ModelConfigurationController.class);
             context.refresh();
             context.getBean(WebSecurityConfig.class).webSessionCookie().onStartup(servlet);
             assertTrue(servlet.getSessionCookieConfig().isSecure());

@@ -25,11 +25,12 @@ import java.util.function.Supplier;
  * 元数据、每个聊天窗口和每张图片分行保存，共用固定根任务锁及数据库当前读，避免跨域竞态。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：消息回执区分持久化、事件通知与已登记业务完成事实。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.5-l
  */
 @Service
 public final class WebChatStore {
@@ -307,7 +308,7 @@ public final class WebChatStore {
     /**
      * @param room 原聊天
      * @param operation 原编号
-     * @param status 实际入站通知状态，不代表 Agent 业务终态
+     * @param status 实际入站及已登记处理阶段状态，不代表所有外部动作都成功
      * @param guard 原授权或宿主仅保存事实的检查
      * @return 已持久阶段
      */
@@ -320,8 +321,9 @@ public final class WebChatStore {
                 return old.receipt();
             }
             var receipt = new WebChat.Receipt(operation, old.receipt().messageId(), status,
-                    status.equals("DISPATCHED") ? "入站事件已通知；模型、工具和回复仍以原时间线及后续消息为准。"
-                            : "入站通知未确认，已发生业务不表示已撤销，不自动重放。");
+                    // 2026/11/04：网页等待原业务阶段，失败提示引导检查活动，不能将入站保存冒充回复。
+                    status.equals("DISPATCHED") ? "本条消息的入站通知及已登记处理阶段已结束，请查看对话中的实际回复。"
+                            : "消息已保存，但入站或业务处理未完成；请检查 Agent 活动与模型配置。已发生动作不会撤销，不自动重发。");
             journal.operations().put(operation, new Operation(old.digest(), old.instance(), receipt, old.at()));
             saveJournal(room, journal);
             return receipt;

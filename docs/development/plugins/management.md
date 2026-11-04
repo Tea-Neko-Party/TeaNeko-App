@@ -90,6 +90,18 @@ Spring `@Scheduled` 继续使用原注解处理器，目录按实际注册对象
 
 需要观测其他调度器时，Spring Bean 实现 `ITimerViewSource`，经原 scanner 发现；source 标识须唯一且不能占用 core。`snapshot(limit)` 只贡献有界、动作为空的实际注册快照；自行维持同一活任务的稳定 UUID，不在查询时创建任务、触发业务或接管生命周期。分类、规则、状态及名称过滤由原目录在分页前统一执行；原全局管理权限仍生效。
 
+## 网页房间与模型配置扩展
+
+v4.7.5-l 的房间准备通过 `@WebRoomPreparation(id = "唯一标识")` Spring Bean 和 `IWebRoomPreparation.prepare(room, guard)` 扩展。目录复用 Core scanner，校验重复标识，按标识排序调用，异步结束后复核会话和插件代次。用于进入房间前的幂等准备，不接收浏览器自报的 scope。Agent 的 `WebPrivateAgentPreparation` 只对未登记私聊提供启用初值，使用 `ConfigEditService.initializeIfAbsent` 的原 DTO 事务，已有关闭不覆盖，群聊不自动登记。
+
+异步消息监听器在同步通知阶段用 `event.trackProcessing(stage)` 登记实际处理链，不阻塞 Core 事件线程。网页通知结束后等待这些阶段，失败仍传播为未确认回执；不能在通知封闭后追加。仅登记监听器自己负责的业务，不把无限后台任务加入本轮。
+
+模型配置扩展放在供应商的 LLM 目录：Spring Bean 实现 `ILLMConfigurationAdapter` 并声明 `@LLMConfigurationAdapter(id = "实际注册路由")`。`describe()` 返回公开模板，地址及路径复用该供应商原常量，具体模型与真实容量可编辑。注册目录同时检查真实 `ILLMModelService` 和模板/模型的插件启用状态；重复路由、协议版本和模板标识不一致明确失败。模板禁止包含运行密钥或其他用户私有配置。
+
+凭据输入方式通过 `@LLMCredentialInput(id = "唯一标识")` 和 `ILLMCredentialInput` 贡献名称、说明、输入正则、掩码及编码前后缀；前端自动发现，手动模式原样写入，环境变量模式生成 `${变量名}`。扩展编码必须已被 Core 文件解析器或对应凭据消费端支持，页面描述不等于新增解析能力。查看公开样板仍要求原 `agent.models` 文件区授权，保存/应用沿用原文件服务、版本、回执、CSRF 和秘密保护。操作说明见[模型配置](../web-console-models.md)。
+
+指令目录由 Core `CommandCatalog` 投影实际扫描方法、`@Description` 参数说明、`@DefaultValue`、权限、scope 及客户端声明。网页补全使用持久房间与真实成员生成的原 `CommandData`，继续调用原权限与范围服务，排除仅管理来源和不兼容原始平台类型的方法。全局说明与成员补全不执行方法、不赋予角色；实际分发仍复核所有原规则。
+
 ## 后续业务资源与页面
 
 4.7.0-l 已提供 Core 运行/日志与聊天持久计划管理，实际边界见[任务与日志](../web-console-runtime.md)。实例级贡献实现 GlobalManagementResource，仍使用原网关、插件目录及明确宿主授权；不能将聊天权限当作全局权限。Web 对两类资源分别路由并检查本机白名单，不新增默认允许的 Authority。

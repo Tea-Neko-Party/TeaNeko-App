@@ -12,6 +12,8 @@ import ChatTargetPicker from './ChatTargetPicker.vue'
 import FileSettingsView from './FileSettingsView.vue'
 import RuntimeView from './RuntimeView.vue'
 import CommandConsoleView from './CommandConsoleView.vue'
+// 2026/11/04：指令说明和模型文件分别保留页面及编辑生命周期。
+import CommandsView from './CommandsView.vue'
 import WebChatView from './WebChatView.vue'
 import type {Overview, Platform, Session} from './api'
 import {ApiError, login, logout, request} from './api'
@@ -50,6 +52,9 @@ const consoleTarget = ref<AgentTarget>()
 const consoleView = ref<InstanceType<typeof CommandConsoleView>>()
 const runtimeOpened = ref(false)
 const filesOpened = ref(false)
+const modelsOpened = ref(false)
+const commandsOpened = ref(false)
+const chatImmersive = ref(false)
 const agentTarget = ref<AgentTarget>()
 // 2026/11/04：Agent 目录与聊天配置各自保留选择状态，不通过配置页中转。
 const agentOpened = ref(false)
@@ -60,7 +65,7 @@ const settingsView = ref<InstanceType<typeof ChatSettingsView>>()
 const agentPickerOpen = ref(false)
 const tokensOpened = ref(false)
 const selectedClient = ref('')
-const title = computed(() => ({ overview: '运行概览', platforms: '客户端', session: '当前会话', settings: '聊天配置', agent: 'Agent 工作区', files: '本地配置', runtime: '任务与日志', console: '指令台', chat: '网页聊天' })[page.value])
+const title = computed(() => ({ overview: '运行概览', platforms: '客户端', session: '当前会话', settings: '聊天配置', agent: 'Agent 工作区', files: '本地配置', models: '模型配置', commands: '指令一览', runtime: '任务与日志', console: '指令台', chat: '网页聊天' })[page.value])
 const connectionCount = computed(() => platforms.value.reduce((total, item) => total + item.connections, 0))
 const date = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未更新'
 
@@ -69,6 +74,8 @@ function navigate(value: ConsolePage) {
   if (value === 'platforms') tokensOpened.value = true
   if (value === 'settings') settingsOpened.value = true
   if (value === 'files') filesOpened.value = true
+  if (value === 'models') modelsOpened.value = true
+  if (value === 'commands') commandsOpened.value = true
   if (value === 'runtime') runtimeOpened.value = true
   if (value === 'chat') chatOpened.value = true
   if (value === 'agent') agentOpened.value = true
@@ -101,6 +108,9 @@ function clearSession() {
   settingsOpened.value = false
   tokensOpened.value = false
   filesOpened.value = false
+  modelsOpened.value = false
+  commandsOpened.value = false
+  chatImmersive.value = false
   runtimeOpened.value = false
   agentTarget.value = undefined
   agentOpened.value = false
@@ -211,7 +221,7 @@ onMounted(() => run(refresh, true))
         <AppearanceControls show-mode />
       </header>
       <main id="main-content" class="content" tabindex="-1">
-        <div class="page-heading"><h1>{{ title }}</h1>
+        <div v-show="page !== 'chat' || !chatImmersive" class="page-heading"><h1>{{ title }}</h1>
           <RefreshButton v-if="['overview', 'platforms'].includes(page)" :loading="busy" @click="run(refreshPage)" label="刷新" /></div>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
         <ChatSettingsView v-if="settingsOpened" ref="settingsView" v-show="page === 'settings'" :clients="platforms" :initial-client="selectedClient" @expired="clearSession" @inspect="inspectAgent" @console="inspectConsole" />
@@ -220,12 +230,14 @@ onMounted(() => run(refresh, true))
           <AgentWorkspaceView v-if="agentTarget" ref="agentView" :target="agentTarget" :active="page === 'agent'" @expired="clearSession" @select-target="selectAgentTarget" />
         </section>
         <FileSettingsView v-if="filesOpened" v-show="page === 'files'" @expired="clearSession" />
+        <FileSettingsView v-if="modelsOpened" v-show="page === 'models'" model-mode @expired="clearSession" />
+        <CommandsView v-if="commandsOpened" v-show="page === 'commands'" @expired="clearSession" />
         <RuntimeView v-if="runtimeOpened" v-show="page === 'runtime'" :active="page === 'runtime'" @expired="clearSession" />
         <CommandConsoleView v-if="consoleTarget" ref="consoleView" v-show="page === 'console'" :target="consoleTarget" :active="page === 'console'" @expired="clearSession" @select-target="openSettings()" />
         <ElEmpty v-if="page === 'console' && !consoleTarget" description="先选择要管理的聊天">
           <ElButton type="primary" @click="openSettings()">选择聊天</ElButton>
         </ElEmpty>
-        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @expired="clearSession" @inspect="inspectAgent" @settings="openChatSettings" />
+        <WebChatView v-if="chatOpened" v-show="page === 'chat'" :active="page === 'chat'" @room-state="value => chatImmersive = value" @expired="clearSession" @inspect="inspectAgent" @settings="openChatSettings" />
         <template v-if="page === 'overview'">
           <div class="stats"><ElCard shadow="never"><div class="stat-label"><span>客户端</span><ConsoleIcon name="platforms" /></div><strong>{{ platforms.length }}</strong></ElCard>
             <ElCard shadow="never"><div class="stat-label"><span>开放连接</span><span class="live-dot"></span></div><strong>{{ connectionCount }}</strong></ElCard>

@@ -19,11 +19,12 @@ import java.util.concurrent.*;
  * 先持久受理再通知原消息总线，重复页面与重连不得重放入站或另起模型循环。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：进入房间时调用模块准备扩展，入站回执等待实际异步业务阶段。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.7.5-l
  */
 @Service
 public final class WebChatService {
@@ -40,6 +41,37 @@ public final class WebChatService {
     private final ConcurrentMap<String, Gate> gates = new ConcurrentHashMap<>();
     private final Semaphore slots = new Semaphore(8);
     private volatile boolean closed;
+    // 2026/11/04：独立网页宿主可不装配扩展；完整 App 由 Spring 安装准备目录。
+    private @org.jspecify.annotations.Nullable WebRoomPreparations preparations;
+
+    /** @param preparations 原扫描式房间准备目录 */
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void installPreparations(WebRoomPreparations preparations) {
+        this.preparations = preparations;
+    }
+
+    /**
+     * 2026/11/04：打开已保存房间并完成幂等准备，不从浏览器接受 scope。
+     *
+     * @param room 已保存的房间引用
+     * @param guard 当前真实会话
+     * @return 完成准备后的房间视图
+     */
+    public CompletionStage<WebChat.RoomView> open(String room, Runnable guard) {
+        check(guard);
+        return store.room(room, guard).thenCompose(value -> prepare(value, guard)).thenApply(WebChatStore::view);
+    }
+
+    /**
+     * @param room 服务端已解析的房间
+     * @param guard 当前真实会话
+     * @return 模块准备完成后的同一房间
+     */
+    private CompletionStage<WebChat.Room> prepare(WebChat.Room room, Runnable guard) {
+        check(guard);
+        return preparations == null ? CompletableFuture.completedStage(room)
+                : preparations.prepare(room, guard).thenApply(ignored -> room);
+    }
 
     /**
      * @param store 原网页持久入口
@@ -86,6 +118,7 @@ public final class WebChatService {
     }
 
     /**
+     * 2026/11/04：创建成功后完成模块准备，私聊默认配置只在缺失时初始化。
      * @param request 显式创建聊天，不接收原 scope
      * @param guard 当前会话
      * @return 已保存聊天的安全视图
@@ -97,7 +130,7 @@ public final class WebChatService {
             String scope = request.kind().equals("GROUP") ? scopes.getGroupScopeId(client, id)
                     : scopes.getPrivateScopeId(profile.uuid());
             return store.create(request, scope, guard);
-        }).thenApply(WebChatStore::view);
+        }).thenCompose(room -> prepare(room, guard)).thenApply(WebChatStore::view);
     }
 
     /**
@@ -129,7 +162,9 @@ public final class WebChatService {
      */
     public CompletionStage<WebChat.Receipt> submit(String room, WebChat.Send request, Runnable guard) {
         check(guard);
-        return store.room(room, guard).thenCompose(known -> accept(known, request, guard));
+        // 2026/11/04：直接提交旧私聊同样完成默认准备，已有关闭记录不会被覆盖。
+        return store.room(room, guard).thenCompose(known -> prepare(known, guard))
+                .thenCompose(known -> accept(known, request, guard));
     }
 
     /**
@@ -208,6 +243,8 @@ public final class WebChatService {
                     data.checkCommandSource();
                     var event = new WebMessageReceiveEvent(data);
                     return TaskStages.successful(events.pushEventWithFuture(event), "网页消息入站")
+                            // 2026/11/04：事件通知结束后继续等待实际命令和 Agent 工作，不阻塞通知线程。
+                            .thenCompose(ignored -> event.processingCompletion())
                             .thenApply(ignored -> event.isCancelled() ? "REJECTED" : "DISPATCHED");
                 }).handle((status, failure) -> facts(room, operation, failure == null ? status : "INDETERMINATE"))
                 .thenCompose(stage -> stage).whenComplete((receipt, failure) -> release(operation, work));

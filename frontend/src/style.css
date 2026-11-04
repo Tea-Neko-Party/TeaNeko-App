@@ -196,6 +196,9 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .settings-field label { font-size: 13px; font-weight: 600; }
 .settings-field p { margin: 8px 0; line-height: 1.7; }
 .config-description { color: var(--muted); font-size: 13px; line-height: 1.7; white-space: pre-line; overflow-wrap: anywhere; }
+/* 2026/11/04：登记使用固定绿色语义，未登记项不占用标记位置。 */
+.config-option-label { display: inline-flex; align-items: center; gap: 8px; }
+.config-registered-dot { display: inline-block; width: 8px; height: 8px; flex-shrink: 0; border-radius: 50%; background: #289b61; }
 .settings-field .el-switch { justify-self: end; }
 .config-field-input { display: grid; gap: 8px; min-width: 0; }
 .config-field-input .el-button { justify-self: end; }
@@ -278,6 +281,42 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .attachment-remove .console-icon { width: 16px; height: 16px; }
 .composer-footer { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .composer-drop-hint { margin: 8px; text-align: center; pointer-events: none; }
+/* 2026/11/04：房间目录与沉浸式对话分屏，设置及成员管理留在独立标签中。 */
+.web-room-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 14px; }
+.web-room-card { display: flex; align-items: center; gap: 12px; padding: 22px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); color: var(--ink); text-align: left; }
+.web-room-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+.web-room-card strong { flex: 1; overflow-wrap: anywhere; }
+.web-room-heading { display: flex; align-items: center; gap: 12px; }
+.web-room-heading h2 { margin: 0; flex: 1; }
+.web-chat--room { display: flex; flex-direction: column; height: calc(100dvh - 115px); min-height: 360px; gap: 12px; }
+.web-chat--room .web-chat-tabs { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.web-chat--room .el-tabs__content { flex: 1; min-height: 0; overflow: auto; }
+.web-chat--room .web-conversation { height: 100%; display: flex; flex-direction: column; gap: 12px; }
+.web-chat--room .web-messages { flex: 1; min-height: 0; max-height: none; padding: 8px; }
+.web-chat--room .web-composer-card { flex-shrink: 0; border: 0; background: transparent; }
+.web-chat--room .web-composer-card > .el-card__body { padding: 4px; }
+.web-chat--room .web-bubble { max-width: min(88%, 800px); }
+.web-bubble.is-referenced { border-color: var(--accent); }
+.web-reply { display: grid; gap: 5px; border-left: 3px solid var(--accent); padding: 8px 12px; margin-bottom: 10px; background: var(--surface-soft); border-radius: 6px; font-size: 12px; overflow-wrap: anywhere; }
+.web-reply button { padding: 0; background: transparent; border: 0; text-align: left; color: var(--muted); }
+.composer-reply { grid-template-columns: 1fr auto; align-items: center; }
+.command-completions { max-height: 240px; overflow: auto; margin-bottom: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.command-completions button { display: flex; gap: 12px; width: 100%; border: 0; padding: 10px 14px; text-align: left; color: var(--ink); background: transparent; }
+.command-completions button.selected, .command-completions button:hover { background: var(--accent-soft); }
+.command-completions span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commands-page > .editor-heading .el-input { max-width: 600px; }
+.command-detail code { overflow-wrap: anywhere; }
+.command-parameters { font-size: 13px; line-height: 1.7; }
+.command-parameters dt { font-weight: 600; margin-top: 12px; }
+.command-parameters dd { margin: 4px 0 0; color: var(--muted); }
+/* 2026/11/04：模型编辑按路由分卡，样板表单在窄屏自动换行。 */
+.model-settings-columns { grid-template-columns: minmax(0, 1fr); }
+.model-template-picker .editor-actions { flex-wrap: wrap; }
+.model-create-form { display: grid; gap: 16px; }
+.model-create-form label { display: grid; gap: 8px; }
+.model-create-form .el-select { width: 100%; }
+.model-create-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+.model-create-form .model-default-toggle { display: flex; align-items: center; justify-content: space-between; }
 .web-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 16px; }
 .console-command { border-top: 1px solid var(--line); padding: 18px 0 6px; }
 .console-command > strong { margin-right: 12px; overflow-wrap: anywhere; }

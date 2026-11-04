@@ -24,7 +24,7 @@ import type {AgentTarget} from './AgentWorkspaceView.vue'
 interface Account { ref: string; name: string; platformId: string; observedAt: string }
 interface Target { ref: string; kind: string; name: string; platformId: string; source: string; shared: boolean; observedAt: string }
 interface Page { items: Target[]; next: string; importMore: boolean }
-interface Section { id: string; name: string; group: string; description: string }
+interface Section { id: string; name: string; group: string; description: string; registered?: boolean | null }
 interface Field { name: string; label: string; group: string; kind: string; description: string; value: string; defaultValue: string; source: string; editable: boolean; choices: Record<string, string>; jsonValue?: boolean; nullable?: boolean }
 interface Receipt { operationId: string; revision: string; registered: boolean; action: string; fields: string[]; at: string; replayed: boolean }
 interface View { section: string; name: string; targetName: string; registered: boolean; revision: string; sharedExplanation: string; fields: Field[] }
@@ -43,7 +43,10 @@ const selected = ref<Target>()
 const sections = ref<Section[]>([])
 const catalog = ref<Section[]>([])
 const configGroup = ref('agent')
-const sectionOptions = computed(() => sections.value.filter(item => (item.group === 'agent') === (configGroup.value === 'agent')))
+// 2026/11/04：登记状态来自当前聊天的实际读取，同状态保持原目录顺序，不改变当前选择。
+const sectionOptions = computed(() => sections.value
+  .filter(item => (item.group === 'agent') === (configGroup.value === 'agent'))
+  .sort((left, right) => Number(right.registered === true) - Number(left.registered === true)))
 const section = ref('agent')
 const view = ref<View>()
 const values = ref<Record<string, string>>({})
@@ -94,7 +97,7 @@ async function openTarget(target: AgentTarget) {
     await loadTargets()
     selected.value = targets.value.find(item => item.ref === target.target)
       ?? {ref: target.target, name: target.name, kind: '', platformId: '', source: '', shared: false, observedAt: ''}
-    sections.value = await request<Section[]>(`clients/${part(client.value)}/accounts/${part(account.value)}/targets/${part(target.target)}/settings`)
+    await loadSections()
     configGroup.value = 'agent'
     section.value = sectionOptions.value[0]?.id ?? ''
     if (section.value) await restoreOrRead()
@@ -171,6 +174,8 @@ function setNull(field: Field, checked: boolean) {
 }
 
 function clearEditor() {
+  // 2026/11/04：切换聊天时清除上一聊天的登记标记，全局目录的状态仍为未知。
+  sections.value = catalog.value
   selected.value = undefined
   view.value = undefined
   values.value = {}
@@ -208,8 +213,15 @@ async function chooseAccount(value: string) {
 async function readView() {
   const current = await request<View>(targetPath())
   view.value = current
+  // 2026/11/04：登记、注销或重新读取后即刻更新排序，以服务端当前状态为准。
+  sections.value = sections.value.map(item => item.id === current.section ? {...item, registered: current.registered} : item)
   values.value = Object.fromEntries(current.fields.map(field => [field.name, field.value]))
   drafts.delete(draftKey())
+}
+
+/** 2026/11/04：只读取当前聊天的配置目录和登记状态，不触碰已编辑的字段草稿。 */
+async function loadSections() {
+  sections.value = await request<Section[]>(`clients/${part(client.value)}/accounts/${part(account.value)}/targets/${part(selected.value!.ref)}/settings`)
 }
 
 async function chooseTarget(value: Target) {
@@ -218,7 +230,7 @@ async function chooseTarget(value: Target) {
     stash()
     clearEditor()
     selected.value = value
-    sections.value = await request<Section[]>(`clients/${part(client.value)}/accounts/${part(account.value)}/targets/${part(value.ref)}/settings`)
+    await loadSections()
     section.value = sectionOptions.value.find(item => item.id === lastSections[configGroup.value])?.id ?? sectionOptions.value[0]?.id ?? ''
     if (section.value) await restoreOrRead()
   })
@@ -275,6 +287,8 @@ async function discover() {
     }
     accounts.value = discovered
     await loadTargets()
+    // 2026/11/04：手动更新目录也同步登记标记，仍保留当前字段草稿及原版本。
+    if (selected.value) await loadSections()
     notice.value = '已更新已知目录。在线且账号唯一就绪时同步平台联系人；历史目录不代表当前全部联系人。'
   })
 }
@@ -397,8 +411,12 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <div class="settings-editor">
         <!-- 2026/11/04：读取失败时仍保留配置选择与重读入口，避免卡在上一份表单。 -->
         <div v-if="selected && sectionOptions.length" class="editor-heading">
-          <ElSelect v-if="sectionOptions.length > 1" :model-value="section" :disabled="busy" aria-label="配置类型" @update:model-value="chooseSection">
-            <ElOption v-for="item in sectionOptions" :key="item.id" :value="item.id" :label="item.name" />
+          <!-- 2026/11/04：其他功能已登记项显示绿色前标，未登记及未知项不显示标记。 -->
+          <ElSelect v-if="sectionOptions.length > 1" :model-value="section" :disabled="busy" filterable aria-label="配置类型" @update:model-value="chooseSection">
+            <template v-if="configGroup !== 'agent' && sections.find(item => item.id === section)?.registered === true" #prefix><span class="config-registered-dot" role="img" aria-label="已登记" title="已登记"></span></template>
+            <ElOption v-for="item in sectionOptions" :key="item.id" :value="item.id" :label="item.name">
+              <span class="config-option-label"><span v-if="configGroup !== 'agent' && item.registered === true" class="config-registered-dot" role="img" aria-label="已登记" title="已登记"></span>{{ item.name }}</span>
+            </ElOption>
           </ElSelect>
           <RefreshButton v-if="!view" :disabled="busy" @click="run(restoreOrRead)" label="重新读取配置" />
         </div>

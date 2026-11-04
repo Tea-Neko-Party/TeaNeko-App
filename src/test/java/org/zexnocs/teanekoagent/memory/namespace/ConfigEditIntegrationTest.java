@@ -35,24 +35,59 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证继承泛型、别名、空值、敏感字段及显式 JSON 类型约束。
+ * <br>2026/11/04：验证登记状态与真实配置行一致，读取不自动登记配置。
+ * <br>2026/11/04：验证网页私聊默认启用、已有关闭保留及原子初始化的授权回滚。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.7.5-l
  */
 @Timeout(20)
 class ConfigEditIntegrationTest {
-    /** 验证真实配置事务与通用投影使用相同的字段身份和泛型。 */
+    /** 2026/11/04：默认初始化仅写入缺失私聊，不覆盖显式关闭，撤权时不残留新行。 */
+    @Test
+    void privateAgentDefaultsPreserveExistingDecisionsAndRollbackOnRevocation() {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var registration = new ConfigDataRegisterService(mock(ILogger.class), db.easyDataService);
+            var edits = editor(db, registration);
+            var preparation = new org.zexnocs.teanekoagent.adapter.web.WebPrivateAgentPreparation(edits);
+            var room = new org.zexnocs.teanekoclient.web.WebChat.Room("private", "PRIVATE", "测试私聊",
+                    "private@test", 1, List.of(), java.time.Instant.now());
+            preparation.prepare(room, ALLOWED).toCompletableFuture().join();
+            var enabled = edits.read(MANAGER, room.scope(), ALLOWED).toCompletableFuture().join();
+            assertTrue(db.mapper.readValue(enabled.json(), AgentScopeConfigData.class).isEnabled());
+            edits.change(MANAGER, room.scope(), "admin", patch(enabled.revision(), Map.of("enabled", "false")),
+                    ALLOWED).toCompletableFuture().join();
+            preparation.prepare(room, ALLOWED).toCompletableFuture().join();
+            assertFalse(db.mapper.readValue(edits.read(MANAGER, room.scope(), ALLOWED).toCompletableFuture().join().json(),
+                    AgentScopeConfigData.class).isEnabled());
+            var group = new org.zexnocs.teanekoclient.web.WebChat.Room("group", "GROUP", "测试群",
+                    "web-group@test", 1, List.of(), java.time.Instant.now());
+            preparation.prepare(group, ALLOWED).toCompletableFuture().join();
+            assertFalse(edits.registered(MANAGER, group.scope(), ALLOWED).toCompletableFuture().join());
+            var initial = new AgentScopeConfigData();
+            initial.setEnabled(true);
+            var checks = new AtomicInteger();
+            assertThrows(CompletionException.class, () -> edits.initializeIfAbsent(MANAGER, "private@revoked", initial,
+                    () -> { if (checks.incrementAndGet() > 1) { throw new SecurityException("初始化已撤权。"); } })
+                    .toCompletableFuture().join());
+            assertFalse(edits.registered(MANAGER, "private@revoked", ALLOWED).toCompletableFuture().join());
+        }
+    }
+
+    /** 2026/11/04：真实配置事务、通用投影及登记状态使用同一持久化身份。 */
     @Test
     void genericJsonFieldsPreserveTypesAliasesAndSecretBoundaries() {
         try (var db = new NamespaceDatabaseFixture()) {
             var registration = new ConfigDataRegisterService(mock(ILogger.class), db.easyDataService);
             var edits = editor(db, registration);
             var manager = ComplexManager.class.getAnnotation(ConfigManager.class);
+            assertFalse(edits.registered(manager, KEY, ALLOWED).toCompletableFuture().join());
             edits.changeJson(manager, KEY, "admin", new ConfigEdits.Change(UUID.randomUUID(), "absent",
                     ConfigEdits.Action.REGISTER, Map.of()), ALLOWED).toCompletableFuture().join();
             var before = edits.read(manager, KEY, ALLOWED).toCompletableFuture().join();
+            assertTrue(edits.registered(manager, KEY, ALLOWED).toCompletableFuture().join());
             edits.changeJson(manager, KEY, "admin", patch(before.revision(), Map.of("items", "[{\"name\":\"茶\",\"weight\":3}]",
                     "note", "null", "count", "2")), ALLOWED).toCompletableFuture().join();
             var current = edits.read(manager, KEY, ALLOWED).toCompletableFuture().join();
@@ -77,6 +112,9 @@ class ConfigEditIntegrationTest {
                     .toCompletableFuture().join();
             assertFalse(db.mapper.writeValueAsString(view).contains("不能回显"));
             assertTrue(view.fields().stream().filter(field -> field.name().equals("items")).findFirst().orElseThrow().value().contains("4"));
+            edits.changeJson(manager, KEY, "admin", new ConfigEdits.Change(UUID.randomUUID(), current.revision(),
+                    ConfigEdits.Action.UNREGISTER, Map.of()), ALLOWED).toCompletableFuture().join();
+            assertFalse(edits.registered(manager, KEY, ALLOWED).toCompletableFuture().join());
         }
     }
 

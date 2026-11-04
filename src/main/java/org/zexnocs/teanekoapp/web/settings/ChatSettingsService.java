@@ -12,9 +12,8 @@ import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
-import java.util.List;
-import java.util.NoSuchElementException;
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 /**
@@ -23,11 +22,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：自动配置目录复用原事务，提交前复核平台命名空间与配置分组授权。
  * <br>2026/11/04：管理员直接管理已启用配置，取消本地配置分组白名单，保留业务边界复核。
+ * <br>2026/11/04：目录按当前聊天的真实登记状态排序，查询前后复核会话、插件及客户端范围。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.3-l
+ * @version 4.7.4-l
  */
 @Service
 public final class ChatSettingsService {
@@ -63,22 +63,43 @@ public final class ChatSettingsService {
     }
 
     /**
+     * 2026/11/04：只查询适用配置的登记状态，已登记项优先，同状态维持稳定标识顺序。
+     *
      * @param client 实际客户端
      * @param account 实际账号引用
      * @param target 实际聊天引用
      * @param guard 当前管理员
-     * @return 适用于此真实目标且已授权的配置目录
+     * @return 适用于此真实目标且已授权、携带实际登记状态的配置目录
      */
     public CompletionStage<List<ChatSettings.Section>> sections(String client, String account, String target,
             Runnable guard) {
         var checked = clients.guard(client, guard);
-        return clients.invoke(client, adapter -> adapter.resolve(account, target).thenApply(resolved -> {
+        return clients.invoke(client, adapter -> adapter.resolve(account, target).thenCompose(resolved -> {
             checked.run();
             var namespaces = adapter.configNamespaces(resolved);
-            return sections.entries().values().stream().filter(entry -> allowed(entry.id()))
+            var applicable = sections.entries().values().stream().filter(entry -> allowed(entry.id()))
                     .filter(entry -> java.util.Arrays.stream(entry.section().manager().namespaces()).anyMatch(namespaces::contains))
-                    .sorted(java.util.Comparator.comparing(ChatSettingsDirectory.Entry::id))
-                    .map(ChatSettingsService::describe).toList();
+                    .sorted(Comparator.comparing(ChatSettingsDirectory.Entry::id)).toList();
+            var queries = new ArrayList<CompletableFuture<ChatSettings.Section>>();
+            var guards = new ArrayList<Runnable>();
+            for (var entry : applicable) {
+                var current = namespaceGuard(lease(entry.id(), checked), adapter, resolved);
+                guards.add(current);
+                queries.add(edits.registered(entry.section().manager(), resolved.scope(), current)
+                        .thenApply(registered -> {
+                            current.run();
+                            var metadata = describe(entry);
+                            return new ChatSettings.Section(metadata.id(), metadata.name(), metadata.group(),
+                                    metadata.description(), registered);
+                        }).toCompletableFuture());
+            }
+            return CompletableFuture.allOf(queries.toArray(CompletableFuture<?>[]::new)).thenApply(ignored -> {
+                checked.run();
+                guards.forEach(Runnable::run);
+                return queries.stream().map(CompletableFuture::join)
+                        .sorted(Comparator.comparing((ChatSettings.Section item) -> !Boolean.TRUE.equals(item.registered()))
+                                .thenComparing(ChatSettings.Section::id)).toList();
+            });
         }));
     }
 

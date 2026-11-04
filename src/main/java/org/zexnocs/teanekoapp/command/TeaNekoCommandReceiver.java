@@ -11,10 +11,13 @@ import org.zexnocs.teanekocore.logger.ILogger;
 /**
  * 用于事件将 message 处理成指令的接收器。
  *
+ * 修改记录：<br>
+ * 2026/11/04：向原消息事件登记真实命令完成阶段，保留非阻塞分发。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.9
- * @version 4.5.0-l
+ * @version 4.7.5-l
  */
 @EventListener
 public class TeaNekoCommandReceiver {
@@ -63,7 +66,10 @@ public class TeaNekoCommandReceiver {
             // 解析失败，不处理
             return;
         }
-        TaskFuture.fromStage(logger, "原生命令分发",
-                iCommandDispatcher.dispatch(commandData, teaNekoCommandErrorHandler, teaNekoHelpSubCommandHandler)).finish();
+        // 2026/11/04：网页可等待真实命令处理链，其他客户端保留原异步通知方式。
+        var processing = iCommandDispatcher.dispatch(commandData, teaNekoCommandErrorHandler,
+                teaNekoHelpSubCommandHandler);
+        event.trackProcessing(processing);
+        TaskFuture.fromStage(logger, "原生命令分发", processing).finish();
     }
 }
