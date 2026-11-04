@@ -24,6 +24,8 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+// 2026/11/05：私聊权限变更继续明确区分版本冲突与非法成员操作。
+import java.util.ConcurrentModificationException;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -47,14 +49,114 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：用已有有界等待工具等待真实入站终态，取消循环休眠。
+ * <br>2026/11/05：验证删除与迟到交付、附件和共享档案边界。
+ * <br>2026/11/05：验证私聊角色更新、原来源撤销、指令权限投影与唯一成员边界。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(20)
 class WebChatIntegrationTest {
     private static final Runnable ALLOWED = () -> {};
+
+    /**
+     * 2026/11/05：私聊沿用原成员事务切换角色，撤销旧消息能力并向指令目录投影最新权限。
+     * @throws Exception 当原入站或权限事务未在期限内完成时
+     */
+    @Test
+    void privateRolesRevokeOldSourcesAndRefreshCommandPermissions() throws Exception {
+        try (var db = new NamespaceDatabaseFixture(); var root = new Root(db, Runnable::run)) {
+            var room = root.room("PRIVATE", "私聊权限");
+            var other = root.room("GROUP", "独立群权限");
+            var original = root.store.room(room.id(), ALLOWED).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var send = new WebChat.Send(UUID.randomUUID(), WebChat.DEFAULT_PROFILE, "切换前消息", false,
+                    "", "", Instant.now());
+            root.service.submit(room.id(), send, ALLOWED).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var source = root.received.get(5, TimeUnit.SECONDS);
+            source.checkCommandSource();
+            var commands = mock(org.zexnocs.teanekocore.command.CommandCatalog.class);
+            var catalog = new WebCommandCatalog(root.store, root.context.getBean(WebMessageFactory.class),
+                    new TeaNekoCommandConverter(root.scopes), commands, Runnable::run);
+            for (String role : List.of("ADMIN", "OWNER", "MEMBER")) {
+                var change = new WebChat.ChangeMember(UUID.randomUUID(), room.revision(),
+                        new WebChat.Member(WebChat.DEFAULT_PROFILE, "网页用户", role), "UPSERT");
+                room = root.service.member(room.id(), change, ALLOWED).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                assertEquals(change.revision() + 1, room.revision());
+                assertEquals(room, root.service.member(room.id(), change, ALLOWED)
+                        .toCompletableFuture().get(5, TimeUnit.SECONDS));
+                assertThrows(SecurityException.class, source::checkCommandSource);
+                doAnswer(call -> {
+                    org.zexnocs.teanekocore.command.CommandData<?> data = call.getArgument(0);
+                    assertEquals(CommandPermission.valueOf(role), data.getPermission());
+                    return List.of();
+                }).when(commands).list(any(), any());
+                catalog.list(room.id(), WebChat.DEFAULT_PROFILE, ALLOWED)
+                        .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            }
+            var updated = root.store.room(room.id(), ALLOWED).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertEquals(original.scope(), updated.scope());
+            assertEquals(original.members(), updated.members());
+            assertEquals(other, WebChatStore.view(root.store.room(other.id(), ALLOWED)
+                    .toCompletableFuture().get(5, TimeUnit.SECONDS)));
+            verify(commands, times(3)).list(any(), any());
+        }
+    }
+
+    /**
+     * 2026/11/05：角色入口不能增加、替换或移除私聊成员，也不能用过期版本覆盖现有权限。
+     * @throws Exception 当准备档案或读取房间未在期限内完成时
+     */
+    @Test
+    void privateMembershipCannotBeReplacedOrRemovedAndRejectsStaleRoleChanges() throws Exception {
+        try (var db = new NamespaceDatabaseFixture(); var root = new Root(db, Runnable::run)) {
+            var room = root.room("PRIVATE", "唯一私聊成员");
+            var profile = root.service.profile(new WebChat.CreateProfile(UUID.randomUUID(), "其他档案"), ALLOWED)
+                    .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var replacement = new WebChat.ChangeMember(UUID.randomUUID(), room.revision(),
+                    new WebChat.Member(profile.id(), profile.name(), "ADMIN"), "UPSERT");
+            var replaceFailure = assertThrows(CompletionException.class, () -> root.service.member(room.id(),
+                    replacement, ALLOWED).toCompletableFuture().join());
+            assertInstanceOf(IllegalArgumentException.class, replaceFailure.getCause());
+            var removal = new WebChat.ChangeMember(UUID.randomUUID(), room.revision(), room.members().getFirst(), "REMOVE");
+            var removeFailure = assertThrows(CompletionException.class, () -> root.service.member(room.id(),
+                    removal, ALLOWED).toCompletableFuture().join());
+            assertInstanceOf(IllegalArgumentException.class, removeFailure.getCause());
+            var stale = new WebChat.ChangeMember(UUID.randomUUID(), room.revision() + 1,
+                    new WebChat.Member(WebChat.DEFAULT_PROFILE, "网页用户", "OWNER"), "UPSERT");
+            var versionFailure = assertThrows(CompletionException.class, () -> root.service.member(room.id(),
+                    stale, ALLOWED).toCompletableFuture().join());
+            assertInstanceOf(ConcurrentModificationException.class, versionFailure.getCause());
+            assertEquals(room, WebChatStore.view(root.store.room(room.id(), ALLOWED)
+                    .toCompletableFuture().get(5, TimeUnit.SECONDS)));
+        }
+    }
+
+    /**
+     * 2026/11/05：删除遵守版本仲裁、原子清理及来源撤销，不影响其他房间和共享档案。
+     * @throws Exception 当图片或入站夹具未完成时
+     */
+    @Test
+    void deletesRoomAndMediaWithoutAllowingLateSend() throws Exception {
+        try (var db = new NamespaceDatabaseFixture(); var root = new Root(db, Runnable::run)) {
+            var room = root.room("GROUP", "待删除");
+            var other = root.room("GROUP", "保留");
+            var image = root.store.upload(room.id(), UUID.randomUUID(), png(1), ALLOWED).toCompletableFuture().join();
+            var send = new WebChat.Send(UUID.randomUUID(), WebChat.DEFAULT_PROFILE, "待删除消息", false, "", image, Instant.now());
+            root.service.submit(room.id(), send, ALLOWED).toCompletableFuture().join();
+            var source = root.received.get(5, TimeUnit.SECONDS);
+            assertThrows(CompletionException.class,
+                    () -> root.service.delete(room.id(), room.revision() + 1, ALLOWED).toCompletableFuture().join());
+            assertTrue(root.service.delete(room.id(), room.revision(), ALLOWED).toCompletableFuture().join());
+            assertFalse(root.service.delete(room.id(), room.revision(), ALLOWED).toCompletableFuture().join());
+            assertThrows(SecurityException.class, source::checkCommandSource);
+            assertThrows(CompletionException.class, () -> root.store.page(room.id(), 0, ALLOWED).toCompletableFuture().join());
+            assertThrows(CompletionException.class, () -> root.store.image(room.id(), image, ALLOWED).toCompletableFuture().join());
+            assertEquals(other.id(), root.store.rooms(ALLOWED).toCompletableFuture().join().getFirst().id());
+            assertNotNull(root.store.profile(WebChat.DEFAULT_PROFILE, ALLOWED).toCompletableFuture().join());
+        }
+    }
 
     /** 2026/11/04：网页已保存不等于 Agent 已结束，业务失败必须反映在同一操作回执中。 */
     @Test

@@ -11,6 +11,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLM
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 
 import java.util.List;
 import java.util.Map;
@@ -33,15 +34,44 @@ import java.util.Optional;
  * @param tools 已观察完成的工具结果，不推断未完成动作是否产生副作用
  * @param budgetUsage 本次交互实际消耗的局部额度，不是供应商计费统计
  * @param rejectedBudget 导致交互终止的预算维度，非预算终止时为空
+ * <br>2026/11/05：交互结果保留可公开的失败诊断，兼容已有构造。
+ *
+ * @param failure 可选的安全失败诊断
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
                                     Optional<ILLMAssistantMessage> finalCandidate, List<ModelAttempt> attempts,
                                     List<ToolInvocationResult> tools, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
-                                    Optional<BudgetKey> rejectedBudget) {
+                                    Optional<BudgetKey> rejectedBudget, @Nullable FailureDiagnostic failure) {
+    /**
+     * 2026/11/05：保留原构造签名，未提供诊断时不虚构失败原因。
+     * @param status 终止状态
+     * @param transcript 诊断消息链
+     * @param finalCandidate 最终候选
+     * @param attempts 模型尝试
+     * @param tools 工具结果
+     * @param budgetUsage 预算快照
+     * @param rejectedBudget 被拒预算维度
+     */
+    public LLMInteractionResult(Status status, List<ILLMMessage> transcript,
+            Optional<ILLMAssistantMessage> finalCandidate, List<ModelAttempt> attempts,
+            List<ToolInvocationResult> tools, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
+            Optional<BudgetKey> rejectedBudget) {
+        this(status, transcript, finalCandidate, attempts, tools, budgetUsage, rejectedBudget, null);
+    }
+
+    /**
+     * 2026/11/05：复制结果并携带脱敏原因，异常对象不进入快照。
+     * @param diagnostic 可选安全诊断
+     * @return 包含同一结果与新诊断的快照
+     */
+    public LLMInteractionResult withFailure(@Nullable FailureDiagnostic diagnostic) {
+        return new LLMInteractionResult(status, transcript, finalCandidate, attempts, tools, budgetUsage,
+                rejectedBudget, diagnostic);
+    }
     /**
      * 冻结所有对外数据，防止调用方或供应商在交付后修改回放内容。
      *
@@ -52,6 +82,7 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
      * @param tools 工具完成记录
      * @param budgetUsage 局部预算用量
      * @param rejectedBudget 可选的被拒预算维度
+     * @param failure 可选安全诊断
      * @throws NullPointerException 当必需的状态、列表或可选容器为空时
      * @throws IllegalArgumentException 当消息或透明状态无法安全冻结时
      */

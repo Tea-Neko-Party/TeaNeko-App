@@ -1,25 +1,36 @@
 # TeaNeko App 可扩展性、可维护性与异步执行评估
 
-评估日期：2026/11/04。版本依据：`version.properties` 中的 `4.8.0-l`；Git 基线：`24631f9`，同时评估当前未提交源码。
+复评日期：2026/11/05。版本依据：`version.properties` 中的 `4.8.1-l`；Git 基线：`36e0188`，同时评估当前未提交源码。首次评估为 2026/11/04、基线 `24631f9`，本文更新为当前结论，不再沿用重构中间态的判断。
 
-本文是源码评估与修改建议，不是已实施改造记录，也不替代 [v4.8.0-l 组件装配计划](../plan/old/4.8.0-agent-composition.md)。审阅期间该计划相关源码仍在更新，下文将已实现的底座、观察到的中间态和建议目标分别说明。本次只新增本文，不修改业务代码，不执行构建、测试、真实模型请求或数据库操作。
+本文是源码评估与修改建议，不是实施记录。[v4.8.0-l 组件装配](../plan/old/4.8.0-agent-composition.md)与[分层重构](../plan/old/4.8.0-layering.md)均已归档完成，[计划索引](../plan/README.md)当前无进行中的实施计划。本次只更新本文，不修改业务代码，不执行构建、测试、真实模型请求或数据库操作。
 
 ## 一、结论
 
 | 维度 | 当前判断 | 主要依据 |
 | --- | --- | --- |
-| 可扩展性 | 已有较好的声明式扩展底座，但不同模块成熟度不一致 | 工具、模型、回复协议、插件能力、管理资源可以贡献新实现；旧扫描器的冲突处理不统一，Agent 内置能力仍在从固定编排向组件装配迁移 |
-| 可维护性 | 分层和业务边界较清楚，局部复杂度偏高 | Core 未检出对上层项目包的直接类型引用；已有专用存储入口和边界测试，但会话服务职责集中、部分关键代码过度压缩，构建尚未强制模块边界 |
-| 异步执行 | 主链完成、取消及资源管理较完整，通用入口的容量和旧任务取消需要补齐 | `CompletionStage`、`ExecutionControl`、HTTP 订阅释放和同会话排队已接通；虚拟线程不等于容量限制，旧 `CompletableFuture.cancel(true)` 不保证停止业务 |
+| 可扩展性 | 明显改善；已有合同内的常规扩展基本满足“只新增实现与声明” | 可序列化组件已贯通校验、字段目录与四阶段执行，工具、模型、回复和管理资源继续复用既有扩展点；旧目录冲突及宿主内建语义耦合仍有边界 |
+| 可维护性 | 明显改善；分层约束和能力归类已落地，局部生命周期复杂度仍高 | 五层源码扫描未检出反向类型引用，完整能力归入组件目录、平台主动适配、工具独立成类；会话服务仍集中管理较多状态，内部边界检查尚不完整 |
+| 异步执行 | 主链底座较完整；关键可靠性短板较上次变化不大 | 组件真实完成阶段已被等待；通用入口容量、旧任务取消语义仍需补齐，系统返回 Stage 与执行域切换也应明确区分 |
 
-总体判断：不需要重建插件框架或统一改成另一套异步模型。最有价值的方向是复用已有 scanner、注册表和执行控制，补齐注册一致性、可选能力装配与通用执行边界。
+总体判断：4.8.0 的改善不只是移动目录，已经降低新增组件、工具和客户端适配对原类的修改需求。下一阶段应优先补齐注册一致性与异步可靠性，不需要重建插件框架、继续大规模目录重构或更换异步模型。
 
 优先事项：
 
 1. 统一旧扩展目录的冲突拒绝和原子发布，避免新增类影响既有路由。
 2. 修正旧任务的超时停止合同，并给高流量入口增加有界准入。
-3. 在现有 4.8.0 计划内完成“组件声明 → 实际系统执行”的闭环，不止于增加目录或能力开关。
-4. 随上述修改拆分确有独立职责的代码、加强边界验证，不进行全仓库机械重构。
+3. 明确新增 System 的执行域合同，避免扩展在 I/O 完成回调线程执行阻塞工作。
+4. 按实际替换需求收敛剩余宿主耦合；渐进处理会话职责与 Agent 内部分层检查，不进行全仓库机械重构。
+
+### 1.1 与上次评价的变化
+
+| 上次关注点 | 本次复核 | 处理结论 |
+| --- | --- | --- |
+| E2：组件声明与实际执行仍在迁移 | 已通过组件贡献接入四阶段，内置人格、记忆和表达有实际 System | 撤回“装配实施中”的判断；剩余内建语义耦合降为 P2 |
+| M2：分层主要靠约定 | 已有全项目依赖检查，客户端主动适配；本轮扫描未检出跨层反向类型引用 | 主要问题已改善；只保留 Agent 内部检查细化建议 |
+| 工具与能力职责聚合 | 可选能力按完整职责归类，19 个注解工具分布于独立文件 | 肯定已实现的维护性改善，不再要求重复拆分 |
+| E3 / E4：目录反复编译、前端扩展受限 | 组件目录已缓存，普通组件字段已自动生成表单 | 部分改善；LLM 配置目录、专用控件和顶层页面仍有局部限制 |
+| E1 / A1 / A2：旧目录、入口容量、旧任务取消 | 相关关键实现与上次基线未变 | 保留三项 P1，作为下一阶段重点 |
+| A4：新增系统的执行域 | 管线串行组合 Stage，但不为每个 System 自动切换执行器 | 新增 P2 合同风险；不是已发生阻塞故障的结论 |
 
 ## 二、评价口径与范围
 
@@ -41,9 +52,11 @@
 
 ### 2.2 本次检查范围
 
-检查了 Core 的扫描、注册、插件、事件、命令、任务、执行控制和组件管线；App 的客户端、内容类型及管理目录；Agent 的能力、工具、模型、回复、轮次和会话装配；OneBot 收发入口，以及前端模型模板和页面导航。
+检查了 Core 的扫描、注册、插件、事件、命令、任务、执行控制和组件管线；App 的客户端、内容类型及管理目录；Agent 的组件、工具、模型、回复、轮次和会话装配；客户端适配、OneBot 收发入口，以及前端组件表单、模型模板和页面导航。
 
-采用源码调用链、配置、现有测试源码和本地 JDK 25 源码交叉核对。下文的扩展成本是静态判断，不是假称已经完成一次新插件接入实验；容量风险也不是已测得的性能瓶颈。没有运行测试，因此“已有用例”仅表示源码中存在相应验证，不表示本次回归通过。
+本轮对 1,231 个生产 Java 文件按五层方向做了文本扫描，去除块注释和独占行注释，保留完整全限定类名及字符串，未检出跨层反向类型引用；检出 19 个 `@TeaNekoAgentTool` 方法，没有单文件聚合多个工具的情况。测试源码共 174 个 Java 文件，定点阅读与本次结论相关的用例。该扫描不能证明动态拼接反射或所有固定能力标识的语义依赖均不存在。
+
+采用源码调用链、配置和现有测试源码交叉核对，并复用首次评估已核实的本地 JDK 25 执行器及取消语义。下文的扩展成本是静态判断，不是一次新插件接入实验；容量风险也不是已测得的性能瓶颈。未运行测试，既有用例和归档验收均不计作本次回归通过。
 
 ## 三、可扩展性评估
 
@@ -51,6 +64,7 @@
 
 - [AnnotatedBeanRegistry](../../src/main/java/org/zexnocs/teanekocore/framework/extension/AnnotatedBeanRegistry.java) 复用 Spring Bean，校验注解和接口，拒绝重复键并冻结目录。它已经是新扩展点合适的公共基础，不需要再建第二套通用注册框架。
 - [AgentPluginRuntime](../../src/main/java/org/zexnocs/teanekoagent/plugin/AgentPluginRuntime.java) 接收 `AgentFeature` 贡献，校验能力依赖、组件命名空间、System 写入范围和插件身份；实例选择与插件安装分开处理。
+- [AgentComponentRegistry](../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java) 缓存已校验的静态声明，向参数校验、运行装配和 Web 目录提供共同元数据；[AgentComponentFeature](../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentFeature.java) 将原 Spring 组件桥接到既有能力执行链，不重新实例化业务服务。
 - [SystemPipeline](../../src/main/java/org/zexnocs/teanekocore/framework/composition/SystemPipeline.java) 在编译时检查重复系统、依赖环及无顺序的多个写入者，运行时检查实体版本和补丁范围。它不只是一个按顺序调用函数的列表。
 - [TeaNekoAgentToolRegistry](../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolRegistry.java) 和 [TeaNekoAgentToolMethods](../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolMethods.java) 已将注解工具纳入能力选择、可信上下文、客户端过滤和真实异步返回链。
 - [ReplyExtensionRegistry](../../src/main/java/org/zexnocs/teanekoagent/component/expression/ReplyExtensionRegistry.java) 按协议、版本、指令和内容类型分派；[LLMModelService](../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelService.java) 按 `@LLMModel` 发现模型。这些位置不需要随着普通实现增加而追加供应商或内容类型分支。
@@ -65,15 +79,15 @@
 | 新增命令或子命令提供者 | `@Command`、`@DefaultCommand` / `@SubCommand` 与 Spring Bean | 0 | 返回真实 `CompletionStage`；重名处理尚不严格，见 E1 |
 | 新增事件观察者 | `@EventListener`、`@EventHandler`、可选 `@PluginOwned` | 0 | 异步监听不是主事件完成的一部分；决策事件不能借此异步修改 |
 | 新增同步任务阶段 | `ITaskStage`、`@TaskStage` | 0 | 只能依赖同步阶段合同，异步环绕使用已有 `OperationPipeline` |
-| 新增 Agent 工具 | `@TeaNekoAgentToolClass`、`@TeaNekoAgentTool` | 0 | 保留能力选择、条件、client、预算和真实工具回执 |
-| 新增资料来源或插件内 System | `AgentFeature` Bean 提供 prompts / systems | 0，限已有扩展位置 | 当前公开阶段为 `BEFORE_PROMPT`、`AFTER_INTERACTION`；不是任意内置步骤替换 |
+| 新增 Agent 工具 | `@TeaNekoAgentToolClass`、`@TeaNekoAgentTool`，独立工具类 | 0 | 保留能力选择、条件、client、预算和真实工具回执；共享业务通过服务复用 |
+| 新增资料来源或插件内 System | `AgentFeature` Bean 提供 prompts / systems | 0，限已有扩展位置 | 已有 `BEFORE_PROMPT`、`BEFORE_INTERACTION`、`AFTER_INTERACTION`、`BEFORE_DELIVERY` 四阶段；不是任意内置步骤替换 |
 | 新增模型执行适配器 | 实现 `ILLMModel` 并声明 `@LLMModel` | 0 | 模型配置、凭据、真实上下文容量仍须完整接入 |
 | 为模型增加现有格式的 Web 模板 | `@LLMConfigurationAdapter` 与模板实现 | 0，普通模板 `M_ui = 0` | 模板字段取值可扩展，不代表任意新控件都已可扩展 |
 | 新增回复协议、指令或内容类型 | 对应 `TeaNekoReply*` 注解和接口 | 0 | 精确版本与类型，不能绕过统一编译、发送守卫和回执 |
 | 新增定时业务动作 | `AgentTaskAction` Bean | 0 | [AgentScheduleConfig](../../src/main/java/org/zexnocs/teanekoagent/component/schedule/configuration/AgentScheduleConfig.java) 已组合动作并拒绝同名，不应另建 Timer |
 | 新增聊天配置区或管理资源 | 配置管理器 / 专用配置区 / `ManagementResource` | 0，通用表单通常 `M_ui = 0` | 聊天配置不恢复本地分组白名单；文件配置仍遵守自身保护规则 |
 | 新增平台客户端与内容数据类型 | `@TeaNekoClient`、客户端接口、`@TeaNekoContentPart` | 基础注册为 0 | 完整平台还需自己的收发、身份、管理与表达适配；不能只算一个客户端类就宣称接入完成 |
-| 新增可序列化 Agent 组件 | `@TeaNekoAgentComponent`、`IAgentComponent` | 实施中，不能整体认定为 0 | 目录与桥接已有源码，内置执行路径仍有固定装配，见 E2 |
+| 新增可序列化 Agent 组件 | `@TeaNekoAgentComponent`、`IAgentComponent`，贡献参数、系统、工具或资料 | 已有合同内为 0，普通字段 `M_ui = 0` | 复用四阶段和现有字段类型；替换内建人格或表达语义槽位不属于同等成本，见 E2 |
 | 新增独立顶层管理页面 | 新 Vue 页面 | 既有前端需修改 | `ConsoleNavigation.vue` 的页面集合与 `App.vue` 的渲染入口均为显式定义，见 E4 |
 
 外部依赖模块还需要导入 Spring 配置；供类扫描使用的声明需要登记扫描根。这一边界已在 [Core 插件指南](../development/plugins/core.md) 说明。当前不是任意 JAR 热插拔、卸载或不受信代码沙箱，不能把这类能力混入本次“新增类即可扩展”的承诺。
@@ -98,31 +112,33 @@
 
 验收：交换扫描顺序结果不变；重名必失败；并发读取只能看见旧版或新版完整目录；重载失败不破坏已发布目录。
 
-### E2：Agent 正在组件化，但“声明即装配”尚未覆盖内置业务——优先级 P1
+### E2：组件装配已形成闭环，宿主仍认识少量内建语义——剩余优先级 P2
 
 源码事实：
 
-- 审阅后段已出现 [AgentComponentFeature](../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentFeature.java) 与 `AgentComponentRegistry.contributions()`，组件正在桥接到原 `AgentFeature` 执行目录，不能再按“完全没有组件接线”评价。
-- [AgentTurnPipeline.compile](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java) 仍固定建立准入、资料、交互、完成四个宿主步骤，并在两个位置调用插件。
-- 该类仍直接持有人格、记忆引用、历史、摘要等端口，处理过程中出现 `assembly.has("personality")`、`assembly.has("tool")`、`assembly.has("memory")` 等已知能力判断；[AgentExecutionConfig](../../src/main/java/org/zexnocs/teanekoagent/configuration/AgentExecutionConfig.java) 仍显式组合插件、Skill 与总来源。
+- [IAgentComponent](../../src/main/java/org/zexnocs/teanekoagent/component/IAgentComponent.java) 已声明参数、字段、数据键、初始化、System、工具及资料来源；[AgentTurnPipeline.compile](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L125) 实际接入四个组件执行阶段。
+- [PersonalityComponent](../../src/main/java/org/zexnocs/teanekoagent/component/personality/PersonalityComponent.java) 注入人格解析系统；[MemoryComponent](../../src/main/java/org/zexnocs/teanekoagent/component/memory/MemoryComponent.java) 注入输入和输出系统，真实等待历史保存；[ExpressionCompileSystem](../../src/main/java/org/zexnocs/teanekoagent/component/expression/ExpressionCompileSystem.java) 返回实际表达编译阶段。不是只有组件外壳或开关。
+- [AgentScopeFieldChecker](../../src/main/java/org/zexnocs/teanekoagent/integration/config/AgentScopeFieldChecker.java#L75) 保存时校验装配，[ConfigDataAgentScopePolicy](../../src/main/java/org/zexnocs/teanekoagent/integration/config/ConfigDataAgentScopePolicy.java#L64) 运行读取时复核；[AgentComponentController](../../src/main/java/org/zexnocs/teanekoagent/integration/web/AgentComponentController.java#L80) 提供统一字段目录，普通表单据此生成。
+- 客户端能力通过 `assemblyRequirements()` 主动声明所需组件；[ToolComponent](../../src/main/java/org/zexnocs/teanekoagent/component/tool/ToolComponent.java) 只依赖本层工具能力，[OnebotAgentFeature](../../src/main/java/org/zexnocs/teanekoclient/onebot/agent/OnebotAgentFeature.java#L114) 负责平台适配，不再由 Agent 固定绑定平台能力标识。
+- 剩余耦合是 `AgentTurnPipeline.preparePrompt` 直接消费 [PersonalityResolveSystem.SNAPSHOT](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L222)，`projectComponents` 直接消费 [ExpressionCompileSystem.PLAN](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L391)；旧实例兼容路径仍调用人格、历史和表达端口，[AgentExecutionConfig](../../src/main/java/org/zexnocs/teanekoagent/configuration/AgentExecutionConfig.java) 仍显式组合部分来源。
 
-判断：新增插件自有资料或阶段系统已经容易；新增一种需要参与内置生命周期的可选业务能力，仍可能需要修改中央编排。不能把“可序列化参数”和“可自由组合执行职责”视为同一项完成成果。
+判断：在已有四阶段追加能力、使用普通字段并沿用默认宿主语义，可以静态判定 `M_core = 0`、`M_ui = 0`。替换人格快照来源、表达计划投影等内建语义则仍可能修改宿主。这是局部可替换性限制，不再是“组件没有执行闭环”。
 
-建议在现有 4.8.0 计划内收敛，不另建平行方案：
+建议：
 
 1. 准入、可信身份、模型预算、提交前复核和最终结果仲裁继续由宿主固定拥有，不允许普通插件替换。
-2. 把可选能力的参数解释、来源贡献和业务执行交给对应组件或 Spring 管理的 System；主链消费已校验的装配结果，避免每增加一种能力再增加一组中央字符串判断。
-3. 只为实际需要插入的业务阶段建立类型化端口。现有两个插件阶段足够的场景继续复用，不开放任意生命周期钩子。
-4. 组件声明、参数校验、执行目录、Web 表单和 API 文档使用同一份权威元数据；兼容读取和私有凭据继续遵守现有计划边界。
-5. 以一个新增可选能力做端到端验收：声明与实现放在新类中，完成配置保存、重启恢复、按需安装、执行及停用，原编排类保持不变。
+2. 继续由组件拥有完整业务职责，不再为新增能力向中央类追加字符串分支；沿用已建立的字段目录、依赖校验与四阶段执行。
+3. 只有出现实际替换需求时，再将人格结果、表达计划等交接定义为窄的宿主端口或类型化协议，不为追求绝对零分支建立万能处理器。
+4. 旧实例兼容路径先确认迁移、部署和回退需求，再决定是否收敛；不能为了缩短主链直接删除。
+5. 后续新增真实组件时，用新类贯通参数保存、恢复、选择、执行及停用，并确认原编排类不变。复用已有装配和轮次用例，不把单系统测试当作全链验收。
 
-普通参数分支并非问题；需要减少的是中央类对每种可选业务能力的逐一认识。本文不将并发开发中的临时接线或尚未验收功能列作已发布故障。
+普通参数分支和固定安全提交点不是扩展缺陷。无需重开已完成的 4.8.0 计划来重复实现这些能力。
 
 ### E3：扫描合同及静态目录生命周期还需统一——优先级 P2
 
 [BeanScanner](../../src/main/java/org/zexnocs/teanekocore/utils/scanner/BeanScanner.java) 使用目标类的 `getAnnotation`，而工具方法编译已经使用 Spring 的合并注解读取；[ClassScanner](../../src/main/java/org/zexnocs/teanekocore/utils/scanner/ClassScanner.java) 对“有注解但不满足接口”的类采取跳过，扫描异常还存在捕获 `Throwable` 后继续的路径。因此不能假定所有扩展点都支持相同的组合注解、错误声明诊断和失败语义。
 
-另外，[LLMConfigurationDirectory.describe](../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/form/LLMConfigurationDirectory.java) 和当前 `AgentComponentRegistry.entries()` 每次调用都会重新建立声明注册表；聊天配置和文件配置目录则采用首次构建后保留快照。尚无测量证明扫描是性能热点，但生命周期和错误出现时机不一致已经增加理解成本。
+目录生命周期已有部分改善：[AgentComponentRegistry.entries](../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java#L42) 通过同步方法和 `registered` 缓存静态目录，上次“每次重建”的判断已不适用。[LLMConfigurationDirectory.describe](../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/form/LLMConfigurationDirectory.java#L61) 仍每次建立模型模板及凭据输入注册表；聊天配置和文件配置目录则保留首次构建的快照。尚无测量证明这是性能热点，建议针对剩余生命周期和错误出现时机的不一致处理。
 
 建议：
 
@@ -135,26 +151,31 @@
 
 ### E4：后端元数据扩展较好，专用前端仍是编译期显式装配——优先级 P2，按需求实施
 
+[AgentAssemblyEditor.vue](../../frontend/src/AgentAssemblyEditor.vue#L165) 已按组件目录的 `fields`、`defaults` 和 `requires` 渲染与选择，支持 BOOLEAN、NUMBER、JSON、SECRET、LONG_TEXT、TEXT。使用这些字段类型的普通新组件无需修改宿主表单，不能继续笼统评价为“组件前端没有通用扩展”。
+
 [ModelTemplateEditor.vue](../../frontend/src/ModelTemplateEditor.vue) 已通过后端 catalog 展示模型类型、默认值、型号、容量和图标，增加同类模板无需追加供应商分支。但该组件的 `form` 和提交逻辑仍明确列举现有字段，新协议若需要额外专用控件，不能仅靠模板默认值自动获得可编辑界面。
 
 [ConsoleNavigation.vue](../../frontend/src/ConsoleNavigation.vue) 的页面类型、导航组和 [App.vue](../../frontend/src/App.vue) 的页面装配也由源码显式定义。后端贡献了管理资源，不代表已经自动生成一个完整的新业务页面。
 
 建议优先复用已有通用字段描述和编辑器。只有确有多个独立页面扩展需求时，再增加前端构建期页面描述注册和统一导航入口，明确页面 ID、权限、标题及组件加载关系；不在后端下发可执行脚本，不引入远程任意前端插件机制。
 
-验收目标应分开：普通配置与模板增加字段不改宿主表单；专用交互页面允许新增前端组件，但不再反复扩张中央导航和条件渲染列表。
+验收目标应分开：已有字段合同内的普通配置和组件不改宿主表单；同结构模型模板不加供应商分支。只有决定扩展专用页面注册时，才要求新增前端组件不再反复扩张中央导航和条件渲染列表。
 
 ## 四、可维护性评估
 
 ### 4.1 优点
 
-- Core、App、Agent、客户端和业务插件有明确的包级职责。本次对 Core 搜索上层项目包的全限定名，未检出直接引用。
+- Core、App、Agent、Client、Plugin 的单向依赖已有 [ProjectLayerBoundaryTest](../../src/test/java/org/zexnocs/teanekocore/framework/ProjectLayerBoundaryTest.java) 约束，覆盖导入、内联全限定名和完整反射类名字符串；本轮按相同方向扫描五层源码，未检出跨层反向类型引用。
+- 可选能力的参数、系统、服务、适配及配置已按完整职责归入 `component/<能力>`；共享轮次与会话归入 `runtime`，通用 App 接入归入 `integration`，具体平台适配由客户端持有。该结构比只拆组件壳类更便于独立理解与修改。
+- 注解工具已拆为独立提供者，19 个工具未发现单文件多方法聚合；共享授权、查询与转换通过服务复用，不再要求每新增工具修改聚合类。
+- App 的 Web 错误处理已通过 [IWebFailureMapper](../../src/main/java/org/zexnocs/teanekoapp/web/error/IWebFailureMapper.java)、声明注解与注册机制接入，下层不再直接认识 Agent 或客户端异常实现。
 - Agent 业务 Store 通过专用 EasyData 入口和 DTO 访问，已有 [AgentLayerBoundaryTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentLayerBoundaryTest.java) 约束绕过数据库封装的导入。
 - 执行控制、管线、HTTP 请求、工具方法编译和实际业务存储已分别承担不同职责，没有把所有扩展和并发问题集中到单一容器。
 - 仓库已有 [插件开发入口](../development/plugins/README.md)、实例和边界测试，后续改造可以沿既有合同进行，不需要靠另建文档体系解决全部问题。
 
 ### M1：会话生命周期职责集中，修改风险大于文件长度本身——优先级 P2
 
-[AgentConversationService](../../src/main/java/org/zexnocs/teanekoagent/runtime/conversation/AgentConversationService.java) 约 1,500 行，同时处理邮箱容量、请求去重与重放、等待计时、人格与记忆对齐、轮次启动、完成提交、退休清理和关闭。该类的风险是这些职责共享状态转换和锁，不是单纯“超过某个行数”。
+[AgentConversationService](../../src/main/java/org/zexnocs/teanekoagent/runtime/conversation/AgentConversationService.java) 约 1,600 行（含注释和空行），同时处理邮箱容量、请求去重与重放、等待计时、人格与记忆对齐、轮次启动、完成提交、退休清理和关闭。该类的风险是这些职责共享状态转换和锁，不是单纯“超过某个行数”。分层迁移没有自动消除这部分维护成本。
 
 建议先复用已有会话 engine、journal、state 等协作者，再根据实际变更抽取缺失职责：
 
@@ -163,21 +184,21 @@
 - 等待计时及终止注册的拥有关系可封装为小的生命周期协作者，但不新建第二个排队器。
 - 不把存储服务、线程或可执行闭包搬入 ECS 组件；不以增加更多构造参数或全能上下文对象替代真正分责。
 
-应先以同会话串行、重复请求、等待超时、取消与完成竞争、关闭和迟到回调用例保护状态机，再按一次可独立验收的职责拆分。不要在组件装配仍变动时同步大范围改写整个会话内核。
+应先以同会话串行、重复请求、等待超时、取消与完成竞争、关闭和迟到回调用例保护状态机，再按一次可独立验收的职责拆分。避免与准入、取消改造同时大范围重写同一个会话状态机。
 
-### M2：包边界主要靠约定，现有文本检查存在盲区——优先级 P2
+### M2：项目层边界已受检，Agent 内部边界仍有检查盲区——剩余优先级 P2
 
-[`settings.gradle.kts`](../../settings.gradle.kts) 当前只有根工程声明，生产代码同处一个主源码集；包名分层并不形成独立编译约束。
+`ProjectLayerBoundaryTest.productionDependenciesPointOnlyDownward()` 已对完整生产源码检查五层依赖方向，不再只检查 import；同一测试类也约束单工具文件。上次“项目分层主要靠约定”的评价应修正为“已有自动化源码约束，但未形成独立编译模块”。[`settings.gradle.kts`](../../settings.gradle.kts) 仍只有根工程声明。
 
-`AgentLayerBoundaryTest.agentDomainDoesNotImportPlatformLegacyOrAdapters()` 只检查以 `import org.zexnocs.` 开头的行；而 `AgentTurnPipeline` 中对 `AgentPluginRuntime`、`ExpressionRuntime` 的全限定类型引用不受这条规则检查。这不证明相应依赖必然错误，但证明该测试不能完整保证其描述的边界。
+剩余盲区在更细的 Agent 内部规则：`AgentLayerBoundaryTest` 对运行域引用具体 `component.*.adapter`、配置及 EasyData 实现，以及 Store 绕过持久化封装的检查仍以 import 行为依据。全限定引用可以绕过这类检查，而全项目测试只限制跨层方向，不区分同属 Agent 层的端口和具体适配器。这是检查覆盖不足，不表示已确认现有源码发生这些越界调用。
 
-建议先明确哪些能力是领域端口、哪些是装配实现，再扩展现有检查覆盖全限定类型引用，必要时使用编译产物依赖检查。禁止为了让检查通过而改写引用形式，允许的协作也应显式记录。只有独立发布、依赖隔离或构建成本出现明确需求时，再评估拆成 Gradle 子模块；本次不建议立即全量拆模块。
+建议复用全项目检查的处理方式补齐内部禁止引用；必要时再使用编译产物依赖检查。继续明确组件端口与实现的区别，不把整个组件目录都当成纯数据或禁止运行域使用它。禁止为了通过检查而改写引用形式。只有独立发布、依赖隔离或构建成本出现明确需求时，再评估 Gradle 子模块；本次不建议立即拆模块。
 
-验收：新增一条真正禁止的导入和等价全限定引用都能触发失败；允许的领域端口和启动装配不会被误报。
+验收：禁止的跨层引用和 Agent 内部实现引用，无论使用导入还是全限定名都能触发失败；允许的组件端口和启动装配不会被误报。固定能力 ID 的反向绑定仍需按真实装配关系审查，不能仅凭类型扫描通过作保证。
 
 ### M3：关键实现的压缩排版与部分说明降低审查效率——优先级 P2
 
-`AnnotatedBeanRegistry`、`ReplyExtensionRegistry`、`StickerCollectionService` 等实际存在一行多个赋值、分支或异常处理的代码。并发和版本复核本就需要追踪执行顺序，这种写法会增加遗漏清理、错误捕获或守卫位置的概率。
+本次新增或迁移的部分实现已经更易阅读，但 `AnnotatedBeanRegistry`、`ReplyExtensionRegistry`、`StickerCollectionService` 等仍局部存在一行多个赋值、分支或异常处理。并发和版本复核需要追踪执行顺序，压缩排版会增加遗漏清理、错误捕获或守卫位置的概率。[AgentServiceTest 的局部说明](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentServiceTest.java#L66) 还含实际替换字符乱码，应随相关维护修正，不作为主要架构问题。
 
 建议只在实质修改的范围内展开多行结构、命名关键阶段和临时变量，按 AGENTS.md 补齐中文方法 JavaDoc、局部修改记录及准确的版本标签。异常信息和注释同步修正，尤其是线程池容量和取消语义，不能只改文字而维持错误的运行承诺。无需引入格式化框架或全仓库重排。
 
@@ -188,7 +209,7 @@
 | 执行层 | 已有行为 | 评价 |
 | --- | --- | --- |
 | 命令 | [CommandExecutor](../../src/main/java/org/zexnocs/teanekocore/command/CommandExecutor.java) 检查返回合同，展开方法返回的 Stage，并在排队启动及结果完成时复核 | 不是调用方法后立即报告业务完成 |
-| 轮次和组件管线 | 显式业务执行器，`thenCompose` 串联；实体租约、版本及补丁范围检查 | 同轮次串行可组合，不代表跨会话只能串行 |
+| 轮次和组件管线 | 宿主阶段显式使用业务执行器，系统内部通过 `thenCompose` 串联；实体租约、版本及补丁范围检查 | 四个扩展阶段等待真实完成；同阶段后续系统不保证自动切换回业务域，见 A4 |
 | 执行控制 | [ExecutionControl](../../src/main/java/org/zexnocs/teanekocore/actuator/execution/ExecutionControl.java) 提供父子取消、截止时间、共享预算及可解除的终止监听 | 资源拥有者与借用者边界较清楚 |
 | HTTP | [APIRequestExecution](../../src/main/java/org/zexnocs/teanekocore/api_response/APIRequestExecution.java) 同时管理完成、计时器、控制监听与实际订阅 | 不止结束外层 Future；取消会释放订阅资源 |
 | 异步拦截 | [OperationPipeline](../../src/main/java/org/zexnocs/teanekocore/plugin/operation/OperationPipeline.java) 等待已启动下游，拒绝重复或迟到 next | 可保留同步任务链，按操作需要使用真正的异步环绕 |
@@ -237,7 +258,7 @@ JDK 行为已用本地 JDK 25 `java.base/java/util/concurrent/ScheduledThreadPoo
 
 验收：运行中的任务超时后，协作任务不再进入后续副作用；不响应取消的底层操作仍被追踪到收敛；迟到回执不能覆盖终态或释放他人的资源；取消不会引发重复发送和自动重写。
 
-### A3：需要明确三种不同的“完成”，不应统一改造全部事件和任务——优先级 P2
+### A3：明确三种不同的“完成”——合同说明，不单列为缺陷
 
 - [TaskStageChain.next](../../src/main/java/org/zexnocs/teanekocore/actuator/task/TaskStageChain.java) 是同步调用栈。同步后置逻辑不会自动等待 Callable 另外发起的异步业务。
 - [EventService](../../src/main/java/org/zexnocs/teanekocore/event/EventService.java) 将 `async=true` 的监听器登记成独立任务，`pushEventWithFuture` 的主结果不等待这些监听器结束。
@@ -247,19 +268,34 @@ JDK 行为已用本地 JDK 25 `java.base/java/util/concurrent/ScheduledThreadPoo
 
 建议让新增接口的 JavaDoc 明确返回阶段表示“已接收”“业务完成”还是“真实交付”；需要异步前后置的操作使用现有 `OperationPipeline`，需要决定主链结果的工作通过可等待端口接入，普通旁路观察仍保留事件。只有实际业务需要时补充可等待事件能力，不改变旧监听器语义。
 
+### A4：System 返回异步阶段，不等于其同步前段已切换执行域——优先级 P2
+
+源码事实：
+
+- [SystemPipeline.execute](../../src/main/java/org/zexnocs/teanekocore/framework/composition/SystemPipeline.java#L123) 用非 Async 的 `thenCompose` 推进步骤；`runStep` 等待受控阶段并提交结果后继续后续步骤。
+- [AgentGuardedSystem.execute](../../src/main/java/org/zexnocs/teanekoagent/component/AgentGuardedSystem.java#L48) 直接调用原 System，再通过 `thenApply` 进行版本复核，不负责切换执行器。
+- [AgentTurnPipeline.pluginStep](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L184) 在进入扩展阶段时使用业务执行器，但不能保证同阶段后续系统都在该执行器启动；它们可能沿前一 Stage 的完成线程继续执行。
+- [IEntitySystem](../../src/main/java/org/zexnocs/teanekocore/framework/composition/IEntitySystem.java) 和[组件开发指南](../development/plugins/agent-components.md) 要求返回真实 Stage，尚未明确同步前段的阻塞限制和执行域责任。
+
+风险：新扩展如果在返回 Stage 前同步访问 JDBC、文件或执行较长计算，可能占用前一步的 I/O 完成回调线程。这里确认的是合同缺口和可发生的调用路径，不是已经测得内置系统发生线程阻塞事故。
+
+建议先约定 `execute` 的同步前段快速返回；阻塞工作交给借用的业务执行器，返回包含真实工作的 Stage，并保留原取消与版本检查。若宿主必须保证每个扩展系统的入口线程，则在 Agent 包装层明确调度边界和执行器所有权。不要让 Core 管线自行创建线程池，也不要把所有组合操作机械替换成 Async。
+
+验收：让前一系统从可控的模拟 I/O 执行器完成，验证后一系统的实际执行线程及完成时点；取消期间不能继续提交补丁。使用 Future 或有界等待，不通过 `Thread.sleep` 轮询证明线程行为。
+
 ## 六、建议实施顺序与验收
 
-以下是建议顺序，不是新增的进行中实施计划，不调整现有 4.8.0 计划进度。若决定实施，再将选定范围纳入 `docs/plan`。
+以下是建议顺序，不是新增的进行中实施计划，也不重开已完成的 4.8.0 计划。若决定实施，再将选定范围纳入 `docs/plan`。
 
 | 顺序 | 完整交付单元 | 对应建议 | 必要验收 |
 | --- | --- | --- | --- |
 | 1 | 旧注册目录一致性 | E1，相关 E3 | 同名拒绝、扫描顺序无关、旧快照保留及并发读取完整性 |
 | 2 | 旧任务停止与资源收敛 | A2 | 排队取消、运行超时、迟到副作用、未知结果和不重复重试 |
 | 3 | 高流量入口有界准入 | A1 | 超限拒绝、跨入口共享额度、底层完成后释放、停机和排队过期 |
-| 4 | Agent 声明装配闭环 | E2，复用 4.8.0 计划 | 一个新组件只新增类即可贯通声明、参数、持久化、执行与目录；旧配置兼容和权限继续生效 |
-| 5 | 局部维护性收敛 | M1–M3，按需求 E4 | 保持原并发合同；架构检查识别全限定引用；通用字段不重复增加页面分支 |
+| 4 | 组件执行域与目录合同 | A4，剩余 E3 | 同阶段续体线程可验证；阻塞工作不占 I/O 回调域；静态目录不重复编译，动态授权不被缓存 |
+| 5 | 局部装配和维护性收敛 | 按实际需求 E2、M1–M3、E4 | 新组件不改宿主；会话状态所有权不分裂；内部边界检查覆盖全限定引用；普通字段继续自动展示 |
 
-第 1 项与正在进行的组件装配可分开安排，但不要同时改写同一注册或会话状态机；容量和取消应联合设计，避免“提前取消外层 Future 就释放额度”的漏洞。
+前三项解决当前未改变的 P1 风险；后两项按真实扩展和维护需求推进。容量和取消应联合设计，避免“提前取消外层 Future 就释放额度”的漏洞；不要同时大范围改写同一个注册或会话状态机。
 
 ### 6.1 必须保留的既有边界
 
@@ -274,11 +310,14 @@ JDK 行为已用本地 JDK 25 `java.base/java/util/concurrent/ScheduledThreadPoo
 | 已有测试源码 | 已有验证方向 | 本次建议新增的关键边界 |
 | --- | --- | --- |
 | [PluginRuntimeTest](../../src/test/java/org/zexnocs/teanekocore/plugin/PluginRuntimeTest.java) | 目录冲突、插件代次、异步拦截真实完成 | 将相同的确定性要求覆盖到旧客户端、内容和命令目录 |
-| [AgentPluginIntegrationTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentPluginIntegrationTest.java) | 实际轮次安装能力、插件变更、决策与停止 | 新可序列化组件贯通配置与执行，而非只测试注册成功 |
-| [SystemPipelineTest](../../src/test/java/org/zexnocs/teanekocore/framework/composition/SystemPipelineTest.java) | 写入依赖、实体租约、取消及迟到补丁 | 扩展装配后的命名空间、参数版本及受保护组件边界 |
+| [AgentAssemblyTest](../../src/test/java/org/zexnocs/teanekoagent/component/AgentAssemblyTest.java) | 新记录纯 LLM、旧记录兼容、参数与依赖、秘密保留、客户端贡献选择 | 新组件从配置保存到恢复执行的完整闭环；其中单系统参数测试不等于完整宿主轮次 |
+| [AgentServiceTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentServiceTest.java) | 实际轮次中，未装人格时记忆与表达仍执行；最小装配不调用记忆、人格和工具 | 新扩展只新增实现仍能参加主链，停用、取消及版本变化继续生效 |
+| [AgentPluginIntegrationTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentPluginIntegrationTest.java) | 实际轮次安装能力、插件变更、决策与停止 | 与组件装配用例复用守卫场景，不重复只测注册成功 |
+| [SystemPipelineTest](../../src/test/java/org/zexnocs/teanekocore/framework/composition/SystemPipelineTest.java) | 写入依赖、实体租约、取消及迟到补丁 | 同阶段续体的执行域，装配后的参数版本及受保护组件边界 |
 | [APIResponseExecutionTest](../../src/test/java/org/zexnocs/teanekocore/api_response/APIResponseExecutionTest.java) | 排队取消、真实订阅释放、超时与迟到缓存写入 | 新准入额度在实际收敛时释放，不受外层提前完成干扰 |
 | [CommandScannerContractTest](../../src/test/java/org/zexnocs/teanekocore/command/CommandScannerContractTest.java) | 命令异步签名和实际生产类合同 | 重名拒绝、失败重载保留目录 |
-| [AgentLayerBoundaryTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentLayerBoundaryTest.java) | 包依赖和持久化导入边界 | 全限定类型引用不能绕过检查 |
+| [ProjectLayerBoundaryTest](../../src/test/java/org/zexnocs/teanekocore/framework/ProjectLayerBoundaryTest.java) | 五层单向依赖、全限定引用与完整反射类名、单工具文件 | 持续防止客户端回流和工具重新聚合；不据此宣称可检测所有语义依赖 |
+| [AgentLayerBoundaryTest](../../src/test/java/org/zexnocs/teanekoagent/runtime/AgentLayerBoundaryTest.java) | Agent 内部运行域和持久化导入边界 | 同层具体适配器的全限定引用也不能绕过检查 |
 
 上述项目是后续实施验收要求，不是本次测试执行报告。实际改代码后再按风险运行定向用例、集中回归、强制编译与产物检查，性能额度另用可重复的负载测量确定。
 

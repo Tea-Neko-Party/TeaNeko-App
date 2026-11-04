@@ -41,10 +41,12 @@ import java.util.Objects;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
+ * <br>2026/11/05：模型连接地址及路径按普通字段显示，密钥继续隐藏。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public final class AgentFileSettings {
     /** 禁止实例化贡献命名空间。 */
@@ -183,10 +185,12 @@ public final class AgentFileSettings {
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
+     * <br>2026/11/05：模型连接地址及路径按普通字段显示，密钥继续隐藏。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     @Component
     @PluginOwned("teaneko.agent")
@@ -203,8 +207,9 @@ public final class AgentFileSettings {
                     // 2026/11/04：唯一配置路由与实际协议适配器分别编辑。
                     field("/models/*/adapter", "协议适配器", "TEXT"),
                     field("/models/*/provider", "兼容供应商标识", "TEXT"), field("/models/*/model", "实际模型名称", "TEXT"),
-                    secret("/models/*/api-key", "API 密钥", "TEXT"), secret("/models/*/base-url", "服务地址", "TEXT"),
-                    secret("/models/*/api-path", "接口路径", "TEXT"), secret("/models/*/api", "旧接口路径别名", "TEXT"),
+                    // 2026/11/05：管理员可读原始地址与路径模板，只有真实凭据继续脱敏。
+                    secret("/models/*/api-key", "API 密钥", "TEXT"), field("/models/*/base-url", "服务地址", "TEXT"),
+                    field("/models/*/api-path", "接口路径", "TEXT"), field("/models/*/api", "旧接口路径别名", "TEXT"),
                     field("/models/*/thinking", "启用思考", "BOOLEAN"), field("/models/*/max-tokens", "最大输出 token", "NUMBER"),
                     // 2026/11/04：模型容量与默认输入比例和其他模型参数共同保存、应用。
                     field("/models/*/context-window-tokens", "上下文总 token 容量", "NUMBER"),

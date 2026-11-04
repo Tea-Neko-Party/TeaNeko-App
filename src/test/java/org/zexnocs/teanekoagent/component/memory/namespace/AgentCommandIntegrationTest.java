@@ -5,6 +5,8 @@ package org.zexnocs.teanekoagent.component.memory.namespace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.zexnocs.teanekoagent.component.expression.ExpressionSettings;
+import org.zexnocs.teanekoagent.component.expression.ReplyCoordinator;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionService;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
@@ -30,6 +32,7 @@ import org.zexnocs.teanekoagent.component.memory.fact.MemoryFactSource;
 import org.zexnocs.teanekoagent.component.memory.fact.MemoryFactValue;
 import org.zexnocs.teanekoagent.component.memory.history.*;
 import org.zexnocs.teanekoagent.component.memory.history.adapter.EasyDataHistoryStore;
+import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.component.personality.PersonalityService;
@@ -129,11 +132,14 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：覆盖协调器取消提示、准入等待超时及迟到结果不再启动模型。
+ *
+ * <br>2026/11/05：验证自动失败原因与开关、撤权边界。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -448,10 +454,11 @@ class AgentCommandIntegrationTest {
     }
     /**
      * 验证经原分发调用 Agent 时拒绝等待自身邮箱，普通用户不能停止他人请求，停止后不重复执行业务。
+     * 2026/11/05：使用真实表达协调器，覆盖原生命令取消提示及观察正常完成。
      * @throws Exception 当异步流程未按时完成时
      */
     @Test void recursiveCommandAndStoppingOtherUsersCannotDeadlockOrStealOwnership() throws Exception {
-        try (var h = new Harness()) {
+        try (var h = new Harness(false, false, true)) {
             h.command.set("/agent chat 递归请求");
             h.gateway.chat(h.source("甲", CommandPermission.OWNER, "/agent chat 起点"), "起点", null).toCompletableFuture().get(10, TimeUnit.SECONDS);
             assertEquals(2, h.prompts.size()); assertTrue(h.client.getSentRawMessages().stream().anyMatch(text -> text.contains("REENTRANT")));
@@ -460,7 +467,47 @@ class AgentCommandIntegrationTest {
             var status = h.gateway.status(source).toCompletableFuture().join(); var matcher = Pattern.compile("[0-9a-f]{8}-[0-9a-f-]{27}").matcher(status); assertTrue(matcher.find());
             var id = matcher.group(); assertTrue(h.gateway.stop(h.source("乙", CommandPermission.MEMBER, "停止"), id).contains("NOT_OWNER"));
             assertTrue(h.gateway.stop(source, id).contains("REQUESTED")); pending.toCompletableFuture().get(10, TimeUnit.SECONDS);
+            assertEquals(1, h.client.getSentRawMessages().stream().filter(text -> text.contains("Agent 请求已取消")).count());
             assertEquals(1, h.handler.calls.get()); h.handler.business.complete("取消后真实完成");
+        }
+    }
+
+    /**
+     * 2026/11/05：资料等待超时只提示一次，迟到资料不登记执行或发起模型；原队列等实际收尾。
+     * @throws Exception 当有界异步验证未完成时
+     */
+    @Test
+    void timesOutReferenceWaitWithoutStartingLateModelOrDuplicatingNotice() throws Exception {
+        try (var h = new Harness(false, false, true);
+             var replies = new ReplyCoordinator(h.workers, h.timers, Clock.systemUTC(),
+                     () -> new ExpressionSettings(true, 8, 3000, 10000, 350, 1, 16))) {
+            var references = mock(IAgentMemoryReferences.class);
+            var pendingReference = new CompletableFuture<MemoryNamespaceReference>();
+            var entered = new CountDownLatch(1);
+            when(references.resolve(any())).thenAnswer(call -> {
+                entered.countDown();
+                return pendingReference;
+            });
+            var attempts = mock(ICommandAttemptStore.class);
+            try (var gateway = new AgentCommandGateway(new AgentFactory(h.registry), h.registry, h.mailbox, h.mailbox,
+                    scope -> h.config.toPolicy(), h.bridge, references, h.bindings, h.namespaces, () -> 1, h.timers, attempts)) {
+                gateway.setExpressions(Objects.requireNonNull(h.expression).sending, replies);
+                var source = h.source("甲", CommandPermission.MEMBER, "/agent chat 等待资料");
+                var pending = gateway.chat(source, "等待资料", null);
+                assertTrue(entered.await(5, TimeUnit.SECONDS));
+                pending.toCompletableFuture().get(5, TimeUnit.SECONDS);
+                assertEquals(1, h.client.getSentRawMessages().stream().filter(text -> text.contains("Agent 请求超时")).count());
+                gateway.chat(source, "等待资料", null).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                var actor = NativeCommandBridge.actor(source);
+                pendingReference.complete(h.references.resolve(actor.scope()).toCompletableFuture().get(5, TimeUnit.SECONDS));
+                // 后项完成证明前项实际已收尾，而不仅是超时观察已结束。
+                replies.execute("验证收尾", actor, UUID.randomUUID(),
+                        source.getClient().getTeaNekoToolbox().getSelfPlatformId().orElse(""),
+                        control -> CompletableFuture.completedStage(null)).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                verifyNoInteractions(attempts);
+                assertTrue(h.prompts.isEmpty());
+                assertEquals(1, h.client.getSentMessages().size());
+            }
         }
     }
     /**
@@ -1094,6 +1141,26 @@ class AgentCommandIntegrationTest {
         return new org.zexnocs.teanekoclient.agent.service.AgentOperations(h.mailbox, new AgentFactory(h.registry), h.registry,
                 scope -> h.registered.get() ? h.config.toPolicy() : AgentScopePolicy.unregistered(), h.references, h.bridge, h.attempts, access,
                 h.personalities, (org.zexnocs.teanekoagent.component.personality.IPersonalityLearningTarget) h.personalities, h.workers, h.timers);
+    }
+
+    /**
+     * 2026/11/05：自动聊天格式失败有可读回执，关闭配置后仍诊断但不再发消息。
+     * @throws Exception 当真实离线流水线未按时结束时
+     */
+    @Test
+    void automaticFailureExplainsProtocolAndHonorsReplySwitch() throws Exception {
+        try (var h = new Harness(false, true, true); var automatic = automatic(h)) {
+            automatic.installFailureReplies(new org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy(h.configs));
+            h.automaticAnswer.set("⟦TNK:wrong|BEGIN|protocol=teaneko:expression|v=1⟧\n错误信封");
+            assertFalse(receiver(h, automatic).receive(incoming(h, "甲", "你好", true))
+                    .toCompletableFuture().get(10, TimeUnit.SECONDS));
+            assertTrue(h.client.getSentRawMessages().stream().anyMatch(text -> text.contains("模型回复格式错误")));
+            int messages = h.client.getSentMessages().size();
+            h.config.setFailureReplyEnabled(false);
+            assertFalse(receiver(h, automatic).receive(incoming(h, "乙", "再试一次", true))
+                    .toCompletableFuture().get(10, TimeUnit.SECONDS));
+            assertEquals(messages, h.client.getSentMessages().size());
+        }
     }
     /**
      * 2026/11/03：真实模型、邮箱、历史、命令和自动入口完成同一表达分段与回执闭环。

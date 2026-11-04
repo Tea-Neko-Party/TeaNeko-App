@@ -36,11 +36,13 @@ import java.util.regex.Pattern;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：协议头识别与控制行解析统一允许边缘空白。
  *
+ * <br>2026/11/05：格式失败使用安全原因类型，允许日志与用户回执准确解释。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public final class ExpressionRuntime {
     public static final String FRAGMENT = "expression_contract";
@@ -116,17 +118,30 @@ public final class ExpressionRuntime {
         String text = answer.getContents().stream().filter(c -> c.getContentPart() instanceof org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart)
                 .map(c -> ((org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart)c.getContentPart()).getText()).collect(java.util.stream.Collectors.joining("\n")).strip();
         boolean adopted = input.fragments().stream().anyMatch(f -> f.name().equals(FRAGMENT));
-        if (!adopted) { if (text.startsWith("⟦TNK:")) { throw new IllegalArgumentException("本轮没有可用的表达协议合同。"); } return CompletableFuture.completedStage(null); }
+        // 2026/11/05：格式错误只携带可信固定原因，不记录模型原文。
+        if (!adopted) {
+            if (text.startsWith("⟦TNK:")) {
+                throw new ReplyProtocolException("本轮没有可用的表达协议合同。");
+            }
+            return CompletableFuture.completedStage(null);
+        }
         if (!enabled(request)) { throw new IllegalStateException("本轮拟人表达已经关闭。"); }
         var key = new ReplyPlans.ProtocolKey(text.startsWith("{") && text.contains("\"teaneko_reply\"") ? "teaneko:json-reply" : "teaneko:plain",1);
         boolean directed = text.startsWith("⟦TNK:");
         if (directed) {
-            var first = text.lines().findFirst().orElse(""); var match = HEADER.matcher(first);
-            if (!match.matches() || !match.group(1).equals(nonce(request.requestId()))) { throw new IllegalArgumentException("回复协议头或当轮标识无效。"); }
+            // 2026/11/05：只规范化协议头的边缘空白，不改变原始正文或插件收到的答案。
+            var first = text.lines().findFirst().orElse("").strip();
+            var match = HEADER.matcher(first);
+            if (!match.matches() || !match.group(1).equals(nonce(request.requestId()))) {
+                throw new ReplyProtocolException("回复协议头或当轮标识无效。");
+            }
             key = new ReplyPlans.ProtocolKey(match.group(2), Integer.parseInt(match.group(3)));
         }
         var tokens = new ArrayList<PluginRegistry.Token>(); var drafts = registry.parse(key, answer, nonce(request.requestId()), tokens);
-        var limits = settings(); if (drafts.size() > (directed ? limits.maxMessages() : 32)) { throw new IllegalArgumentException("回复消息数量超出当前策略。"); }
+        var limits = settings();
+        if (drafts.size() > (directed ? limits.maxMessages() : 32)) {
+            throw new ReplyProtocolException("回复消息数量超出当前策略。");
+        }
         var steps = new ArrayList<ReplyPlans.Step>(); int total = 0;
         // 2026/11/03：仅本次交互回执可授权资源；异步链尚未执行时不能用 steps.size 判断首段。
         var context = new ReplyCompileContext(request, input, control,interaction.tools(),drafts);
@@ -136,7 +151,9 @@ public final class ExpressionRuntime {
             int delay = draft.waitMillis() == null ? (first ? 0 : limits.defaultDelay() + 40 * Math.min(36, draft.content() instanceof ReplyPlans.Text(
                     String value
             ) ? value.codePointCount(0, value.length()) : 8)) : draft.waitMillis();
-            if (delay < 0 || delay > 60000) { throw new IllegalArgumentException("回复等待无效。"); }
+            if (delay < 0 || delay > 60000) {
+                throw new ReplyProtocolException("回复等待无效。");
+            }
             delay = Math.min(delay, Math.min(first ? Math.min(500,limits.maxStepDelay()) : limits.maxStepDelay(), limits.maxTotalDelay()-total));
             total += delay; final int fixedDelay = delay;
             compiled = compiled.thenComposeAsync(ignored -> registry.prepareAsync(context, draft, fixedDelay, tokens, executor)
@@ -164,19 +181,26 @@ public final class ExpressionRuntime {
     }
     /**
      * 编译时生成一次不可变历史正文，重放不重新调用处理器。
+     * 2026/11/05：容量失败按固定安全原因上报，不包含语义正文或媒体内容。
      * @param steps 完整步骤
      * @return 冻结语义消息
      * @throws IllegalArgumentException 当整体正文、图片或编码容量超限时
      */
     private ILLMAssistantMessage semanticAnswer(List<ReplyPlans.Step> steps) {
-        if (steps.stream().mapToLong(step -> step.text().length()).sum() > 64000) { throw new IllegalArgumentException("回复语义文本超出总容量。"); }
+        if (steps.stream().mapToLong(step -> step.text().length()).sum() > 64000) {
+            throw new ReplyProtocolException("回复语义文本超出总容量。");
+        }
         var contents = steps.stream().map(registry::history).toList();
         var images = contents.stream().map(ILLMContent::getContentPart)
                 .filter(org.zexnocs.teanekoagent.component.llm.framework.message.content.ImageLLMContentPart.class::isInstance)
                 .map(org.zexnocs.teanekoagent.component.llm.framework.message.content.ImageLLMContentPart.class::cast).toList();
-        if (images.size() > 4 || images.stream().mapToLong(image -> image.getUrl().length()).sum() > 2097152) { throw new IllegalArgumentException("回复媒体超出总容量。"); }
+        if (images.size() > 4 || images.stream().mapToLong(image -> image.getUrl().length()).sum() > 2097152) {
+            throw new ReplyProtocolException("回复媒体超出总容量。");
+        }
         var answer = (ILLMAssistantMessage) LLMProtocolSnapshots.messages(List.of(LLMAssistantMessage.builder().contents(contents).build())).getFirst();
-        if (codec.signature(List.of(answer)).bytes() > 3000000) { throw new IllegalArgumentException("回复总投影超出字节预算。"); }
+        if (codec.signature(List.of(answer)).bytes() > 3000000) {
+            throw new ReplyProtocolException("回复总投影超出字节预算。");
+        }
         return answer;
     }
     /**

@@ -52,10 +52,13 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：明确非空选项断言并以两节点引用环验证拒绝行为，简化泛型推断。
+ * <br>2026/11/05：验证初始化遇到已停止控制时不请求模型且只记录终止状态。
+ * <br>2026/11/05：验证安全诊断传递与响应正文脱敏。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class LLMInteractionServiceTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -385,6 +388,20 @@ class LLMInteractionServiceTest {
         }
     }
 
+    /** 2026/11/05：初始化前已停止的请求保留取消结果，不记录为供应商故障。 */
+    @Test
+    void reportsStoppedInitializationWithoutModelFailure() {
+        try (var parent = runtime.parent(settings.limits())) {
+            parent.cancel();
+            var result = service.interact(prompt(), new LLMToolSet(new ObjectMapper(), List.of()), context(parent))
+                    .toCompletableFuture().join();
+            assertEquals(CANCELLED, result.status());
+            verifyNoInteractions(models);
+            verify(logger, never()).error(anyString(), anyString());
+            verify(logger).info(eq(LLMInteractionService.class.getName()), contains("原因=CANCELLED"));
+        }
+    }
+
     /** 验证在途模型取消会及时完成结果，迟到响应不推进工具或后续请求。 */
     @Test void cancelsPendingModelAndIgnoresLateResponse() {
         try (var parent = runtime.parent(settings.limits())) {
@@ -431,6 +448,10 @@ class LLMInteractionServiceTest {
             runtime.runAll();
             var result = pending.toCompletableFuture().join();
             assertEquals(FAILED, result.status());
+            // 2026/11/05：HTTP 原因进入结果且不携带第三方正文。
+            assertNotNull(result.failure());
+            assertTrue(result.failure().description().contains("HTTP 400"));
+            assertFalse(result.failure().toString().contains("测试敏感异常"));
             assertEquals(1, result.modelAttempts());
             assertTrue(result.attempts().getFirst().response().isEmpty());
             assertFalse(result.toString().contains("测试敏感异常"));

@@ -42,10 +42,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：将表达解析与 LLM 交互失败保留到轮次结果。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 final class AgentTurn implements AutoCloseable {
     final AgentHandle handle;
@@ -337,9 +339,17 @@ final class AgentTurn implements AutoCloseable {
         }
         var budget = current == null ? lifetime.budget() : current.budget();
         var projection = promptTranscript;
+        // 2026/11/05：上下文拒绝会终止执行控制，保留首个真实原因而非后续停止包装。
+        var cause = contextFailure.get();
+        if (cause == null) {
+            cause = failure;
+        }
         return new AgentRunResult(handle.id(), request.requestId(), status, Optional.ofNullable(denied == null ? access : denied),
                 Optional.ofNullable(interaction), budget.snapshot(), request.conversation(), memoryReference,
-                projection != null && projection.interaction() == interaction ? projection : null);
+                projection != null && projection.interaction() == interaction ? projection : null)
+                // 2026/11/05：表达编译等管线错误与 LLM 失败采用同一安全诊断。
+                .withFailure(cause != null ? org.zexnocs.teanekocore.logger.FailureDiagnostic.from(cause)
+                        : interaction == null ? null : interaction.failure());
     }
 
     /**

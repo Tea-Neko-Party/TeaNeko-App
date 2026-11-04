@@ -42,14 +42,27 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：持久化准入前后复核协调截止时间，避免已到期的自动回复继续启动模型。
+ *
+ * <br>2026/11/05：自动回复失败可提示具体原因，取消和撤权不补发。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Service
 public final class AgentAutomaticGateway implements AutoCloseable {
+    private java.util.function.Predicate<AgentScope> failureReplies = scope -> true;
+
+    /**
+     * 2026/11/05：安装实时聊天回执策略，独立宿主保持默认开启。
+     * @param policy 当前配置读取入口
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void installFailureReplies(org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy policy) {
+        failureReplies = policy::enabled;
+    }
     private final IAgentFactory factory;
     private final IAgentRegistry registry;
     private final IAgentService agents;
@@ -107,7 +120,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
     }
 
     /**
-     * 取得持久化唯一准入后生成，失败不对聊天发送错误噪声；票据释放由调用方负责。
+     * 取得持久化唯一准入后生成，失败按当前配置发送安全原因；票据释放由调用方负责。
      * 原生命令租约由异步工作链释放，覆盖模型、工具和实际发送，不能在同步作用域提前关闭。
      * @param data 实际原生消息
      * @param text 当前原文中的文本部分，不包含引用正文
@@ -135,12 +148,14 @@ public final class AgentAutomaticGateway implements AutoCloseable {
             var actor = ticket.signal().actor();
             var id = requestId(actor);
             return coordinator.execute(replyOwner, actor, id, data.getClient().getTeaNekoToolbox().getSelfPlatformId().orElse(""),
-                    control -> respondPrepared(data, input, ticket, captured, control)).whenComplete((sent, failure) -> {
+                    control -> respondPrepared(data, input, ticket, captured, control))
+                    .whenComplete((sent, failure) -> {
                         if (failure != null) { access.release(ticket); triggers.finish(ticket, false); }
                     });
         }
         return respondPrepared(data, input, ticket, captured, null);
     }
+
     /**
      * 2026/11/03：保留原持久化准入，在真实顺序位置执行生成与发送。
      * 2026/11/03：租约只赋值一次，完整异步交付和同步装配失败分别释放，不提前关闭。
@@ -164,6 +179,10 @@ public final class AgentAutomaticGateway implements AutoCloseable {
                     ? references.resolve(actor.scope())
                     : references.verify(captured.reference()).thenApply(ignored -> captured.reference());
             return fixed.thenCompose(reference -> {
+                // 2026/11/05：异步资料查询结束后不得继续提交已经停止的请求。
+                if (control != null) {
+                    control.checkActive();
+                }
                 triggers.verify(ticket);
                 var attempt = new ICommandAttemptStore.Attempt(id, "automatic-entry", actor, reference, input.digest(),
                         ICommandAttemptStore.Kind.CHAT_ENTRY);
@@ -174,6 +193,10 @@ public final class AgentAutomaticGateway implements AutoCloseable {
 
                     CompletionStage<Boolean> work;
                     try {
+                        // 2026/11/05：准入写入期间到期时仍收尾账本，但不再发起模型执行。
+                        if (control != null) {
+                            control.checkActive();
+                        }
                         triggers.verify(ticket);
                         access.bind(ticket);
                         var target = instance();
@@ -229,6 +252,30 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      */
     private CompletionStage<Boolean> send(ITeaNekoMessageData data, AgentHandle target, AgentRunRequest request,
             AgentRunResult result, AgentTriggerGate.Ticket ticket, @Nullable ExecutionControl control) {
+        // 2026/11/05：失败也经原身份、票据、启用和停止检查；提示不写入模型对话历史。
+        if (result.status() != AgentRunResult.Status.SUCCESS) {
+            // 2026/11/05：跳过、取消和过期不是模型故障，不向已经失效的聊天补发通知。
+            if (result.status() == AgentRunResult.Status.SKIPPED
+                    || result.status() == AgentRunResult.Status.CANCELLED
+                    || result.status() == AgentRunResult.Status.STALE_CONVERSATION) {
+                return CompletableFuture.completedStage(false);
+            }
+            synchronized (this) {
+                if (closed) {
+                    return CompletableFuture.completedStage(false);
+                }
+            }
+            if (control != null) {
+                control.checkActive();
+            }
+            triggers.verify(ticket);
+            if (!failureReplies.test(request.actor().scope())
+                    || !request.actor().equals(NativeCommandBridge.actor(data))) {
+                return CompletableFuture.completedStage(false);
+            }
+            return data.getMessageSender().sendReplyMessageAsync("Agent 未能回复：" + result.failureDescription())
+                    .thenApply(ignored -> false);
+        }
         // 2026/11/03：表达计划复用原票据和目标守卫，完成段数不通过重解析推断。
         if (result.replyPlan() != null) {
             if (result.replyPlan().steps().isEmpty()) { return CompletableFuture.completedStage(false); }

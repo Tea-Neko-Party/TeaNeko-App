@@ -31,16 +31,32 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：通过端点声明接入统一安全错误映射。
  *
+ * <br>2026/11/05：管理员可按房间版本删除聊天。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @RestController
 // 2026/11/05：主动接入统一安全错误映射，保持原认证与 HTTP 路径。
 @WebManagedEndpoint
 @RequestMapping("/api/v1/chat")
 public final class WebChatController {
+    /**
+     * 2026/11/05：删除独立网页聊天，继续使用真实管理员与 CSRF，不允许任意数据库目标。
+     * @param room 原房间标识
+     * @param revision 页面确认的成员版本
+     * @param request 当前请求
+     * @param authentication 真实管理员
+     * @return 实际删除标志
+     */
+    @DeleteMapping("/rooms/{room}")
+    public CompletionStage<Map<String, Boolean>> delete(@PathVariable String room, @RequestParam long revision,
+            HttpServletRequest request, Authentication authentication) {
+        return service.delete(room, revision, sessions.capture(request, authentication))
+                .thenApply(deleted -> Map.of("deleted", deleted));
+    }
     /**
      * @param room 已保存的房间引用
      * @param request 当前请求

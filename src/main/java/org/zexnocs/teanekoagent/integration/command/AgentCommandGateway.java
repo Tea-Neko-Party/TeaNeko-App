@@ -23,14 +23,12 @@ import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
 import org.zexnocs.teanekoagent.runtime.conversation.IAgentConversationControl;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
 /**
@@ -45,14 +43,27 @@ import java.util.stream.Collectors;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：原生命令显式提示超时或取消，异步准入及交付前复核停止，禁止迟到重复发送。
+ *
+ * <br>2026/11/05：按聊天配置发送具体失败原因，保留停止与关闭边界。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Service
 public final class AgentCommandGateway implements AutoCloseable {
+    private java.util.function.Predicate<AgentScope> failureReplies = scope -> true;
+
+    /**
+     * 2026/11/05：实时读取回执开关，不因创建 Agent 实例冻结聊天配置。
+     * @param policy 当前配置策略
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void installFailureReplies(org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy policy) {
+        failureReplies = policy::enabled;
+    }
     private final IAgentFactory factory;
     private final IAgentRegistry registry;
     private final IAgentService agents;
@@ -150,11 +161,46 @@ public final class AgentCommandGateway implements AutoCloseable {
             try { started = coordinator == null ? startChat(data, request, target, null)
                     : coordinator.execute(replyOwner, actor, id, data.getClient().getTeaNekoToolbox().getSelfPlatformId().orElse(""),
                             control -> startChat(data, request, target, control)); } catch (RuntimeException failure) { started = CompletableFuture.failedStage(failure); }
-            started.whenComplete((ignored, failure) -> {
-                if (failure == null) { chat.completion().complete(null); } else { chat.completion().completeExceptionally(failure); }
+            // 2026/11/05：预期停止在原生命令边界转为单次提示，其他故障仍向任务调用方传播。
+            started.exceptionallyCompose(failure -> reportStopped(data, actor, failure)).whenComplete((ignored, failure) -> {
+                if (failure == null) {
+                    chat.completion().complete(null);
+                } else {
+                    chat.completion().completeExceptionally(failure);
+                }
             });
             return chat.completion().minimalCompletionStage();
         } catch (RuntimeException invalid) { return reply(data, "Agent 当前不可执行，请检查注册、配置和运行状态。"); }
+    }
+
+    /**
+     * 2026/11/05：把原生用户请求的预期停止映射为提示，不吞掉其他异常或在关闭后发送。
+     * @param data 原发送来源
+     * @param actor 原身份及作用域
+     * @param failure 观察阶段的失败
+     * @return 单次提示的真实发送阶段，非停止异常保持失败
+     */
+    private CompletionStage<Void> reportStopped(ITeaNekoMessageData data, AgentActorContext actor, Throwable failure) {
+        Throwable cause = failure;
+        while ((cause instanceof CompletionException || cause instanceof ExecutionException) && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        if (!(cause instanceof ExecutionStoppedException stopped)) {
+            return CompletableFuture.failedStage(failure);
+        }
+        synchronized (chats) {
+            if (closed) {
+                return CompletableFuture.completedStage(null);
+            }
+        }
+        if (stopped.reason() == ExecutionControl.StopReason.CLOSED || !scopes.read(actor.scope()).enabled()
+                || !failureReplies.test(actor.scope())
+                || !actor.equals(NativeCommandBridge.actor(data))) {
+            return CompletableFuture.completedStage(null);
+        }
+        return reply(data, stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED
+                ? "Agent 请求超时（包含排队、生成和发送等待），已停止后续回复；如需重试请发送新消息。"
+                : "Agent 请求已取消。");
     }
     /**
      * 先提交原生消息的唯一准入，重启后不恢复旧模型循环或以新工具 ID 重跑同一消息。
@@ -168,17 +214,29 @@ public final class AgentCommandGateway implements AutoCloseable {
     private CompletionStage<Void> startChat(ITeaNekoMessageData data, AgentRunRequest request, AgentHandle target,
             @Nullable ExecutionControl control) {
         return references.resolve(request.actor().scope()).thenCompose(reference -> {
+            // 2026/11/05：持久化查询可能跨过截止时间，到期后不再申请新的执行记录。
+            if (control != null) {
+                control.checkActive();
+            }
             requireEnabled(request.actor().scope());
             var attempt = new ICommandAttemptStore.Attempt(request.requestId(), "entry", request.actor(), reference,
                     StableDigest.sha256(Objects.requireNonNull(request.userText()).text()), ICommandAttemptStore.Kind.CHAT_ENTRY);
             return attempts.claim(attempt).thenCompose(claim -> {
                 if (!claim.acquired()) {
+                    // 2026/11/05：重复请求的提示也不能越过本次已终止的观察。
+                    if (control != null) {
+                        control.checkActive();
+                    }
                     return reply(data, "该消息已有处理记录（" + claim.receipt().status()
                             + "），不会重新执行模型或命令；如需新操作请发送新消息。");
                 }
 
                 CompletionStage<Void> execution;
                 try {
+                    // 2026/11/05：准入写入后再次复核；到期沿原账本收尾，不再启动模型。
+                    if (control != null) {
+                        control.checkActive();
+                    }
                     requireEnabled(request.actor().scope());
                     synchronized (chats) {
                         if (closed) {
@@ -318,8 +376,17 @@ public final class AgentCommandGateway implements AutoCloseable {
     private CompletionStage<Void> deliver(ITeaNekoMessageData data, AgentHandle target, AgentRunRequest request, AgentRunResult result,
             @Nullable ExecutionControl control) {
         synchronized (chats) { if (closed) { return CompletableFuture.completedStage(null); } }
+        // 2026/11/05：协调器已报告停止后，模型迟到的取消结果不能再发送第二条状态消息。
+        if (control != null) {
+            control.checkActive();
+        }
         requireEnabled(NativeCommandBridge.actor(data).scope());
-        if (result.status() != AgentRunResult.Status.SUCCESS) { return reply(data, "Agent 请求结束：" + result.status()); }
+        // 2026/11/05：真实失败原因由模型或管线保留，不能只把枚举值发送给用户。
+        if (result.status() != AgentRunResult.Status.SUCCESS) {
+            return failureReplies.test(request.actor().scope())
+                    ? reply(data, "Agent 请求结束：" + result.status() + "；" + result.failureDescription())
+                    : CompletableFuture.completedStage(null);
+        }
         // 2026/11/03：冻结计划只复核不重解析，真实发送仍使用原入口检查。
         if (result.replyPlan() != null) {
             if (expressionDelivery == null || control == null) { return CompletableFuture.failedStage(new IllegalStateException("表达计划缺少实际交付装配。")); }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 2026/11/04：模型样板来自已注册供应商适配器，新增只进入当前草稿，保存与应用仍分开。
+// 2026/11/04：模型样板来自已注册供应商适配器，新增在确认后直接保存，保存与应用仍分开。
 import {computed, ref} from 'vue'
 import {ElAlert, ElButton, ElDialog, ElInput, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import type {CredentialInput} from './FileFieldEditor.vue'
@@ -79,18 +79,21 @@ function add() {
     <ElDialog v-model="open" :title="picking ? '添加模型' : custom ? '自定义模型' : `添加 ${route?.name ?? '模型'} 样板`" width="min(620px, 94vw)" @closed="secret = ''">
       <div v-if="picking"><p class="small muted">选择类型，自动填写协议连接。同一类型可添加多次。</p><div class="model-template-grid"><button v-for="item in catalog.routes" :key="item.id" class="model-template-button" @click="begin(item.id)"><ModelIcon :icon="item.icon" :name="item.name" /><span>{{ item.name }}</span><span class="muted">＋</span></button><ElButton :disabled="!available.length" @click="begin(available[0]!.id, true)">自定义模型</ElButton></div></div>
       <div v-else class="model-create-form">
+        <!-- 2026/11/05：连接信息先于路由和模型参数显示；供应商样板地址只读，自定义仍可编辑。 -->
         <label>协议适配器<ElSelect :model-value="routeId" :disabled="!custom" aria-label="新增模型协议适配器" @update:model-value="value => selectRoute(String(value))"><ElOption v-for="item in available" :key="item.id" :value="item.id" :label="item.name" /></ElSelect></label>
+        <label>服务地址<ElInput v-model="form.url" :readonly="!custom" aria-label="新增模型服务地址" placeholder="https://example.com/v1" /></label>
+        <label>接口路径<ElInput v-model="form.path" :readonly="!custom" aria-label="新增模型接口路径" placeholder="/chat/completions" /></label>
         <label>路由标识<ElInput v-model="configurationId" aria-label="新增模型路由标识" placeholder="例如 deepseek-chat" /></label>
         <p class="config-description">{{ route?.description }}</p>
         <div><label>模型名称</label><ModelNamePicker v-model="form.model" :names="route?.models ?? []" label="新增模型名称" @select="value => { const capacity = route?.contextWindows?.[value]; if (capacity) form.context = String(capacity) }" /></div>
-        <template v-if="custom"><label>服务地址<ElInput v-model="form.url" aria-label="新增模型服务地址" placeholder="https://example.com/v1" /></label><label>接口路径<ElInput v-model="form.path" aria-label="新增模型接口路径" placeholder="/chat/completions" /></label></template>
         <div class="model-create-numbers"><label>最大输出 token<ElInput v-model="form.output" type="number" aria-label="新增模型最大输出" /></label><label>上下文总容量<ElInput v-model="form.context" type="number" aria-label="新增模型上下文容量" /></label></div>
         <label>输入上下文占比<ElInput v-model="form.ratio" type="number" aria-label="新增模型输入比例" /></label>
-        <label>API key 输入方式<ElSelect v-model="inputId" aria-label="新增模型密钥输入方式" @change="secret = ''"><ElOption v-for="mode in catalog.inputs" :key="mode.id" :value="mode.id" :label="mode.name" /></ElSelect></label>
-        <label>API key<ElInput v-model="secret" :type="input?.secret ? 'password' : 'text'" :placeholder="input?.placeholder" aria-label="新增模型密钥" autocomplete="off" /></label><p class="small muted">{{ input?.description }} 留空可先保存样板，配置有效密钥后才能调用。</p>
+        <!-- 2026/11/05：新增模型与编辑表单统一使用 API 密钥名称。 -->
+        <label>API 密钥输入方式<ElSelect v-model="inputId" aria-label="新增模型密钥输入方式" @change="secret = ''"><ElOption v-for="mode in catalog.inputs" :key="mode.id" :value="mode.id" :label="mode.name" /></ElSelect></label>
+        <label>API 密钥<ElInput v-model="secret" :type="input?.secret ? 'password' : 'text'" :placeholder="input?.placeholder" aria-label="新增模型密钥" autocomplete="off" /></label><p class="small muted">{{ input?.description }} 留空可先保存样板，配置有效密钥后才能调用。保存会重新排版 YAML、不保留原注释；运行应用仍需单独确认。</p>
         <label class="model-default-toggle">设为默认模型<ElSwitch v-model="makeDefault" aria-label="新增后设为默认模型" /></label>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" />
-        <div class="editor-actions"><ElButton @click="secret = ''; picking = true">返回</ElButton><ElButton @click="open = false">取消</ElButton><ElButton type="primary" @click="add">加入本次修改</ElButton></div>
+        <div class="editor-actions"><ElButton @click="secret = ''; picking = true">返回</ElButton><ElButton @click="open = false">取消</ElButton><ElButton type="primary" @click="add">保存模型</ElButton></div>
       </div>
     </ElDialog>
   </div>

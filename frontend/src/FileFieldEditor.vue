@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// 2026/11/04：普通与模型表单共用局部字段编辑；原秘密只显示配置状态。
+// 2026/11/05：普通与模型表单共用局部字段编辑；原敏感值只显示配置状态，API 密钥单独命名。
 import {computed, ref, watch} from 'vue'
 import {ElInput, ElOption, ElSelect} from 'element-plus'
 
@@ -7,24 +7,34 @@ export interface FileField {path: string; label: string; description: string; ki
 export interface CredentialInput {id: string; name: string; description: string; prefix: string; suffix: string; pattern: string; secret: boolean; placeholder: string}
 const props = defineProps<{field: FileField; draft: {action: string; text: string}; disabled: boolean; advanced: boolean; inputs?: CredentialInput[]; choices?: {value: string; label: string}[]}>()
 const emit = defineEmits<{action: [value: string]; text: [value: string]; error: [value: string]}>()
-const inputId = ref('manual')
-const inputText = ref('')
+// 2026/11/05：只从本次草稿恢复输入方式，输入内容直接派生自草稿，保存释放时不残留第二份密钥。
+const inputId = ref(props.inputs?.find(input => (input.prefix || input.suffix)
+  && props.draft.text.startsWith(input.prefix) && props.draft.text.endsWith(input.suffix))?.id ?? 'manual')
 const credential = computed(() => props.field.path.endsWith('/api-key') && !!props.inputs?.length)
+const sensitiveName = computed(() => props.field.path.endsWith('/api-key') ? '密钥' : '敏感值')
 const mode = computed(() => props.inputs?.find(item => item.id === inputId.value) ?? props.inputs?.[0])
+const inputText = computed(() => {
+  const selected = mode.value
+  return props.draft.text && selected
+    ? props.draft.text.slice(selected.prefix.length, selected.suffix ? -selected.suffix.length : undefined)
+    : ''
+})
 const id = computed(() => 'file-' + props.field.path)
 
+/** 2026/11/05：按目录规则编码本次密钥或环境变量名，字段草稿是唯一输入状态。 */
 function encode(value: string) {
-  inputText.value = value
   const selected = mode.value!
   emit('error', value && !new RegExp(selected.pattern).test(value) ? `${props.field.label}：${selected.placeholder}` : '')
   emit('text', value ? selected.prefix + value + selected.suffix : '')
 }
+/** 2026/11/05：切换输入方式时丢弃上一次尚未保存的密钥输入。 */
 function chooseMode(value: string) {
   inputId.value = value
   encode('')
 }
 watch(() => props.draft.action, action => {
-  if (action !== 'REPLACE_SECRET') { inputText.value = ''; emit('error', '') }
+  // 2026/11/05：退出替换动作同时释放草稿，避免再次选择替换时提交不可见的旧密钥。
+  if (props.field.secret && action !== 'REPLACE_SECRET') { emit('text', ''); emit('error', '') }
 })
 </script>
 
@@ -32,7 +42,8 @@ watch(() => props.draft.action, action => {
   <div class="settings-field">
     <div><label :for="id">{{ field.label }}</label><span v-if="field.secret" class="field-source"> · {{ field.configured ? '已配置' : '未配置' }}</span><p class="config-description">{{ field.description }}</p><span v-if="advanced" class="field-source">{{ field.path }} · {{ field.source }}</span></div>
     <div class="file-input">
-      <ElSelect v-if="advanced || field.secret || !['KEEP', 'SET'].includes(draft.action)" :id="id + '-action'" :model-value="draft.action" :aria-label="`${field.label}修改方式`" :disabled="disabled" @update:model-value="value => emit('action', String(value))"><ElOption label="保持原值" value="KEEP" /><ElOption v-if="!field.secret" label="设置新值" value="SET" /><ElOption v-if="!field.secret" label="移除声明" value="REMOVE" /><ElOption v-if="field.secret" label="替换秘密" value="REPLACE_SECRET" /><ElOption v-if="field.secret" label="清除秘密" value="CLEAR_SECRET" /></ElSelect>
+      <!-- 2026/11/05：API 密钥动作使用密钥用语，密码等其他受保护字段统一称敏感值。 -->
+      <ElSelect v-if="advanced || field.secret || !['KEEP', 'SET'].includes(draft.action)" :id="id + '-action'" :model-value="draft.action" :aria-label="`${field.label}修改方式`" :disabled="disabled" @update:model-value="value => emit('action', String(value))"><ElOption label="保持原值" value="KEEP" /><ElOption v-if="!field.secret" label="设置新值" value="SET" /><ElOption v-if="!field.secret" label="移除声明" value="REMOVE" /><ElOption v-if="field.secret" :label="`替换${sensitiveName}`" value="REPLACE_SECRET" /><ElOption v-if="field.secret" :label="`清除${sensitiveName}`" value="CLEAR_SECRET" /></ElSelect>
       <template v-if="credential && draft.action === 'REPLACE_SECRET'">
         <ElSelect :model-value="mode?.id" :aria-label="`${field.label}输入方式`" :disabled="disabled" @update:model-value="value => chooseMode(String(value))"><ElOption v-for="input in inputs" :key="input.id" :value="input.id" :label="input.name" /></ElSelect>
         <ElInput :id="id" :model-value="inputText" :type="mode?.secret ? 'password' : 'text'" :placeholder="mode?.placeholder" :aria-label="field.label" :disabled="disabled" autocomplete="off" @update:model-value="encode" /><p class="small muted">{{ mode?.description }}</p>

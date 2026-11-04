@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.actuator.runtime;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.OperatingSystemMXBean;
@@ -16,10 +17,13 @@ import java.util.function.LongSupplier;
  * 按需采样 JDK 运行指标，最短间隔一秒，不启动后台线程，不依赖聊天平台或业务插件。
  * 首次 CPU 采样只建立基准；未知值保持为空，不用虚拟地址空间冒充进程常驻内存。
  *
+ * 修改记录：<br>
+ * 2026/11/05：采样工作目录所在磁盘，区分已用、总量及当前进程可用容量，不导出本地路径。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.1-l
  */
 @Component
 public final class MachineMonitor {
@@ -30,11 +34,16 @@ public final class MachineMonitor {
     private final RuntimeMXBean runtime;
     private final Clock clock;
     private final LongSupplier nanoTime;
+    // 2026/11/05：只观测程序所在卷，避免汇总挂载点时重复计算同一磁盘。
+    private final File diskDirectory;
     private @Nullable Snapshot current;
     private long sampledNanos;
     private long processNanos = -1;
 
-    /** 从当前 JVM 借用管理接口，不访问文件或启动调度任务。 */
+    /**
+     * 从当前 JVM 借用管理接口，不启动调度任务。
+     * 2026/11/05：磁盘容量在实际采样时读取，构造时只保留目录引用。
+     */
     public MachineMonitor() {
         this(ManagementFactory.getOperatingSystemMXBean(), ManagementFactory.getMemoryMXBean(),
                 ManagementFactory.getRuntimeMXBean(), Clock.systemUTC(), System::nanoTime);
@@ -42,6 +51,7 @@ public final class MachineMonitor {
 
     /**
      * 为测试及宿主组合提供明确的观测来源，借用对象的生命周期由调用方负责。
+     * 2026/11/05：保持原构造入口，默认观测工作目录所在磁盘。
      * @param operatingSystem JDK 系统指标，扩展能力不支持时只保留通用指标
      * @param memory JVM 内存指标
      * @param runtime JVM 运行时长
@@ -50,17 +60,34 @@ public final class MachineMonitor {
      */
     public MachineMonitor(OperatingSystemMXBean operatingSystem, MemoryMXBean memory, RuntimeMXBean runtime,
             Clock clock, LongSupplier nanoTime) {
+        this(operatingSystem, memory, runtime, clock, nanoTime, new File(".").getAbsoluteFile());
+    }
+
+    /**
+     * 2026/11/05：允许宿主或测试指定磁盘观测目录，目录及路径不进入公开快照。
+     *
+     * @param operatingSystem JDK 系统指标
+     * @param memory JVM 内存指标
+     * @param runtime JVM 运行时长
+     * @param clock 采样时间
+     * @param nanoTime 单调采样时钟
+     * @param diskDirectory 需要观测容量的已存在目录
+     */
+    public MachineMonitor(OperatingSystemMXBean operatingSystem, MemoryMXBean memory, RuntimeMXBean runtime,
+            Clock clock, LongSupplier nanoTime, File diskDirectory) {
         this.operatingSystem = operatingSystem;
         this.extendedSystem = operatingSystem instanceof com.sun.management.OperatingSystemMXBean bean ? bean : null;
         this.memory = memory;
         this.runtime = runtime;
         this.clock = clock;
         this.nanoTime = nanoTime;
+        this.diskDirectory = diskDirectory;
     }
 
     /**
      * 同一秒内复用不可变采样，防止并发页面把 CPU 统计窗口缩短到没有意义。
      * 进程 CPU 为两次采样间 CPU 时间除以经过时间和可用处理器数。
+     * 2026/11/05：磁盘与其他指标共享采样节流；无法取得容量时返回未知，不伪装为空盘。
      * @return 带真实观测时间的快照，不包含主机名、路径或其他进程信息
      */
     public synchronized Snapshot sample() {
@@ -80,10 +107,15 @@ public final class MachineMonitor {
         Long used = total != null && free >= 0 && free <= total ? total - free : null;
         var heap = memory.getHeapMemoryUsage();
         var nonHeap = memory.getNonHeapMemoryUsage();
+        Long diskTotal = positive(diskDirectory.getTotalSpace());
+        long diskFree = diskDirectory.getFreeSpace();
+        long diskUsable = diskDirectory.getUsableSpace();
+        Long diskUsed = diskTotal != null && diskFree >= 0 && diskFree <= diskTotal ? diskTotal - diskFree : null;
+        Long diskAvailable = diskTotal != null && diskUsable >= 0 && diskUsable <= diskTotal ? diskUsable : null;
         current = new Snapshot(clock.instant(), runtime.getUptime(), processors, warmingUp,
                 current == null ? 0 : Duration.ofNanos(elapsed).toMillis(), warmingUp ? null : systemPercent,
                 processPercent, heap.getUsed(), heap.getCommitted(), positive(heap.getMax()),
-                nonHeap.getUsed(), nonHeap.getCommitted(), used, total, null);
+                nonHeap.getUsed(), nonHeap.getCommitted(), used, total, null, diskUsed, diskTotal, diskAvailable);
         sampledNanos = now;
         processNanos = cpu;
         return current;
@@ -109,6 +141,9 @@ public final class MachineMonitor {
      * 当前采样的指标口径，JVM 容量与物理内存分别命名。
      * JDK 未公开进程常驻内存，当前实现明确返回空值。
      *
+     * 修改记录：<br>
+     * 2026/11/05：补充程序所在磁盘容量；已用不含文件系统保留的空闲空间。
+     *
      * @param observedAt 真实采样时间
      * @param uptimeMillis JVM 运行时长
      * @param processors JVM 可用处理器数
@@ -124,14 +159,19 @@ public final class MachineMonitor {
      * @param physicalUsedBytes 系统物理内存已用量，不含交换空间
      * @param physicalTotalBytes 系统物理内存总量
      * @param processResidentBytes 当前进程常驻物理内存，不支持时为空
+     * @param diskUsedBytes 工作目录所在卷的已用容量，无法读取时为空
+     * @param diskTotalBytes 工作目录所在卷的总容量，无法读取时为空
+     * @param diskUsableBytes 当前进程可用的磁盘容量，可能少于磁盘空闲量
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.7.1-l
+     * @version 4.8.1-l
      */
     public record Snapshot(Instant observedAt, long uptimeMillis, int processors, boolean cpuWarmingUp,
                            long cpuIntervalMillis, @Nullable Double systemCpuPercent, @Nullable Double processCpuPercent,
                            long heapUsedBytes, long heapCommittedBytes, @Nullable Long heapMaxBytes,
                            long nonHeapUsedBytes, long nonHeapCommittedBytes, @Nullable Long physicalUsedBytes,
-                           @Nullable Long physicalTotalBytes, @Nullable Long processResidentBytes) {}
+                           @Nullable Long physicalTotalBytes, @Nullable Long processResidentBytes,
+                           @Nullable Long diskUsedBytes, @Nullable Long diskTotalBytes,
+                           @Nullable Long diskUsableBytes) {}
 }

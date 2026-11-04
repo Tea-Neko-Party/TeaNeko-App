@@ -1,10 +1,14 @@
 <script setup lang="ts">
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
+// 2026/11/05：详细操作回执只在高级模式展示。
+import {useConsolePreferences} from './console-preferences'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
+
+const {advanced} = useConsolePreferences()
 
 export interface AgentTarget { client: string; account: string; target: string; name: string }
 interface Evidence { id: string; revision: number; subjectId: string; text: string; kind: string; locked: boolean; createdAt: string; updatedAt: string; time: unknown; client: string; sourceScope: string }
@@ -464,7 +468,7 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
       <ElButton type="danger" plain :disabled="busy || !!pending" @click="editLong(item, profile, true)">遗忘长期画像条目</ElButton>
       </ElCard>
       </template>
-    <ElCard v-if="receipt" shadow="never" class="operation-receipt">
+    <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt">
       <h3>原事务回执</h3>
       <p>操作 {{ receipt.operationId }} · {{ receipt.status === 'APPLIED' ? '已提交' : receipt.status === 'UNCHANGED' ? '无需变更' : receipt.status }}</p>
       <p>结果目标 {{ receipt.target }} · 版本 {{ receipt.revision }}</p>

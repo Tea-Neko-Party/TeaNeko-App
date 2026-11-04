@@ -13,6 +13,7 @@ import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 
 import java.util.*;
 
@@ -32,17 +33,70 @@ import java.util.*;
  * @param budgetUsage 交付时宿主共享总预算读数，派生轮次不把它冒充自身增量
  * @param conversation 会话拥有者固定的代次；独立执行或未准入时可为空，出站前仍需复核
  * @param memoryReference 实际固定的持久化空间引用；未启用此能力或解析失败时为空
+ * @param failure 可选的安全失败诊断，不含供应商原始正文
  * @param promptTranscript 可选已验证的本轮临时输入/历史投影，原交互诊断始终保留实际模型输入
  * <br>2026/11/03：公开已验证语义答案及固定表达计划，不改变原构造入口。
+ * <br>2026/11/05：轮次结果传递安全失败诊断与中文原因。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                              Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
                              Map<BudgetKey, ResourceBudget.Usage> budgetUsage, @Nullable AgentConversationStamp conversation,
-                             @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript) {
+                             @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript,
+                             @Nullable FailureDiagnostic failure) {
+    /**
+     * 2026/11/05：保持原结果构造签名，自动继承 LLM 已知的安全失败原因。
+     * @param agentId 实例
+     * @param requestId 请求
+     * @param status 状态
+     * @param access 门控结果
+     * @param interaction 交互结果
+     * @param budgetUsage 预算
+     * @param conversation 会话代次
+     * @param memoryReference 记忆引用
+     * @param promptTranscript 已验证投影
+     */
+    public AgentRunResult(EntityId agentId, UUID requestId, Status status,
+            Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
+            Map<BudgetKey, ResourceBudget.Usage> budgetUsage, @Nullable AgentConversationStamp conversation,
+            @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript) {
+        this(agentId, requestId, status, access, interaction, budgetUsage, conversation, memoryReference,
+                promptTranscript, interaction.map(LLMInteractionResult::failure).orElse(null));
+    }
+
+    /**
+     * 2026/11/05：保留流水线失败诊断，不保存 Throwable 或不可信错误文本。
+     * @param diagnostic 可选安全诊断
+     * @return 相同业务结果及诊断
+     */
+    public AgentRunResult withFailure(@Nullable FailureDiagnostic diagnostic) {
+        return new AgentRunResult(agentId, requestId, status, access, interaction, budgetUsage, conversation,
+                memoryReference, promptTranscript, diagnostic);
+    }
+
+    /** @return 2026/11/05：用户可读的失败原因，缺少异常时使用明确状态解释 */
+    public String failureDescription() {
+        if (failure != null) {
+            return failure.description();
+        }
+        return switch (status) {
+            case CONFIGURATION_ERROR -> "模型或 Agent 配置不可用，请检查路由、参数和组件装配。";
+            case INVALID_INPUT -> "模型输入不符合当前协议或能力限制。";
+            case INVALID_RESPONSE -> "模型返回了无法解析的响应。";
+            case EMPTY_OUTPUT -> "模型没有返回可发送的内容。";
+            case TRUNCATED -> "模型输出被截断，请检查输出额度和上下文容量。";
+            case REFUSED -> "模型拒绝了本次请求。";
+            case BUDGET_EXCEEDED -> "本轮调用次数或预算不足。";
+            case TIMED_OUT, QUEUE_TIMED_OUT -> "请求超过允许的等待或执行时限。";
+            case CANCELLED -> "请求已取消。";
+            case SKIPPED -> "当前聊天或请求未通过执行条件。";
+            default -> "请求未完成，状态：" + status;
+        };
+    }
     /**
      * 保留没有临时 Prompt 投影的既有结果构造。
      * @param agentId 实际实例
@@ -106,6 +160,7 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      * @param conversation 可选可信会话代次
      * @param memoryReference 可选实际空间引用
      * @param promptTranscript 可选已验证历史投影，必须绑定同一份原始交互
+     * @param failure 可选安全失败诊断
      * @throws NullPointerException 当必需结果字段为空时
      * @throws IllegalArgumentException 当成功结果缺少成功交互或准入、代次属于其他实例，或会话与空间作用域不一致时
      */

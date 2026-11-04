@@ -43,10 +43,13 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：执行控制的正常终止记录为状态日志，不再误报模型交互故障。
+ * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  * @see LLMInteractionExecution
  */
 public final class LLMInteractionService implements ILLMInteractionService {
@@ -112,7 +115,16 @@ public final class LLMInteractionService implements ILLMInteractionService {
      */
     private void reportFailure(UUID requestId, String phase, Throwable failure) {
         if (logger == null) { return; }
-        try { logger.error(LLMInteractionService.class.getName(), "LLM 交互失败。请求=" + requestId + "，阶段=" + phase + "，" + FailureDiagnostic.from(failure)); }
+        // 2026/11/05：只将明确的生命周期终止降为状态，HTTP、协议及配置失败仍保留错误诊断。
+        try {
+            if (unwrap(failure) instanceof ExecutionStoppedException stopped) {
+                logger.info(LLMInteractionService.class.getName(), "LLM 交互已停止。请求=" + requestId
+                        + "，阶段=" + phase + "，原因=" + stopped.reason());
+            } else {
+                logger.error(LLMInteractionService.class.getName(), "LLM 交互失败。请求=" + requestId
+                        + "，阶段=" + phase + "，" + FailureDiagnostic.from(failure));
+            }
+        }
         catch (RuntimeException ignored) { /* 诊断失败不能改变业务结果。 */ }
     }
 
@@ -180,7 +192,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
                     messages, options, optionsPolicy, ids, (phase, failure) -> reportFailure(context.requestId(), phase, failure));
         } catch (RuntimeException failure) {
             reportFailure(context.requestId(), "交互初始化", failure);
-            return CompletableFuture.completedStage(empty(classify(failure)));
+            // 2026/11/05：初始化失败同样保留可公开原因，供命令及自动回复使用。
+            return CompletableFuture.completedStage(empty(classify(failure)).withFailure(FailureDiagnostic.from(failure)));
         }
         return run.next().handle((status, failure) -> {
             try {
@@ -266,10 +279,12 @@ public final class LLMInteractionService implements ILLMInteractionService {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
+     *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     private static final class Run {
         private final LLMInteractionExecution execution;
@@ -282,6 +297,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
         private ILLMAssistantMessage candidate;
         private int appendedTools;
         private @Nullable BudgetKey rejectedBudget;
+        // 2026/11/05：只保留脱敏结构，不跨轮次保存 Throwable 或供应商正文。
+        private @Nullable FailureDiagnostic failureDiagnostic;
 
         /**
          * 接管已固定的本轮数据，消息列表转为本轮私有追加容器。
@@ -404,6 +421,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
          * @return 可观察终止状态
          */
         private LLMInteractionResult.Status stopped(String phase, Throwable failure) {
+            // 2026/11/05：终止原因进入结果，HTTP 状态不再仅存在于后台日志。
+            failureDiagnostic = FailureDiagnostic.from(failure);
             var cause = unwrap(failure);
             if (cause instanceof BudgetExceededException exceeded) { rejectedBudget = exceeded.key(); }
             // 2026/11/02：正常取消/预算终止不当成未知错误；原异常文本始终不进入日志。
@@ -418,9 +437,11 @@ public final class LLMInteractionService implements ILLMInteractionService {
          * @return 不持有本轮运行状态的完整结果
          */
         private LLMInteractionResult finish(LLMInteractionResult.Status status) {
+            // 2026/11/05：交付结果保留安全诊断，调用方无需另查日志才能说明失败。
             appendTools();
             return new LLMInteractionResult(status, transcript, Optional.ofNullable(candidate), attempts,
-                    execution.toolResults(), execution.usage(), Optional.ofNullable(rejectedBudget));
+                    execution.toolResults(), execution.usage(), Optional.ofNullable(rejectedBudget))
+                    .withFailure(failureDiagnostic);
         }
     }
 }

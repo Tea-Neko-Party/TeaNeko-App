@@ -27,10 +27,13 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：消息回执区分持久化、事件通知与已登记业务完成事实。
  *
+ * <br>2026/11/05：原子删除网页房间、消息及附件，不影响共享记忆或配置。
+ * <br>2026/11/05：允许私聊原成员修改网页角色，保持唯一成员和原聊天归属。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.2-l
  */
 @Service
 public final class WebChatStore {
@@ -155,6 +158,7 @@ public final class WebChatStore {
     }
 
     /**
+     * 2026/11/05：私聊只允许更新原成员，不能通过成员管理增加、替换或移除私聊身份。
      * @param id 当前聊天
      * @param request 专用成员变更，不接受 DEBUG
      * @param guard 当前管理员会话
@@ -169,8 +173,9 @@ public final class WebChatStore {
                 return state.room(replay);
             }
             var room = state.room(id);
-            if (!room.kind().equals("GROUP") || !Set.of("UPSERT", "REMOVE").contains(request.action())) {
-                throw new IllegalArgumentException("只有群聊支持专用成员管理。");
+            if (room.kind().equals("PRIVATE") && (!request.action().equals("UPSERT")
+                    || !room.members().getFirst().profile().equals(request.member().profile()))) {
+                throw new IllegalArgumentException("私聊只允许更新原有成员，不能增加、替换或移除成员。");
             }
             if (room.revision() != request.revision()) {
                 throw new ConcurrentModificationException("网页成员版本已经变化。");
@@ -478,6 +483,51 @@ public final class WebChatStore {
             state.save();
             return true;
         }).thenAccept(ignored -> {});
+    }
+
+    /**
+     * 2026/11/05：目录锁内删除房间、消息与图片，保留共享档案、配置及跨聊天记忆。
+     * @param id 当前聊天标识
+     * @param revision 用户确认的成员版本
+     * @param guard 当前管理员会话
+     * @return 已删除为真，重复删除为假
+     * @throws ConcurrentModificationException 当确认后成员版本已经改变时
+     */
+    public CompletionStage<Boolean> deleteRoom(String id, long revision, Runnable guard) {
+        return transaction(guard, state -> {
+            var room = state.catalog.rooms().get(id);
+            if (room == null) {
+                return false;
+            }
+            if (room.revision() != revision) {
+                throw new ConcurrentModificationException("聊天成员已变化，请刷新后重新确认删除。");
+            }
+            var media = state.catalog.media().entrySet().iterator();
+            while (media.hasNext()) {
+                var entry = media.next();
+                if (entry.getValue().room().equals(id)) {
+                    deleteRow("media-" + entry.getKey(), "png");
+                    media.remove();
+                }
+            }
+            deleteRow("room-" + id, "journal");
+            state.catalog.rooms().remove(id);
+            state.save();
+            return true;
+        });
+    }
+
+    /**
+     * 2026/11/05：借用当前目录事务删除确切业务行，不绕过 EasyData 封装。
+     * @param name 业务 DTO 名称
+     * @param key 精确行键
+     */
+    private void deleteRow(String name, String key) {
+        var rows = data.apply(name).atomic();
+        var row = rows.find(key, EasyDataLock.WRITE);
+        if (row != null) {
+            rows.delete(row);
+        }
     }
 
     /**

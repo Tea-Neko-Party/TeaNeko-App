@@ -27,13 +27,34 @@ import java.util.concurrent.Semaphore;
  *
  * <br>2026/11/04：返回文件用途及原类型字段说明。
  *
+ * <br>2026/11/05：模块可在原授权及磁盘版本内读取私有检测快照。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.6-l
+ * @version 4.8.2-l
  */
 @Service
 public final class FileSettingsService {
+    /**
+     * 2026/11/05：在原文件授权和版本边界内读取模块私有快照；回调只做同步读取，不等待网络。
+     * @param id 已开放配置区
+     * @param revision 页面固定的磁盘版本
+     * @param guard 当前管理员会话
+     * @param reader 模块内部快照读取，不直接序列化返回秘密
+     * @param <T> 内部快照类型
+     * @return 原授权及文件锁内取得的快照
+     */
+    public <T> CompletionStage<T> inspect(String id, String revision, Runnable guard,
+            java.util.function.BiFunction<FileConfigDocument, FileConfigDocument.Snapshot, T> reader) {
+        return run(id, guard, (lease, document) -> {
+            var snapshot = document.read();
+            if (!snapshot.revision().equals(revision)) {
+                throw new ConcurrentModificationException("文件已经修改，请刷新后再检测。");
+            }
+            return reader.apply(document, snapshot);
+        });
+    }
     private static final String ACTOR = StableDigest.sha256("web.local-admin");
     private final FileSettingsDirectory adapters;
     private final IFileConfigService files;

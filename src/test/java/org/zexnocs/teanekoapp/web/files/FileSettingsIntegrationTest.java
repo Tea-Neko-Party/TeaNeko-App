@@ -4,8 +4,6 @@ package org.zexnocs.teanekoapp.web.files;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.core.env.MapPropertySource;
-import org.springframework.core.env.StandardEnvironment;
 import org.zexnocs.teanekoagent.component.llm.configuration.FileLLMCredentialResolver;
 import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigService;
 import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigurationEpoch;
@@ -44,6 +42,7 @@ import static org.mockito.Mockito.*;
 /**
  * 使用真实 YAML、文件锁、原子移动和私有账本验证关键保存与恢复路径，不启动机器人。
  *
+ * 修改记录：<br>
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：自动类型投影与明确的热更新适配器共享真实文件事务。
  *
@@ -57,10 +56,13 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/05：适配模型专属 configuration 包，保留原凭据和文件边界验证。
  *
+ * <br>2026/11/05：验证保存版本检测、失败脱敏、凭据释放与运行配置隔离。
+ * <br>2026/11/05：验证环境变量缺失的安全说明、原文件保留以及环境模板与小数的联合保存。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class FileSettingsIntegrationTest {
     /**
@@ -96,6 +98,98 @@ class FileSettingsIntegrationTest {
 
     @TempDir Path root;
     private final ObjectMapper mapper = new ObjectMapper();
+
+    /**
+     * 2026/11/05：缺少环境变量时明确拒绝且不改磁盘；变量就绪后占位符与小数可同时保存。
+     * @throws Exception 当隔离文件夹具创建失败时
+     */
+    @Test
+    void modelEnvironmentReplacementReportsMissingVariableAndPreservesTemplate() throws Exception {
+        var fixture = new Fixture(root);
+        var view = result(fixture.service.read("agent.models", () -> {}));
+        var change = new FileSettings.Change(UUID.randomUUID(), view.revision(), List.of(
+                new FileSettings.Edit("/models/0/api-key", "REPLACE_SECRET",
+                        mapper.valueToTree("${DEEPSEEK_API_KEY}")),
+                new FileSettings.Edit("/models/0/context-input-ratio", "SET", mapper.valueToTree(0.75))));
+        var rejected = assertThrows(java.util.concurrent.CompletionException.class,
+                () -> result(fixture.service.save("agent.models", change, () -> {})));
+        var reason = assertInstanceOf(org.zexnocs.teanekocore.file_config.FileConfigEnvironmentException.class,
+                rejected.getCause());
+        assertTrue(reason.failureReason().contains("DEEPSEEK_API_KEY"));
+        assertTrue(reason.failureReason().contains("当前后端进程"));
+        assertNull(reason.getCause());
+        assertEquals(view.revision(), result(fixture.service.read("agent.models", () -> {})).revision());
+
+        fixture.environment.withProperty("DEEPSEEK_API_KEY", "仅用于离线测试的值");
+        var saved = result(fixture.service.save("agent.models", change, () -> {}));
+        assertEquals("SAVED", saved.status());
+        String disk = Files.readString(root.resolve("config/agent/model.yml"));
+        assertTrue(disk.contains("${DEEPSEEK_API_KEY}"));
+        assertFalse(disk.contains("仅用于离线测试的值"));
+        result(fixture.service.apply("agent.models",
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> {}));
+        var applied = fixture.files.get(LLMModelFileConfig.class).getModels().getFirst();
+        assertEquals("仅用于离线测试的值", applied.getApiKey());
+        assertEquals(0.75, applied.getContextInputRatio());
+    }
+
+    /**
+     * 2026/11/05：检测读取保存版本而非旧运行缓存，失败不泄露正文，结束后释放临时凭据路由。
+     * @throws Exception 当文件夹具创建失败时
+     */
+    @Test
+    void probesSavedModelWithoutApplyingItOrLeakingCredentials() throws Exception {
+        var fixture = new Fixture(root);
+        var view = result(fixture.service.read("agent.models", () -> {}));
+        var saved = result(fixture.service.save("agent.models", new FileSettings.Change(UUID.randomUUID(), view.revision(),
+                List.of(new FileSettings.Edit("/models/0/api-key", "REPLACE_SECRET", mapper.valueToTree("new-key")),
+                        new FileSettings.Edit("/models/0/base-url", "SET", mapper.valueToTree("https://example.test")),
+                        new FileSettings.Edit("/models/0/api-path", "SET", mapper.valueToTree("/chat/completions")))), () -> {}));
+        var visible = result(fixture.service.read("agent.models", () -> {}));
+        assertTrue(mapper.writeValueAsString(visible).contains("https://example.test"));
+        assertFalse(mapper.writeValueAsString(visible).contains("new-key"));
+        var routes = new org.zexnocs.teanekoagent.component.llm.file_config.ProbeLLMRouteSource();
+        var models = mock(org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService.class);
+        var recorded = new java.util.concurrent.atomic.AtomicReference<String>();
+        var response = new java.util.concurrent.CompletableFuture<org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult>();
+        when(models.call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+                any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class))).thenAnswer(call -> {
+            var prompt = call.getArgument(0, org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class);
+            String route = java.util.Objects.requireNonNull(prompt.getOptions()).findProvider().orElseThrow();
+            recorded.set(route);
+            assertEquals("new-key", routes.credentials(route).apiKey());
+            return org.zexnocs.teanekocore.actuator.task.TaskFuture.fromStage(mock(ILogger.class), "离线检测", response);
+        });
+        try (var scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()) {
+            var probes = new org.zexnocs.teanekoagent.integration.web.ModelProbeService(fixture.service, models, routes, scheduler);
+            var pending = probes.probe("deepseek", saved.diskRevision(), () -> {});
+            response.completeExceptionally(org.springframework.web.reactive.function.client.WebClientResponseException.create(
+                    403, "不应公开的消息", new org.springframework.http.HttpHeaders(), "敏感响应".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                    java.nio.charset.StandardCharsets.UTF_8));
+            var failure = result(pending);
+            assertEquals("FAILED", failure.status());
+            assertTrue(failure.reason().contains("HTTP 403"));
+            assertFalse(failure.reason().contains("敏感响应"));
+            assertThrows(LLMConfigurationException.class, () -> routes.credentials(recorded.get()));
+            assertEquals("first-key", fixture.files.get(LLMModelFileConfig.class).getModels().getFirst().getApiKey());
+            assertThrows(RuntimeException.class, () -> result(probes.probe("deepseek", view.revision(), () -> {})));
+            verify(models, times(1)).call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+                    any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class));
+            // 2026/11/05：同一保存快照的完整响应可以成功，空响应仍明确失败。
+            var success = org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult.builder().choices(List.of(
+                    org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice.builder().finishReason("stop")
+                            .message(org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage.builder()
+                                    .contents(new org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder()
+                                            .addText("OK").build()).build()).build())).build();
+            when(models.call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+                    any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class)))
+                    .thenReturn(org.zexnocs.teanekocore.actuator.task.TaskFuture.fromStage(mock(ILogger.class), "离线成功检测",
+                            java.util.concurrent.CompletableFuture.completedStage(success)));
+            assertEquals("SUCCESS", result(probes.probe("deepseek", saved.diskRevision(), () -> {})).status());
+            success.setChoices(List.of());
+            assertEquals("FAILED", result(probes.probe("deepseek", saved.diskRevision(), () -> {})).status());
+        }
+    }
 
     /**
      * 保留原始模板、秘密和未知节点；预检、保存、应用有不同的真实效果。
@@ -267,17 +361,23 @@ class FileSettingsIntegrationTest {
 
     /**
      * 所有写入均限制到 JUnit 临时目录，使用原扫描契约和真实配置服务。
+     *
+     * 修改记录：<br>
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：共用实际文件解析器，支持自动目录与专用热应用适配器。
      * <br>2026/11/04：测试模型文件显式声明上下文容量和输出额度。
      * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
+     * <br>2026/11/05：独立维护模拟环境属性，避免开发机密钥影响变量缺失与就绪分支。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.2-l
+     * @version 4.8.2-l
      */
     private final class Fixture {
+        // 2026/11/05：测试变量不继承开发机环境，避免本机密钥影响缺失与成功分支。
+        final org.springframework.mock.env.MockEnvironment environment =
+                new org.springframework.mock.env.MockEnvironment().withProperty("TEST_SECRET", "测试环境秘密");
         // 2026/11/04：自动元数据与文件服务共用扫描器，避免测试另一套命名策略。
         final FileTypeScanner parsers;
         final IClassScanner classes;
@@ -295,8 +395,7 @@ class FileSettingsIntegrationTest {
          * @throws Exception 当临时文件创建失败时
          */
         Fixture(Path directory) throws Exception {
-            var environment = new StandardEnvironment();
-            environment.getPropertySources().addFirst(new MapPropertySource("测试环境", Map.of("TEST_SECRET", "测试环境秘密")));
+            // 2026/11/05：使用夹具拥有的属性来源，可显式模拟后端进程未继承变量。
             var parser = new YAMLFileTypeParser(environment);
             parsers = mock(FileTypeScanner.class);
             when(parsers.get(FileConfigType.YAML)).thenReturn(parser);

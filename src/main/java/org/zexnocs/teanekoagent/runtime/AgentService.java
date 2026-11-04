@@ -47,10 +47,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：失败日志直接说明安全原因并关联原请求。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -551,7 +553,9 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private void reportFailure(AgentTurn turn, AgentRunResult result, @Nullable Throwable failure) {
         try {
             var attempts = result.interaction().map(LLMInteractionResult::modelAttempts).orElse(0L);
-            var detail = failure == null ? "请查看相同请求的 LLM 交互失败日志。" : org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).toString();
+            // 2026/11/05：优先采用随结果传递的安全诊断，不要求用户再猜测另一条日志。
+            var detail = result.failure() != null ? result.failure().toString() : failure == null
+                    ? result.failureDescription() : org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).toString();
             logger.error(AgentService.class.getName(), "Agent 轮次执行失败。请求=" + turn.request.requestId() + "，活动=" + turn.request.activity()
                     + "，模型尝试=" + attempts + "，" + detail);
         }

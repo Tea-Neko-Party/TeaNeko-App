@@ -130,7 +130,11 @@ function open(id: string) {
       <article v-for="item in catalog.components" :key="item.id" class="assembly-card" :class="{'is-installed': !!assembly.components[item.id]}">
         <div class="assembly-card-heading"><strong>{{ item.name }}</strong><ElSwitch :model-value="!!assembly.components[item.id]" :disabled="disabled || item.id === 'llm'" :aria-label="'安装' + item.name" @change="value => toggle(item.id, !!value)" /></div>
         <p class="small muted">{{ item.description }}</p>
-        <div class="assembly-card-actions"><ElTag v-if="item.id === 'llm'" size="small">必要组件</ElTag><span v-else class="small muted">{{ assembly.components[item.id] ? '已安装' : '未安装' }}</span><ElButton v-if="assembly.components[item.id]" text :disabled="disabled" @click="open(item.id)">参数设置</ElButton></div>
+        <!-- 2026/11/05：安装状态由开关表达，仅保留必要标识；参数入口统一靠卡片底部右侧。 -->
+        <div class="assembly-card-actions">
+          <ElTag v-if="item.id === 'llm'" size="small">必要组件</ElTag>
+          <ElButton v-if="assembly.components[item.id]" text :disabled="disabled" @click="open(item.id)">参数设置</ElButton>
+        </div>
       </article>
     </div>
     <ElDialog :model-value="!!selected" :title="current?.name + ' · 组件参数'" width="min(690px, 94vw)" @close="selected = ''">
@@ -144,7 +148,7 @@ function open(id: string) {
           </template>
           <template v-else>
             <p class="small muted">只保存到当前聊天配置，不修改系统模型文件。密钥不回显。</p>
-            <label>协议适配器<ElSelect :model-value="String(privateModel.adapter ?? '')" :disabled="disabled" @change="value => chooseAdapter(String(value))"><ElOption v-for="item in catalog?.models.routes" :key="item.id" :value="item.id" :label="item.name"><ModelIcon :icon="item.icon" :name="item.name" /> {{ item.name }}</ElOption></ElSelect></label>
+            <label>协议适配器<ElSelect :model-value="String(privateModel.adapter ?? '')" :disabled="disabled" @change="value => chooseAdapter(String(value))"><ElOption class="model-adapter-option" v-for="item in catalog?.models.routes" :key="item.id" :value="item.id" :label="item.name"><ModelIcon :icon="item.icon" :name="item.name" /> {{ item.name }}</ElOption></ElSelect></label>
             <template v-if="privateModel.adapter">
               <div><label>模型名称</label><ModelNamePicker :model-value="String(privateModel.model ?? '')" :names="adapter?.models ?? []" :disabled="disabled" label="私有模型名称" @update:model-value="value => modelField('model', value)" @select="selectModel" /></div>
               <label>服务地址<ElInput :model-value="String(privateModel['base-url'] ?? '')" :disabled="disabled" @update:model-value="value => modelField('base-url', value)" /></label>

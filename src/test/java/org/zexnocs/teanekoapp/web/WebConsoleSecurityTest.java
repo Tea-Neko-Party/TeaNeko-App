@@ -32,6 +32,7 @@ import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
 import org.zexnocs.teanekoapp.client.GuardedClientWebSocketHandler;
 import org.zexnocs.teanekoapp.utils.VersionUtil;
+import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.console.ClientConsole;
 import org.zexnocs.teanekoapp.web.console.ClientConsoleService;
@@ -72,6 +73,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * 使用真实 Spring Security 过滤器验证登录、全入口拒绝、会话撤销与机器凭据边界。
+ *
+ * 修改记录：<br>
  * <br>2026/11/03：新增类型化管理及文件配置路由的真实会话与防伪验证。
  * <br>2026/11/03：实例级运行入口也必须通过同一真实会话和防伪链。
  * <br>2026/11/03：默认日志采集不格式化正文，结构化 UUID 保持可关联。
@@ -90,13 +93,48 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：通过真实扫描发现业务错误映射并验证原 MVC 安全链。
  * <br>2026/11/05：验证项目配置覆盖开发期会话落盘默认值，登录身份不跨实例恢复。
+ * <br>2026/11/05：验证活动时间线前置名称查询的授权，不扩大到匿名读取或写操作。
+ *
+ * <br>2026/11/05：验证模型检测及房间删除的真实认证与防伪链。
+ * <br>2026/11/05：验证文件保存的缺失环境变量经过真实错误映射返回安全、可定位的提示。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 2026/11/05：通过真实安全链读取目标名称，匿名请求与同路径写请求仍被拒绝。
+     *
+     * @throws Exception 当隔离 MVC 请求失败时
+     */
+    @Test
+    void timelineTargetNameIsReadableOnlyThroughAuthenticatedGet() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            String path = "/api/v1/clients/onebot/accounts/a/targets/t";
+            var clients = fixture.context.getBean(ClientManagementDirectory.class);
+            when(clients.guard(eq("onebot"), any(Runnable.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(1, Runnable.class));
+            var target = new ChatTargets.Resolved("onebot", "a", "t", "private-scope",
+                    "测试聊天", "GROUP", "123", false);
+            when(clients.invoke(eq("onebot"), any())).thenAnswer(ignored ->
+                    java.util.concurrent.CompletableFuture.completedFuture(target));
+
+            fixture.mvc.perform(fixture.request(path, false)).andExpect(status().isUnauthorized());
+            var session = fixture.authenticate();
+            var read = fixture.mvc.perform(fixture.request(path, false).session(session))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(read)).andExpect(status().isOk())
+                    .andExpect(jsonPath("$.name").value("测试聊天"))
+                    .andExpect(jsonPath("$.scope").doesNotExist());
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            fixture.mvc.perform(fixture.request(path, true).session(session).header("X-CSRF-TOKEN", csrf))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
     /**
      * 2026/11/05：按实际资源绑定容器会话配置，防止 DevTools 默认值重新开启会话落盘。
      *
@@ -152,6 +190,49 @@ class WebConsoleSecurityTest {
                         .andExpect(request().asyncStarted()).andReturn();
                 fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isOk());
             }
+            // 2026/11/05：检测及删除同样不能绕过管理员会话与 CSRF。
+            var probes = fixture.context.getBean(org.zexnocs.teanekoagent.integration.web.ModelProbeService.class);
+            when(probes.probe(eq("deepseek"), eq("1"), any())).thenReturn(
+                    java.util.concurrent.CompletableFuture.completedStage(
+                            new org.zexnocs.teanekoagent.integration.web.ModelProbeService.Result("1", "SUCCESS", "检测正常")));
+            when(fixture.chat.delete(eq("room"), eq(1L), any()))
+                    .thenReturn(java.util.concurrent.CompletableFuture.completedStage(true));
+            String probePath = "/api/v1/model-configurations/deepseek/probe";
+            String deletePath = "/api/v1/chat/rooms/room";
+            for (var write : List.of(fixture.request(probePath, true).param("revision", "1"),
+                    delete(deletePath).servletPath(deletePath).secure(true).header("Host", "console.example")
+                            .header("Origin", ORIGIN).param("revision", "1"))) {
+                fixture.mvc.perform(write).andExpect(status().isForbidden());
+                fixture.mvc.perform(write.session(session)).andExpect(status().isForbidden());
+                var accepted = fixture.mvc.perform(write.header("X-CSRF-TOKEN", csrf))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(accepted)).andExpect(status().isOk());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/05：环境缺失经真实错误映射返回变量名，不只显示参数无效。
+     * @throws Exception 当隔离 MVC 请求失败时
+     */
+    @Test
+    void missingEnvironmentHasActionableMessageThroughFileEndpoint() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            var session = fixture.authenticate();
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            when(fixture.fileSettings.save(eq("agent.models"), any(), any())).thenReturn(
+                    java.util.concurrent.CompletableFuture.failedStage(
+                            new org.zexnocs.teanekocore.file_config.FileConfigEnvironmentException("DEEPSEEK_API_KEY", true)));
+            var result = fixture.mvc.perform(fixture.request("/api/v1/file-configs/agent.models/actions/save", true)
+                            .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
+                            .content("{\"operationId\":\"" + UUID.randomUUID() + "\",\"expectedRevision\":\"one\","
+                                    + "\"edits\":[{\"path\":\"/models/0/api-key\",\"action\":\"REPLACE_SECRET\","
+                                    + "\"value\":\"${DEEPSEEK_API_KEY}\"}]}"))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("FILE_ENVIRONMENT_UNAVAILABLE"))
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("DEEPSEEK_API_KEY")));
         }
     }
 
@@ -356,6 +437,7 @@ class WebConsoleSecurityTest {
     /**
      * 配置和时间可控，认证、会话与 CSRF 均为真实框架实现。
      *
+     * 修改记录：<br>
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：装配机器令牌控制器并保留真实身份与防伪过滤器。
      * <br>2026/11/04：注册纯 JDK 机器观测及其独立控制器，不启动业务服务。
@@ -364,10 +446,13 @@ class WebConsoleSecurityTest {
      * <br>2026/11/04：组件与工具目录接入原认证夹具，继续验证匿名访问拒绝。
      * <br>2026/11/05：注册真实错误映射扫描器，不绕过管理端点声明。
      *
+     * <br>2026/11/05：验证模型检测及房间删除的真实认证与防伪链。
+     * <br>2026/11/05：注册文件环境错误映射，覆盖异步保存失败的实际 HTTP 响应。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     private static final class Fixture implements AutoCloseable {
         final WebSecurityFileConfig file = new WebSecurityFileConfig();
@@ -435,6 +520,8 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("commandCatalog", commandCatalog);
                 factory.registerSingleton("memberCommands", memberCommands);
                 factory.registerSingleton("modelTemplates", modelTemplates);
+                // 2026/11/05：检测仍通过真实安全链，模型端口仅使用离线替身。
+                factory.registerSingleton("modelProbes", mock(org.zexnocs.teanekoagent.integration.web.ModelProbeService.class));
                 // 2026/11/04：真实目录控制器只读取无秘密元数据，夹具不加载模型或配置文件。
                 factory.registerSingleton("componentDirectory", mock(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class));
                 factory.registerSingleton("toolDirectory", mock(org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.class));
@@ -451,7 +538,9 @@ class WebConsoleSecurityTest {
                     WebChatController.class, MachineTokenController.class, WebCommandCatalogController.class,
                     org.zexnocs.teanekoagent.integration.web.ModelConfigurationController.class,
                     org.zexnocs.teanekoagent.integration.web.AgentComponentController.class,
-                    org.zexnocs.teanekoagent.integration.web.AgentWebFailureMapper.class);
+                    org.zexnocs.teanekoagent.integration.web.AgentWebFailureMapper.class,
+                    // 2026/11/05：缺失环境变量通过真实业务映射返回，不在测试控制器中伪造提示。
+                    FileEnvironmentFailureMapper.class);
             context.refresh();
             context.getBean(WebSecurityConfig.class).webSessionCookie().onStartup(servlet);
             assertTrue(servlet.getSessionCookieConfig().isSecure());

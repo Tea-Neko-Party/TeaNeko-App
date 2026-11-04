@@ -85,6 +85,8 @@ const dragging = ref(false)
 const pending = ref<{ room: string; body: Send }>()
 const pendingAdmin = ref<Admin>()
 const pendingUpload = ref<{ room: string; id: string; file: File }>()
+// 2026/11/05：在途请求不等于连接失败，仅失败后显示恢复卡片。
+const pendingFailed = ref(false)
 const receipt = ref<Receipt>()
 const settings = ref<Settings>()
 const namespace = computed(() => settings.value?.fields.find(field => field.name === 'memoryNamespace')?.value || '尚未确认')
@@ -109,9 +111,14 @@ const base = (id = roomId.value) => `chat/rooms/${encodeURIComponent(id)}`
 const imageUrl = (id: string) => `/api/v1/${base()}/media/${encodeURIComponent(id)}`
 const blocked = computed(() => busy.value || !!pending.value || !!pendingAdmin.value || !!pendingUpload.value)
 const members = computed(() => room.value?.members.map(value => ({ ...value, name: home.value?.profiles.find(profile => profile.id === value.profile)?.name ?? value.profile })) ?? [])
+// 2026/11/05：顶部权限始终对应当前聊天的发言档案，不借用网页登录管理身份。
+const currentMember = computed(() => members.value.find(member => member.profile === sender.value))
 const learning = computed(() => ['enabled', 'historyCaptureEnabled', 'autoSummaryEnabled', 'memoryLearningEnabled', 'personalityLearningEnabled']
   .map(name => settings.value?.fields.find(field => field.name === name)).filter(value => !!value))
 const roles: Record<string, string> = { MEMBER: '普通成员', ADMIN: '群管理员', OWNER: '群主' }
+// 2026/11/05：私聊使用中性的权限名称，群聊沿用原成员角色名称。
+const currentRoles = computed<Record<string, string>>(() => room.value?.kind === 'GROUP'
+  ? roles : {MEMBER: '普通成员', ADMIN: '管理员', OWNER: '所有者'})
 const status: Record<string, string> = { PERSISTED: '消息已保存，入站通知待确认', DISPATCHED: '已通知原消息链', REJECTED: '原入站被拒绝', INDETERMINATE: '入站结果未确认，不自动重放' }
 const profileName = (id: string) => id === home.value?.self ? 'TeaNeko（当前机器人）' : home.value?.profiles.find(value => value.id === id)?.name ?? id
 const date = (value: string) => new Date(value).toLocaleString('zh-CN', { hour12: false })
@@ -198,10 +205,12 @@ async function run(action: () => Promise<void>) {
   if (busy.value) return
   const current = generation
   busy.value = true
+  pendingFailed.value = false
   error.value = ''
   try { await action() }
   catch (failure) {
     if (current !== generation) return
+    pendingFailed.value = !!(pending.value || pendingAdmin.value || pendingUpload.value)
     error.value = failure instanceof Error ? failure.message : '网页聊天请求未完成。'
     if (failure instanceof ApiError && failure.status === 401) emit('expired')
   } finally { if (current === generation) busy.value = false }
@@ -214,6 +223,30 @@ async function refreshHome() {
   home.value = result
   if (!selectedProfiles.value.length && result.profiles.length) selectedProfiles.value = [result.profiles[0]!.id]
   if (room.value && !room.value.members.some(value => value.profile === sender.value)) sender.value = room.value.members[0]?.profile ?? ''
+}
+
+/** 2026/11/05：删除聊天前只确认一次，服务端按目录版本原子清理消息和附件。 */
+async function deleteRoom(item: Room) {
+  if (!await confirm(`删除“${item.name}”及其全部聊天消息、图片？此操作无法复原。共享记忆与聊天配置不会删除。`, '删除聊天')) return
+  await run(async () => {
+    await request(`chat/rooms/${encodeURIComponent(item.id)}?revision=${item.revision}`, {method: 'DELETE'})
+    if (roomId.value === item.id) {
+      pollController?.abort()
+      roomOpen.value = false
+      roomId.value = ''
+      picker.value = ''
+      messages.value = []
+      text.value = ''
+      media.value = ''
+      reply.value = ''
+      pending.value = undefined
+      pendingUpload.value = undefined
+      receipt.value = undefined
+      emit('roomState', false)
+    }
+    delete roomPages.value[item.id]
+    await refreshHome()
+  })
 }
 
 async function pull(signal?: AbortSignal) {
@@ -291,19 +324,36 @@ async function choose(id: string) {
   })
 }
 
+/** 2026/11/05：确认后重新检查房间与在途请求，防止对旧目标提交并覆盖原请求。 */
 async function administrative(path: string, body: Admin['body'], action: string) {
   if (blocked.value) return
+  const current = generation
   if (!await confirm(`${action}只作用于网页客户端。聊天中的成员权限与网页登录管理权限分开，确认提交？`, '确认提交')) return
+  if (current !== generation || blocked.value) return
   pendingAdmin.value = { path, body, action }
   await run(retryAdmin)
 }
 
+/** 2026/11/05：权限切换复用原成员事务、版本与操作编号，不重建输入区或清除草稿。 */
+async function changeSenderRole(role: string) {
+  if (blocked.value || !room.value || !currentMember.value || role === currentMember.value.role) return
+  const member = currentMember.value
+  await administrative(`${base()}/members`, {
+    operationId: operationId(), revision: room.value.revision,
+    member: {profile: member.profile, card: member.card, role}, action: 'UPSERT'
+  }, `将“${member.card || member.name}”的网页权限改为${currentRoles.value[role]}`)
+}
+
+/** 2026/11/05：重试仍使用原请求；切换聊天后迟到的管理响应不能覆盖新聊天状态。 */
 async function retryAdmin() {
   const original = pendingAdmin.value!
+  const current = generation
   const result = await request<{ id: string }>(original.path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(original.body) })
+  if (current !== generation) return
   pendingAdmin.value = undefined
   nickname.value = ''
   await refreshHome()
+  if (current !== generation) return
   notice.value = `${original.action}已保存。`
   if (original.path === 'chat/rooms') {
     // 2026/11/04：只有创建请求已确认成功后才收起表单。
@@ -484,7 +534,8 @@ function beforeUnload(event: BeforeUnloadEvent) {
   if (text.value.trim() || media.value || pending.value || pendingAdmin.value || pendingUpload.value) { event.preventDefault(); event.returnValue = '' }
 }
 
-watch([roomOpen, roomId, sender], () => void loadCommands())
+// 2026/11/05：成员版本变化时刷新指令权限投影，角色切换不留下旧身份的补全结果。
+watch([roomOpen, roomId, sender, () => room.value?.revision], () => void loadCommands())
 // 2026/11/04：从房间管理子页返回时重读启用状态，不占用发送锁，也不重置输入草稿。
 watch(roomTab, async (tab, previous) => {
   if (tab !== 'messages' || !['chat-config', 'agent'].includes(previous) || !roomOpen.value) return
@@ -517,7 +568,8 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
       <div class="web-room-picker">
         <div class="editor-actions"><ElButton :disabled="busy || !home" @click="openCreateRoom('PRIVATE')"><ConsoleIcon name="private" /> 创建私聊</ElButton><ElButton :disabled="busy || !home" @click="openCreateRoom('GROUP')"><ConsoleIcon name="group" /> 创建模拟群</ElButton><ElButton @click="profileOpen = true">网页档案</ElButton></div>
         <div class="agent-tabs" aria-label="聊天室类型"><button v-for="item in [{id: '', name: '全部'}, {id: 'PRIVATE', name: '私聊'}, {id: 'GROUP', name: '群聊'}]" :key="item.id" :class="{selected: directoryKind === item.id}" @click="directoryKind = item.id">{{ item.name }}</button></div>
-        <div class="web-room-grid"><button v-for="item in visibleRooms" :key="item.id" class="web-room-card" :disabled="busy" @click="choose(item.id)"><ConsoleIcon :name="item.kind === 'GROUP' ? 'group' : 'private'" /><strong>{{ item.name }}</strong><span class="small muted">{{ item.kind === 'GROUP' ? `${item.members.length} 位成员` : '私聊' }}</span></button></div>
+        <!-- 2026/11/05：进入与删除是独立按钮，避免嵌套点击。 -->
+        <div class="web-room-grid"><div v-for="item in visibleRooms" :key="item.id" class="web-room-entry"><button class="web-room-card" :disabled="busy" @click="choose(item.id)"><ConsoleIcon :name="item.kind === 'GROUP' ? 'group' : 'private'" /><strong>{{ item.name }}</strong><span class="small muted">{{ item.kind === 'GROUP' ? `${item.members.length} 位成员` : '私聊' }}</span></button><button class="icon-button room-delete" :disabled="blocked" :aria-label="`删除聊天 ${item.name}`" title="删除聊天" @click="deleteRoom(item)"><ConsoleIcon name="trash" /></button></div></div>
         <ElEmpty v-if="home && !visibleRooms.length" description="创建一个聊天室开始对话" />
       </div>
     </ElCard>
@@ -533,13 +585,21 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
       </div>
     </ElDialog>
     <div v-if="roomOpen && room" class="web-room-heading"><button class="icon-button" aria-label="返回聊天室列表" title="返回聊天室列表" @click="backToRooms"><ConsoleIcon name="back" /></button><h2>{{ room.name }}</h2><ElTag>{{ room.kind === 'GROUP' ? '群聊' : '私聊' }}</ElTag><AgentChatStatus :target="roomTarget(room)" :active="active && roomOpen && roomTab === 'messages'" :enabled="!!settings?.registered && settings.fields.some(field => field.name === 'enabled' && field.value === 'true')" @expired="emit('expired')" /></div>
-    <ElTabs v-if="home" v-show="roomOpen" v-model="roomTab" class="web-chat-tabs" @tab-change="value => { if (value === 'chat-config' || value === 'agent') openRoomPage(value) }">
+    <!-- 2026/11/05：权限下拉固定在聊天室标签栏右端，私聊与群聊共用当前发言成员。 -->
+    <div v-if="home" v-show="roomOpen" class="web-chat-workspace">
+      <label v-if="currentMember" class="web-chat-role" :title="`当前发言档案：${currentMember.card || currentMember.name}`">
+        <span>权限</span>
+        <ElSelect :model-value="currentMember.role" aria-label="当前网页用户权限" :disabled="blocked" @change="changeSenderRole">
+          <ElOption v-for="(label, role) in currentRoles" :key="role" :label="label" :value="role" />
+        </ElSelect>
+      </label>
+    <ElTabs v-model="roomTab" class="web-chat-tabs" @tab-change="value => { if (value === 'chat-config' || value === 'agent') openRoomPage(value) }">
       <ElTabPane label="聊天" name="messages" class="web-conversation">
         <ElEmpty v-if="!room" description="创建一个私聊或模拟群后开始；每个档案只对应一个私聊" />
         <template v-else>
           <div ref="messagePane" class="web-messages" aria-label="网页聊天消息" aria-live="polite">
             <ElEmpty v-if="!messages.length" description="当前消息窗口为空" />
-            <article v-for="message in messages" :id="'web-message-' + message.id" :key="message.id" class="web-bubble" :class="{ 'web-bot-bubble': message.bot, 'is-referenced': highlighted === message.id }">
+            <article v-for="message in messages" :id="'web-message-' + message.id" :key="message.id" class="web-bubble" :class="{ 'web-own-bubble': !message.bot && message.sender.id === sender, 'is-referenced': highlighted === message.id }">
               <div class="web-message-heading"><strong>{{ message.card || message.sender.name }}</strong><ElTag v-if="advanced" size="small">{{ message.bot ? 'TeaNeko' : roles[message.role] ?? message.role }}</ElTag><time>{{ date(message.at) }}</time></div>
               <template v-for="(part, index) in message.parts" :key="index">
                 <p v-if="part.kind === 'TEXT'" class="web-message-text">{{ part.value }}</p>
@@ -575,7 +635,7 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
         <ElCard v-if="room" shadow="never" class="runtime-card"><h3>当前聊天</h3><p v-if="settings && !settings.registered">群聊尚未登记 Agent；网页私聊默认启用，已有关闭设置会保留。</p><div class="editor-actions"><ElButton @click="openSettings">聊天设置</ElButton><ElButton @click="inspect">活动与记忆</ElButton></div><p>记忆空间：{{ namespace }}；人格按当前聊天独立。</p><p v-for="field in learning" :key="field.name">{{ field.label }}：{{ settings?.registered && field.value === 'true' ? '开启' : '关闭或尚未登记' }}</p>
           <label for="web-sender">当前发言档案</label><ElSelect id="web-sender" v-model="sender" aria-label="网页发言档案" :disabled="blocked"><ElOption v-for="member in members" :key="member.profile" :label="`${member.card || member.name} · ${roles[member.role]}`" :value="member.profile" /></ElSelect>
         </ElCard>
-        <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ status[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p v-if="advanced" class="small revision">原操作：{{ receipt.operationId }}<br />消息：{{ receipt.messageId }}</p><ElButton :disabled="busy" @click="run(query)">查询原消息回执</ElButton></ElCard>
+        <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>{{ status[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p v-if="advanced" class="small revision">原操作：{{ receipt.operationId }}<br />消息：{{ receipt.messageId }}</p><ElButton :disabled="busy" @click="run(query)">查询原消息回执</ElButton></ElCard>
       </ElTabPane>
       <ElTabPane label="成员" name="members">
         <!-- 2026/11/04：档案与成员分卡片留白，三个成员字段和提交操作分别排列。 -->
@@ -595,8 +655,9 @@ onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort()
       <ElTabPane label="聊天设置" name="chat-config"><template v-for="item in home.rooms" :key="item.id"><ChatSettingsView v-if="roomPages[item.id]?.settings" v-show="roomId === item.id" :clients="clients" initial-client="web" :fixed-target="roomTarget(item)" embedded @expired="emit('expired')" @inspect="inspect" /></template></ElTabPane>
       <ElTabPane label="活动与记忆" name="agent"><template v-for="item in home.rooms" :key="item.id"><AgentWorkspaceView v-if="roomPages[item.id]?.agent" v-show="roomId === item.id" :target="roomTarget(item)" :active="active && roomOpen && roomId === item.id && roomTab === 'agent'" embedded @expired="emit('expired')" /></template></ElTabPane>
     </ElTabs>
+    </div>
     <ElDialog v-model="profileOpen" title="网页档案" width="min(560px, 94vw)"><div v-if="home" class="web-profile-form"><ElInput v-model="nickname" maxlength="80" aria-label="新网页档案昵称" :disabled="blocked" placeholder="例如：小茶" /><ElButton :disabled="blocked || !nickname.trim()" @click="administrative('chat/profiles', { operationId: operationId(), name: nickname }, '创建网页档案')">创建档案</ElButton><p v-for="profile in home.profiles" :key="profile.id">{{ profile.name }}<span v-if="advanced" class="small revision"> · {{ profile.id }} · {{ profile.uuid }}</span></p></div></ElDialog>
-    <ElCard v-if="pending || pendingAdmin || pendingUpload" shadow="never" class="pending-operation"><h3>原请求结果待确认</h3><p>连接失败不表示未受理；保留原编号和原文，不会自动重发。</p><p class="small revision">{{ pending?.body.operationId ?? pendingUpload?.id ?? pendingAdmin?.body.operationId }}</p><ElButton v-if="pending" :disabled="busy" @click="run(query)">查询原请求</ElButton><ElButton :disabled="busy" @click="run(pending ? deliver : pendingAdmin ? retryAdmin : retryUpload)">原样重试</ElButton><ElButton :disabled="busy" @click="forgetPending">放弃原请求</ElButton></ElCard>
+    <ElCard v-if="pendingFailed && !busy && (pending || pendingAdmin || pendingUpload)" shadow="never" class="pending-operation"><h3>原请求结果待确认</h3><p>连接失败不表示未受理；保留原编号和原文，不会自动重发。</p><p class="small revision">{{ pending?.body.operationId ?? pendingUpload?.id ?? pendingAdmin?.body.operationId }}</p><ElButton v-if="pending" :disabled="busy" @click="run(query)">查询原请求</ElButton><ElButton :disabled="busy" @click="run(pending ? deliver : pendingAdmin ? retryAdmin : retryUpload)">原样重试</ElButton><ElButton :disabled="busy" @click="forgetPending">放弃原请求</ElButton></ElCard>
   </div>
 </template>
 

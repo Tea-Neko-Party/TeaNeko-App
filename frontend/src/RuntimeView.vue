@@ -1,6 +1,8 @@
 <script setup lang="ts">
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
+// 2026/11/05：详细操作回执只在高级模式展示。
+import {useConsolePreferences} from './console-preferences'
 import {computed, onBeforeUnmount, onMounted, reactive, ref} from 'vue'
 import {
   ElAlert,
@@ -16,6 +18,8 @@ import {
 } from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
+
+const {advanced} = useConsolePreferences()
 
 interface Timer { id: string; name: string; state: string; revision: number; rule: { kind: string; rule: string; nextFire?: string; waiting: boolean; zone: string }; actions: string[]; category: string; categoryName: string; description: string; source: string }
 interface TimerPage { items: Timer[]; next: string; more: boolean; limited: boolean; categories: {id: string; name: string}[] }
@@ -211,6 +215,6 @@ onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('bef
       <ElCard v-for="log in displayedLogs" :key="`${logs?.instance}-${log.sequence}`" shadow="never" class="runtime-card"><div class="editor-heading"><strong>{{ log.level }}</strong><time class="small muted">{{ date(log.at) }}</time></div><p class="small revision">{{ log.namespace }}</p><pre class="log-message">{{ log.message }}</pre><p v-if="log.requestId || log.scope || log.plugin" class="small revision">{{ log.requestId }} {{ log.scope }} {{ log.plugin }}</p></ElCard>
       <ElEmpty v-if="logs && !displayedLogs.length" description="当前扫描页没有匹配日志" /><ElButton v-if="logs?.more" :disabled="busy" @click="run(() => loadLogs())">继续读取日志</ElButton><RefreshButton v-else :disabled="busy" label="刷新最新日志" @click="run(() => loadLogs())" />
     </template>
-    <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>定时器门禁已确认</h3><p>{{ receipt.note }}</p><p>原操作：{{ receipt.operationId }} · 版本 {{ receipt.revision }}</p><p>原提交时间：{{ date(receipt.at) }}；历史回执不代表现在仍是同一状态。</p><ElButton :disabled="busy" @click="operation">查询此回执</ElButton></ElCard>
+    <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>定时器门禁已确认</h3><p>{{ receipt.note }}</p><p>原操作：{{ receipt.operationId }} · 版本 {{ receipt.revision }}</p><p>原提交时间：{{ date(receipt.at) }}；历史回执不代表现在仍是同一状态。</p><ElButton :disabled="busy" @click="operation">查询此回执</ElButton></ElCard>
   </div>
 </template>

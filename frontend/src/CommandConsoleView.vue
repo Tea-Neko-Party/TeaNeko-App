@@ -1,11 +1,15 @@
 <script setup lang="ts">
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
+// 2026/11/05：详细操作回执只在高级模式展示。
+import {useConsolePreferences} from './console-preferences'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
+
+const {advanced} = useConsolePreferences()
 
 interface Catalog { targetName: string; state: { state: string; connection: string; explanation: string }; commands: { usage: string; description: string; sendsMessages: boolean }[]; observedAt: string }
 interface Receipt { operationId: string; status: string; commandStatus: string; output: string[]; confirmedMessages: string[]; note: string; at: string }
@@ -129,6 +133,8 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); original.value = 
     </ElCard>
     <ElCard shadow="never" class="runtime-card"><label for="console-command-input">命令正文</label><ElInput id="console-command-input" v-model="text" type="textarea" :rows="4" maxlength="4096" :disabled="locked" placeholder="例如 /console 或 /console say 大家好；这里不执行操作系统命令或任意平台 JSON" aria-label="指令台命令正文" autocomplete="off" /><div class="editor-actions"><ElButton type="primary" :disabled="locked || catalog?.state.state !== 'READY' || !catalog.commands.length || !text.trim()" @click="submit">提交指令</ElButton></div></ElCard>
     <ElCard v-if="original" shadow="never" class="pending-operation"><h3>原请求受理结果待确认</h3><p class="small revision">操作编号：{{ original.operationId }}</p><p class="small muted">连接中断不等于未执行。原请求只保留在当前页面内存；先查询原编号，不能更换编号猜测重发。</p><ElButton :disabled="busy" @click="query">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><RefreshButton :disabled="busy" @click="discard" label="放弃原请求并刷新" /></ElCard>
-    <ElCard v-if="receipt" shadow="never" class="operation-receipt"><h3>{{ outcomes[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>原分发状态：{{ receipt.commandStatus || '尚未确认' }} · {{ new Date(receipt.at).toLocaleString('zh-CN') }}</p><p v-if="ongoing" class="small muted">页面可见时每两秒查询原状态，不会重新提交命令。</p><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre><p v-if="receipt.confirmedMessages.length" class="small revision">平台已确认消息：{{ receipt.confirmedMessages.join('、') }}</p><p v-else class="small muted">当前没有已记录的平台消息确认；这不表示此前必然没有产生外部动作。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
+    <!-- 2026/11/05：简洁模式保留真正的指令输出，只隐藏回执诊断。 -->
+    <div v-if="!advanced && receipt?.output.length"><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre></div>
+    <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>{{ outcomes[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>原分发状态：{{ receipt.commandStatus || '尚未确认' }} · {{ new Date(receipt.at).toLocaleString('zh-CN') }}</p><p v-if="ongoing" class="small muted">页面可见时每两秒查询原状态，不会重新提交命令。</p><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre><p v-if="receipt.confirmedMessages.length" class="small revision">平台已确认消息：{{ receipt.confirmedMessages.join('、') }}</p><p v-else class="small muted">当前没有已记录的平台消息确认；这不表示此前必然没有产生外部动作。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
   </div>
 </template>

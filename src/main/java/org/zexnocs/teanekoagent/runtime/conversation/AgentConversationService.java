@@ -48,10 +48,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：邮箱交付及重放保留安全诊断而不保存异常对象。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
     private final IAgentTurnService turns;
@@ -529,7 +531,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @return 不会把拒绝或失效诊断作为回答交付的结果
      */
     private static AgentRunResult restate(AgentRunResult result, AgentRunResult.Status status) {
-        return new AgentRunResult(result.agentId(), result.requestId(), status, result.access(), result.interaction(), result.budgetUsage(), result.conversation(), result.memoryReference(), result.promptTranscript());
+        // 2026/11/05：重放或状态调整不丢失原安全诊断。
+        return new AgentRunResult(result.agentId(), result.requestId(), status, result.access(), result.interaction(), result.budgetUsage(), result.conversation(), result.memoryReference(), result.promptTranscript()).withFailure(result.failure());
     }
 
     /**
@@ -1345,7 +1348,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         return new AgentRunResult(entry.handle.id(), entry.request.requestId(), status,
                 raw == null ? Optional.empty() : raw.access(), raw == null ? Optional.empty() : raw.interaction(),
                 raw == null ? entry.lifetime.budget().snapshot() : raw.budgetUsage(), entry.stamp,
-                raw == null ? entry.memoryReference : raw.memoryReference(), raw == null ? null : raw.promptTranscript());
+                raw == null ? entry.memoryReference : raw.memoryReference(), raw == null ? null : raw.promptTranscript())
+                // 2026/11/05：邮箱交付保留管线原因，不能只剩笼统 FAILED 状态。
+                .withFailure(failure != null ? org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure)
+                        : raw == null ? null : raw.failure());
     }
 
     /**

@@ -51,10 +51,11 @@ import static org.mockito.Mockito.mock;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
+ * <br>2026/11/05：验证控制行边缘空白、正文保真及错误标识和行内正文拒绝。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(15)
 class ExpressionProtocolTest {
@@ -168,6 +169,38 @@ class ExpressionProtocolTest {
             assertThrows(IllegalArgumentException.class,()->compiled(runtime,request,input,interaction(input,literal.replace(nonce,"000000000000"))));
         }
     }
+    /**
+     * 2026/11/05：多行示例可直接解析，控制行空白不影响正文，错误标识与行内正文仍失败。
+     */
+    @Test
+    void acceptsControlWhitespaceWithoutRewritingBodyOrWeakeningValidation() {
+        try (var context = context(new AtomicInteger())) {
+            var runtime = new ExpressionRuntime(context.getBean(ReplyExtensionRegistry.class),
+                    ExpressionSettings::defaults, scope -> true, JsonMapper.builder().build());
+            var request = request();
+            String nonce = ExpressionRuntime.nonce(request.requestId());
+            String head = "⟦TNK:" + nonce + "|";
+            var input = new AgentPromptInput(request.messages(),
+                    List.of(new AgentPromptFragment(ExpressionRuntime.FRAGMENT, runtime.contract(request), null)), 0);
+            String body = "  保留正文缩进与行尾  \n第二行\n  \\" + head + "TEXT⟧";
+            String envelope = "  " + head + "BEGIN|protocol=teaneko:expression|v=1⟧  \r\n\t"
+                    + head + "TEXT|wait=0⟧ \t\r\n" + body + "\n  " + head + "END⟧  ";
+            var plan = compiled(runtime, request, input, interaction(input, envelope));
+            assertEquals(body.replace("\\⟦TNK:", "⟦TNK:"), plan.steps().getFirst().text());
+            for (String invalid : List.of(envelope.replace(head + "TEXT|", "⟦TNK:wrong|TEXT|"),
+                    envelope.replace("TEXT|wait=0⟧", "TEXT|wait=0⟧不能同行"),
+                    envelope.replace(head + "END⟧", ""))) {
+                // 2026/11/05：缺少结束标记同样有可信原因，不发送不完整表达计划。
+                assertThrows(ReplyProtocolException.class,
+                        () -> compiled(runtime, request, input, interaction(input, invalid)));
+            }
+            String instructions = context.getBean(ExpressionReplyProtocol.class).instructions(nonce);
+            String example = instructions.substring(instructions.indexOf(head), instructions.indexOf(head + "END⟧")
+                    + (head + "END⟧").length());
+            assertEquals(2, compiled(runtime, request, input, interaction(input, example)).steps().size());
+        }
+    }
+
     /**
      * 取消中间项不让后项越过前项，其他 scope 并发且停止立即结束等待。
      * @throws Exception 当有界异步验证失败时

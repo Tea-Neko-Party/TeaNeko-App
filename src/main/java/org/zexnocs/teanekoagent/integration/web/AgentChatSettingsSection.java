@@ -35,10 +35,12 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：开放失败原因回复的中文配置字段与版本校验。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Component
 // 2026/11/04：Agent 专用投影明确归入独立配置分组。
@@ -57,9 +59,9 @@ public final class AgentChatSettingsSection implements IChatSettingsSection {
     }
     private final ObjectMapper mapper;
     private final MemoryNamespaceBindings bindings;
-    // 2026/11/04：业务参数由组件目录独立提供，此处只维护整个聊天的接入选项。
+    // 2026/11/05：失败原因回复与启用、触发方式一样属于聊天入口策略。
     private static final Map<String, String> LABELS = Map.of("enabled", "启用 Agent", "mode", "交互模式",
-            "triggerNames", "机器人称呼", "inputMaxBytes", "模型输入字节上限");
+            "triggerNames", "机器人称呼", "inputMaxBytes", "模型输入字节上限", "failureReplyEnabled", "失败原因回复");
 
     /**
      * @param mapper 原转换器
@@ -98,7 +100,8 @@ public final class AgentChatSettingsSection implements IChatSettingsSection {
                 org.zexnocs.teanekoagent.component.AgentAssembly.MINIMAL, "版本化装配", true, Map.of()));
         for (var field : AgentScopeConfigData.class.getDeclaredFields()) {
             String id = field.getName();
-            if (!java.util.Set.of("enabled", "mode", "triggerNames", "inputMaxBytes").contains(id)) {
+            // 2026/11/05：允许在网页直接调整失败回执，不需重新装配任何组件。
+            if (!java.util.Set.of("enabled", "mode", "triggerNames", "inputMaxBytes", "failureReplyEnabled").contains(id)) {
                 continue;
             }
             JsonNode value = current.has(id) ? current.get(id) : defaults.get(id);
@@ -134,8 +137,8 @@ public final class AgentChatSettingsSection implements IChatSettingsSection {
      */
     @Override
     public void validate(ConfigEdits.Change change) {
-        // 2026/11/04：LLM 路由改由组件参数管理，不再同时接受旧平铺字段。
-        if (!java.util.Set.of("enabled", "mode", "triggerNames", "inputMaxBytes", "components")
+        // 2026/11/05：失败回复是聊天入口策略，可独立于组件装配修改。
+        if (!java.util.Set.of("enabled", "mode", "triggerNames", "inputMaxBytes", "components", "failureReplyEnabled")
                 .containsAll(change.fields().keySet())) {
             throw new IllegalArgumentException("请求包含本页面不可编辑的字段。");
         }

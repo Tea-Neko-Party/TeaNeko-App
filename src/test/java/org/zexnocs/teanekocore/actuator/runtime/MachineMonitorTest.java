@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.actuator.runtime;
 import com.sun.management.OperatingSystemMXBean;
 import org.junit.jupiter.api.Test;
 
+import java.io.File;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
@@ -18,13 +19,19 @@ import static org.mockito.Mockito.when;
 /**
  * 验证 CPU 统计窗口、内存口径与能力缺失，不依赖测试机器的实际负载。
  *
+ * 修改记录：<br>
+ * 2026/11/05：验证磁盘已用与可用量口径，并覆盖容量未知的情况。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.1-l
  */
 class MachineMonitorTest {
-    /** 首轮只建基准，同秒复用；后续 CPU 按时长和核数计算，物理内存不含交换空间。 */
+    /**
+     * 首轮只建基准，同秒复用；后续 CPU 按时长和核数计算，物理内存不含交换空间。
+     * 2026/11/05：磁盘已用按总量减空闲计算，不把进程不可用的保留空间算成已用。
+     */
     @Test
     void samplesCpuIntervalsAndKeepsMemoryDefinitionsSeparate() {
         var os = mock(OperatingSystemMXBean.class);
@@ -37,8 +44,12 @@ class MachineMonitorTest {
         var runtime = mock(RuntimeMXBean.class);
         when(runtime.getUptime()).thenReturn(60_000L);
         var nanos = new AtomicLong(1_000_000_000L);
+        var disk = mock(File.class);
+        when(disk.getTotalSpace()).thenReturn(2000L, 2000L, 0L);
+        when(disk.getFreeSpace()).thenReturn(800L);
+        when(disk.getUsableSpace()).thenReturn(600L);
         var monitor = new MachineMonitor(os, memory, runtime,
-                Clock.fixed(Instant.parse("2026-11-04T00:00:00Z"), ZoneOffset.UTC), nanos::get);
+                Clock.fixed(Instant.parse("2026-11-04T00:00:00Z"), ZoneOffset.UTC), nanos::get, disk);
         var first = monitor.sample();
         assertTrue(first.cpuWarmingUp());
         assertNull(first.systemCpuPercent());
@@ -55,12 +66,18 @@ class MachineMonitorTest {
         assertEquals(128, second.heapUsedBytes());
         assertEquals(20, second.nonHeapUsedBytes());
         assertNull(second.processResidentBytes());
+        assertEquals(1200L, second.diskUsedBytes());
+        assertEquals(2000L, second.diskTotalBytes());
+        assertEquals(600L, second.diskUsableBytes());
         nanos.addAndGet(2_000_000_000L);
         var unsupported = monitor.sample();
         assertFalse(unsupported.cpuWarmingUp());
         assertNull(unsupported.systemCpuPercent());
         assertNull(unsupported.processCpuPercent());
         assertNull(unsupported.physicalUsedBytes());
+        assertNull(unsupported.diskUsedBytes());
+        assertNull(unsupported.diskTotalBytes());
+        assertNull(unsupported.diskUsableBytes());
     }
 
     /** 没有扩展系统管理接口时，JVM 指标仍可读取，未知容量和 CPU 不伪装成零。 */

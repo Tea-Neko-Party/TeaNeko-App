@@ -10,6 +10,8 @@ interface MachineSnapshot {
   heapUsedBytes: number; heapCommittedBytes: number; heapMaxBytes: number | null
   nonHeapUsedBytes: number; nonHeapCommittedBytes: number
   physicalUsedBytes: number | null; physicalTotalBytes: number | null; processResidentBytes: number | null
+  // 2026/11/05：程序所在卷单独展示，不把可用空间与所有空闲空间混为一谈。
+  diskUsedBytes: number | null; diskTotalBytes: number | null; diskUsableBytes: number | null
 }
 
 const emit = defineEmits<{expired: []}>()
@@ -111,12 +113,18 @@ defineExpose({refresh})
           <ElProgress v-if="ratio(snapshot.heapUsedBytes, snapshot.heapMaxBytes) !== undefined" :percentage="ratio(snapshot.heapUsedBytes, snapshot.heapMaxBytes)!" :show-text="false" aria-label="JVM 堆使用率" />
           <p class="small muted">堆上限 {{ bytes(snapshot.heapMaxBytes) }} · 非堆 {{ bytes(snapshot.nonHeapUsedBytes) }}</p>
         </ElCard>
+        <!-- 2026/11/05：磁盘与现有机器指标同频刷新，未知容量不显示虚假进度。 -->
+        <ElCard shadow="never" class="machine-card"><h3>程序所在磁盘</h3><strong>{{ bytes(snapshot.diskUsedBytes) }}</strong>
+          <ElProgress v-if="ratio(snapshot.diskUsedBytes, snapshot.diskTotalBytes) !== undefined" :percentage="ratio(snapshot.diskUsedBytes, snapshot.diskTotalBytes)!" :show-text="false" aria-label="程序所在磁盘使用率" />
+          <p class="small muted">总量 {{ bytes(snapshot.diskTotalBytes) }} · 可用 {{ bytes(snapshot.diskUsableBytes) }}</p>
+        </ElCard>
       </div>
       <p class="small muted">已运行 {{ uptime(snapshot.uptimeMillis) }} · 当前页面可见时每 5 秒更新</p>
       <DetailPanel title="指标说明"><dl class="machine-details">
         <dt>JVM 堆已用 / 已提交 / 上限</dt><dd>{{ bytes(snapshot.heapUsedBytes) }} / {{ bytes(snapshot.heapCommittedBytes) }} / {{ bytes(snapshot.heapMaxBytes) }}</dd>
         <dt>JVM 非堆已用 / 已提交</dt><dd>{{ bytes(snapshot.nonHeapUsedBytes) }} / {{ bytes(snapshot.nonHeapCommittedBytes) }}</dd>
         <dt>进程常驻物理内存</dt><dd>{{ snapshot.processResidentBytes === null ? 'JDK 管理接口未提供' : bytes(snapshot.processResidentBytes) }}</dd>
+        <dt>程序所在磁盘</dt><dd>工作目录所在卷的已用 / 总量；可用量按当前进程权限计算，可能少于磁盘空闲量，不代表程序文件自身大小。</dd>
         <dt>CPU 采样间隔</dt><dd>{{ snapshot.cpuWarmingUp ? '首次建立基准，下次更新显示负载' : `${(snapshot.cpuIntervalMillis / 1000).toFixed(1)} 秒` }}</dd>
       </dl><p class="small muted">系统 CPU 使用 JDK 最近统计窗口，程序 CPU 使用两次采样间平均值。已提交量和堆上限不代表进程实际物理占用；不支持的指标保留为空。</p></DetailPanel>
     </template>

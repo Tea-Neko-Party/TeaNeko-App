@@ -69,7 +69,7 @@ const draftKey = () => JSON.stringify([client.value, account.value, selected.val
 // 2026/11/04：简洁模式只收起 Agent 的次要选项，编辑值仍保留在完整草稿中。
 const {advanced} = useConsolePreferences()
 const showAllFields = ref(false)
-const commonFields = new Set(['enabled', 'components', 'mode'])
+const commonFields = new Set(['enabled', 'components', 'mode', 'failureReplyEnabled'])
 const displayedFields = computed(() => view.value?.fields.filter(field => section.value !== 'agent' || advanced.value || showAllFields.value || commonFields.has(field.name)) ?? [])
 const hiddenCount = computed(() => (view.value?.fields.length ?? 0) - displayedFields.value.length)
 const hiddenDirtyCount = computed(() => view.value?.fields.filter(field => field.editable && values.value[field.name] !== field.value && !displayedFields.value.includes(field)).length ?? 0)
@@ -489,7 +489,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
             <p class="small muted">失败或断开不证明未提交。请查询真实结果，或使用相同编号重试原请求。</p>
             <ElButton :disabled="busy" @click="queryPending">查询提交结果</ElButton><ElButton :disabled="busy" @click="resend">重试原请求</ElButton>
             <RefreshButton :disabled="busy" @click="discardPending" label="放弃草稿并刷新" /></ElCard>
-          <ElCard v-if="lastReceipt" shadow="never" class="operation-receipt"><h3>真实操作回执</h3>
+          <ElCard v-if="advanced && lastReceipt" shadow="never" class="operation-receipt"><h3>真实操作回执</h3>
             <p>操作者：本地管理员 · {{ date(lastReceipt.at) }}{{ lastReceipt.replayed ? ' · 原结果重放' : '' }}</p>
             <DetailPanel><p class="small">操作编号：{{ lastReceipt.operationId }}</p></DetailPanel>
             <p class="small muted">{{ lastReceipt.action === 'PATCH' ? '修改字段：' + lastReceipt.fields.map(name => view?.fields.find(field => field.name === name)?.label ?? name).join('、') : lastReceipt.action === 'REGISTER' ? '登记完成' : '注销完成' }}</p></ElCard>

@@ -33,11 +33,14 @@ import java.util.Set;
  * <br>2026/11/04：模型样板、指令目录及房间准备继续执行管理员会话和防伪规则。
  *
  * <br>2026/11/04：组件和工具目录仅向管理员开放。
+ * <br>2026/11/05：补全单个聊天名称读取的管理员路由，修复活动时间线被前置查询阻断。
+ *
+ * <br>2026/11/05：模型检测及房间删除继续要求管理员会话和防伪校验。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -50,6 +53,7 @@ public class WebSecurityConfig {
      */
     @Bean
     public SecurityFilterChain webSecurity(HttpSecurity http, WebCredentials credentials, ObjectMapper mapper) {
+        // 2026/11/05：只为已存在的聊天名称 GET 接口补授权，不开放任意目标子路径或写操作。
         http.authenticationProvider(credentials)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .logout(AbstractHttpConfigurer::disable)
@@ -77,6 +81,7 @@ public class WebSecurityConfig {
                                 "/api/v1/agent/catalog/components", "/api/v1/agent/catalog/tools",
                                 "/api/v1/settings/sections", "/api/v1/clients/*/accounts",
                                 "/api/v1/clients/*/accounts/*/targets",
+                                "/api/v1/clients/*/accounts/*/targets/*",
                                 // 2026/11/04：目录同样按真实客户端与聊天解析。
                                 "/api/v1/clients/*/accounts/*/targets/*/settings",
                                 "/api/v1/clients/*/accounts/*/targets/*/settings/*",
@@ -95,7 +100,9 @@ public class WebSecurityConfig {
                                 "/api/v1/chat/rooms/*/open", "/api/v1/chat/rooms/*/commands",
                                 "/api/v1/chat/rooms/*/members", "/api/v1/chat/rooms/*/messages",
                                 "/api/v1/chat/rooms/*/media").hasRole("WEB_ADMIN")
-                        .requestMatchers(HttpMethod.DELETE, "/api/v1/chat/rooms/*/media/*").hasRole("WEB_ADMIN")
+                        // 2026/11/05：只开放明确的管理员模型检测与房间删除，保持 CSRF 校验。
+                        .requestMatchers(HttpMethod.POST, "/api/v1/model-configurations/*/probe").hasRole("WEB_ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/chat/rooms/*", "/api/v1/chat/rooms/*/media/*").hasRole("WEB_ADMIN")
                         // 2026/11/03：写路由仍经过原 CSRF、真实会话及事务内再次授权。
                         // 2026/11/03：实例级资源的进一步授权由原管理网关完成。
                         .requestMatchers(HttpMethod.POST, "/api/v1/management/*", "/api/v1/auth/logout", "/api/v1/clients/*/actions/discover",

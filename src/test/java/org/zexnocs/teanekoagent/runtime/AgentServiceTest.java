@@ -71,10 +71,12 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：验证上下文首个失败原因在结果与日志中保留。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class AgentServiceTest {
     /** 2026/11/04：无人格的记忆与表达组件按真实阶段执行，原历史端口不能被重复调用。 */
@@ -613,6 +615,9 @@ class AgentServiceTest {
             runtime.runAll();
             assertTrue(result.isDone());
             assertEquals(CONFIGURATION_ERROR, result.join().status());
+            // 2026/11/05：结果与日志都保留首个上下文原因，不被随后的停止状态覆盖。
+            assertTrue(java.util.Objects.requireNonNull(result.join().failure()).types()
+                    .contains(IllegalArgumentException.class.getName()));
             var diagnostic = org.mockito.ArgumentCaptor.forClass(String.class);
             verify(logger).error(eq(AgentService.class.getName()), diagnostic.capture());
             assertTrue(diagnostic.getValue().contains("IllegalArgumentException"));

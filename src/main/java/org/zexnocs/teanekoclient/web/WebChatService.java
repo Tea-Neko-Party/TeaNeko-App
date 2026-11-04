@@ -21,10 +21,12 @@ import java.util.concurrent.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：进入房间时调用模块准备扩展，入站回执等待实际异步业务阶段。
  *
+ * <br>2026/11/05：删除房间时撤销旧来源并阻止迟到发送。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.5-l
+ * @version 4.8.2-l
  */
 @Service
 public final class WebChatService {
@@ -152,6 +154,25 @@ public final class WebChatService {
                 return CompletableFuture.failedStage(failure);
             }
         });
+    }
+
+    /**
+     * 2026/11/05：删除时撤销原房间来源，迟到交付不能恢复已删除消息。
+     * @param room 已知聊天标识
+     * @param revision 已确认版本
+     * @param guard 当前管理员会话
+     * @return 实际删除结果；重复调用不重新创建房间
+     */
+    public CompletionStage<Boolean> delete(String room, long revision, Runnable guard) {
+        check(guard);
+        var gate = gates.computeIfAbsent(room, ignored -> new Gate());
+        gate.begin();
+        try {
+            return store.deleteRoom(room, revision, guard).whenComplete((deleted, failure) -> gate.end());
+        } catch (RuntimeException failure) {
+            gate.end();
+            return CompletableFuture.failedStage(failure);
+        }
     }
 
     /**

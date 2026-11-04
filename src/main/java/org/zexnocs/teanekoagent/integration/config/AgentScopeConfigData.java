@@ -26,10 +26,12 @@ import org.zexnocs.teanekocore.framework.description.Description;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：新增默认开启的失败原因回复配置。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Getter @Setter
 public class AgentScopeConfigData implements IConfigData {
@@ -83,6 +85,10 @@ public class AgentScopeConfigData implements IConfigData {
     }
     @Description("是否启用当前作用域的 Agent 功能。")
     private boolean enabled = true;
+
+    // 2026/11/05：默认向原聊天反馈可公开的失败原因，不包含凭据或模型原文。
+    @Description("Agent 失败时是否通过原发送器回复原因，默认开启；关闭后仅记录后台诊断。示例：/cfg set agent failureReplyEnabled false。")
+    private boolean failureReplyEnabled = true;
 
     // 2026/11/04：每个聊天独立选择已添加的模型路由，旧记录空值继承默认。
     @Description("使用的模型配置路由；留空继承 model.yml 默认模型。")

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.core.env.StandardEnvironment;
+import org.zexnocs.teanekocore.file_config.FileConfigEnvironmentException;
 import org.zexnocs.teanekocore.file_config.api.FileConfig;
 import org.zexnocs.teanekocore.file_config.api.FileConfigType;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
@@ -32,11 +33,12 @@ import java.nio.file.Path;
  * <br>2026/11/04：通用表单沿用本解析器的 Kebab 命名、别名与泛型合同。
  *
  * <br>2026/11/04：受保护结构化配置复用 Core 环境变量解析，不回写模板。
+ * <br>2026/11/05：保留缺少环境变量的安全诊断，不让敏感配置包装抹去可操作原因。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.1
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @FileTypeParser(FileConfigType.YAML)
 public class YAMLFileTypeParser implements IFileDocumentParser {
@@ -121,6 +123,9 @@ public class YAMLFileTypeParser implements IFileDocumentParser {
             var source = objectMapper.readTree(stream);
             if (source == null || source.isNull()) { throw new IllegalArgumentException("YAML 配置内容不能为空。"); }
             return objectMapper.treeToValue(resolve(source), clazz);
+        } catch (FileConfigEnvironmentException failure) {
+            // 2026/11/05：该类型只包含安全标识和固定说明，无需再次丢弃原因。
+            throw failure;
         } catch (RuntimeException failure) {
             var config = clazz.getAnnotation(FileConfig.class);
             if (config != null && config.sensitive()) { throw new IllegalArgumentException("敏感 YAML 配置解析失败，请检查格式、字段类型及环境变量。"); }
@@ -135,13 +140,33 @@ public class YAMLFileTypeParser implements IFileDocumentParser {
      * @throws IllegalArgumentException 当必需变量缺失或占位符循环引用时
      */
     private JsonNode resolve(JsonNode node) {
-        if (node.isString()) { return StringNode.valueOf(environment.resolveRequiredPlaceholders(node.stringValue())); }
+        // 2026/11/05：环境展开仍统一在 Core；失败不保存原始模板或异常链。
+        if (node.isString()) {
+            return StringNode.valueOf(resolveText(node.stringValue()));
+        }
         if (node instanceof ObjectNode object) {
             for (var name : java.util.List.copyOf(object.propertyNames())) { object.set(name, resolve(object.path(name))); }
         } else if (node instanceof ArrayNode array) {
             for (int i = 0; i < array.size(); i++) { array.set(i, resolve(array.path(i))); }
         }
         return node;
+    }
+
+    /**
+     * 使用原属性解析器展开字符串，仅对直接变量缺失提供名称和启动环境建议。
+     * @param text 原节点字符串，不写入异常
+     * @return 原规则解析后的字符串
+     * @throws FileConfigEnvironmentException 当变量缺失或占位符无法解析时
+     */
+    private String resolveText(String text) {
+        try {
+            return environment.resolveRequiredPlaceholders(text);
+        } catch (IllegalArgumentException failure) {
+            var direct = java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]{0,127})}").matcher(text);
+            String variable = direct.matches() ? direct.group(1) : null;
+            throw new FileConfigEnvironmentException(variable,
+                    variable != null && !environment.containsProperty(variable));
+        }
     }
 
     /**
@@ -153,6 +178,9 @@ public class YAMLFileTypeParser implements IFileDocumentParser {
     public JsonNode resolveDocument(JsonNode document) {
         try {
             return resolve(document.deepCopy());
+        } catch (FileConfigEnvironmentException failure) {
+            // 2026/11/05：结构化模型配置与文件模型复用同一安全原因。
+            throw failure;
         } catch (RuntimeException failure) {
             throw new IllegalArgumentException("配置环境占位符不可用，请检查必需变量。");
         }
