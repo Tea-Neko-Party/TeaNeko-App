@@ -35,8 +35,8 @@
 | 2 · 执行权限 | `chmod +x gradlew` | 仅 Linux / macOS 首次使用时执行 |
 | 3 · 生成配置 | `./gradlew copyTemplatesToConfig` | 补充缺少的模板，不覆盖已有配置 |
 | 4 · 配置连接 | `src/main/resources/application-prod.properties`<br>`config/web/security.yml` | 分别配置数据库、控制台 HTTPS 来源与可信代理 |
-| 5 · 构建项目 | `./gradlew bootJar` | 自动安装前端依赖、检查并打包网页，无需单独执行 npm |
-| 6 · 启动服务 | `./gradlew bootRun` | 默认 **`prod`**，同一后端提供网页和 API，不启动 Vite |
+| 5 · 构建项目 | `./gradlew bootJar` | 自动安装前端依赖、检查并打包网页 |
+| 6 · 启动服务 | `./gradlew bootRun` | 默认 **`prod`**，同一后端提供网页和 API |
 
 构建产物为 `build/libs/TeaNeko-App-版本号.jar`；需要构建并运行测试时使用 `./gradlew build`。生产通过 HTTPS 代理访问 `https://你的域名/console/`。环境变量、JAR 部署及更多命令见下方“详细文档”中的构建指南。
 
