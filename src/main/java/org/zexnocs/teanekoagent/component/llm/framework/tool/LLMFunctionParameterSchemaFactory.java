@@ -2,6 +2,9 @@ package org.zexnocs.teanekoagent.component.llm.framework.tool;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.*;
 import org.zexnocs.teanekocore.framework.description.Description;
@@ -23,11 +26,12 @@ import java.util.*;
  * {@link ILLMFunctionParameter} 结构。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：结构化输出复用类型描述，支持显式 JSON 字段名并拒绝重复声明。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class LLMFunctionParameterSchemaFactory {
     /**
@@ -55,7 +59,7 @@ public final class LLMFunctionParameterSchemaFactory {
                 required.add(parameterName);
             }
         }
-        return new LLMObjectFunctionParameter("Function tool parameters.", properties, required);
+        return new LLMObjectFunctionParameter("工具调用参数。", properties, required);
     }
 
     /**
@@ -75,8 +79,17 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param description 参数描述
      * @return 参数 Schema
      */
-    public static ILLMFunctionParameter fromType(Type type, String description) {
+    public static ILLMFunctionParameter fromType(Type type, @Nullable String description) {
         return fromType(type, description, new HashSet<>());
+    }
+
+    /**
+     * 初始化时为完整输出类型生成声明；高频调用须读取业务目录缓存。
+     * @param type 固定输出类型
+     * @return 包含类型及字段描述的原始结构
+     */
+    public static ILLMFunctionParameter fromOutputType(Class<?> type) {
+        return fromType(type, getDescription(type));
     }
 
     /**
@@ -87,7 +100,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param visiting 当前递归链路中正在处理的类
      * @return 参数 Schema
      */
-    private static ILLMFunctionParameter fromType(Type type, String description, Set<Class<?>> visiting) {
+    private static ILLMFunctionParameter fromType(Type type, @Nullable String description, Set<Class<?>> visiting) {
         if (type instanceof ParameterizedType parameterizedType) {
             return fromParameterizedType(parameterizedType, description, visiting);
         }
@@ -110,7 +123,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @return 参数 Schema
      */
     private static ILLMFunctionParameter fromParameterizedType(ParameterizedType type,
-                                                               String description,
+                                                               @Nullable String description,
                                                                Set<Class<?>> visiting) {
         var rawType = type.getRawType();
         if (!(rawType instanceof Class<?> rawClass)) {
@@ -139,7 +152,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param visiting 当前递归链路中正在处理的类
      * @return 参数 Schema
      */
-    private static ILLMFunctionParameter fromClass(Class<?> clazz, String description, Set<Class<?>> visiting) {
+    private static ILLMFunctionParameter fromClass(Class<?> clazz, @Nullable String description, Set<Class<?>> visiting) {
         if (clazz.isArray()) {
             return new LLMArrayFunctionParameter(description, fromClass(clazz.getComponentType(), null, visiting));
         }
@@ -179,7 +192,9 @@ public final class LLMFunctionParameterSchemaFactory {
         if (clazz.isEnum()) {
             return enumParameter(clazz, description);
         }
-        if (Map.class.isAssignableFrom(clazz) || clazz == Object.class) {
+        // 2026/11/06：原始集合及未绑定泛型不伪装成空对象，输出合同会明确拒绝。
+        if (Map.class.isAssignableFrom(clazz) || Collection.class.isAssignableFrom(clazz)
+                || Optional.class == clazz || clazz == Object.class || clazz.getTypeParameters().length > 0) {
             return objectWithAdditionalProperties(description);
         }
         if (visiting.contains(clazz)) {
@@ -195,7 +210,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param description 参数描述
      * @return 字符串枚举参数
      */
-    private static ILLMFunctionParameter enumParameter(Class<?> clazz, String description) {
+    private static ILLMFunctionParameter enumParameter(Class<?> clazz, @Nullable String description) {
         var enumValues = new java.util.ArrayList<String>();
         for (var constant : clazz.getEnumConstants()) {
             if (constant instanceof Enum<?> enumConstant) {
@@ -214,15 +229,20 @@ public final class LLMFunctionParameterSchemaFactory {
      * @return object 参数
      */
     private static ILLMFunctionParameter objectFromFields(Class<?> clazz,
-                                                          String description,
+                                                          @Nullable String description,
                                                           Set<Class<?>> visiting) {
         visiting.add(clazz);
         var properties = new LinkedHashMap<String, ILLMFunctionParameter>();
         var required = new java.util.ArrayList<String>();
         for (var field : getSerializableFields(clazz)) {
-            properties.put(field.getName(), fromType(field.getGenericType(), getDescription(field), visiting));
+            // 2026/11/06：声明和实际 JSON 绑定采用同一显式字段名，冲突不静默覆盖。
+            var declared = field.getAnnotation(JsonProperty.class);
+            var name = declared == null || declared.value().isEmpty() ? field.getName() : declared.value();
+            if (properties.putIfAbsent(name, fromType(field.getGenericType(), getDescription(field), visiting)) != null) {
+                throw new IllegalArgumentException("JSON 描述字段重复：" + clazz.getName() + "." + name);
+            }
             if (isRequired(field)) {
-                required.add(field.getName());
+                required.add(name);
             }
         }
         visiting.remove(clazz);
@@ -244,7 +264,8 @@ public final class LLMFunctionParameterSchemaFactory {
                 if (!Modifier.isStatic(modifiers)
                         && !Modifier.isTransient(modifiers)
                         && !field.isSynthetic()
-                        && !field.isAnnotationPresent(Ignore.class)) {
+                        && !field.isAnnotationPresent(Ignore.class)
+                        && (!field.isAnnotationPresent(JsonIgnore.class) || !field.getAnnotation(JsonIgnore.class).value())) {
                     fields.add(field);
                 }
             }
@@ -259,7 +280,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param description 参数描述
      * @return object 参数
      */
-    private static ILLMFunctionParameter objectWithAdditionalProperties(String description) {
+    private static ILLMFunctionParameter objectWithAdditionalProperties(@Nullable String description) {
         return AbstractLLMFunctionParameter.builder()
                 .type("object")
                 .description(description)
@@ -325,7 +346,7 @@ public final class LLMFunctionParameterSchemaFactory {
      * @param element 可携带注解的反射元素
      * @return 描述文本
      */
-    private static String getDescription(AnnotatedElement element) {
+    private static @Nullable String getDescription(AnnotatedElement element) {
         var description = element.getAnnotation(Description.class);
         return description == null ? null : description.value();
     }

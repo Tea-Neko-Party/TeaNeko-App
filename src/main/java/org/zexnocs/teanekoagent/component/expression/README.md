@@ -6,6 +6,8 @@
 
 v4.8.2-l 的普通回复优先使用正文，只有分段或专用指令才使用信封。格式错误通过安全诊断分别说明 BEGIN、END、当轮标识或指令问题，不记录模型原文、不交付半截控制文本；默认经原发送器提示用户，可用 `/cfg set agent failureReplyEnabled false` 关闭失败提示。
 
+v4.8.3-l 在整个计划冻结前检查解码后的正文，拒绝混入内部工具调用标记；JSON 转义不能绕过检查。普通代码围栏示例保留，包括自动分段后的长示例。模型阶段的有限协议纠正见[交互规则](../llm/framework/interaction/README.md#内部工具标记泄漏)。
+
 默认能力 teaneko.agent:expression 安装到使用默认能力的实例，显式 features 集合需要加入该能力。实际来源 scope 仍须已登记并启用 Agent；通过 `/cfg set agent expressionEnabled false` 关闭该区域的表达合同。关闭后保留原普通图文/JSON 回复和统一目标顺序，不关闭人格或记忆。
 
 本地 config/agent/expression.yml 由原 FileConfig 服务加载，缺失时使用项目模板；支持 Core 环境占位符，读取不写回。它只控制开关、数量和时序，模型和凭据仍在 model.yml，人格在原人格模块。
@@ -40,6 +42,12 @@ TEXT 支持 reply/at/plain，默认 plain；wait 可省略，使用非负十进�
 控制行独占一行，允许行首、行尾空白，但 `⟧` 后不能接正文或标点；正文从下一行开始，原有缩进和行尾空白保持不变。字段禁止重复；当轮标识、版本、协议或指令无效时在第一段发送前失败。代码围栏中的标记保持字面，正文可用反斜杠转义控制前缀。普通图文与旧 teaneko_reply:1 JSON 继续可用；新协议解析失败不回退成正文。原生入站、工具结果、记忆或模型推理都不作为正式回复协议执行。
 
 ## 扩展开发
+
+### 独立原生表情
+
+安装 expression 后，`NativeFaceService` 独立提供 `native_faces` 当轮资料；只装 llm+expression 也可使用客户端原生表情，不需要 tool、sticker 或图库文件。目录遵守媒体总开关、scope 原生表情开关、客户端能力及插件状态，不访问图库事务。
+
+FACE 只能使用当轮签名目录中的 ID，许可绑定请求、真实目标、机器人账号、配置和扩展代次，十分钟失效；编译与发送前复核。每轮最多四条、不重复 ID，单独发送并等待有效消息 ID。图库类别、`sticker_list` 与 STICKER 仍由 sticker 提供，详见[素材模块](../sticker/README.md#类别选图与原生表情)。
 
 | 扩展 | 声明与接口 | 精确键 |
 | --- | --- | --- |

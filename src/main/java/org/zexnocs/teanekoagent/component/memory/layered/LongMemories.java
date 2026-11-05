@@ -4,6 +4,7 @@ package org.zexnocs.teanekoagent.component.memory.layered;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
+import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.time.Instant;
@@ -17,10 +18,11 @@ import java.util.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：长期候选与引用字段加入统一结构说明。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class LongMemories {
     /** 禁止实例化领域契约容器。 */
@@ -82,14 +84,18 @@ public final class LongMemories {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param evidenceId 宿主提供的证据标识
      * @param text 原始消息中的连续片段
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Quote(String evidenceId, String text) {
+    // 2026/11/06：引用字段加入统一输出描述，证据仍由原事务校验。
+    public record Quote(
+            @Description("本批真实证据ID，必须来自输入 evidenceMap。") String evidenceId,
+            @Description("该证据中的逐字连续原话，不拼接、不改标点；非空且最多512字。") String text) {
         /**
          * 限制引用容量，空引用不能证明事实。
          * @param evidenceId 证据标识
@@ -108,6 +114,7 @@ public final class LongMemories {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param kind 事实、偏好或事件
      * @param subjectId 事实主体，事件可为空
      * @param attribute 语义属性
@@ -119,10 +126,18 @@ public final class LongMemories {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Candidate(Kind kind, @Nullable UUID subjectId, String attribute, String text, Mode mode,
-                            List<Quote> quotes, List<UUID> segments, String timeHint) {
+    // 2026/11/06：统一描述完整候选，包括可空主体及真实证据关系。
+    public record Candidate(
+            @Description("FACT 为事实，PREFERENCE 为偏好，EPISODE 为共同经历。") Kind kind,
+            @Description("事实或偏好的真实作者 UUID；EPISODE 为 null，不猜测或创造身份。") @Nullable UUID subjectId,
+            @Description("简短稳定语义属性，如 preference.drink；非空且最多64字。") String attribute,
+            @Description("有证据的非空事实或经历摘要，最多512字。") String text,
+            @Description("共存用 ADD，原话明确改变单值属性才用 REPLACE，不确定用 CONFLICT；EPISODE 必须 ADD。") Mode mode,
+            @Description("最多4条逐字引用；事实和偏好至少1条。") List<Quote> quotes,
+            @Description("1至4个本批真实片段 UUID，每条引用须落在这些片段内。") List<UUID> segments,
+            @Description("默认空字符串；重要时间仅复制原话表达，不补造，最多128字。") String timeHint) {
         /**
          * 固定有界候选，不接受模型自报权限或未定位的事实主体。
          * @param kind 记忆类型

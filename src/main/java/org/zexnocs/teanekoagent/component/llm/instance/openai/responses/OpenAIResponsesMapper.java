@@ -31,10 +31,11 @@ import java.util.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：通过 text.format 发送严格 JSON Schema。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class OpenAIResponsesMapper {
@@ -242,7 +243,10 @@ public final class OpenAIResponsesMapper {
     private static Map<String, Object> toText(OpenAIModelOptions options) {
         var result = new LinkedHashMap<String, Object>();
         if (options.findResponseFormat().orElse(LLMResponseFormat.TEXT) == LLMResponseFormat.JSON) {
-            result.put("format", Map.of("type", "json_object"));
+            // 2026/11/06：Responses 的具名 Schema 直接位于 text.format，不嵌套 json_schema。
+            result.put("format", options.findResponseSchema().<Map<String, Object>>map(schema -> Map.of(
+                    "type", "json_schema", "name", schema.name(), "strict", true, "schema", schema.schema()))
+                    .orElseGet(() -> Map.of("type", "json_object")));
         }
         options.findVerbosity().ifPresent(value -> result.put("verbosity", value));
         return result.isEmpty() ? null : Map.copyOf(result);

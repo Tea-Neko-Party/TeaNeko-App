@@ -52,10 +52,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：客户端和插件过滤后复核技能依赖，不触发未装配工具。
+ * <br>2026/11/05：工具整体禁用时仍验证已提供资料的依赖，避免残留不可执行的查询提示。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;
@@ -336,6 +338,16 @@ final class AgentTurnPipeline {
                 ? binding.guarded((call, trusted) -> turn.guard(gate, true))
                 : binding.guardedAsync((call, trusted) -> guard(turn, true), executor)).toList();
         var toolSet = new LLMToolSet(mapper, bound);
+        // 2026/11/05：包括工具整体禁用后的空集合，只验证资料依赖，不重新选择或启用工具。
+        try {
+            var definition = context.snapshot().require(AgentComponents.DEFINITION);
+            if (!input.fragments().isEmpty()
+                    || definition.assembly().has("tool") && definition.activities().contains(AgentActivity.TOOL)) {
+                tools.verifySelection(request, input, bound);
+            }
+        } catch (AgentPromptException rejected) {
+            return turn.rejectContext(rejected);
+        }
         turn.guard(gate, false);
         var prompt = new LLMPrompt(input.messages(), runtime.modelOptions().toOptions(), LLMOptionsPolicy.RESOLVED);
         var trusted = new ToolInvocationContext(request.requestId(), context.snapshot(), context.control());

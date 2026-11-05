@@ -17,6 +17,8 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResponseProtocolException;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonException;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
@@ -43,19 +45,18 @@ import static org.mockito.Mockito.mock;
 /**
  * 核验注解代理、扩展分派、语义历史与取消后的真实顺序。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
  * <br>2026/11/05：验证控制行边缘空白、正文保真及错误标识和行内正文拒绝。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：验证 JSON 转义与表达解码不能泄漏工具标记，跨分段代码示例保持可用。
+ * <br>2026/11/06：旧信封的结构化失败保留实际请求号，缺少上下文时不伪造编号。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Timeout(15)
 class ExpressionProtocolTest {
@@ -97,6 +98,7 @@ class ExpressionProtocolTest {
                 ()->new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent","1",1,Set.of(),true),
                 ()->new org.zexnocs.teanekocore.plugin.PluginDescriptor("test.extra","1",1,Set.of())));
         context.getBeanFactory().registerSingleton("plugins",plugins);
+        context.getBeanFactory().registerSingleton("faces", mock(NativeFaceService.class));
         context.register(org.zexnocs.teanekoagent.component.expression.configuration.AgentExpressionConfig.class,ExpressionFeature.class);
         context.refresh();org.mockito.Mockito.verifyNoInteractions(files,configs);return context;
     }
@@ -198,6 +200,66 @@ class ExpressionProtocolTest {
             String example = instructions.substring(instructions.indexOf(head), instructions.indexOf(head + "END⟧")
                     + (head + "END⟧").length());
             assertEquals(2, compiled(runtime, request, input, interaction(input, example)).steps().size());
+        }
+    }
+
+    /**
+     * 2026/11/05：JSON 转义及表达正文必须在整个计划交付前拒绝，旧发送入口同样受保护。
+     */
+    @Test
+    void rejectsToolMarkupAfterProtocolDecoding() {
+        try (var context = context(new AtomicInteger())) {
+            var runtime = new ExpressionRuntime(context.getBean(ReplyExtensionRegistry.class),
+                    ExpressionSettings::defaults, scope -> true, JsonMapper.builder().build());
+            var request = request();
+            var input = new AgentPromptInput(request.messages(),
+                    List.of(new AgentPromptFragment(ExpressionRuntime.FRAGMENT, runtime.contract(request))), 0);
+            String marker = "<｜｜DSML｜｜ invoke name=\"sticker_list\">";
+            String encoded = JsonMapper.builder().build().writeValueAsString(Map.of("teaneko_reply", 1,
+                    "messages", List.of(Map.of("mode", "reply", "text", marker))))
+                    .replace("<", "\\u003c");
+            assertFalse(encoded.contains("<"));
+            var answer = interaction(input, encoded);
+            assertThrows(LLMResponseProtocolException.class,
+                    () -> AgentReplyPlan.fromAnswer(answer.finalCandidate().orElseThrow()));
+            assertThrows(LLMResponseProtocolException.class,
+                    () -> compiled(runtime, request, input, answer));
+            String head = "⟦TNK:" + ExpressionRuntime.nonce(request.requestId()) + "|";
+            String envelope = head + "BEGIN|protocol=teaneko:expression|v=1⟧\n" + head
+                    + "TEXT|wait=0⟧\n合法前段\n" + head + "TEXT|wait=0⟧\n" + marker + "\n" + head + "END⟧";
+            var failure = assertThrows(CompletionException.class,
+                    () -> compiled(runtime, request, input, interaction(input, envelope)));
+            assertInstanceOf(LLMResponseProtocolException.class, failure.getCause());
+        }
+    }
+
+    /** 2026/11/06：兼容解析保留真实定位，缺失请求上下文时报告未取得。 */
+    @Test
+    void reportsActualOrUnavailableRequestForInvalidLegacyJson() {
+        var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder()
+                .addText("{\"teaneko_reply\":1,\"messages\":\"不是数组\"}").build()).build();
+        var requestId = UUID.randomUUID();
+        var identified = assertThrows(LLMJsonException.class, () -> AgentReplyPlan.fromAnswer(answer, requestId));
+        assertTrue(identified.getMessage().contains("请求=" + requestId));
+        var unidentified = assertThrows(LLMJsonException.class, () -> AgentReplyPlan.fromAnswer(answer));
+        assertTrue(unidentified.getMessage().contains("请求=未取得"));
+        assertFalse(unidentified.getMessage().contains("不是数组"));
+    }
+
+    /** 2026/11/05：长代码示例跨自动分段时不丢失围栏状态，不被误判为工具泄漏。 */
+    @Test
+    void preservesCodeFenceAcrossMessageSegments() {
+        try (var context = context(new AtomicInteger())) {
+            var runtime = new ExpressionRuntime(context.getBean(ReplyExtensionRegistry.class),
+                    ExpressionSettings::defaults, scope -> true, JsonMapper.builder().build());
+            var request = request();
+            var input = new AgentPromptInput(request.messages(),
+                    List.of(new AgentPromptFragment(ExpressionRuntime.FRAGMENT, runtime.contract(request))), 0);
+            String text = "协议示例：\n```text\n" + "说明文字".repeat(600)
+                    + "\n<｜｜DSML｜｜ calls>\n</｜｜DSML｜｜ calls>\n```";
+            var result = interaction(input, text);
+            assertEquals(2, AgentReplyPlan.fromAnswer(result.finalCandidate().orElseThrow()).orElseThrow().parts().size());
+            assertEquals(2, compiled(runtime, request, input, result).steps().size());
         }
     }
 

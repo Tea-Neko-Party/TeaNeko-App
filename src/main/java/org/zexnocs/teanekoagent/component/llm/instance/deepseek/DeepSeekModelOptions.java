@@ -26,10 +26,11 @@ import java.util.Optional;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：从已经选定的元数据值解析布尔及整数，去掉始终相同的字段名参数。
+ * <br>2026/11/06：专用参数复制保留输出 Schema。
  * @author zExNocs
  * @date 2026/06/09
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Getter
 @Setter
@@ -190,6 +191,8 @@ public class DeepSeekModelOptions extends LLMModelOptions {
         overrides.findTopP().ifPresent(result::setTopP);
         overrides.findPresencePenalty().ifPresent(result::setPresencePenalty);
         overrides.findResponseFormat().ifPresent(result::setResponseFormat);
+        // 2026/11/06：保留统一描述，原生协议能否发送 Schema 由模型能力决定。
+        overrides.findResponseSchema().ifPresent(result::setResponseSchema);
         overrides.findStopWords().ifPresent(result::setStopWords);
         overrides.findStream().ifPresent(result::setStream);
         overrides.findTools().ifPresent(result::setTools);

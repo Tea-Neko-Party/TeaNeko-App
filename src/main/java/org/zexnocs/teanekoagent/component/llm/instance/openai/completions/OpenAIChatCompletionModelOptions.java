@@ -26,10 +26,11 @@ import java.util.Optional;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：直接转换已经选定的整数元数据值，明确字段缺失时的可空契约。
+ * <br>2026/11/06：专用参数复制保留输出 Schema。
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Getter
 @Setter
@@ -246,6 +247,8 @@ public class OpenAIChatCompletionModelOptions extends LLMModelOptions {
         source.findTopP().ifPresent(target::setTopP);
         source.findPresencePenalty().ifPresent(target::setPresencePenalty);
         source.findResponseFormat().ifPresent(target::setResponseFormat);
+        // 2026/11/06：兼容供应商参数复制不丢失输出 Schema。
+        source.findResponseSchema().ifPresent(target::setResponseSchema);
         source.findStopWords().ifPresent(target::setStopWords);
         source.findStream().ifPresent(target::setStream);
         source.findTools().ifPresent(target::setTools);

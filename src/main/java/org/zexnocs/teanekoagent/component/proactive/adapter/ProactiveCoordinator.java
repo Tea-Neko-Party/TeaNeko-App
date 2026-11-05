@@ -41,10 +41,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：轮换批次起点，忙槽位保留原到期机会。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
@@ -151,21 +152,33 @@ public final class ProactiveCoordinator implements AutoCloseable {
             List<AgentScope> keys;
             synchronized (scheduled) { keys = List.copyOf(scheduled.keySet()); }
             for (int n = 0; n < Math.min(4, keys.size()); n++) {
-                var scope = keys.get(Math.floorMod(cursor++, keys.size())); var config = config(scope.scopeId());
+                var scope = keys.get(Math.floorMod(cursor + n, keys.size())); var config = config(scope.scopeId());
                 synchronized (scheduled) {
                     var item = scheduled.get(scope);
                     if (item == null) { continue; }
                     if (config == null || !config.isProactiveTimedEnabled()) { scheduled.remove(scope); continue; }
                     if (!now.isBefore(item.next())) {
-                        scheduled.put(scope, new Scheduled(item.target(), now.plusSeconds(item.interval()), item.interval()));
                         due.add(Map.entry(item.target(), now));
                     }
                 }
             }
+            // 2026/11/05：每批轮换起点，不能在目标数等于批宽时固定偏向前两项。
+            cursor = keys.isEmpty() ? 0 : Math.floorMod(cursor + 1, keys.size());
             return due;
         }, executor).thenCompose(due -> CompletableFuture.allOf(due.stream().map(item ->
                 service.candidate(item.getKey(), AgentTriggerGate.Kind.TIMER, item.getValue().toString(), "")
-                        .exceptionally(failure -> Delivery.FAILED).toCompletableFuture()).toArray(CompletableFuture[]::new)))
+                        .exceptionally(failure -> Delivery.FAILED).thenAccept(result -> {
+                            if (result != Delivery.BUSY) {
+                                synchronized (scheduled) {
+                                    var current = scheduled.get(item.getKey().scope());
+                                    if (current != null && current.target().equals(item.getKey())
+                                            && !current.next().isAfter(item.getValue())) {
+                                        scheduled.put(item.getKey().scope(), new Scheduled(current.target(),
+                                                clock.instant().plusSeconds(current.interval()), current.interval()));
+                                    }
+                                }
+                            }
+                        }).toCompletableFuture()).toArray(CompletableFuture[]::new)))
                 .whenComplete((ignored, failure) -> scanning.set(false));
     }
 

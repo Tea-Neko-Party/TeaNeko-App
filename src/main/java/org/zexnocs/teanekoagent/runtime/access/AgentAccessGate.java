@@ -27,10 +27,11 @@ import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：聊天路由覆盖仅替换身份，不重置定义中的 JSON 输出合同。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class AgentAccessGate {
     private final IAgentRegistry registry;
@@ -104,10 +105,9 @@ public final class AgentAccessGate {
             // 2026/11/04：聊天路由优先于文件默认，定义中的其他模型选项和能力保持不变。
             var definition = handle.definition();
             if (!policy.modelRoute().isEmpty()) {
-                var options = org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions.merge(
-                        definition.modelOptions().toOptions(),
-                        org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions.builder()
-                                .provider(policy.modelRoute()).build());
+                // 2026/11/06：只覆盖路由，避免默认 TEXT 清除原 JSON 合同。
+                var options = definition.modelOptions().toOptions();
+                options.setProvider(policy.modelRoute());
                 definition = new org.zexnocs.teanekoagent.runtime.AgentDefinition(definition.id(),
                         new org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot(options),
                         definition.activities(), definition.features());

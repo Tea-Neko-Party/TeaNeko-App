@@ -32,10 +32,11 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：工具声明和说明由可重扫目录缓存，页面查询不再遍历全部 Bean 定义。
  *
+ * <br>2026/11/05：保留已发现提供者类型，高频选择不重新解析代理。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Component
 public final class TeaNekoAgentToolRegistry implements IScanner {
@@ -110,7 +111,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
      */
     public List<AgentFeature> combine(List<AgentFeature> existing) {
         var keys = new HashSet<String>(); existing.forEach(value -> keys.add(value.key()));
-        var result = new ArrayList<>(existing); var groups = new TreeMap<String, List<String>>();
+        var result = new ArrayList<>(existing); var groups = new TreeMap<String, List<Declaration>>();
         var declarations = new HashMap<String, TeaNekoAgentToolClass>();
         var owners = new HashMap<String, String>();
         for (var declaration : discovered) {
@@ -127,7 +128,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
             if (keys.contains(key)) { throw new IllegalArgumentException("自动工具能力与既有能力重名：" + key); }
             var previous = declarations.putIfAbsent(key, annotation);
             if (previous != null && previous.defaultEnabled() != annotation.defaultEnabled()) { throw new IllegalArgumentException("同一工具能力的默认安装声明不一致：" + key); }
-            owners.put(key, plugin); groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(beanName);
+            owners.put(key, plugin); groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(declaration);
         }
         groups.forEach((key, providers) -> {
             IAgentToolSource tools = new IAgentToolSource() {
@@ -153,7 +154,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
                 @Override public List<org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding> select(org.zexnocs.teanekoagent.runtime.AgentDefinition definition,
                         org.zexnocs.teanekoagent.runtime.AgentRunRequest request, org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot runtime, AgentPromptInput input) {
                     var selected = new ArrayList<org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding>();
-                    for (var provider : providers) { selected.addAll(TeaNekoAgentToolMethods.select(beans.getBean(provider), definition, request, runtime, input, mapper, executor)); }
+                    for (var provider : providers) { selected.addAll(TeaNekoAgentToolMethods.select(provider.type(), beans.getBean(provider.name()), definition, request, runtime, input, mapper, executor)); }
                     return List.copyOf(selected);
                 }
             };

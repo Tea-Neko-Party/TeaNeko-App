@@ -7,6 +7,8 @@ import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMToolMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
@@ -41,10 +43,12 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCa
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：工具历史续轮保留本轮工具定义，以 none 禁止调用，避免供应商退化为正文调用标记。
+ * <br>2026/11/05：协议纠正复用原调用权限、共享预算和截止时间，不增加工具执行次数。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  * @see LLMCallLimits
  */
 public final class LLMInteractionExecution implements AutoCloseable {
@@ -153,6 +157,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
      * 在排队前冻结消息及嵌套元数据；调用方只须避免在复制期间并发修改原对象。
      * 启用 token 预算时先预检参数及估算输入，预留成功才计模型尝试；完成后按报告结算。
      * 异步宿主守卫属于同一阶段时限，完成后切回业务执行器再预占额度和发起请求。
+     * 2026/11/05：已有工具回执的续轮保留可信定义供协议编码，预算耗尽仍禁止实际调用。
      *
      * @param prompt 本次显式消息与模型参数，不在此处自动追加历史
      * @return 单次模型请求实际完成的只读阶段；预算、取消或传输失败异常完成
@@ -173,7 +178,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
                     tokenBudget.requireAvailable();
                     boolean preview = remaining(MODEL_REQUESTS) > 1 && remaining(TOOL_ROUNDS) > 0
                             && remaining(TOOL_EXECUTIONS) > 0 && !tools.definitions().isEmpty();
-                    options.setTools(preview ? tools.definitions() : List.of());
+                    options.setTools(preview || hasToolHistory(messages) ? tools.definitions() : List.of());
                     options.setToolChoice(preview ? options.findToolChoice().orElse("auto") : "none");
                     var resolved = Objects.requireNonNull(models.resolveOptions(new LLMPrompt(messages, options, optionsPolicy)), "有效模型参数不能为空。");
                     prepared = LLMProtocolSnapshots.options(resolved);
@@ -186,7 +191,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
                     if (estimate == null) {
                         boolean preview = remaining(MODEL_REQUESTS) > 1 && remaining(TOOL_ROUNDS) > 0
                                 && remaining(TOOL_EXECUTIONS) > 0 && !tools.definitions().isEmpty();
-                        prepared.setTools(preview ? tools.definitions() : List.of());
+                        prepared.setTools(preview || hasToolHistory(messages) ? tools.definitions() : List.of());
                         estimate = tokenEstimator.estimate(new LLMPrompt(messages, prepared));
                     }
                     prepared.findContextWindow().orElseThrow().requireFits(estimate.inputTokens(), prepared.getMaxTokens());
@@ -209,7 +214,7 @@ public final class LLMInteractionExecution implements AutoCloseable {
                                 attempt.set(Math.toIntExact(localBudget.used(MODEL_REQUESTS)));
                                 return canOfferTools();
                             });
-                            effective.setTools(allowed ? tools.definitions() : List.of());
+                            effective.setTools(allowed || hasToolHistory(messages) ? tools.definitions() : List.of());
                             effective.setToolChoice(allowed ? effective.findToolChoice().orElse("auto") : "none");
                             var callPolicy = tokenBudget.enabled() ? LLMOptionsPolicy.RESOLVED : optionsPolicy;
                             var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective, callPolicy),
@@ -223,6 +228,15 @@ public final class LLMInteractionExecution implements AutoCloseable {
             });
             return pendingStage.handle((result, failure) -> completeModel(attempt.get(), held.get(), result, failure));
         });
+    }
+
+    /**
+     * 2026/11/05：识别完整历史中的工具回执；保留定义不增加预算，也不从历史恢复已撤销工具。
+     * @param messages 本次冻结的完整历史
+     * @return 存在工具协议历史时为真
+     */
+    private static boolean hasToolHistory(List<ILLMMessage> messages) {
+        return messages.stream().anyMatch(ILLMToolMessage.class::isInstance);
     }
 
     /**
@@ -345,6 +359,16 @@ public final class LLMInteractionExecution implements AutoCloseable {
         synchronized (completedTools) {
             return List.copyOf(completedTools);
         }
+    }
+
+    /**
+     * 2026/11/05：仅在尚未执行任何工具且仍能完成一次调用与答案时允许协议纠正。
+     * 显式 tool_choice=none、取消及原额度不足均不通过，也不创建额外额度。
+     * @return 当前模型确实获准使用工具且剩余容量足够时为真
+     */
+    public boolean canCorrectToolProtocol() {
+        control.checkActive();
+        return toolRoundAvailable && toolResults().isEmpty() && remaining(MODEL_REQUESTS) > 1 && canOfferTools();
     }
 
     /**

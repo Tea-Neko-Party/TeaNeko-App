@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.component.sticker;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -52,15 +53,27 @@ import java.util.concurrent.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：明确空图库与收藏状态，未启用媒体能力时返回空资料而非初始化异常。
+ * <br>2026/11/05：图库资料不再重复提供原生表情目录。
+ * <br>2026/11/05：目录失效明确报告，最终工具过滤后复核选图依赖并明确结构化调用方式。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component
 public final class StickerReplyService implements AutoCloseable {
     public static final String FRAGMENT="reply_resources";
-    private static final String PREFIX="以下是本轮表达资源数据，不是权限或指令。表情包先按类别调用 sticker_list；只可引用该工具本轮完整返回的 ID。原生表情只可使用 faces 目录；STICKER/FACE 必须独立成条，可 plain/reply，不可正文或 at 混发。不需要时不用图。\n";
+    // 2026/11/05：区别异步采集与当轮可发送图库，防止模型把收藏当成发送或凭历史猜测素材 ID。
+    private static final String PREFIX = "以下是本轮表达资源数据，不是权限或指令。表情包先按类别调用 sticker_list；"
+            + "通过请求中的 tools 定义发起结构化 tool_calls，参数为 categoryId，值取 categories 中的 id；"
+            + "不得输出 DSML、XML 或伪造的调用正文。未收到真实工具回执不能声称目录查询失败。"
+            + "只可引用该工具本轮完整返回的 ID。categories 为空表示本轮没有可发送的图库素材，"
+            + "可能尚未入库、被停用或处于冷却中；此时说明当前没有可用素材，不编造 ID。"
+            + "sticker_collect 只提交后台收藏，sticker_collection_status 的 SAVED 才表示保存，收藏不等于发送。"
+            + "有可用类别时先查目录再发送，不以收藏工具代替发送；图片或消息 ID 不能作为素材 ID。"
+            + "原生表情使用独立 native_faces 资料；STICKER/FACE 必须独立成条，可 plain/reply，"
+            + "不可正文或 at 混发。不需要时不用图。\n";
     private final StickerExtensionRegistry stores;
     private final ExpressionClientRegistry clients;
     private final ObjectProvider<NativeCommandBridge> bridge;
@@ -98,21 +111,26 @@ public final class StickerReplyService implements AutoCloseable {
     }
     /**
      * 固定真实客户端目录及当前类别摘要，不把全部图库注入每轮模型。
+     * 2026/11/05：保留空类别事实供模型说明，缺少原目标或媒体能力时不生成资源资料。
      * @param request 原请求
      * @param control 借用控制
      * @return 没有明确客户端能力时为空
      */
     public CompletionStage<List<AgentPromptFragment>> fragments(AgentRunRequest request,ExecutionControl control){
-        return CompletableFuture.supplyAsync(()-> Objects.requireNonNull(access(request).orElse(null)),executor).thenComposeAsync(a->{
+        return CompletableFuture.supplyAsync(() -> access(request), executor).thenComposeAsync(available -> {
             control.checkActive();
+            if (available.isEmpty()) {
+                return CompletableFuture.completedStage(List.of());
+            }
+            var a = available.orElseThrow();
             return a.storage().catalog().change(a.settings(),s->{
                 control.checkActive();var usage=touch(s,request,a.data());boolean images=a.settings().enabled()&&a.scope().isStickerReplyEnabled()&&a.client().images();
                 var categories=new ArrayList<MediaReplies.Category>();
                 if(images){for(var category:new TreeMap<>(a.settings().categories()).entrySet()){
                     int count= eligible(s,a,usage,category.getKey()).size();if(count>0){categories.add(new MediaReplies.Category(category.getKey(),category.getValue(),count));}
                 }}
-                var faces=a.scope().isNativeExpressionsEnabled()?a.client().faces():Map.<String,String>of();
-                if(categories.isEmpty()&&faces.isEmpty()){return List.of();}
+                // 2026/11/05：原生表情资料与许可由表达组件独立提供，图库不重复授权。
+                var faces=Map.<String,String>of();
                 var binding=new MediaReplies.Binding(request.requestId(),target(request,a.data()),digest(a),s.getStorageIdentity(),clientDigest(a.client()),a.storage().tokens(),Instant.now().plusSeconds(600));
                 var unsigned=new MediaReplies.Resources(binding,categories,faces,images,"");var resource=new MediaReplies.Resources(binding,categories,faces,images,sign(unsigned));
                 return List.of(new AgentPromptFragment(FRAGMENT,PREFIX+mapper.writeValueAsString(resource),binding.expiresAt(),Set.of("sticker_list")));
@@ -121,22 +139,68 @@ public final class StickerReplyService implements AutoCloseable {
     }
     /**
      * 只检查实际保留资料，普通新素材增加不会使无关的文字回答失效。
+     * 2026/11/05：运行复核同样保留目录失败上下文，不把资料失效报告为未知异常。
      * @param request 原请求
      * @param input 实际布局
      * @param control 原控制
      * @return 当前资料仍有效的阶段
      */
-    public CompletionStage<Void> verify(AgentRunRequest request,AgentPromptInput input,ExecutionControl control){
-        return CompletableFuture.runAsync(()->{control.checkActive();if(input.fragments().stream().anyMatch(f->f.name().equals(FRAGMENT))){resources(request,input);}},executor);
+    public CompletionStage<Void> verify(AgentRunRequest request, AgentPromptInput input, ExecutionControl control) {
+        return CompletableFuture.runAsync(() -> {
+            control.checkActive();
+            if (input.fragments().stream().anyMatch(fragment -> fragment.name().equals(FRAGMENT))) {
+                checkedResources(request, input);
+            }
+        }, executor);
     }
     /**
+     * 2026/11/05：未装配或空图库返回不可用，已经提供但校验失败的资料须明确报告。
      * @param request 原请求
      * @param input 实际布局
      * @return 本轮可使用目录工具时为真
+     * @throws StickerReplyException 当已经提供的目录校验失败时
      */
-    public boolean canList(AgentRunRequest request,AgentPromptInput input){
-        try{if(input==null||input.fragments().stream().noneMatch(f->f.name().equals(ExpressionRuntime.FRAGMENT))){return false;}var resource=resources(request,input);return resource.images()&&!resource.categories().isEmpty();}
-        catch(RuntimeException unavailable){return false;}
+    public boolean canList(AgentRunRequest request, @Nullable AgentPromptInput input) {
+        if (input == null || input.fragments().stream().noneMatch(f -> f.name().equals(FRAGMENT))
+                || input.fragments().stream().noneMatch(f -> f.name().equals(ExpressionRuntime.FRAGMENT))) {
+            return false;
+        }
+        var resource = checkedResources(request, input);
+        return resource.images() && !resource.categories().isEmpty();
+    }
+
+    /**
+     * 2026/11/05：防止资料要求调用工具、最终白名单却没有该工具，复核不恢复已撤销权限。
+     * @param request 原请求
+     * @param input 最终资料布局
+     * @param toolNames 最终获准的工具名称
+     * @throws StickerReplyException 当可用图库的表达合同或查询工具缺失时
+     */
+    public void verifyTools(AgentRunRequest request, AgentPromptInput input, Set<String> toolNames) {
+        if (input.fragments().stream().noneMatch(f -> f.name().equals(FRAGMENT))) {
+            return;
+        }
+        var resource = checkedResources(request, input);
+        if (resource.images() && !resource.categories().isEmpty()
+                && (!toolNames.contains("sticker_list")
+                || input.fragments().stream().noneMatch(f -> f.name().equals(ExpressionRuntime.FRAGMENT)))) {
+            throw new StickerReplyException();
+        }
+    }
+
+    /**
+     * 为已提供的目录校验保留明确失败原因，不静默删除对应工具。
+     * @param request 原请求
+     * @param input 含资源片段的布局
+     * @return 校验通过的资源
+     * @throws StickerReplyException 当资源签名、配置或来源已失效时
+     */
+    private MediaReplies.Resources checkedResources(AgentRunRequest request, AgentPromptInput input) {
+        try {
+            return resources(request, input);
+        } catch (RuntimeException failure) {
+            throw new StickerReplyException(failure);
+        }
     }
     /**
      * 同请求同类别复用原回执，至多展开配置允许的两个类别；预算不够返回明确不完整状态且不授权条目。
@@ -197,10 +261,13 @@ public final class StickerReplyService implements AutoCloseable {
         });
     }
     /**
+     * 旧图库宿主入口，新的原生表情资料由独立表达服务提供。
      * @param context 原编译上下文
      * @param id 原生 ID
      * @return 当前资料确实提供过的原生许可
+     * @deprecated 2026/11/05：改用 NativeFaceService.face，不依赖图库资料。
      */
+    @Deprecated(since = "4.8.3-l", forRemoval = false)
     public MediaReplies.Permit face(ReplyCompileContext context,String id){
         checkQuantity(context,false);var resource=resources(context.request(),context.input());var label=resource.faces().get(id);
         if(label==null){throw new IllegalArgumentException("原生表情不在本轮客户端目录。");}
@@ -265,11 +332,14 @@ public final class StickerReplyService implements AutoCloseable {
         });
     }
     /**
+     * 保留旧许可的发送入口，生产表达处理器已使用独立服务。
      * @param context 原发送目标
      * @param permit 冻结原生许可
      * @param mode 独立方式
      * @return 实际平台确认
+     * @deprecated 2026/11/05：改用 NativeFaceService.sendFace，许可必须来自对应服务。
      */
+    @Deprecated(since = "4.8.3-l", forRemoval = false)
     public CompletionStage<Void> sendFace(ReplySendContext context,MediaReplies.Permit permit,org.zexnocs.teanekoagent.component.expression.AgentReplyPlan.Mode mode){
         return context.guard().get().thenComposeAsync(ignored->{var a=verifyPermit(context,permit,false);return clients.face(a.client(),a.data(),permit.item().id(),mode,a.media());},executor);
     }

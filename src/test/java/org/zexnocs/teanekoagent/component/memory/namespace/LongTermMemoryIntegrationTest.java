@@ -1,7 +1,5 @@
 package org.zexnocs.teanekoagent.component.memory.namespace;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
@@ -12,6 +10,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMConte
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
 import org.zexnocs.teanekoagent.component.memory.adapter.*;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryContext;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
@@ -43,23 +42,81 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 /**
  * 复用事务夹具检验从真实发言到长期画像、召回和本人维护的完整闭环。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证长期生成器保留宿主配置的更小输出上限。
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：独立工具组合继续覆盖原文意图和共享长期画像边界。
- *
+ * <br>2026/11/05：核对联合输出的 JSON 对象约束及字段失败安全诊断。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：验证证据原因、混合回滚、来源失效与持久暂停的授权恢复。
+ * <br>2026/11/06：覆盖排队证据到期、旧作业读取、网页恢复回执及数据库异常包装。
+ * <br>2026/11/06：格式不匹配保留受控字段诊断，不清空原作业或误计模型错误。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(25)
 class LongTermMemoryIntegrationTest {
+    /**
+     * 2026/11/05：在数据库回调已排队后撤销事实资格或取消控制，纯事实与空候选均不推进水位。
+     * @throws Exception 当有界异步检查超时或真实事务失败时
+     */
+    @Test void queuedConsolidationRechecksCancellationAndFactLearning() throws Exception {
+        for (boolean empty : List.of(false, true)) {
+            for (boolean cancelled : List.of(false, true)) {
+                try (var h = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
+                    h.medium("我喜欢喝茶");
+                    var entered = new CompletableFuture<Void>();
+                    var release = new CompletableFuture<Void>();
+                    var learning = new AtomicBoolean(true);
+                    var active = new java.util.concurrent.atomic.AtomicReference<ExecutionControl>();
+                    h.db.beforeTask.set(name -> {
+                        if (name.contains("提交长期记忆和画像证据")) {
+                            entered.complete(null);
+                            release.orTimeout(8, TimeUnit.SECONDS).join();
+                        }
+                    });
+                    try (var processor = new LayeredMemoryProcessor(h.layers,
+                            (batch, control) -> { throw new AssertionError("本例不应生成中期摘要"); }, h.refs,
+                            () -> settings, ignored -> new LayeredMemoryPolicy(true, true, true), Runnable::run, timers,
+                            Clock.fixed(now.plusSeconds(1000), ZoneOffset.UTC), mock(ILogger.class), h.longs,
+                            (batch, control) -> {
+                                active.set(control);
+                                return CompletableFuture.completedStage(empty ? List.of()
+                                        : List.of(h.candidate(batch, "喜欢喝茶", LongMemories.Mode.ADD)));
+                            }, ignored -> learning.get())) {
+                        var work = processor.drain().toCompletableFuture();
+                        try {
+                            entered.get(5, TimeUnit.SECONDS);
+                            if (cancelled) { active.get().cancel(); } else { learning.set(false); }
+                        } finally { release.complete(null); }
+                        work.get(8, TimeUnit.SECONDS);
+                        assertTrue(h.longs.query(reference, user, "", 20).toCompletableFuture().join().items().isEmpty());
+                        assertTrue(h.longs.claim(h.stream(), now.plusSeconds(1100)).toCompletableFuture().join().isPresent(),
+                                "撤权后不能推进原中期片段的整理水位");
+                    }
+                }
+            }
+        }
+    }
+
+    /** 2026/11/05：单字无索引词时仍须字面命中，真正空查询才列出最近项。 */
+    @Test void singleCharacterQueryDoesNotReturnUnrelatedRecentFacts() {
+        try (var h = new Harness()) {
+            h.medium("我喜欢喝茶");
+            h.learn("喜欢喝茶", LongMemories.Mode.ADD);
+            assertEquals(1, h.longs.query(reference, null, "茶", 20).toCompletableFuture().join().items().size());
+            assertTrue(h.longs.query(reference, null, "猫", 20).toCompletableFuture().join().items().isEmpty());
+            assertTrue(h.longs.query(reference, user, "a", 20).toCompletableFuture().join().items().isEmpty());
+            assertEquals(1, h.longs.query(reference, null, "", 20).toCompletableFuture().join().items().size());
+        }
+    }
     private final Instant now = Instant.parse("2026-11-03T00:00:00Z");
     private final UUID user = new UUID(0, 1);
     private final AgentScope scope = new AgentScope("test", "群甲");
@@ -179,6 +236,7 @@ class LongTermMemoryIntegrationTest {
             // 2026/11/05：每个提供者仅声明一个工具，组合仍按真实原文决定可见能力。
             var providers = List.of(tools, new LongTermProfileTool(tools),
                     new LongTermForgetTool(tools), new LongTermCorrectTool(tools));
+            providers.forEach(TeaNekoAgentToolMethods::prepare);
             IAgentToolSource selectedTools = (currentDefinition, currentRequest, runtime) -> providers.stream()
                     .flatMap(provider -> TeaNekoAgentToolMethods.select(provider, currentDefinition,
                             currentRequest, runtime, null, h.db.mapper, Runnable::run).stream())
@@ -219,6 +277,250 @@ class LongTermMemoryIntegrationTest {
             assertFalse(h.longs.commit(batch, List.of(valid), now.plusSeconds(1101)).toCompletableFuture().join());
             assertTrue(h.longs.commit(replacement, List.of(valid), now.plusSeconds(1101)).toCompletableFuture().join());
             assertFalse(h.longs.commit(replacement, List.of(valid), now.plusSeconds(1102)).toCompletableFuture().join());
+        }
+    }
+    /** 2026/11/05：准确区分原话、作者与同批错误片段，非法混合批次不得留下部分记录。 */
+    @Test void evidenceReasonsAreSpecificAndAtomic() {
+        try (var h = new Harness()) {
+            h.medium("私密原话：我喜欢喝茶");
+            h.medium("私密原话：我喜欢咖啡");
+            var batch = h.claim();
+            var valid = h.candidate(batch, "私密候选正文", LongMemories.Mode.ADD);
+            var invalid = List.of(
+                    new LongMemories.Candidate(valid.kind(), user, valid.attribute(), valid.text(), valid.mode(),
+                            List.of(new LongMemories.Quote(valid.quotes().getFirst().evidenceId(), "模型改写的私密原话")), valid.segments(), ""),
+                    new LongMemories.Candidate(valid.kind(), UUID.randomUUID(), valid.attribute(), valid.text(), valid.mode(),
+                            valid.quotes(), valid.segments(), ""),
+                    new LongMemories.Candidate(valid.kind(), user, valid.attribute(), valid.text(), valid.mode(),
+                            valid.quotes(), List.of(batch.segments().getFirst().id()), ""));
+            var codes = List.of(MemoryEvidenceException.Code.QUOTE_MISMATCH,
+                    MemoryEvidenceException.Code.SUBJECT_MISMATCH, MemoryEvidenceException.Code.SEGMENT_MISMATCH);
+            for (int i = 0; i < invalid.size(); i++) {
+                var candidate = invalid.get(i);
+                var failure = assertThrows(CompletionException.class,
+                        () -> h.longs.commit(batch, List.of(valid, candidate), now.plusSeconds(1001)).toCompletableFuture().join());
+                var detail = evidenceFailure(failure);
+                assertEquals(codes.get(i), detail.code());
+                assertEquals(MemoryEvidenceException.Domain.MEMORIES, detail.domain());
+                assertEquals(1, detail.index());
+                assertNull(detail.modelStatus());
+                // 2026/11/06：夹具保留原异常，再显式叠加生产任务包装验证安全原因仍可读取。
+                var wrapped = new CompletionException(new org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException(
+                        "不可公开的私密包装正文", failure));
+                var safe = org.zexnocs.teanekocore.logger.FailureDiagnostic.from(wrapped).toString();
+                assertSame(detail, evidenceFailure(wrapped));
+                assertEquals(codes.get(i).name(), LongMemoryJobs.Failure.from(wrapped).code());
+                assertTrue(safe.contains(codes.get(i).name()));
+                assertTrue(safe.contains("memories[1]"));
+                assertFalse(safe.contains("私密"));
+                assertTrue(h.longs.query(reference, user, "", 20).toCompletableFuture().join().items().isEmpty());
+                assertEquals(0, h.longs.consolidationState(reference, now, () -> {}).toCompletableFuture().join().through());
+            }
+            assertTrue(h.longs.commit(batch, List.of(valid), now.plusSeconds(1001)).toCompletableFuture().join());
+            assertEquals(batch.segments().getLast().through(),
+                    h.longs.consolidationState(reference, now, () -> {}).toCompletableFuture().join().through());
+        }
+    }
+
+    /** 2026/11/05：预检通过后，事务仍拒绝已经丢失、变化或到期的原消息。 */
+    @Test void authoritativeEvidenceIsRecheckedAfterPrevalidation() {
+        for (var code : List.of(MemoryEvidenceException.Code.EVIDENCE_MISSING,
+                MemoryEvidenceException.Code.EVIDENCE_CHANGED, MemoryEvidenceException.Code.EVIDENCE_EXPIRED)) {
+            try (var h = new Harness()) {
+                h.medium("私密原话");
+                var batch = h.claim();
+                var valid = h.candidate(batch, "私密候选", LongMemories.Mode.ADD);
+                assertFalse(LongMemoryEvidence.validate(batch,
+                        new org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis(List.of(valid), List.of()), null).isEmpty());
+                var source = batch.evidence().getLast();
+                String key = String.format(Locale.ROOT, "%020d", source.sequence());
+                String target = "short:" + batch.stream().id();
+                if (code == MemoryEvidenceException.Code.EVIDENCE_MISSING) {
+                    h.db.removeFactRow("agent.memory.layers.v1", target, key);
+                } else {
+                    var original = h.db.mapper.readValue(h.db.storedValue("agent.memory.layers.v1", target, key), MemoryLayers.Message.class);
+                    var message = original.message();
+                    if (code == MemoryEvidenceException.Code.EVIDENCE_CHANGED) {
+                        message = new HistoryMessage(message.messageId(), message.source(), message.role(), "已经变化的私密正文",
+                                message.occurredAt(), message.estimatedTime(), message.truncated());
+                    }
+                    h.db.seedFactRow("agent.memory.layers.v1", target, key, h.db.mapper.writeValueAsString(new MemoryLayers.Message(
+                            source.sequence(), message, original.personality(), code == MemoryEvidenceException.Code.EVIDENCE_EXPIRED
+                            ? now.plusSeconds(1000) : original.expiresAt())));
+                }
+                var failure = assertThrows(CompletionException.class,
+                        () -> h.longs.commit(batch, List.of(valid), now.plusSeconds(1001)).toCompletableFuture().join());
+                assertEquals(code, evidenceFailure(failure).code());
+                assertFalse(LongMemoryJobs.Failure.from(failure).invalidCandidate());
+                assertTrue(h.longs.query(reference, user, "", 20).toCompletableFuture().join().items().isEmpty());
+            }
+        }
+    }
+
+    /** 2026/11/05：同输入三次无效后重启仍暂停，授权恢复幂等，旧租约及未授权恢复均拒绝。 */
+    @Test void invalidInputPausesPersistentlyAndResumesOnlyWithAuthorityOrNewInput() {
+        for (boolean inputChanged : List.of(false, true)) {
+            try (var h = new Harness()) {
+                h.medium("我喜欢喝茶");
+                LongMemories.Batch old = null;
+                for (int attempt = 0; attempt < LongMemoryJobs.INVALID_LIMIT; attempt++) {
+                    old = h.longs.claim(h.stream(), now.plusSeconds(1000L + attempt * 4000L)).toCompletableFuture().join().orElseThrow();
+                    var failure = new MemoryEvidenceException(MemoryEvidenceException.Code.QUOTE_MISMATCH,
+                            MemoryEvidenceException.Domain.MEMORIES, 0, old.leaseId(), old.evidence().getFirst().id());
+                    h.longs.retry(old, now.plusSeconds(1001L + attempt * 4000L), new CompletionException(failure)).toCompletableFuture().join();
+                }
+                var original = Objects.requireNonNull(old);
+                var restored = new EasyDataLongTermMemoryStore(h.db.data, h.db.store, h.db.mapper, () -> settings);
+                var at = now.plusSeconds(16000);
+                var state = restored.consolidationState(reference, at, () -> {}).toCompletableFuture().join();
+                assertEquals(LongMemoryJobs.State.PAUSED, state.state());
+                assertEquals(3, state.invalidAttempts());
+                assertEquals(0, state.through());
+                assertTrue(restored.claim(h.stream(), at).toCompletableFuture().join().isEmpty());
+                if (inputChanged) {
+                    h.medium("新输入不会偷偷跳过前缀");
+                } else {
+                    var manager = new AgentActorContext(scope, AgentActorContext.Origin.MANAGEMENT, Optional.of(user), "", "恢复", "群甲");
+                    var operation = UUID.randomUUID();
+                    assertThrows(CompletionException.class, () -> restored.resumeConsolidation(reference, actor("伪造"),
+                            state.revision(), operation, at, () -> {}).toCompletableFuture().join());
+                    assertThrows(CompletionException.class, () -> restored.resumeConsolidation(reference, manager,
+                            state.revision(), operation, at, () -> { throw new IllegalStateException("管理权限已撤销"); })
+                            .toCompletableFuture().join());
+                    assertEquals(LongMemoryJobs.State.PAUSED, restored.consolidationState(reference, at, () -> {}).toCompletableFuture().join().state());
+                    var result = restored.resumeConsolidation(reference, manager, state.revision(), operation, at, () -> {}).toCompletableFuture().join();
+                    assertEquals(result, restored.resumeConsolidation(reference, manager, state.revision(), operation, at, () -> {}).toCompletableFuture().join());
+                    assertEquals(result, restored.consolidationOperation(reference, manager, operation, () -> {}).toCompletableFuture().join());
+                    assertThrows(CompletionException.class, () -> restored.resumeConsolidation(reference, manager,
+                            state.revision(), UUID.randomUUID(), at, () -> {}).toCompletableFuture().join());
+                }
+                var next = restored.claim(h.stream(), at.plusSeconds(1)).toCompletableFuture().join().orElseThrow();
+                assertFalse(restored.commit(original, List.of(), at.plusSeconds(2)).toCompletableFuture().join());
+                assertTrue(restored.commit(next, List.of(h.candidate(next, "修正的候选", LongMemories.Mode.ADD)), at.plusSeconds(2))
+                        .toCompletableFuture().join());
+                var done = restored.consolidationState(reference, at.plusSeconds(3), () -> {}).toCompletableFuture().join();
+                assertEquals(0, done.invalidAttempts());
+                assertEquals(next.segments().getLast().through(), done.through());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/05：穿过完成阶段与数据库任务异常包装读取领域原因，不依赖异常文本猜测。
+     * @param failure 完成阶段异常
+     * @return 实际证据异常
+     */
+    private static MemoryEvidenceException evidenceFailure(Throwable failure) {
+        for (int depth = 0; failure != null && depth < 24; depth++, failure = failure.getCause()) {
+            if (failure instanceof MemoryEvidenceException evidence) return evidence;
+        }
+        throw new AssertionError("缺少证据领域原因");
+    }
+
+    /**
+     * 2026/11/06：入队时有效的原证据在真正事务开始前过期，固定时钟推进代替 sleep。
+     * @throws Exception 当有界事务协调失败时
+     */
+    @Test
+    void queuedCommitUsesActualEvidenceTime() throws Exception {
+        try (var h = new Harness()) {
+            h.medium("我喜欢喝茶");
+            var batch = h.claim();
+            h.db.rewriteRows("short:", raw -> {
+                var original = h.db.mapper.readValue(raw, MemoryLayers.Message.class);
+                return h.db.mapper.writeValueAsString(new MemoryLayers.Message(original.sequence(), original.message(),
+                        original.personality(), now.plusSeconds(1005)));
+            });
+            var time = new java.util.concurrent.atomic.AtomicReference<>(now.plusSeconds(1001));
+            var clock = mock(Clock.class);
+            when(clock.instant()).thenAnswer(ignored -> time.get());
+            var store = new EasyDataLongTermMemoryStore(h.db.data, h.db.store, h.db.mapper, () -> settings, null, clock);
+            var entered = new CompletableFuture<Void>();
+            var release = new CompletableFuture<Void>();
+            h.db.beforeTask.set(name -> {
+                if (name.contains("提交长期记忆和画像证据")) {
+                    entered.complete(null);
+                    release.orTimeout(5, TimeUnit.SECONDS).join();
+                }
+            });
+            var submitted = store.commit(batch, List.of(h.candidate(batch, "喝茶", LongMemories.Mode.ADD)), time.get()).toCompletableFuture();
+            try {
+                entered.get(3, TimeUnit.SECONDS);
+                time.set(now.plusSeconds(1020));
+            } finally {
+                release.complete(null);
+            }
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class, () -> submitted.get(3, TimeUnit.SECONDS));
+            assertEquals(MemoryEvidenceException.Code.EVIDENCE_EXPIRED, evidenceFailure(failure).code());
+            assertEquals(0, store.consolidationState(reference, time.get(), () -> {}).toCompletableFuture().join().through());
+        }
+    }
+
+    /**
+     * 2026/11/06：旧格式兼容不能放宽已存在的非法字段，失败原因不导出原字段值。
+     * @throws Exception 当有界数据库操作失败时
+     */
+    @Test
+    void malformedJobsKeepOriginalDataAndReportSafeFields() throws Exception {
+        try (var h = new Harness()) {
+            h.medium("原话不能出现在诊断中");
+            h.claim();
+            var key = h.stream().id();
+            var original = h.db.storedValue("agent.memory.long.v1", "jobs", key);
+            var node = assertInstanceOf(tools.jackson.databind.node.ObjectNode.class, h.db.mapper.readTree(original));
+            node.put("revision", "不可公开的私密内容");
+            var malformed = h.db.mapper.writeValueAsString(node);
+            h.db.seedFactRow("agent.memory.long.v1", "jobs", key, malformed);
+            var failure = assertThrows(java.util.concurrent.ExecutionException.class, () -> h.longs.claim(h.stream(), now.plusSeconds(2000))
+                    .toCompletableFuture().get(3, TimeUnit.SECONDS));
+            var safe = org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).toString();
+            assertTrue(safe.contains("MEMORY_STORAGE_FORMAT"));
+            assertTrue(safe.contains("记录类型=Job"));
+            assertTrue(safe.contains("字段=revision"));
+            assertFalse(safe.contains("私密"));
+            assertFalse(safe.contains("原话"));
+            assertEquals(new LongMemoryJobs.Failure("MEMORY_STORAGE_FORMAT", false), LongMemoryJobs.Failure.from(failure));
+            assertEquals(malformed, h.db.storedValue("agent.memory.long.v1", "jobs", key));
+            h.db.seedFactRow("agent.memory.long.v1", "jobs", key, original);
+            assertTrue(h.longs.claim(h.stream(), now.plusSeconds(2000)).toCompletableFuture().get(3, TimeUnit.SECONDS).isPresent());
+        }
+    }
+
+    /** 2026/11/06：旧作业无新增字段仍可提交，网页恢复及回执通过真实存储，绑定版本不丢失。 */
+    @Test
+    void legacyJobsAndConsoleReplayRemainUsable() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            h.medium("我喜欢喝茶");
+            var batch = h.claim();
+            h.db.rewriteRows("jobs", raw -> {
+                var node = (tools.jackson.databind.node.ObjectNode) h.db.mapper.readTree(raw);
+                node.remove("trouble");
+                node.remove("revision");
+                return h.db.mapper.writeValueAsString(node);
+            });
+            assertTrue(h.longs.commit(batch, List.of(), now.plusSeconds(1001)).toCompletableFuture().join());
+            var bound = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 3, 0);
+            h.db.seedFactRow("agent.memory.long.v1", "jobs", MemoryLayers.stream(bound), h.db.mapper.writeValueAsString(Map.of(
+                    "through", 0, "until", Instant.EPOCH, "retryAt", Instant.EPOCH, "failures", 3, "claimedThrough", 0,
+                    "fingerprint", "", "revision", 7, "trouble", Map.of("fingerprint", "输入摘要", "invalidAttempts", 3,
+                    "code", "QUOTE_MISMATCH", "at", now))));
+            var bindings = mock(MemoryNamespaceBindings.class);
+            when(bindings.readReference(scope)).thenReturn(CompletableFuture.completedStage(Optional.of(bound)));
+            var service = new org.zexnocs.teanekoagent.integration.web.AgentLayersConsoleService(h.layers, h.longs,
+                    bindings, h.db.store, new org.springframework.mock.env.MockEnvironment());
+            var context = new org.zexnocs.teanekocore.plugin.management.ManagementContext("管理员",
+                    org.zexnocs.teanekoapp.web.client.ManagementTargets.encode(scope.clientId(), scope.scopeId()), UUID.randomUUID(), control);
+            var view = assertInstanceOf(org.zexnocs.teanekoagent.integration.web.AgentLayersConsole.View.class,
+                    service.execute(context, new org.zexnocs.teanekoagent.integration.web.AgentLayersConsole.Query(
+                            "READ", "", -1, null, "", null, -1, null, null)).toCompletableFuture().join());
+            assertEquals(LongMemoryJobs.State.PAUSED, Objects.requireNonNull(view.consolidation()).state());
+            var operation = UUID.randomUUID();
+            var replay = new org.zexnocs.teanekoagent.integration.web.AgentLayersConsole.Query("REPLAY", "default", 0,
+                    null, "", null, 7, operation, null);
+            var result = service.execute(context, replay).toCompletableFuture().join();
+            assertEquals(result, service.execute(context, new org.zexnocs.teanekoagent.integration.web.AgentLayersConsole.Query(
+                    "REPLAY_OPERATION", "default", 0, null, "", null, 7, operation, null)).toCompletableFuture().join());
+            assertEquals(LongMemoryJobs.State.READY, h.longs.consolidationState(bound, now, () -> {}).toCompletableFuture().join().state());
         }
     }
     /** 变化替代旧值，本人维护按版本且幂等；同一旧证据换正文仍不能复活已遗忘信息。 */
@@ -264,6 +566,7 @@ class LongTermMemoryIntegrationTest {
     /**
      * 实际学习适配器保持统一门控与无工具请求，严格拒绝模型额外字段，释放自有实例。
      * 2026/11/04：验证统一预算不扩大宿主模型的输出配置。
+     * 2026/11/05：联合输出形状错误明确拒绝，解析错误不携带模型原文。
      */
     @Test void usesGuardedModelAdapterAndStrictCandidateSchema() {
         try (var h = new Harness(); var registry = new AgentRegistry(); var control = ExecutionControl.create()) {
@@ -273,7 +576,7 @@ class LongTermMemoryIntegrationTest {
             var gate = new AgentAccessGate(registry, ignored -> new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE),
                     ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime)), mock(ILogger.class));
             var interactions = mock(ILLMInteractionService.class);
-            var output = new java.util.concurrent.atomic.AtomicReference<>(h.db.mapper.writeValueAsString(List.of(h.candidate(batch, "喜欢喝茶", LongMemories.Mode.ADD))));
+            var output = new java.util.concurrent.atomic.AtomicReference<>(h.db.mapper.writeValueAsString(Map.of("memories", List.of(h.candidate(batch, "喜欢喝茶", LongMemories.Mode.ADD)), "styles", List.of())));
             when(interactions.interact(any(), any(), any(), any(), any())).thenAnswer(call -> {
                 org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt prompt = call.getArgument(0);
                 assertTrue(Objects.requireNonNull(prompt.getOptions().getTools()).isEmpty());
@@ -282,11 +585,19 @@ class LongTermMemoryIntegrationTest {
                 var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(output.get()).build()).build();
                 return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(answer), answer, List.of(), List.of(), Map.of()));
             });
-            try (var generator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, h.refs, interactions,
+            try (var generator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, h.refs, LLMJsonTestSupport.create(interactions, h.db.mapper),
                     () -> settings, ignored -> true, h.db.mapper, Runnable::run)) {
                 assertEquals(0, registry.snapshots().size());
                 var values = generator.consolidate(batch, control).toCompletableFuture().join();
                 assertEquals("喜欢喝茶", values.getFirst().text());
+                // 2026/11/05：结构合法但原话改写的输出在生成阶段拒绝，保留实际 SUCCESS 与安全原因。
+                var validOutput = output.get();
+                output.set(validOutput.replace("我喜欢喝茶", "私密改写原话"));
+                var mismatched = assertThrows(CompletionException.class, () -> generator.consolidate(batch, control).toCompletableFuture().join());
+                assertEquals(MemoryEvidenceException.Code.QUOTE_MISMATCH, evidenceFailure(mismatched).code());
+                assertEquals(LLMInteractionResult.Status.SUCCESS, evidenceFailure(mismatched).modelStatus());
+                assertFalse(org.zexnocs.teanekocore.logger.FailureDiagnostic.from(mismatched).toString().contains("私密"));
+                output.set(validOutput);
                 // 2026/11/03：同次联合协议保持严格结构，不把表达观察塞入用户事实。
                 var basis = new org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot("人格", "teaneko", 1, "scope", 0, "友善自然", "", null);
                 var styleTarget = new org.zexnocs.teanekoagent.component.personality.StyleObservations.Target(basis, Set.of("speakingStyle"),
@@ -296,10 +607,18 @@ class LongTermMemoryIntegrationTest {
                 var originalOutput = output.get();
                 output.set(h.db.mapper.writeValueAsString(new org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis(values, List.of(style))));
                 assertEquals(1, generator.analyze(batch, styleTarget, control).toCompletableFuture().join().styles().size());
-                output.set(originalOutput);
-                output.set(output.get().replace("\"kind\":", "\"unexpected\":true,\"kind\":"));
-                assertThrows(CompletionException.class, () -> generator.consolidate(batch, control).toCompletableFuture().join());
                 output.set("[]");
+                var wrongShape = assertThrows(CompletionException.class,
+                        () -> generator.analyze(batch, styleTarget, control).toCompletableFuture().join());
+                assertTrue(org.zexnocs.teanekocore.logger.FailureDiagnostic.from(wrongShape).description().contains("要求 object"));
+                output.set(originalOutput);
+                output.set(output.get().replace("\"kind\":", "\"unexpected\":\"private-model-value\",\"kind\":"));
+                var invalid = assertThrows(CompletionException.class, () -> generator.consolidate(batch, control).toCompletableFuture().join());
+                var diagnostic = org.zexnocs.teanekocore.logger.FailureDiagnostic.from(invalid);
+                assertTrue(diagnostic.description().contains("额外字段"));
+                assertTrue(diagnostic.description().contains("JSON_SHAPE"));
+                assertFalse(diagnostic.toString().contains("private-model-value"));
+                output.set("{\"memories\":[],\"styles\":[]}");
                 assertTrue(generator.consolidate(batch, control).toCompletableFuture().join().isEmpty());
                 assertTrue(h.longs.commit(batch, List.of(), now.plusSeconds(1001)).toCompletableFuture().join());
                 assertTrue(h.longs.claim(h.stream(), now.plusSeconds(2000)).toCompletableFuture().join().isEmpty());

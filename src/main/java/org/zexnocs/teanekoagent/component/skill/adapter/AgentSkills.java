@@ -40,10 +40,11 @@ import java.util.concurrent.Executor;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：在最终过滤后的工具集复核加载器及技能依赖。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentSkills {
@@ -253,6 +254,21 @@ public final class AgentSkills {
      * @version 4.8.0-l
      */
     private record ToolSource(IAgentToolSource delegate, AgentSkills owner) implements IAgentToolSource {
+        /**
+         * 2026/11/05：最终权限过滤不能留下缺少依赖或加载器的 Skill 目录。
+         * @param request 原请求
+         * @param input 实际布局
+         * @param selected 最终工具
+         */
+        @Override public void verifySelection(AgentRunRequest request, AgentPromptInput input, List<LLMToolBinding> selected) {
+            delegate.verifySelection(request, input, selected);
+            var skill = owner.verify(request, input);
+            if (skill == null) { return; }
+            var names = selected.stream().map(binding -> binding.definition().getName()).collect(java.util.stream.Collectors.toSet());
+            if (!names.contains(LOAD) || skill.skills().stream().anyMatch(value -> !names.containsAll(value.requiredTools()))) {
+                throw new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE);
+            }
+        }
         /**
          * 没有实际 Prompt 布局的旧入口只返回原工具，不能隐藏加载 Skill。
          * @param definition 原定义

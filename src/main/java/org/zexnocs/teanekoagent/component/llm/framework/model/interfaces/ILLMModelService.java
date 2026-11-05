@@ -20,10 +20,11 @@ import java.util.Map;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：显式模型身份覆盖不清除 JSON 选项。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface ILLMModelService {
     /**
@@ -176,13 +177,10 @@ public interface ILLMModelService {
      * @throws IllegalArgumentException 当模型未注册或调用选项不受支持时抛出
      */
     default TaskFuture<ILLMResult> call(String modelId, String model, ILLMPrompt prompt) {
-        var options = LLMModelOptions.merge(
-                prompt.getOptions(),
-                LLMModelOptions.builder()
-                        .provider(modelId)
-                        .model(model)
-                        .build()
-        );
+        // 2026/11/06：身份覆盖不能以 builder 默认 TEXT 覆盖调用方的 JSON 格式。
+        var options = LLMModelOptions.copyOf(prompt.getOptions());
+        options.setProvider(modelId);
+        options.setModel(model);
         return call(LLMModelId.of(modelId), new LLMPrompt(prompt.getMessages(), options, prompt.getOptionsPolicy()));
     }
 }

@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.component.tool.command;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 
@@ -15,10 +16,11 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：允许无记忆的主动活动保留独立持久身份，其他动作继续要求引用。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface ICommandAttemptStore {
     /**
@@ -43,15 +45,15 @@ public interface ICommandAttemptStore {
      * @param requestId 原宿主请求
      * @param callId 原工具调用 ID
      * @param actor 原真实发起者
-     * @param reference 原完整空间引用
+     * @param reference 原完整空间引用；仅独立主动活动允许为空
      * @param commandDigest 原命令文本摘要
      * @param kind 原生聊天准入或具体工具动作，二者使用不同幂等空间
      * @author zExNocs
      * @date 2026/11/01
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    record Attempt(UUID requestId, String callId, AgentActorContext actor, MemoryNamespaceReference reference, String commandDigest, Kind kind) {
+    record Attempt(UUID requestId, String callId, AgentActorContext actor, @Nullable MemoryNamespaceReference reference, String commandDigest, Kind kind) {
         /**
          * 创建具体工具动作，保留原工具调用标识而不拼接伪造前缀。
          * @param requestId 原请求
@@ -75,10 +77,12 @@ public interface ICommandAttemptStore {
          * @throws NullPointerException 当必需身份、引用或类别为空时
          */
         public Attempt {
-            Objects.requireNonNull(requestId); Objects.requireNonNull(actor); Objects.requireNonNull(reference); Objects.requireNonNull(kind);
+            Objects.requireNonNull(requestId); Objects.requireNonNull(actor); Objects.requireNonNull(kind);
             if (callId == null || callId.isBlank() || callId.length() > 256
                     || actor.origin() != (kind == Kind.PROACTIVE_ENTRY ? AgentActorContext.Origin.SYSTEM : AgentActorContext.Origin.USER)
-                    || !actor.scope().equals(reference.scope()) || commandDigest == null || !commandDigest.matches("[0-9a-f]{64}")) {
+                    || reference == null && kind != Kind.PROACTIVE_ENTRY
+                    || reference != null && !actor.scope().equals(reference.scope())
+                    || commandDigest == null || !commandDigest.matches("[0-9a-f]{64}")) {
                 throw new IllegalArgumentException("命令动作来源、范围或摘要无效。");
             }
         }

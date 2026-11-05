@@ -26,10 +26,11 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：资料和留言工具独立注册，继续组合为原插件能力。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class InfoAgentPlugin {
@@ -72,6 +73,8 @@ public class InfoAgentPlugin {
     @Bean
     public AgentFeature infoAgentFeature(InfoAgentTools source, InfoUserMessagesTool messages, ObjectMapper mapper,
             @Qualifier("virtualExecutor") ExecutorService executor) {
+        // 2026/11/05：在能力装配时编译实际工具，选择阶段不做发现。
+        TeaNekoAgentToolMethods.prepare(messages);
         return new SourceAgentFeature(ID, "user-info", true, (definition, request, runtime) -> {
             var selected = new java.util.ArrayList<>(source.select(definition, request, runtime));
             selected.addAll(TeaNekoAgentToolMethods.select(messages, definition, request, runtime, null, mapper, executor));

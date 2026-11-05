@@ -20,10 +20,11 @@ import java.util.Map;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：按动作组合插件窄策略，保留公共授权与停用后的取消能力。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentScheduleConfig {
@@ -59,6 +60,11 @@ public class AgentScheduleConfig {
     public AgentScheduleService pluginScheduleService(EasyDataScheduleStore store, NativeScheduleAdapter adapter,
             java.util.List<org.zexnocs.teanekoagent.plugin.AgentTaskAction> contributions, org.zexnocs.teanekocore.plugin.PluginRegistry plugins) {
         var actions = new java.util.TreeMap<String, AgentScheduleService.Action>(); actions.put("remind", adapter);
+        var policies = new java.util.TreeMap<String, AgentScheduleService.Policy>();
+        policies.put("remind", (task, operation, actor) -> {
+            adapter.validateReminder(task);
+            return java.util.concurrent.CompletableFuture.completedStage(null);
+        });
         for (var contribution : contributions) {
             plugins.requireRegistered(contribution.pluginId());
             AgentScheduleService.Action wrapped = (task, guard) -> plugins.invoke(contribution.pluginId(), () -> {
@@ -69,7 +75,21 @@ public class AgentScheduleConfig {
                 return checked.get().thenCompose(ignored -> contribution.action().execute(task, checked));
             });
             if (actions.putIfAbsent(contribution.id(), wrapped) != null) { throw new IllegalArgumentException("插件任务动作名重复：" + contribution.id()); }
+            // 2026/11/05：策略也在所属插件的当前生命周期中执行，不因动作已注册而自动授权。
+            policies.put(contribution.id(), (task, operation, actor) -> plugins.invoke(contribution.pluginId(), () -> {
+                var token = plugins.capture(contribution.pluginId());
+                return contribution.policy().check(task, operation, actor).thenRun(() -> plugins.check(token));
+            }));
         }
-        return new AgentScheduleService(store, Clock.systemUTC(), adapter, actions);
+        AgentScheduleService.Policy combined = (task, operation, actor) -> adapter.checkIdentity(task, operation, actor)
+                .thenCompose(ignored -> {
+                    if (operation == AgentScheduleService.Operation.READ || operation == AgentScheduleService.Operation.CANCEL) {
+                        return java.util.concurrent.CompletableFuture.completedStage(null);
+                    }
+                    var policy = policies.get(task.spec().action());
+                    return policy == null ? java.util.concurrent.CompletableFuture.failedStage(
+                            new IllegalStateException("任务动作策略不可用。")) : policy.check(task, operation, actor);
+                });
+        return new AgentScheduleService(store, Clock.systemUTC(), combined, actions);
     }
 }

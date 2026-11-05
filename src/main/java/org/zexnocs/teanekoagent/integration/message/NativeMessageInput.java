@@ -26,6 +26,7 @@ import java.time.Instant;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：容量拒绝分别报告数量、长度与上限，图片格式错误不回显 URL。
  * @param text 当前消息字面文本
  * @param message 冻结的有序图文消息
  * @param occurredAt 原生平台时刻
@@ -33,7 +34,7 @@ import java.time.Instant;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public record NativeMessageInput(String text, ILLMMessage message, Instant occurredAt, String digest) {
     // 2026/11/02：复用只投影基础数据的转换器，不为每条平台消息重复创建转换器。
@@ -57,19 +58,41 @@ public record NativeMessageInput(String text, ILLMMessage message, Instant occur
         var occurredAt = java.util.Objects.requireNonNull(data.getTime(), "原生消息时间不能为空。");
         // 2026/11/02：元数据只进入模型消息，不参与用户原文、明确记忆意图或原文摘要。
         var text = new StringBuilder(); var contents = new LLMContentListBuilder().addText(contextText(data)); var digest = new java.util.ArrayList<String>();
-        int images = 0, characters = 0;
+        // 2026/11/06：总量用 long 累加；各边界独立报告，不削弱原容量保护。
+        int images = 0;
+        long characters = 0;
         for (var item : data.getMessages()) {
             var part = item.getContentPart();
             if (part instanceof ITextTeaNekoContentPart words) {
-                characters = Math.addExact(characters, words.getText().length());
-                if (text.length() + words.getText().length() > 65536) { throw new IllegalArgumentException("原生文本超出容量限制。"); }
+                characters += words.getText().length();
+                if ((long) text.length() + words.getText().length() > 65536) {
+                    throw new NativeMessageInputException("文本字符数=" + ((long) text.length() + words.getText().length()) + "，上限=65536。");
+                }
                 text.append(words.getText()); contents.addText(words.getText()); digest.add("text"); digest.add(words.getText());
             } else if (part instanceof IImageTeaNekoContentPart image) {
                 var url = image.getUrl();
-                if (++images > 4 || url.length() > 2_097_152) { throw new IllegalArgumentException("原生图片数量或引用超出限制。"); }
-                characters = Math.addExact(characters, url.length()); contents.addImage(url); digest.add("image"); digest.add(url);
+                if (++images > 4) {
+                    throw new NativeMessageInputException("已遇到图片数=" + images + "，每条消息上限=4；请分条发送。");
+                }
+                if (url == null || url.isBlank()) {
+                    throw new NativeMessageInputException("第" + images + "张图片缺少可用引用。");
+                }
+                if (url.length() > 2_097_152) {
+                    throw new NativeMessageInputException("第" + images + "张图片引用字符数=" + url.length() + "，单引用上限=2097152。");
+                }
+                characters += url.length();
+                try {
+                    contents.addImage(url);
+                } catch (IllegalArgumentException invalid) {
+                    throw new NativeMessageInputException("第" + images
+                            + "张图片引用格式无效；仅支持无账号信息或片段的 HTTP(S) URL，或 PNG/JPEG/GIF/WebP 的合法 base64 data 引用。");
+                }
+                digest.add("image");
+                digest.add(url);
             }
-            if (characters > 2_097_152) { throw new IllegalArgumentException("原生图文总量超出限制。"); }
+            if (characters > 2_097_152) {
+                throw new NativeMessageInputException("文字与图片引用总字符数=" + characters + "，上限=2097152。");
+            }
         }
         digest.add(occurredAt.toString());
         return new NativeMessageInput(text.toString(), LLMUserMessage.builder().contents(contents.build()).build(), occurredAt,

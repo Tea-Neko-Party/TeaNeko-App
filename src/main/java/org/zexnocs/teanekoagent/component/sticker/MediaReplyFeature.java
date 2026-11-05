@@ -37,10 +37,12 @@ import java.util.concurrent.Executor;
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
+ * <br>2026/11/05：最终工具筛选后复核图库查询依赖，避免向模型提供无法执行的目录提示。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component
 public final class MediaReplyFeature implements AgentFeature {
@@ -54,7 +56,7 @@ public final class MediaReplyFeature implements AgentFeature {
      * @param mapper 转换器
      * @param executor 借用业务域
      */
-    public MediaReplyFeature(StickerReplyService service,StickerReplyTools tools,ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){this.service=service;this.tools=tools;this.mapper=mapper;this.executor=executor;}
+    public MediaReplyFeature(StickerReplyService service,StickerReplyTools tools,ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){TeaNekoAgentToolMethods.prepare(tools);this.service=service;this.tools=tools;this.mapper=mapper;this.executor=executor;}
     /** @return 宿主插件 */ @Override public String pluginId(){return "teaneko.agent";}
     /**
      * 2026/11/04：与所属工具注解共享标识，防止注册声明与实际能力不一致。
@@ -99,6 +101,17 @@ public final class MediaReplyFeature implements AgentFeature {
     };}
     /** @return 必须看到实际布局才安装的工具源 */
     @Override public IAgentToolSource tools(){return new IAgentToolSource(){
+        /**
+         * 2026/11/05：按最终工具集验证可用图库的查询条件，不扩展工具授权。
+         * @param request 原请求
+         * @param input 实际布局
+         * @param selected 最终获准工具
+         */
+        @Override
+        public void verifySelection(AgentRunRequest request, AgentPromptInput input, List<LLMToolBinding> selected) {
+            service.verifyTools(request, input, selected.stream().map(binding -> binding.definition().getName())
+                    .collect(java.util.stream.Collectors.toUnmodifiableSet()));
+        }
         /**
          * 2026/11/05：移除包迁移后重复或未使用的类型导入。
          * @param definition 定义

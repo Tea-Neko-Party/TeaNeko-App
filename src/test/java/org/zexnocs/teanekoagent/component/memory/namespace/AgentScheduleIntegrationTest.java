@@ -36,13 +36,13 @@ import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Sta
  * 复用真实 EasyData 事务夹具，验证调度幂等、取消竞争和重启不补跑。
  * <br>2026/11/03：覆盖独立管理取消的权限、版本、回执及撤权事务回滚。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/06：验证四槽饱和时保留后续到期任务，释放后继续调度。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(15)
 class AgentScheduleIntegrationTest {
@@ -146,6 +146,120 @@ class AgentScheduleIntegrationTest {
                 assertEquals(NOW.plusSeconds(240), store.find(repeat.id()).toCompletableFuture().join().orElseThrow().nextFire());
             }
             verify(config).setLivable(any());
+        }
+    }
+
+    /**
+     * 2026/11/05：大量历史不占到期页，慢动作只占一个槽位，其余空槽仍能处理下一批。
+     * @throws Exception 当有界执行等待失败时
+     */
+    @Test
+    void dueIndexAndAvailableSlotsAvoidHistoryAndSlowActionBlocking() throws Exception {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var store = new EasyDataScheduleStore(db.data, db.mapper);
+            for (int index = 0; index < 105; index++) {
+                var old = new AgentScheduledTask(UUID.randomUUID(), spec("历史" + index, NOW, 0), NOW, COMPLETED, 2, "完成");
+                store.create(old).toCompletableFuture().join();
+            }
+            var clock = new AtomicReference<>(NOW);
+            var tasks = new java.util.ArrayList<AgentScheduledTask>();
+            for (int index = 0; index < 6; index++) {
+                var at = NOW.plusSeconds(index);
+                var task = new AgentScheduledTask(UUID.randomUUID(), spec("到期" + index, at, 0), at, ACTIVE, 1, "等待");
+                tasks.add(task);
+            }
+            store.create(tasks.getFirst()).toCompletableFuture().join();
+            clock.set(NOW.plusSeconds(10));
+            var slow = new CompletableFuture<AgentScheduleService.Outcome>();
+            var entered = new CompletableFuture<Void>();
+            var calls = new AtomicInteger();
+            try (var service = service(store, clock, (task, guard) -> {
+                calls.incrementAndGet();
+                if (task.id().equals(tasks.getFirst().id())) {
+                    entered.complete(null);
+                    return slow;
+                }
+                return CompletableFuture.completedStage(AgentScheduleService.Outcome.COMPLETED);
+            })) {
+                var first = service.tick().toCompletableFuture();
+                try {
+                    entered.get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    // 2026/11/05：慢动作已开始后加入新任务，按每批真实完成回执等待容量释放。
+                    for (var task : tasks.subList(1, tasks.size())) {
+                        store.create(task).toCompletableFuture().get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    }
+                    service.tick().toCompletableFuture().get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    service.tick().toCompletableFuture().get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    assertFalse(first.isDone());
+                    assertEquals(6, calls.get());
+                    assertEquals(COMPLETED, store.find(tasks.getLast().id()).toCompletableFuture().join().orElseThrow().status());
+                } finally {
+                    slow.complete(AgentScheduleService.Outcome.COMPLETED);
+                }
+                first.get(3, java.util.concurrent.TimeUnit.SECONDS);
+            }
+            assertTrue(store.due(clock.get(), 4).toCompletableFuture().join().isEmpty());
+        }
+    }
+
+    /** 2026/11/05：发现入口同步抛错后释放互斥，下一次显式扫描仍可处理任务。 */
+    @Test
+    void synchronousDiscoveryFailureDoesNotPermanentlyBlockScanning() {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var store = spy(new EasyDataScheduleStore(db.data, db.mapper));
+            var task = new AgentScheduledTask(UUID.randomUUID(), spec("发现恢复", NOW, 0), NOW, ACTIVE, 1, "等待");
+            store.create(task).toCompletableFuture().join();
+            doThrow(new IllegalStateException("测试发现入口故障。"))
+                    .doCallRealMethod().when(store).due(any(), anyInt());
+            var calls = new AtomicInteger();
+            try (var service = service(store, new AtomicReference<>(NOW), (current, guard) -> {
+                calls.incrementAndGet();
+                return CompletableFuture.completedStage(AgentScheduleService.Outcome.COMPLETED);
+            })) {
+                assertThrows(CompletionException.class, () -> service.tick().toCompletableFuture().join());
+                service.tick().toCompletableFuture().join();
+                assertEquals(1, calls.get());
+                assertEquals(COMPLETED, store.find(task.id()).toCompletableFuture().join().orElseThrow().status());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/06：四槽均在途时第五项保持未认领，完成后按原到期索引继续，不超额启动。
+     * @throws Exception 当有界协调或动作结束失败时
+     */
+    @Test
+    void fourOccupiedSlotsRetainTheNextDueTask() throws Exception {
+        try (var db = new NamespaceDatabaseFixture()) {
+            var store = new EasyDataScheduleStore(db.data, db.mapper);
+            var tasks = new java.util.ArrayList<AgentScheduledTask>();
+            for (int index = 0; index < 5; index++) {
+                var task = new AgentScheduledTask(UUID.randomUUID(), spec("占槽" + index, NOW.plusSeconds(index), 0),
+                        NOW.plusSeconds(index), ACTIVE, 1, "等待");
+                store.create(task).toCompletableFuture().join();
+                tasks.add(task);
+            }
+            var entered = new CompletableFuture<Void>();
+            var release = new CompletableFuture<AgentScheduleService.Outcome>();
+            var calls = new AtomicInteger();
+            try (var service = service(store, new AtomicReference<>(NOW.plusSeconds(10)), (task, guard) -> {
+                if (calls.incrementAndGet() == 4) entered.complete(null);
+                return release;
+            })) {
+                var first = service.tick().toCompletableFuture();
+                try {
+                    entered.get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    service.tick().toCompletableFuture().get(3, java.util.concurrent.TimeUnit.SECONDS);
+                    assertEquals(4, calls.get());
+                    assertEquals(ACTIVE, store.find(tasks.getLast().id()).toCompletableFuture().join().orElseThrow().status());
+                } finally {
+                    release.complete(AgentScheduleService.Outcome.COMPLETED);
+                }
+                first.get(3, java.util.concurrent.TimeUnit.SECONDS);
+                service.tick().toCompletableFuture().get(3, java.util.concurrent.TimeUnit.SECONDS);
+                assertEquals(5, calls.get());
+                assertEquals(COMPLETED, store.find(tasks.getLast().id()).toCompletableFuture().join().orElseThrow().status());
+            }
         }
     }
 

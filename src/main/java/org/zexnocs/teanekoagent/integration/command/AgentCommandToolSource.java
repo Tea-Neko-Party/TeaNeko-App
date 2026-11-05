@@ -32,10 +32,11 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.command", managedByFeature = true)
@@ -53,6 +54,8 @@ public final class AgentCommandToolSource {
      * @param mapper JSON 转换器
      */
     public AgentCommandToolSource(ICommandInvocationPort commands, IConfigDataService configs, AgentScopeConfigManager manager, ObjectMapper mapper) {
+        // 2026/11/05：单例创建时编译工具目录，高频选择只读缓存。
+        TeaNekoAgentToolMethods.prepare(this);
         this.commands = commands; this.configs = configs; this.manager = manager;
         this.mapper = mapper.rebuild().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
     }

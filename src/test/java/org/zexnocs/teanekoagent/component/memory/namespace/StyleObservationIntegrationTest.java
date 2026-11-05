@@ -38,17 +38,16 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：补充观察原话和补正到期清理、容量释放及不可变备份保护。
  * <br>2026/11/03：核对默认送达账本与分层资料的联合装配。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：验证空观察前缀可推进、后续有效样本可学习及排队后的真实撤权。
+ * <br>2026/11/06：核对混合批次中错误风格的原因、序号及事实和风格整体回滚。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(25)
 class StyleObservationIntegrationTest {
@@ -136,6 +135,129 @@ class StyleObservationIntegrationTest {
         /** 关闭本夹具拥有的数据库执行器。 */
         @Override public void close() { db.close(); }
     }
+    /**
+     * 2026/11/05：切换人格、无可学习字段及证据到期产生的空筛选均推进，避免堵塞后续样本。
+     * @throws Exception 当有界离线整理失败时
+     */
+    @Test
+    void emptyObservationPrefixAdvancesAndLaterSamplesRemainLearnable() throws Exception {
+        for (String reason : List.of("personality", "fields", "expired")) {
+            try (var h = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
+                var stream = h.medium();
+                Instant processingAt = reason.equals("expired") ? now.plus(Duration.ofDays(8)) : now.plusSeconds(1000);
+                if (!reason.equals("expired")) {
+                    h.base.set(new BasePersonality("teaneko", 2, "小茶", List.of("新表达习惯"),
+                            reason.equals("fields") ? Set.of() : Set.of("speakingStyle")));
+                }
+                var clock = Clock.fixed(processingAt, ZoneOffset.UTC);
+                var observer = new StyleObservationService(h.source, h.configuration, h.styles,
+                        ignored -> h.enabled.get(), Runnable::run, clock);
+                var references = mock(IAgentMemoryReferences.class);
+                when(references.verify(reference)).thenReturn(CompletableFuture.completedStage(null));
+                var generator = mock(ILongTermMemoryConsolidator.class);
+                when(generator.analyze(any(), any(), any())).thenAnswer(call -> {
+                    LongMemories.Batch batch = call.getArgument(0);
+                    StyleObservations.Target target = Objects.requireNonNull(call.getArgument(1));
+                    var quotes = batch.evidence().stream().filter(item -> target.evidenceIds().contains(item.id()))
+                            .limit(2).map(item -> new LongMemories.Quote(item.id(), "先讲结论，再举个小例子呀")).toList();
+                    assertEquals(2, quotes.size());
+                    return CompletableFuture.completedStage(new StyleObservations.Analysis(List.of(), List.of(
+                            new StyleObservations.Candidate("speakingStyle", "先说结论，再举例", StyleObservations.Context.TECHNICAL,
+                                    quotes, batch.segments().stream().map(MemoryLayers.Segment::id).toList()))));
+                });
+                try (var processor = new LayeredMemoryProcessor(h.layers,
+                        (batch, control) -> { throw new AssertionError("本例只整理已有中期片段"); }, references,
+                        () -> settings, ignored -> new LayeredMemoryPolicy(true, true, false), Runnable::run,
+                        timers, clock, mock(ILogger.class), h.longs, generator, ignored -> false, observer)) {
+                    processor.drain().toCompletableFuture().get(5, TimeUnit.SECONDS);
+                    verifyNoInteractions(generator);
+                    assertTrue(h.longs.claim(stream, processingAt.plusSeconds(1)).toCompletableFuture().join().isEmpty());
+                    if (!reason.equals("expired")) {
+                        h.base.set(new BasePersonality("teaneko", 3, "小茶", List.of("新表达习惯"), Set.of("speakingStyle")));
+                        h.medium();
+                        // 2026/11/05：首轮游标已越过该分区；下一次空页复位后才重新访问，不能绕开轮转合同。
+                        processor.drain().toCompletableFuture().get(5, TimeUnit.SECONDS);
+                        verifyNoInteractions(generator);
+                        processor.drain().toCompletableFuture().get(5, TimeUnit.SECONDS);
+                        verify(generator).analyze(any(), any(), any());
+                        assertEquals(1, h.styles.inspect(scope, h.snapshot(scope), processingAt)
+                                .toCompletableFuture().join().size());
+                        assertTrue(h.longs.claim(stream, processingAt.plusSeconds(1)).toCompletableFuture().join().isEmpty());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 2026/11/05：合法空筛选排队后关闭观察仍须拒绝，不以空结果绕过动态资格。
+     * @throws Exception 当事务协调或有界等待失败时
+     */
+    @Test
+    void queuedEmptyObservationStillRejectsRevocation() throws Exception {
+        try (var h = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
+            var stream = h.medium();
+            h.base.set(new BasePersonality("teaneko", 2, "小茶", List.of("不学习字段"), Set.of()));
+            var references = mock(IAgentMemoryReferences.class);
+            when(references.verify(reference)).thenReturn(CompletableFuture.completedStage(null));
+            var entered = new CompletableFuture<Void>();
+            var release = new CompletableFuture<Void>();
+            h.db.beforeTask.set(name -> {
+                if (name.contains("提交长期记忆和画像证据")) {
+                    entered.complete(null);
+                    release.orTimeout(8, TimeUnit.SECONDS).join();
+                }
+            });
+            try (var processor = new LayeredMemoryProcessor(h.layers,
+                    (batch, control) -> { throw new AssertionError("不应生成中期摘要"); }, references,
+                    () -> settings, ignored -> new LayeredMemoryPolicy(true, true, false), Runnable::run,
+                    timers, Clock.fixed(now.plusSeconds(1000), ZoneOffset.UTC), mock(ILogger.class), h.longs,
+                    (batch, control) -> { throw new AssertionError("空观察不应请求模型"); }, ignored -> false, h.observer)) {
+                var work = processor.drain().toCompletableFuture();
+                try {
+                    entered.get(5, TimeUnit.SECONDS);
+                    h.enabled.set(false);
+                } finally {
+                    release.complete(null);
+                }
+                work.get(5, TimeUnit.SECONDS);
+                assertTrue(h.longs.claim(stream, now.plusSeconds(2000)).toCompletableFuture().join().isPresent());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/05：只含风格的提交排队后撤销人格学习，事务不得保存观察或推进长期水位。
+     * @throws Exception 当事务协调超时或被中断时
+     */
+    @Test
+    void queuedStyleCommitRechecksLearningInsideTransaction() throws Exception {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            h.medium();
+            var batch = h.claim();
+            var target = Objects.requireNonNull(h.observer.prepare(batch, control).toCompletableFuture().join());
+            var entered = new CompletableFuture<Void>();
+            var release = new CompletableFuture<Void>();
+            h.db.beforeTask.set(name -> {
+                if (name.contains("提交长期记忆和画像证据")) {
+                    entered.complete(null);
+                    release.orTimeout(8, TimeUnit.SECONDS).join();
+                }
+            });
+            var commit = h.longs.commit(batch, new StyleObservations.Analysis(List.of(), List.of(h.candidate(batch))),
+                    target, now.plusSeconds(1001), h.observer.guard(batch, target, control)).toCompletableFuture();
+            try {
+                entered.get(5, TimeUnit.SECONDS);
+                control.cancel();
+            } finally {
+                release.complete(null);
+            }
+            assertThrows(ExecutionException.class, () -> commit.get(5, TimeUnit.SECONDS));
+            assertTrue(h.styles.inspect(scope, target.basis(), now).toCompletableFuture().join().isEmpty());
+            assertTrue(h.longs.claim(batch.stream(), now.plusSeconds(2000)).toCompletableFuture().join().isPresent());
+        }
+    }
+
     /** 重复样本不增加支持；第二段独立证据才采用，观察/补正/水位任意写失败一起回滚。 */
     @Test void accumulatesDistinctEvidenceAndAdoptsAtomicallyWithinScope() {
         try (var h = new Harness(); var control = ExecutionControl.create()) {
@@ -163,6 +285,37 @@ class StyleObservationIntegrationTest {
             assertTrue(h.longs.query(reference, null, "", 8).toCompletableFuture().join().items().isEmpty());
         }
     }
+    /** 2026/11/06：合法事实与风格混入一条非法原话时，完整批次不提交且准确标明 styles 位置。 */
+    @Test
+    void invalidStyleRollsBackValidFactsAndOtherStyles() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            h.medium();
+            var batch = h.claim();
+            var target = Objects.requireNonNull(h.observer.prepare(batch, control).toCompletableFuture().join());
+            var valid = h.candidate(batch);
+            var fact = new LongMemories.Candidate(LongMemories.Kind.PREFERENCE,
+                    batch.evidence().getFirst().message().source().userId().orElseThrow(), "preference.explanation",
+                    "希望先说结论再举例", LongMemories.Mode.ADD, valid.quotes(), valid.segments(), "");
+            var invalid = new StyleObservations.Candidate(valid.field(), valid.pattern(), valid.context(),
+                    List.of(new LongMemories.Quote(valid.quotes().getFirst().evidenceId(), "私密改写的原话")), valid.segments());
+            var failure = assertThrows(CompletionException.class, () -> h.longs.commit(batch,
+                    new StyleObservations.Analysis(List.of(fact), List.of(valid, invalid)), target,
+                    now.plusSeconds(1001), h.observer.guard(batch, target, control)).toCompletableFuture().join());
+            var detail = assertInstanceOf(MemoryEvidenceException.class, failure.getCause());
+            assertEquals(MemoryEvidenceException.Code.QUOTE_MISMATCH, detail.code());
+            assertEquals(MemoryEvidenceException.Domain.STYLES, detail.domain());
+            assertEquals(1, detail.index());
+            assertFalse(detail.failureReason().contains("私密"));
+            assertTrue(h.longs.query(reference, null, "", 20).toCompletableFuture().join().items().isEmpty());
+            assertTrue(h.styles.inspect(scope, target.basis(), now).toCompletableFuture().join().isEmpty());
+            assertEquals(0, h.longs.consolidationState(reference, now, () -> {}).toCompletableFuture().join().through());
+            assertTrue(h.longs.commit(batch, new StyleObservations.Analysis(List.of(fact), List.of(valid)), target,
+                    now.plusSeconds(1001), h.observer.guard(batch, target, control)).toCompletableFuture().join());
+            assertEquals(1, h.longs.query(reference, null, "", 20).toCompletableFuture().join().items().size());
+            assertEquals(1, h.styles.inspect(scope, target.basis(), now).toCompletableFuture().join().size());
+        }
+    }
+
     /** 伪造样本、人格切换和空间 clear 拒绝迟到观察，不用新的目标续用旧结果。 */
     @Test void rejectsForgedSamplesAndLatePersonaOrNamespaceTargets() {
         try (var h = new Harness(); var control = ExecutionControl.create()) {
@@ -223,6 +376,8 @@ class StyleObservationIntegrationTest {
             var refs = mock(IAgentMemoryReferences.class);
             var configs = mock(org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService.class);
             var beans = context.getBeanFactory();
+            // 2026/11/06：局部装配复用真实 JSON 合同，启动仍不调用模型。
+            beans.registerSingleton("structuredOutput", org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport.create(models, h.db.mapper));
             beans.registerSingleton("data", h.db.data); beans.registerSingleton("namespaces", h.db.store); beans.registerSingleton("mapper", h.db.mapper);
             beans.registerSingleton("personalityStore", h.personalities); beans.registerSingleton("configuration", h.configuration); beans.registerSingleton("personalities", h.source);
             beans.registerSingleton("interactions", models); beans.registerSingleton("gate", gate); beans.registerSingleton("references", refs); beans.registerSingleton("configs", configs);

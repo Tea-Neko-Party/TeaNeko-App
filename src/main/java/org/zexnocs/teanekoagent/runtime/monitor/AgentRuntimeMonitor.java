@@ -20,10 +20,11 @@ import java.util.concurrent.atomic.LongAdder;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：区分主动候选容量忙与已经尝试的跳过。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentRuntimeMonitor {
@@ -111,5 +112,5 @@ public final class AgentRuntimeMonitor {
      * @since 4.5.0-l
      * @version 4.8.0-l
      */
-    public enum Delivery { SENT, ABSTAINED, SKIPPED, FAILED }
+    public enum Delivery { SENT, ABSTAINED, SKIPPED, FAILED, BUSY }
 }

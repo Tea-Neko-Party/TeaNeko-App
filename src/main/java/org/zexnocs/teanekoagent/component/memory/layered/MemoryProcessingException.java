@@ -4,7 +4,10 @@ package org.zexnocs.teanekoagent.component.memory.layered;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonException;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
+import org.zexnocs.teanekocore.logger.IFailureReason;
 
 import java.io.Serial;
 
@@ -16,17 +19,21 @@ import java.io.Serial;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：保留固定协议说明及原错误的安全快照，不保存模型原文。
+ * <br>2026/11/06：共享 JSON 诊断映射为原领域失败，保留暂停与退避分类。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
-public final class MemoryProcessingException extends IllegalStateException {
+public final class MemoryProcessingException extends IllegalStateException implements IFailureReason {
     @Serial
     private static final long serialVersionUID = 1L;
     private final Reason reason;
     private final LLMInteractionResult.@Nullable Status modelStatus;
     private final String accessStatus;
+    private final String detail;
+    private final transient @Nullable FailureDiagnostic diagnostic;
 
     /**
      * @param reason 明确宿主失败原因
@@ -40,10 +47,25 @@ public final class MemoryProcessingException extends IllegalStateException {
      * @param modelStatus 模型真实终止状态，未进入模型时为空
      */
     public MemoryProcessingException(Reason reason, LLMInteractionResult.@Nullable Status modelStatus) {
+        // 2026/11/05：原调用保持固定分类，新调用可补充安全原因和原解析位置。
+        this(reason, modelStatus, reason.description(), null);
+    }
+
+    /**
+     * 2026/11/05：补充固定协议说明及脱敏快照，不接收原始解析异常或响应文本。
+     * @param reason 安全分类
+     * @param modelStatus 实际模型状态
+     * @param detail 固定说明，不允许传入模型输出、字段值或供应商错误正文
+     * @param diagnostic 原失败的安全快照
+     */
+    public MemoryProcessingException(Reason reason, LLMInteractionResult.@Nullable Status modelStatus,
+            String detail, @Nullable FailureDiagnostic diagnostic) {
         super(reason.description());
         this.reason = reason;
         this.modelStatus = modelStatus;
         this.accessStatus = "未检查";
+        this.detail = detail;
+        this.diagnostic = diagnostic;
     }
 
     /**
@@ -55,6 +77,9 @@ public final class MemoryProcessingException extends IllegalStateException {
         super(accessReason(decision).description());
         this.reason = accessReason(decision);
         this.modelStatus = null;
+        // 2026/11/05：门控拒绝仍使用原固定分类，不伪造模型或解析诊断。
+        this.detail = reason.description();
+        this.diagnostic = null;
         this.accessStatus = decision.reason().name()
                 + decision.readiness().map(value -> "/" + value.status().name()).orElse("");
     }
@@ -78,6 +103,39 @@ public final class MemoryProcessingException extends IllegalStateException {
     /** @return 可供日志及网页筛选的稳定原因 */
     public Reason reason() {
         return reason;
+    }
+
+    /**
+     * 2026/11/06：保留统一 JSON 诊断，并维持无效输出的持久暂停计数。
+     * @param failure 异步失败
+     * @return JSON 的领域分类；其他异常保持原失败链
+     */
+    public static RuntimeException structured(Throwable failure) {
+        var cause = failure;
+        while (cause instanceof java.util.concurrent.CompletionException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        if (cause instanceof LLMJsonException json) {
+            var reason = switch (json.code()) {
+                case MODEL_RESULT -> Reason.MODEL_RESULT;
+                case OUTPUT_LIMIT -> Reason.OUTPUT_LIMIT;
+                default -> Reason.INVALID_OUTPUT;
+            };
+            return new MemoryProcessingException(reason, json.status(), json.failureReason(), json.failureDiagnostic());
+        }
+        return cause instanceof RuntimeException runtime ? runtime : new java.util.concurrent.CompletionException(cause);
+    }
+
+    /** @return 2026/11/05：可公开的协议或资格失败说明 */
+    @Override
+    public String failureReason() {
+        return detail;
+    }
+
+    /** @return 2026/11/05：原模型或 JSON 校验失败的安全快照，没有时为空 */
+    @Override
+    public @Nullable FailureDiagnostic failureDiagnostic() {
+        return diagnostic;
     }
 
     /** @return 原模型终止状态，未观察到模型结果时为空 */

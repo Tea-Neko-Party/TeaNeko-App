@@ -1,7 +1,5 @@
 package org.zexnocs.teanekoagent.component.llm.instance.deepseek;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMImageDetail;
 import org.zexnocs.teanekoagent.component.llm.framework.model.AbstractLLMModel;
@@ -12,10 +10,13 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSupport;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * DeepSeek 对话补全模型适配器。
@@ -28,13 +29,24 @@ import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：声明原生 JSON 对象能力，结构约束由共用类型提示与解码负责。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @LLMModel(id = DeepSeekChatModel.PROVIDER)
 public class DeepSeekChatModel extends AbstractLLMModel {
+    /**
+     * 2026/11/06：当前 Chat Completions 协议声明原生 JSON 对象能力。
+     * @param model 实际模型名称
+     * @return 对象模式，字段结构由共享描述和本地校验约束
+     */
+    @Override
+    public LLMJsonSupport getJsonOutputSupport(String model) {
+        return LLMJsonSupport.OBJECT;
+    }
+
     /**
      * DeepSeek 模型适配器注册 ID。
      */

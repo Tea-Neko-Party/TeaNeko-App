@@ -22,15 +22,17 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：原生表情解析和发送使用独立表达目录，不借用图库事务。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component @TeaNekoReplyPartHandler("teaneko:face")
 public final class FaceReplyHandler implements IReplyPartHandler<MediaReplies.Face> {
-    private final StickerReplyService service;
-    /** @param service 原资源宿主 */ public FaceReplyHandler(StickerReplyService service){this.service=service;}
+    private final NativeFaceService service;
+    /** @param service 2026/11/05：独立原生表情目录及许可服务，不经过图库 */
+    public FaceReplyHandler(NativeFaceService service){this.service=service;}
     /** @return 准确内容类型 */ @Override public Class<MediaReplies.Face> type(){return MediaReplies.Face.class;}
     /**
      * @param context 原编译上下文

@@ -17,7 +17,22 @@ interface Memory { namespace: string; generation: number; revision: number; exis
 interface Profile { subjectId: string; namespace: string; generation: number; complete: boolean; scanned: number; matched: number; records: Evidence[] }
 interface LongItem { id: string; kind: string; subjectId: string | null; attribute: string; text: string; status: string; revision: number; time: string }
 interface LongResult { items: LongItem[]; scanned: number; limited: boolean }
-interface Layers { namespace: string; generation: number; compressedThrough: number; recent: { sequence: number; role: string; text: string; at: string; estimated: boolean; truncated: boolean }[]; episodes: { id: string; brief: string; details: string; from: string; through: string }[]; longTerm: LongResult }
+// 2026/11/05：整理作业显示安全状态和版本，恢复不等于立即完成模型调用。
+interface Consolidation { revision: number; through: number; state: 'READY' | 'RUNNING' | 'BACKOFF' | 'PAUSED'; failures: number; invalidAttempts: number; reasonCode: string; failedAt: string | null; retryAt: string; inputFingerprint: string }
+interface Layers { namespace: string; generation: number; compressedThrough: number; recent: { sequence: number; role: string; text: string; at: string; estimated: boolean; truncated: boolean }[]; episodes: { id: string; brief: string; details: string; from: string; through: string }[]; longTerm: LongResult; consolidation: Consolidation | null }
+const consolidationStates = { READY: '等待整理', RUNNING: '正在整理', BACKOFF: '稍后重试', PAUSED: '重复无效生成，已暂停' }
+// 2026/11/06：简洁视图说明固定失败原因，诊断代码保留在高级模式。
+const consolidationReasons: Record<string, string> = {
+  QUOTE_MISMATCH: '引用与原话不一致', SUBJECT_MISMATCH: '引用作者不一致', SEGMENT_MISMATCH: '引用不在所选片段内',
+  EVIDENCE_ID_INVALID: '证据不属于本批', SEGMENT_OUTSIDE_BATCH: '片段不属于本批', TIME_HINT_MISMATCH: '时间不来自原话',
+  STYLE_TARGET_MISMATCH: '表达观察目标不匹配', EVIDENCE_MISSING: '来源已不存在', EVIDENCE_CHANGED: '来源已变化',
+  EVIDENCE_EXPIRED: '来源已到期', EVIDENCE_ROLE_INVALID: '来源不是真实用户', STYLE_TARGET_CHANGED: '来源人格已变化',
+  INVALID_OUTPUT: '模型输出格式无效', OUTPUT_LIMIT: '模型输出被截断', INPUT_LIMIT: '输入超过预算',
+  // 2026/11/06：存储格式故障不与模型无效候选混为一类。
+  MEMORY_STORAGE_FORMAT: '持久记忆格式不匹配，请查看后台记录类型与字段',
+  ACCESS_REVOKED: '当前配置或权限不允许整理', EXECUTION_DEADLINE_EXCEEDED: '整理超时',
+  EXECUTION_CANCELLED: '整理已取消', EXECUTION_CLOSED: '整理已关闭', PROCESSING_FAILED: '整理失败，请查看后台同批次日志',
+}
 interface Correction { id: string; field: string; text: string; locked: boolean; occurredAt: string; origin: string }
 interface Personality { name: string; rules: string[]; fields: string[]; key: string; bindingRevision: number; revision: number; current: boolean; backup: boolean; corrections: Correction[]; backups: string[] }
 interface Event { sequence: number; requestId: string; activity: string; stage: string; state: string; at: string; metrics: Record<string, number> }
@@ -181,7 +196,9 @@ async function resend() {
 async function queryOperation() {
   if (!pending.value) return
   const original = pending.value
-  await run(async () => { await finish(await call<Receipt>(original.resource, { ...original.body, action: 'OPERATION' })) })
+  // 2026/11/05：恢复回执独立查询，不能转成长期条目维护或重复执行恢复。
+  const action = original.resource === 'layers' && original.body.action === 'REPLAY' ? 'REPLAY_OPERATION' : 'OPERATION'
+  await run(async () => { await finish(await call<Receipt>(original.resource, { ...original.body, action })) })
 }
 
 async function discard() {
@@ -226,6 +243,15 @@ async function editLong(item: LongItem, source: { namespace: string; generation:
   }
   await commit('layers', { action: forget ? 'FORGET' : 'EDIT', namespace: source.namespace, generation: source.generation, revision: item.revision, id: item.id, text: replacement, topic: '' },
     forget ? '遗忘会影响整个共享空间。保留墓碑以阻止旧证据自动复活，不删除原始聊天。' : '修正共享长期记忆并保护人工纠正，所有引用此条目的聊天都会受到影响。')
+}
+
+/** 2026/11/05：管理员明确解除当前分区暂停，失败回执沿用原操作查询。 */
+async function resumeConsolidation() {
+  const current = layers.value
+  if (!current?.consolidation || current.consolidation.state !== 'PAUSED') return
+  await commit('layers', { action: 'REPLAY', namespace: current.namespace, generation: current.generation,
+    revision: current.consolidation.revision, topic: '' },
+  '重新尝试本聊天暂停的长期整理，不删除证据或跳过原水位。请先检查失败原因；同一输入再次连续三次无效仍会暂停。')
 }
 
 async function changePersonality(action: string, item?: Correction) {
@@ -335,6 +361,14 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
       </div>
       <template v-if="layers">
       <p class="small muted">空间 {{ layers.namespace }} · 代次 {{ layers.generation }} · 压缩覆盖序号 {{ layers.compressedThrough }}</p>
+      <!-- 2026/11/05：后台暂停可见且有受控恢复入口，不让页面轮询自动触发生成。 -->
+      <ElCard v-if="layers.consolidation" shadow="never" class="evidence-card">
+        <strong>长期整理 · {{ consolidationStates[layers.consolidation.state] }}</strong>
+        <p v-if="layers.consolidation.reasonCode" class="small muted">{{ consolidationReasons[layers.consolidation.reasonCode] || '整理未完成，请查看后台日志' }}<span v-if="advanced">（{{ layers.consolidation.reasonCode }}）</span> · 无效生成 {{ layers.consolidation.invalidAttempts }}/3<span v-if="layers.consolidation.failedAt"> · {{ date(layers.consolidation.failedAt) }}</span></p>
+        <p v-if="layers.consolidation.state === 'PAUSED'" class="small muted">原证据和进度已保留。输入有效变化后会重新检查，也可确认原因后手动恢复。</p>
+        <ElButton v-if="layers.consolidation.state === 'PAUSED'" :disabled="busy || !!pending" @click="resumeConsolidation">恢复整理</ElButton>
+        <p v-if="advanced" class="small muted">整理覆盖序号 {{ layers.consolidation.through }} · 版本 {{ layers.consolidation.revision }}</p>
+      </ElCard>
         <h3>短期 · 最近二十四条持久消息</h3>
       <p class="small muted">助手存档是生成记录，平台实际确认另见活动时间线。</p>
       <ElEmpty v-if="!layers.recent.length" description="当前分区没有有效短期消息" />

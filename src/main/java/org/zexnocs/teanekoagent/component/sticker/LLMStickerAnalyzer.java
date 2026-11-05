@@ -7,16 +7,16 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
@@ -30,8 +30,6 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
-import tools.jackson.core.StreamReadFeature;
-import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -40,7 +38,6 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
-import java.util.stream.Collectors;
 
 /**
  * 通过统一门控进行一次零工具视觉任务，严格区分画作与聊天表情包。
@@ -55,16 +52,18 @@ import java.util.stream.Collectors;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：视觉分析失败保留请求号、模型状态、HTTP 原因及结构错误，不记录模型原文。
+ * <br>2026/11/06：分类改用统一类型化 JSON 生成，保留真实状态和脱敏结构诊断。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component @TeaNekoStickerAnalyzer("llm")
 public final class LLMStickerAnalyzer implements IStickerAnalyzer,AutoCloseable {
     private final ObjectProvider<IAgentFactory> factory;
     private final AgentAccessGate gate;
-    private final ILLMInteractionService interactions;
+    private final LLMJsonService json;
     private final IFileConfigService files;
     private final IConfigDataService configs;
     private final AgentScopeConfigManager manager;
@@ -77,18 +76,17 @@ public final class LLMStickerAnalyzer implements IStickerAnalyzer,AutoCloseable 
      * 只保存依赖，实际任务才创建受限实例。
      * @param factory 懒实例工厂
      * @param gate 统一活动门控
-     * @param interactions 原模型服务
+     * @param json 统一结构化生成服务
      * @param files 本地配置
      * @param configs 区域登记
      * @param manager 配置声明
      * @param mapper 原转换器
      * @param executor 借用业务域
      */
-    public LLMStickerAnalyzer(ObjectProvider<IAgentFactory> factory,AgentAccessGate gate,ILLMInteractionService interactions,IFileConfigService files,
+    public LLMStickerAnalyzer(ObjectProvider<IAgentFactory> factory,AgentAccessGate gate,LLMJsonService json,IFileConfigService files,
             IConfigDataService configs,AgentScopeConfigManager manager,ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){
-        this.factory=factory;this.gate=gate;this.interactions=interactions;this.files=files;this.configs=configs;this.manager=manager;this.executor=executor;
-        this.mapper=mapper.rebuild().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
-                .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,DeserializationFeature.FAIL_ON_TRAILING_TOKENS,DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES,DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES).build();
+        this.factory=factory;this.gate=gate;this.json=json;this.files=files;this.configs=configs;this.manager=manager;this.executor=executor;
+        this.mapper=mapper;
     }
     /**
      * @param source 原来源
@@ -100,6 +98,7 @@ public final class LLMStickerAnalyzer implements IStickerAnalyzer,AutoCloseable 
     }
     /**
      * 2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+     * 2026/11/05：将实际请求号传递给结果解析，关联交互失败与采集日志。
      * @param source 原来源
      * @param prepared 真实预览
      * @param settings 固定预算
@@ -120,21 +119,15 @@ public final class LLMStickerAnalyzer implements IStickerAnalyzer,AutoCloseable 
                 +"不要把昵称、经历或原聊天写进通用描述。多帧是同一动画的有限采样，不臆测未展示部分。类别="+mapper.writeValueAsString(settings.categories())).build()).build();
         var content=new LLMContentListBuilder().addText(prepared.note());prepared.previews().forEach(v->content.addImage(v,detail));
         var prompt=new LLMPrompt(List.of(system,LLMUserMessage.builder().contents(content.build()).build()),options,LLMOptionsPolicy.RESOLVED);
-        return interactions.interact(prompt,new LLMToolSet(mapper,List.of()),new ToolInvocationContext(control.id(),EntitySnapshot.of(EntityId.random(),ComponentPatch.empty()),control),
+        // 2026/11/06：原生 JSON 选项、完整 Schema 及解析诊断由共用服务统一维护。
+        return json.generate(Stickers.Analysis.class,prompt,new ToolInvocationContext(control.id(),EntitySnapshot.of(EntityId.random(),ComponentPatch.empty()),control),
                 new LLMInteractionSettings(new LLMCallLimits(1, 0, 0),settings.timeout(),settings.timeout(),settings.timeout()),
                 ILLMInteractionGuard.asynchronous(context->CompletableFuture.runAsync(()->{context.getControl().checkActive();runtime(source,settings);},executor)))
-                .thenApplyAsync(result->{control.checkActive();runtime(source,settings);return decode(result);},executor);
-    }
-    /**
-     * @param result 原模型结果
-     * @return 严格领域判定
-     */
-    private Stickers.Analysis decode(LLMInteractionResult result){
-        if(result.status()!=LLMInteractionResult.Status.SUCCESS){throw new IllegalArgumentException("表情包视觉任务未成功完成。");}
-        String text=result.finalCandidate().orElseThrow().getContents().stream().map(ILLMContent::getContentPart).filter(TextLLMContentPart.class::isInstance)
-                .map(TextLLMContentPart.class::cast).map(TextLLMContentPart::getText).collect(Collectors.joining());
-        if(text.length()>4096){throw new IllegalArgumentException("表情包视觉输出超过预算。");}
-        try{return mapper.readValue(text,Stickers.Analysis.class);}catch(RuntimeException invalid){throw new IllegalArgumentException("表情包视觉输出结构无效。");}
+                .thenApplyAsync(result -> {
+                    control.checkActive();
+                    runtime(source, settings);
+                    return result;
+                }, executor);
     }
     /**
      * @param source 原来源

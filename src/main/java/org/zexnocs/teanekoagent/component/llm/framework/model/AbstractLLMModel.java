@@ -16,10 +16,11 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：身份固定保留 JSON 合同，直调遵循适配器原生输出能力。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
@@ -65,10 +66,11 @@ public abstract class AbstractLLMModel implements ILLMModel {
     protected AbstractLLMModel(String provider, String model, ILLMModelOptions baseOptions) {
         this.provider = provider;
         this.model = model;
-        this.baseOptions = LLMModelOptions.merge(
-                baseOptions,
-                LLMModelOptions.builder().provider(provider).model(model).build()
-        );
+        // 2026/11/06：身份固定不覆盖已有 JSON 选项。
+        var fixedOptions = LLMModelOptions.copyOf(baseOptions);
+        fixedOptions.setProvider(provider);
+        fixedOptions.setModel(model);
+        this.baseOptions = fixedOptions;
     }
 
     /**
@@ -141,6 +143,8 @@ public abstract class AbstractLLMModel implements ILLMModel {
                 ? LLMOptionBoundary.requireResolved(prompt.getOptions())
                 : LLMModelOptions.merge(baseOptions, prompt.getOptions());
         LLMOptionBoundary.validate(options);
+        // 2026/11/06：直接使用适配器也遵循原生 JSON 能力，不静默忽略格式要求。
+        options = getJsonOutputSupport(options.getModel()).adapt(options, true);
         if (!supports(options)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + provider);
         }

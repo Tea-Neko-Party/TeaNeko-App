@@ -13,9 +13,13 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.time.Clock;
+import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -44,11 +48,15 @@ import java.util.function.Supplier;
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：目录与领取后的整理分别计时，等待实际退避完成，避免重复超时诊断和重叠调度。
  *
+ * <br>2026/11/05：长期事实与风格提交分别在真实事务内复核生命周期及学习资格。
+ * <br>2026/11/05：合法空观察批次不再因缺少目标被误判撤权，保留提交前动态开关复核。
+ * <br>2026/11/06：目录与租约领取失败分别退避，坏分区不阻塞其他分区，不误报模型失败。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -71,6 +79,8 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
     private final Clock clock;
     private final ILogger logger;
     private final AtomicBoolean running = new AtomicBoolean();
+    // 2026/11/06：未取得租约时不能写批次退避，使用有界进程状态控制实际读取频率。
+    private final MemoryScanBackoff scanBackoff = new MemoryScanBackoff();
     private volatile boolean closed;
     private volatile ExecutionControl current;
     private String cursor = "";
@@ -138,46 +148,77 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
     }
     /**
      * 在既有调度设施中恢复有界工作，不因上一批等待模型而启动重复任务。
-     * 2026/11/04：目录或退避失败同样报告安全的异常结构。
+     * 2026/11/06：扫描完成处统一保存退避和报告，定时入口不重复记录同一异常。
      */
     @Scheduled(fixedDelayString = "${tea-neko.agent.memory.layered.poll-ms:5000}", initialDelayString = "${tea-neko.agent.memory.layered.poll-ms:5000}")
     public void tick() {
-        drain().whenComplete((ignored, failure) -> {
-            if (failure != null) {
-                reportFailure("Agent 分层记忆", "目录扫描或退避", null, null, failure);
-            }
-        });
+        drain();
     }
     /**
      * 执行一次有界扫描，可供显式宿主或测试等待真实完成。
      * 2026/11/04：按本次输入容量配置创建父 token 预算，覆盖一次完整的生成输出。
+     * 2026/11/05：扫描只保护查询与领取，批次自行控制生成时限；结束前等待真实提交或退避。
+     * 2026/11/06：目录及未处理的基础设施失败也限频，冷却期间不重复读库或输出日志。
      * @return 本次扫描和至多一个压缩任务完成阶段
      */
     public CompletionStage<Void> drain() {
-        if (closed || !running.compareAndSet(false, true)) { return CompletableFuture.completedStage(null); }
+        if (closed || !running.compareAndSet(false, true)) {
+            return CompletableFuture.completedStage(null);
+        }
         try {
+            if (!scanBackoff.allows("processor", clock.instant())) {
+                running.set(false);
+                return CompletableFuture.completedStage(null);
+            }
             return CompletableFuture.supplyAsync(() -> {
                 var policy = settings.get();
-                if (closed || !policy.enabled()) { return CompletableFuture.<Void>completedStage(null); }
+                if (closed || !policy.enabled()) {
+                    return CompletableFuture.<Void>completedStage(null);
+                }
                 // 2026/11/04：父控制保留调用次数，token 容量由选定模型的上下文声明约束。
                 var control = ExecutionControl.withDeadline(policy.modelCallLimits().newBudget(),
                         clock.instant().plus(policy.timeout()), clock, scheduler);
-                current = control; if (closed) { control.cancel(); }
+                current = control;
+                if (closed) {
+                    control.cancel();
+                }
                 CompletionStage<Void> work;
-                try { control.checkActive(); work = control.guard(store.streams(cursor)).thenComposeAsync(streams -> {
-                    if (streams.isEmpty()) { cursor = ""; return CompletableFuture.completedStage(null); }
-                    return visit(streams, 0, control);
-                }, executor); }
-                catch (RuntimeException failure) { work = CompletableFuture.failedStage(failure); }
-                return control.guard(work).whenComplete((ignored, failure) -> { control.close(); if (current == control) { current = null; } });
-            }, executor).thenCompose(stage -> stage).whenComplete((ignored, failure) -> running.set(false));
-        } catch (RuntimeException failure) { running.set(false); return CompletableFuture.failedStage(failure); }
+                try {
+                    control.checkActive();
+                    work = readOrDefer("directory", "目录扫描", () -> store.streams(cursor), control).thenComposeAsync(read -> {
+                        if (read.deferred()) {
+                            return CompletableFuture.completedStage(null);
+                        }
+                        var streams = read.value();
+                        if (streams.isEmpty()) {
+                            cursor = "";
+                            return CompletableFuture.completedStage(null);
+                        }
+                        return visit(streams, 0, control);
+                    }, executor);
+                } catch (RuntimeException failure) {
+                    work = CompletableFuture.failedStage(failure);
+                }
+                // 2026/11/05：不能再用扫描控制包装整条链，否则超时会抢先释放 running 并重复报告批次失败。
+                return work.whenComplete((ignored, failure) -> {
+                    control.close();
+                    if (current == control) {
+                        current = null;
+                    }
+                });
+            }, executor).thenCompose(stage -> stage).whenComplete((ignored, failure) -> scanFinished(failure));
+        } catch (RuntimeException failure) {
+            scanFinished(failure);
+            return CompletableFuture.failedStage(failure);
+        }
     }
     /**
      * 逐个检查目录直至领取一个任务，持久目录游标轮转避免单分区饥饿。
+     * 2026/11/05：领取成功后转交独立批次控制，扫描耗时不再占用生成额度。
+     * 2026/11/06：长期领取失败只暂缓该阶段，仍可压缩当前分区和访问后续分区。
      * @param streams 本次目录页
      * @param index 当前位置
-     * @param control 包含目录读取、领取、生成及提交观察的本批控制
+     * @param control 本页目录读取和租约领取的控制
      * @return 本次扫描完成阶段
      */
     private CompletionStage<Void> visit(List<MemoryLayers.Stream> streams, int index, ExecutionControl control) {
@@ -193,17 +234,136 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
             // 2026/11/02：先处理已就绪的长期整理，再尝试原始消息压缩。
             // 2026/11/03：人格观察与事实学习独立授权，任一启用即可消费新中期片段。
             var candidates = longStore != null && consolidator != null && learningEnabled(stream.reference().scope())
-                    ? control.guard(longStore.claim(stream, clock.instant())) : CompletableFuture.<java.util.Optional<LongMemories.Batch>>completedStage(java.util.Optional.empty());
-            return candidates.thenComposeAsync(longBatch -> {
-                if (longBatch.isPresent()) { return processLong(longBatch.get(), control); }
+                    ? readOrDefer("long:" + stream.id(), "长期租约领取", () -> longStore.claim(stream, clock.instant()), control)
+                    : CompletableFuture.completedStage(new ScanRead<>(false, Optional.<LongMemories.Batch>empty()));
+            return candidates.thenComposeAsync(read -> {
+                if (!read.deferred() && read.value().isPresent()) {
+                    return processClaimed(control, policySettings, batchControl -> processLong(read.value().orElseThrow(), batchControl));
+                }
                 if (!policy.compress()) { return visit(streams, index + 1, control); }
-                return control.guard(store.claim(stream, policySettings, clock.instant())).thenComposeAsync(batch -> batch.map(value -> process(value, control)).orElseGet(() -> visit(streams, index + 1, control)), executor);
+                return readOrDefer("medium:" + stream.id(), "中期租约领取",
+                        () -> store.claim(stream, policySettings, clock.instant()), control).thenComposeAsync(shortRead -> {
+                    if (!shortRead.deferred() && shortRead.value().isPresent()) {
+                        return processClaimed(control, policySettings, batchControl -> process(shortRead.value().orElseThrow(), batchControl));
+                    }
+                    return visit(streams, index + 1, control);
+                }, executor);
             }, executor);
         }, executor);
     }
     /**
+     * 2026/11/06：读取失败明确返回暂缓，不将损坏记录当作合法空批次或写回默认值。
+     * @param key 目录或完整分区阶段键
+     * @param phase 固定阶段说明
+     * @param source 实际异步读取，冷却时不调用
+     * @param control 本轮扫描控制
+     * @param <T> 原读取结果类型
+     * @return 实际结果或已报告、待重试的暂缓状态
+     */
+    private <T> CompletionStage<ScanRead<T>> readOrDefer(String key, String phase,
+            Supplier<CompletionStage<T>> source, ExecutionControl control) {
+        control.checkActive();
+        if (!scanBackoff.allows(key, clock.instant())) {
+            return CompletableFuture.completedStage(new ScanRead<>(true, null));
+        }
+        CompletionStage<T> reading;
+        try {
+            reading = source.get();
+        } catch (RuntimeException failure) {
+            reading = CompletableFuture.failedStage(failure);
+        }
+        return control.guard(reading).handleAsync((value, failure) -> {
+            control.checkActive();
+            if (failure == null) {
+                scanBackoff.succeeded(key);
+                return new ScanRead<>(false, Objects.requireNonNull(value));
+            }
+            var next = scanBackoff.failed(key, clock.instant());
+            reportReadFailure(phase, key, control.id(), failure, next);
+            return new ScanRead<T>(true, null);
+        }, executor);
+    }
+
+    /**
+     * 2026/11/06：未被分区恢复处理的扫描、时限或退避写入失败也不能每个 tick 重复执行。
+     * @param failure 最终真实失败，成功时为空
+     */
+    private void scanFinished(@Nullable Throwable failure) {
+        try {
+            if (failure == null) {
+                scanBackoff.succeeded("processor");
+            } else {
+                var next = scanBackoff.failed("processor", clock.instant());
+                reportReadFailure("扫描或退避保存", "processor", null, failure, next);
+            }
+        } finally {
+            running.set(false);
+        }
+    }
+
+    /**
+     * 2026/11/06：无租约故障不套用模型三次暂停说明，不导出分区名、原文或异常消息。
+     * @param phase 固定阶段
+     * @param key 完整目标，仅输出摘要
+     * @param request 扫描控制编号，尚未分配时为空
+     * @param failure 实际失败
+     * @param next 本进程允许再次尝试的时刻
+     */
+    private void reportReadFailure(String phase, String key, @Nullable UUID request, Throwable failure, Instant next) {
+        logger.warn("Agent 分层记忆", "记忆扫描或领取未完成。请求=" + (request == null ? "未分配" : request)
+                + "，阶段=" + phase + "，目标摘要=" + StableDigest.sha256(key).substring(0, 12)
+                + "，" + FailureDiagnostic.from(failure) + "。当前进程退避至=" + next
+                + "；冷却期间不重复读取或告警，不据此重置记录或跳过整理进度；此失败不计为模型无效生成。");
+    }
+
+    /**
+     * 区分暂缓读取与实际返回的空结果，暂缓不代表不存在待处理记录。
+     * @param deferred 是否因失败或冷却暂缓
+     * @param result 实际读取结果，暂缓时为空
+     * @param <T> 原读取类型
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    private record ScanRead<T>(boolean deferred, @Nullable T result) {
+        /** @return 仅在读取成功后访问的实际结果 */
+        private T value() { return Objects.requireNonNull(result); }
+    }
+    /**
+     * 2026/11/05：领取后开始完整的生成时限，批次结束前保留在途占用及实际持久化结果。
+     * @param scanning 即将释放的扫描控制
+     * @param policy 领取本批时使用的预算
+     * @param processing 借用批次控制并完成提交或退避的处理
+     * @return 实际批次完成阶段；控制由本方法在其完成后关闭
+     */
+    private CompletionStage<Void> processClaimed(ExecutionControl scanning, LayeredMemorySettings policy,
+            Function<ExecutionControl, CompletionStage<Void>> processing) {
+        scanning.checkActive();
+        var control = ExecutionControl.withDeadline(policy.modelCallLimits().newBudget(),
+                clock.instant().plus(policy.timeout()), clock, scheduler);
+        current = control;
+        scanning.close();
+        if (closed) {
+            control.cancel();
+        }
+        CompletionStage<Void> work;
+        try {
+            work = processing.apply(control);
+        } catch (RuntimeException failure) {
+            work = CompletableFuture.failedStage(failure);
+        }
+        return work.whenComplete((ignored, failure) -> {
+            control.close();
+            if (current == control) {
+                current = null;
+            }
+        });
+    }
+    /**
      * 2026/11/02：等待语义选择后重新检查学习和空间，零候选也按真实提交推进进度。
      * 2026/11/04：区分观察准备、模型生成、资格复核和持久提交，不导出候选原文。
+     * 2026/11/05：无合格观察目标不等于撤权；空批次仍在事务内复核真实学习开关。
      * @param batch 原长期租约
      * @param control 本批统一控制
      * @return 提交或退避完成阶段
@@ -232,10 +392,23 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
                     throw new MemoryProcessingException(MemoryProcessingException.Reason.ACCESS_REVOKED);
                 }
                 // 2026/11/03：生成器不能自行选择写入域；提交时按两个实际开关筛选。
-                var facts = Boolean.TRUE.equals(learning.apply(batch.stream().reference().scope())) ? values.analysis().memories() : List.<LongMemories.Candidate>of();
+                boolean factsAllowed = Boolean.TRUE.equals(learning.apply(batch.stream().reference().scope()));
+                var facts = factsAllowed ? values.analysis().memories() : List.<LongMemories.Candidate>of();
                 boolean styleAllowed = observations != null && observations.enabled(batch.stream().reference().scope()) && values.basis() != null;
                 var styles = styleAllowed ? values.analysis().styles() : List.<StyleObservations.Candidate>of();
-                var guard = styleAllowed ? java.util.Objects.requireNonNull(observations).guard(batch, java.util.Objects.requireNonNull(values.basis()), control) : (Runnable) control::checkActive;
+                var styleGuard = styleAllowed ? java.util.Objects.requireNonNull(observations)
+                        .guard(batch, java.util.Objects.requireNonNull(values.basis()), control) : (Runnable) () -> {};
+                // 2026/11/05：在真实事务入口及提交前分别核对两个学习域，不能以人格授权代替事实授权。
+                Runnable guard = () -> {
+                    control.checkActive();
+                    if (closed || !settings.get().enabled()
+                            || factsAllowed && !Boolean.TRUE.equals(learning.apply(batch.stream().reference().scope()))
+                            || !factsAllowed && (observations == null
+                            || !observations.enabled(batch.stream().reference().scope()))) {
+                        throw new MemoryProcessingException(MemoryProcessingException.Reason.ACCESS_REVOKED);
+                    }
+                    styleGuard.run();
+                };
                 phase.set("长期持久提交");
                 return target.commit(batch, new StyleObservations.Analysis(facts, styles), values.basis(), clock.instant(), guard).thenApply(committed -> {
                     if (!committed) {
@@ -244,7 +417,7 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
                     return (Void) null;
                 });
             }, executor);
-        }, executor).exceptionallyCompose(failure -> target.retry(batch, clock.instant()).thenRun(() ->
+        }, executor).exceptionallyCompose(failure -> target.retry(batch, clock.instant(), failure).thenRun(() ->
                 reportFailure("Agent 长期记忆", phase.get(), control.id(), batch.leaseId(), failure)));
     }
     /**
@@ -271,7 +444,7 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
      * 等待真实模型结果、复核当前策略并提交，失败只保留退避，不推进水位。
      * 2026/11/04：记录实际失败阶段、模型状态和原请求编号，继续使用原租约退避。
      * @param batch 原租约及输入
-     * @param control 不重新创建时限或预算的本批控制
+     * @param control 领取成功后建立的本批控制
      * @return 摘要或失败退避的实际完成阶段
      */
     private CompletionStage<Void> process(MemoryLayers.Batch batch, ExecutionControl control) {
@@ -301,6 +474,8 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
 
     /**
      * 只读取宿主原因、异常结构及真实编号，不读取 Throwable 消息或模型原文。
+     * 2026/11/05：明确区分达到时限、主动取消及资源关闭，并提供超时参数入口。
+     * 2026/11/06：持久格式错误独立分类，仅对无效模型候选说明三次暂停策略。
      * @param namespace 当前记忆处理域
      * @param phase 最后实际进入的处理阶段
      * @param request 原模型请求编号，扫描尚未建立控制时为空
@@ -309,29 +484,54 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
      */
     private void reportFailure(String namespace, String phase, @Nullable UUID request,
             @Nullable UUID lease, Throwable failure) {
+        // 2026/11/05：关系校验异常保留候选位置，不与基础设施失败或模型配置错误混为一类。
         MemoryProcessingException classified = null;
-        String stopped = null;
+        MemoryEvidenceException evidence = null;
+        boolean storageFailure = false;
+        ExecutionControl.StopReason stopped = null;
         Throwable currentFailure = failure;
         for (int depth = 0; currentFailure != null && depth < 16; depth++) {
+            if (currentFailure instanceof MemoryStorageException) {
+                storageFailure = true;
+                break;
+            }
+            if (currentFailure instanceof MemoryEvidenceException value) {
+                evidence = value;
+                break;
+            }
             if (currentFailure instanceof MemoryProcessingException value) {
                 classified = value;
                 break;
             }
             if (currentFailure instanceof org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException value) {
-                stopped = value.reason().name();
+                stopped = value.reason();
             }
             currentFailure = currentFailure.getCause();
         }
         String code = "PROCESSING_FAILED";
         String explanation = "检查异常类型及代码位置";
-        if (classified != null) {
+        if (storageFailure) {
+            code = "MEMORY_STORAGE_FORMAT";
+            explanation = "持久记忆数据与当前结构不匹配；核对记录类型和字段，不会自动重置原记录";
+        } else if (evidence != null) {
+            code = evidence.code().name();
+            explanation = evidence.code().description();
+        } else if (classified != null) {
             code = classified.reason().name();
             explanation = classified.reason().description();
         } else if (stopped != null) {
-            code = "EXECUTION_" + stopped;
-            explanation = "执行已取消、关闭或达到截止时间";
+            code = "EXECUTION_" + stopped.name();
+            explanation = switch (stopped) {
+                case DEADLINE_EXCEEDED -> "当前阶段达到截止时间；请检查模型响应或数据库耗时，时限由 "
+                        + "tea-neko.agent.memory.layered.timeout-seconds 配置";
+                case CANCELLED -> "整理任务已取消";
+                case CLOSED -> "整理执行资源已关闭";
+            };
         }
         String status = classified == null || classified.modelStatus() == null ? "未取得" : classified.modelStatus().name();
+        if (evidence != null && evidence.modelStatus() != null) {
+            status = evidence.modelStatus().name();
+        }
         String previousRequest = MDC.get("requestId");
         try {
             if (request != null) {
@@ -341,7 +541,9 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
                     + "，批次=" + (lease == null ? "无租约" : lease) + "，阶段=" + phase + "，原因=" + code
                     + "（" + explanation + "），模型状态=" + status + "，准入状态="
                     + (classified == null ? "未取得" : classified.accessStatus()) + "，" + FailureDiagnostic.from(failure)
-                    + "。本批不会以失败候选推进整理进度，将按持久状态重试。");
+                    + (namespace.equals("Agent 长期记忆") && LongMemoryJobs.Failure.from(failure).invalidCandidate()
+                    ? "。本批不推进整理水位；按持久状态退避，同输入三次无效生成后暂停，可在工作区查看并恢复。"
+                    : "。本批不推进整理水位，将按持久状态重试。"));
         } finally {
             if (previousRequest == null) {
                 MDC.remove("requestId");

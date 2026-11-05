@@ -51,11 +51,12 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * <br>2026/11/05：邮箱交付及重放保留安全诊断而不保存异常对象。
  * <br>2026/11/05：会话准备和策略加载失败保留首个安全原因，避免只返回通用配置错误。
+ * <br>2026/11/05：资料重放拒绝及复核异常保留安全原因，避免发送端只得到通用失效错误。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
     private final IAgentTurnService turns;
@@ -337,6 +338,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     /**
      * 以独立有界观察复核实际准入、代次和资料来源，未实现资料重放协议时明确不可重放。
      * 派生观察不更改原结果、控制或预算，也不以不可重放为由补执行模型或工具。
+     * 2026/11/05：重放来源未授权时解释原状态，资料检查抛错时保留原安全诊断。
      * @param handle 原目标实例
      * @param request 原始请求
      * @param source 原完成信号
@@ -362,12 +364,17 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     return control.guard(Objects.requireNonNull(turns.verifyPromptReplay(handle, request, checked, control), "资料重放阶段不能为空。"))
                             .thenComposeAsync(allowed -> {
                                 control.checkActive();
-                                if (!Boolean.TRUE.equals(allowed)) { return CompletableFuture.completedStage(restate(checked, AgentRunResult.Status.REPLAY_UNAVAILABLE)); }
+                                if (!Boolean.TRUE.equals(allowed)) {
+                                    return CompletableFuture.completedStage(restate(checked, AgentRunResult.Status.REPLAY_UNAVAILABLE)
+                                            .withFailure(FailureDiagnostic.from(new AgentDeliveryException(
+                                                    "原资料源不允许重放，或资料、配置、插件版本已变化；已停止发送旧答案。"))));
+                                }
                                 return replayAccess(handle, request, checked);
                             }, executor);
                 }, executor).thenApplyAsync(checked -> {
                     control.checkActive(); var after = replayStatus(handle, stamp); return after == null ? checked : restate(checked, after);
-                }, executor).exceptionally(failure -> restate(raw, AgentMemoryBoundary.status(failure)));
+                }, executor).exceptionally(failure -> restate(raw, AgentMemoryBoundary.status(failure))
+                        .withFailure(FailureDiagnostic.from(failure)));
             }, executor)).handle((result, failure) -> failure == null ? result
                     : rejectedResult(handle, request, AgentMemoryBoundary.status(failure), parent));
         } catch (RuntimeException failure) { return immediate(handle, request, AgentMemoryBoundary.status(failure), parent); }

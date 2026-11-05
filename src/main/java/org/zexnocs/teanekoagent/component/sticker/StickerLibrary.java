@@ -27,10 +27,12 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：已回收文件的删除决定与分析缓存独立计量。
+ * <br>2026/11/05：下载后按指纹复核独立删除记录，禁止重复采集恢复人工拒绝。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class StickerLibrary {
     private final StickerExtensionRegistry registry;
@@ -137,9 +139,17 @@ public final class StickerLibrary {
      * @return ANALYZE、CACHED 或终态原因
      */
     public CompletionStage<String> attach(StickerSettings config,StickerExtensionRegistry.Selected ports,Work work,Stickers.Blob blob,ExecutionControl control){
-        return ports.catalog().change(config,s->{
+        // 2026/11/05：删除决定不再常驻主目录，仍在相同根事务内优先仲裁。
+        return ports.catalog().transact(config,transaction->{
+            var s = transaction.state();
             check(config,ports,work.job().getSource(),control);var job=running(s,work);job.setBlob(blob);
             if(blob.bytes()<1||blob.bytes()>job.getReserved()||!blob.hash().matches("[a-f0-9]{64}")){throw new IllegalArgumentException("素材文件超出预约或摘要无效。");}
+            var deleted = transaction.deletedByHash(blob.hash());
+            if (deleted.isPresent()) {
+                job.setExpectedEntryRevision(deleted.get().getRevision());
+                terminal(job, Stickers.JobStatus.REJECTED, "MANAGED_BLOCKED", clock.instant());
+                return "DONE";
+            }
             var entry=s.getEntries().get(blob.hash());var now=clock.instant();
             if(entry!=null){
                 // 2026/11/03：下载后固定版本，后续人工修改不能被迟到分析覆盖。
@@ -153,7 +163,7 @@ public final class StickerLibrary {
                     if(entry.getAnalysis()==null){terminal(job,Stickers.JobStatus.REJECTED,"ANALYSIS_UNCERTAIN",now);return "DONE";}return "CACHED";
                 }
             }else{
-                if(s.getEntries().size()>=2048){terminal(job,Stickers.JobStatus.REJECTED,"CACHE_CAPACITY",now);return "DONE";}
+                if(cacheSize(s)>=2048){terminal(job,Stickers.JobStatus.REJECTED,"CACHE_CAPACITY",now);return "DONE";}
                 entry=new Stickers.Entry();entry.setHash(blob.hash());entry.setId("stk_"+StableDigest.sha256(config.catalogId(),blob.hash()).substring(0,32));entry.setCreated(now);observe(entry,job.getSource(),now);s.getEntries().put(blob.hash(),entry);
                 job.setExpectedEntryRevision(entry.getRevision());
             }
@@ -438,11 +448,21 @@ public final class StickerLibrary {
         state.getJobs().values().removeIf(j->!pending(j)&&!needsCleanup(j)&&(!retained.contains(j.getId())||j.getNextAttempt().plus(Duration.ofHours(24)).isBefore(now)));
         // 2026/11/03：仅回收自动缓存，不自动遗忘人工删除和停用决定。
         state.getEntries().values().removeIf(e->e.getState()==Stickers.EntryStatus.CACHED&&e.getBlob()==null&&e.getCachedUntil()!=null&&e.getCachedUntil().isBefore(now)&&state.getJobs().values().stream().noneMatch(j->pending(j)&&j.getBlob()!=null&&j.getBlob().hash().equals(e.getHash())));
-        if(state.getEntries().size()>=2048){
+        if(cacheSize(state)>=2048){
             var inFlight=state.getJobs().values().stream().filter(StickerLibrary::pending).map(Stickers.Job::getBlob).filter(Objects::nonNull).map(Stickers.Blob::hash).collect(java.util.stream.Collectors.toSet());
             var evictable=state.getEntries().values().stream().filter(e->e.getState()==Stickers.EntryStatus.CACHED&&e.getBlob()==null&&!inFlight.contains(e.getHash())).sorted(Comparator.comparing(Stickers.Entry::getCreated)).toList();
-            for(var entry:evictable){if(state.getEntries().size()<2048){break;}state.getEntries().remove(entry.getHash());}
+            for(var entry:evictable){if(cacheSize(state)<2048){break;}state.getEntries().remove(entry.getHash());}
         }
+    }
+    /**
+     * 2026/11/05：已回收文件的人工删除决定单独计量，不占用分析缓存且不被自动遗忘。
+     * @param state 当前原子目录
+     * @return 仍占用缓存或文件的条目数
+     */
+    public static long cacheSize(Stickers.State state) {
+        return state.getEntries().values().stream()
+                .filter(entry -> entry.getState() != Stickers.EntryStatus.DELETED || entry.getBlob() != null)
+                .count();
     }
     /**
      * @param state 原目录

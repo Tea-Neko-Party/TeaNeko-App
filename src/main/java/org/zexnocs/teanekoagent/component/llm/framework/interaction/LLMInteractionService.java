@@ -9,12 +9,16 @@ import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageHistory;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
+import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResponseProtocolException;
+import org.zexnocs.teanekoagent.component.llm.framework.response.LLMVisibleTextValidator;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
@@ -45,14 +49,23 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：执行控制的正常终止记录为状态日志，不再误报模型交互故障。
  * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
+ * <br>2026/11/05：配置解析和输入预检失败同样保留安全诊断，避免宿主预算错误被误认为图片拒绝。
+ * <br>2026/11/05：拒绝作为正文泄漏的内部工具调用标记，保留代码示例，不从正文执行工具。
+ * <br>2026/11/05：工具尚未执行且原预算允许时，仅纠正一次内部标记泄漏，不沉积错误正文。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  * @see LLMInteractionExecution
  */
 public final class LLMInteractionService implements ILLMInteractionService {
+    // 2026/11/05：固定宿主反馈不包含供应商原文，临时纠正只使用原工具集和原预算。
+    private static final String TOOL_PROTOCOL_CORRECTION = "宿主工具协议反馈：上一响应把内部工具标记写入正文，"
+            + "没有发生任何工具执行，也没有向用户发送。请重新处理当前用户请求：需要工具时，"
+            + "使用本次请求 tools 定义对应的结构化 tool_calls，并按 schema 填写参数；"
+            + "不得输出 DSML、XML 调用标记或用代码块代替调用。只依据本轮资料和真实工具回执回答，"
+            + "没有调用回执不能声称工具或目录查询失败；不需要工具时直接给正常答案。";
     private final ILLMModelService models;
     private final ILLMInteractionDefaults defaults;
     private final Executor executor;
@@ -147,6 +160,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
     /**
      * 固定宿主守卫并复用有限交互循环，守卫不进入消息、选项或返回快照。
      * 2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+     * 2026/11/05：预检异常携带原类型和位置，不公开消息、凭据或配置原值。
      * @param prompt 初始消息和参数策略
      * @param tools 本轮可信工具集
      * @param context 宿主绑定及父控制
@@ -161,7 +175,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
         try {
             selected = Objects.requireNonNull(settings == null ? defaults.resolve() : settings, "交互配置不能为空。");
         } catch (RuntimeException failure) {
-            return CompletableFuture.completedStage(empty(CONFIGURATION_ERROR));
+            return CompletableFuture.completedStage(empty(CONFIGURATION_ERROR).withFailure(FailureDiagnostic.from(failure)));
         }
         final List<ILLMMessage> messages;
         final LLMModelOptions options;
@@ -183,7 +197,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
                 context.getControl().budget().remaining(LLMCallLimits.TOTAL_TOKENS);
             }
         } catch (RuntimeException failure) {
-            return CompletableFuture.completedStage(empty(INVALID_INPUT));
+            return CompletableFuture.completedStage(empty(INVALID_INPUT).withFailure(FailureDiagnostic.from(failure)));
         }
         final Run run;
         try {
@@ -245,6 +259,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
     private static LLMInteractionResult.Status classify(Throwable failure) {
         if (failure instanceof LLMOperationRejectedException) { return CANCELLED; }
         failure = unwrap(failure);
+        // 2026/11/05：协议正文泄漏属于无效响应，不能当作成功回复或配置错误。
+        if (failure instanceof LLMResponseProtocolException) { return INVALID_RESPONSE; }
         if (failure instanceof ExecutionStoppedException stopped) {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED ? TIMED_OUT : CANCELLED;
         }
@@ -280,11 +296,12 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
+     * <br>2026/11/05：一次性纠正提示与错误正文不进入正常续轮和提交历史。
      *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.5.0-l
-     * @version 4.8.2-l
+     * @version 4.8.3-l
      */
     private static final class Run {
         private final LLMInteractionExecution execution;
@@ -296,6 +313,9 @@ public final class LLMInteractionService implements ILLMInteractionService {
         private final List<LLMInteractionResult.ModelAttempt> attempts = new ArrayList<>();
         private ILLMAssistantMessage candidate;
         private int appendedTools;
+        // 2026/11/05：本轮仅能纠正一次，已执行的工具不会因为文本协议错误重新执行。
+        private boolean protocolCorrected;
+        private boolean protocolCorrectionPending;
         private @Nullable BudgetKey rejectedBudget;
         // 2026/11/05：只保留脱敏结构，不跨轮次保存 Throwable 或供应商正文。
         private @Nullable FailureDiagnostic failureDiagnostic;
@@ -322,12 +342,19 @@ public final class LLMInteractionService implements ILLMInteractionService {
         }
 
         /**
-         * 发起一个模型阶段并登记真实尝试；错误响应不会重试，也不会进入工具副作用路径。
+         * 发起一个模型阶段并登记真实尝试；协议纠正共享额度，传输失败不重试。
          * @return 当前阶段及所有后续往返的终止状态
          */
         private CompletionStage<LLMInteractionResult.Status> next() {
             long before = execution.usage().get(LLMCallLimits.MODEL_REQUESTS).used();
-            return execution.callModel(new LLMPrompt(transcript, options, optionsPolicy)).handle((raw, failure) -> {
+            var messages = new ArrayList<>(transcript);
+            if (protocolCorrectionPending) {
+                // 2026/11/05：纠正规则仅存在于本次模型请求，不写入可提交对话或伪造工具回执。
+                messages.add(LLMSystemMessage.builder().contents(new LLMContentListBuilder()
+                        .addText(TOOL_PROTOCOL_CORRECTION).build()).build());
+                protocolCorrectionPending = false;
+            }
+            return execution.callModel(new LLMPrompt(messages, options, optionsPolicy)).handle((raw, failure) -> {
                 int after = Math.toIntExact(execution.usage().get(LLMCallLimits.MODEL_REQUESTS).used());
                 if (failure != null) {
                     if (after > before) {
@@ -350,6 +377,7 @@ public final class LLMInteractionService implements ILLMInteractionService {
         /**
          * 验证统一响应的终止标识及唯一候选，先完成工具链再请求最终答案。
          * 多候选不能隐式选择一条产生副作用，截断和拒绝也不执行携带的工具。
+         * 2026/11/05：最终正文泄漏工具标记时清除候选并公开安全原因，不发送或执行这些标记。
          * @param response 已冻结的完整供应商响应
          * @return 明确终止状态，或下一次模型阶段
          */
@@ -379,6 +407,19 @@ public final class LLMInteractionService implements ILLMInteractionService {
             if ("cancelled".equals(reason)) { return CompletableFuture.completedStage(CANCELLED); }
             if (calls.isEmpty()) {
                 if (!"stop".equals(reason)) { return CompletableFuture.completedStage(INVALID_RESPONSE); }
+                try {
+                    LLMVisibleTextValidator.validate(message);
+                } catch (LLMResponseProtocolException invalid) {
+                    candidate = null;
+                    if (!protocolCorrected && execution.canCorrectToolProtocol()) {
+                        protocolCorrected = true;
+                        protocolCorrectionPending = true;
+                        // 2026/11/05：原错误响应仍在 attempts 中供诊断，正常历史及续轮不回放泄漏正文。
+                        transcript.removeLast();
+                        return next();
+                    }
+                    return CompletableFuture.completedStage(stopped("工具协议", invalid));
+                }
                 boolean visible = message.getContents().stream().anyMatch(content ->
                         !(content.getContentPart() instanceof TextLLMContentPart text) || !text.getText().isBlank());
                 return CompletableFuture.completedStage(visible ? SUCCESS : EMPTY_OUTPUT);

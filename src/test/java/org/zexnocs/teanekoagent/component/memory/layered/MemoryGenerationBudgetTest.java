@@ -1,7 +1,5 @@
 package org.zexnocs.teanekoagent.component.memory.layered;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -18,6 +16,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
@@ -48,6 +47,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.*;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 /**
  * 用真实处理器、生成器、输入估算及交互预算验证大批次的准入与容量边界。
  *
@@ -61,10 +62,11 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/06：按带失败原因的退避接口核对预算拒绝后的原进度保留。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(15)
 class MemoryGenerationBudgetTest {
@@ -107,7 +109,8 @@ class MemoryGenerationBudgetTest {
         when(longs.claim(eq(stream), any())).thenReturn(CompletableFuture.completedStage(Optional.of(longBatch)));
         when(longs.commit(eq(longBatch), any(org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis.class),
                 isNull(), any(), any())).thenReturn(CompletableFuture.completedStage(true));
-        when(longs.retry(eq(longBatch), any())).thenReturn(CompletableFuture.completedStage(null));
+        // 2026/11/05：长期退避携带真实失败分类，预算失败仍不得提交水位。
+        when(longs.retry(eq(longBatch), any(), any())).thenReturn(CompletableFuture.completedStage(null));
         var models = mock(ILLMModelService.class);
         var options = LLMModelOptions.builder().provider("test").model("受控模型").maxTokens(configuredOutput).build();
         when(models.resolveOptions(any())).thenAnswer(call -> {
@@ -120,7 +123,7 @@ class MemoryGenerationBudgetTest {
             assertTrue(input > 16384, "回归输入必须超过原固定总预算。");
             // 2026/11/04：业务生成器必须完整继承模型输出额度，不额外限制为 8192。
             assertEquals(configuredOutput, Objects.requireNonNull(prompt.getOptions()).getMaxTokens(), "输出额度必须与模型配置一致。");
-            var text = longTerm ? "[]" : mapper.writeValueAsString(digest);
+            var text = longTerm ? "{\"memories\":[],\"styles\":[]}" : mapper.writeValueAsString(digest);
             ILLMResult result = LLMResult.builder().model("受控模型").choices(List.of(LLMChoice.builder()
                     .index(0).finishReason("stop").message(LLMAssistantMessage.builder()
                             .contents(new LLMContentListBuilder().addText(text).build()).build()).build())).build();
@@ -134,9 +137,9 @@ class MemoryGenerationBudgetTest {
             var interactions = new LLMInteractionService(models, LLMInteractionSettings::defaults, Runnable::run,
                     timers, new JsonLLMTokenEstimator(mapper));
             try (var compressor = new LLMLayeredMemoryCompressor(() -> new AgentFactory(registry), gate, references,
-                    interactions, () -> settings, ignored -> new LayeredMemoryPolicy(true, true, true), mapper, Runnable::run);
+                    LLMJsonTestSupport.create(interactions, mapper), () -> settings, ignored -> new LayeredMemoryPolicy(true, true, true), mapper, Runnable::run);
                  var consolidator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, references,
-                         interactions, () -> settings, ignored -> true, mapper, Runnable::run);
+                         LLMJsonTestSupport.create(interactions, mapper), () -> settings, ignored -> true, mapper, Runnable::run);
                  var processor = new LayeredMemoryProcessor(layers, compressor, references, () -> settings,
                          ignored -> new LayeredMemoryPolicy(true, true, true), Runnable::run, timers, Clock.systemUTC(),
                          mock(ILogger.class), longTerm ? longs : null, longTerm ? consolidator : null, ignored -> true)) {
@@ -145,7 +148,7 @@ class MemoryGenerationBudgetTest {
                 if (longTerm) {
                     verify(longs, times(oversized ? 0 : 1)).commit(eq(longBatch),
                             any(org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis.class), isNull(), any(), any());
-                    verify(longs, times(oversized ? 1 : 0)).retry(eq(longBatch), any());
+                    verify(longs, times(oversized ? 1 : 0)).retry(eq(longBatch), any(), any());
                 } else {
                     verify(layers, times(oversized ? 0 : 1)).commit(eq(batch), any(), any());
                     verify(layers, times(oversized ? 1 : 0)).retry(eq(batch), any());

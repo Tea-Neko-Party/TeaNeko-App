@@ -35,10 +35,11 @@ import java.util.Map;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：保留并回传工具续轮的供应商推理字段，正文仍不暴露推理内容。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class DeepSeekChatCompletionMapper {
@@ -46,6 +47,9 @@ public final class DeepSeekChatCompletionMapper {
      * metadata 中写入 DeepSeek 请求体扩展字段的前缀。
      */
     public static final String EXTRA_BODY_PREFIX = "body.";
+
+    /** 2026/11/05：供应商推理仅用于协议续轮，不属于用户可见正文。 */
+    private static final String REASONING_CONTENT_METADATA = "deepseek.reasoningContent";
 
     /**
      * 将 LLM prompt 和 options 转换为 DeepSeek 请求数据。
@@ -109,6 +113,7 @@ public final class DeepSeekChatCompletionMapper {
 
     /**
      * 转换消息列表。
+     * <br>2026/11/05：工具续轮回传原始 reasoning_content，不混入普通内容。
      *
      * @param messages LLM 消息列表
      * @return DeepSeek 消息列表
@@ -124,6 +129,11 @@ public final class DeepSeekChatCompletionMapper {
             putIfNotBlank(item, "name", message.getName());
             item.put("content", OpenAIContentMapper.toChatContent(message));
             if (message instanceof ILLMAssistantMessage assistantMessage) {
+                // 2026/11/05：只读取本供应商命名空间的原推理字段，不根据正文重建推理。
+                var reasoning = assistantMessage.getProviderMetadata().get(REASONING_CONTENT_METADATA);
+                if (reasoning instanceof String value) {
+                    putIfNotBlank(item, "reasoning_content", value);
+                }
                 var toolCalls = assistantMessage.getToolCalls();
                 if (toolCalls != null && !toolCalls.isEmpty()) {
                     item.put("tool_calls", toToolCalls(toolCalls));
@@ -228,6 +238,7 @@ public final class DeepSeekChatCompletionMapper {
 
     /**
      * 转换 assistant message。
+     * 2026/11/05：推理内容存入供应商元数据，由后续工具轮次原样回传。
      *
      * @param message 需要发送或映射的消息
      * @return 统一 assistant message
@@ -245,6 +256,8 @@ public final class DeepSeekChatCompletionMapper {
                         .addText(firstNotBlank(message.getContent(), ""))
                         .build())
                 .toolCalls(toFrameworkToolCalls(message.getToolCalls()))
+                .providerMetadata(message.getReasoningContent() == null || message.getReasoningContent().isBlank()
+                        ? Map.of() : Map.of(REASONING_CONTENT_METADATA, message.getReasoningContent()))
                 .build();
     }
 

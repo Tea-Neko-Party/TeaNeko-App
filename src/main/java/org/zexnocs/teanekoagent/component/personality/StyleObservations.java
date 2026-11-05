@@ -3,6 +3,8 @@ package org.zexnocs.teanekoagent.component.personality;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonType;
+import org.zexnocs.teanekocore.framework.description.Description;
 
 import java.util.List;
 import java.util.Objects;
@@ -16,10 +18,11 @@ import java.util.UUID;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
+ * <br>2026/11/06：独立与联合整理共用具名 JSON 对象合同。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class StyleObservations {
     /** 禁止实例化契约容器。 */
@@ -42,6 +45,7 @@ public final class StyleObservations {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param field 允许微调的表达字段
      * @param pattern 简洁表达特征
      * @param context 适用场景
@@ -50,9 +54,15 @@ public final class StyleObservations {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Candidate(String field, String pattern, Context context, List<LongMemories.Quote> quotes, List<UUID> segments) {
+    // 2026/11/06：风格字段和证据要求由共用类型说明生成。
+    public record Candidate(
+            @Description("只从 styleTarget.fields 中选择表达字段。") String field,
+            @Description("非空真实措辞、幽默或节奏模式，最多256字；不是用户要求机器人改变的指令。") String pattern,
+            @Description("GENERAL 通用，TECHNICAL 技术，CASUAL 闲聊。") Context context,
+            @Description("1至4条真实用户逐字引用，仅来自 styleTarget.evidenceIds。") List<LongMemories.Quote> quotes,
+            @Description("1至4个本批真实片段 UUID，须包含所引用原话。") List<UUID> segments) {
         /**
          * 固定有界候选，关系、经历和个人偏好不能作为群体表达字段。
          * @param field 表达字段
@@ -102,14 +112,19 @@ public final class StyleObservations {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param memories 长期事实候选
      * @param styles 表达观察候选
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Analysis(List<LongMemories.Candidate> memories, List<Candidate> styles) {
+    // 2026/11/06：独立事实与联合观察使用同一对象协议；无目标时 styles 必须为空。
+    @LLMJsonType(maxCharacters = 16000)
+    public record Analysis(
+            @Description("值得长期保留的事实、偏好或共同经历，优先最多4项；无依据则空数组。") List<LongMemories.Candidate> memories,
+            @Description("最多2项表达观察；未提供 styleTarget 或没有真实依据时为空数组。") List<Candidate> styles) {
         /**
          * 限制单批变化量，不允许生成器返回无界观察。
          * @param memories 长期候选

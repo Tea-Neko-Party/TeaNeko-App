@@ -9,6 +9,8 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResponseProtocolException;
+import org.zexnocs.teanekoagent.component.llm.framework.response.LLMVisibleTextValidator;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
@@ -39,10 +41,11 @@ import java.util.regex.Pattern;
  * <br>2026/11/05：协议头识别与控制行解析统一允许边缘空白。
  *
  * <br>2026/11/05：格式失败使用安全原因类型，允许日志与用户回执准确解释。
+ * <br>2026/11/05：正式语义答案在完整编译后复核内部工具标记，不让协议转义绕过交付检查。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 public final class ExpressionRuntime {
     public static final String FRAGMENT = "expression_contract";
@@ -182,9 +185,11 @@ public final class ExpressionRuntime {
     /**
      * 编译时生成一次不可变历史正文，重放不重新调用处理器。
      * 2026/11/05：容量失败按固定安全原因上报，不包含语义正文或媒体内容。
+     * 2026/11/05：按完整语义文本校验，不误伤跨分段代码围栏，也不发送部分合法段。
      * @param steps 完整步骤
      * @return 冻结语义消息
-     * @throws IllegalArgumentException 当整体正文、图片或编码容量超限时
+     * @throws IllegalArgumentException 当整体容量超限时
+     * @throws LLMResponseProtocolException 当正文包含内部工具控制标记时
      */
     private ILLMAssistantMessage semanticAnswer(List<ReplyPlans.Step> steps) {
         if (steps.stream().mapToLong(step -> step.text().length()).sum() > 64000) {
@@ -198,6 +203,7 @@ public final class ExpressionRuntime {
             throw new ReplyProtocolException("回复媒体超出总容量。");
         }
         var answer = (ILLMAssistantMessage) LLMProtocolSnapshots.messages(List.of(LLMAssistantMessage.builder().contents(contents).build())).getFirst();
+        LLMVisibleTextValidator.validate(answer);
         if (codec.signature(List.of(answer)).bytes() > 3000000) {
             throw new ReplyProtocolException("回复总投影超出字节预算。");
         }

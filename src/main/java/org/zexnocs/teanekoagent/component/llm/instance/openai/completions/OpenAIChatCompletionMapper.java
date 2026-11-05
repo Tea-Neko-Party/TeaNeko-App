@@ -30,10 +30,11 @@ import java.util.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：映射原生 JSON Schema 和严格输出选项。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class OpenAIChatCompletionMapper {
@@ -147,10 +148,16 @@ public final class OpenAIChatCompletionMapper {
      * @param options Chat Completions 参数
      * @return response_format 请求对象或 {@code null}
      */
-    private static Map<String, String> toResponseFormat(OpenAIChatCompletionModelOptions options) {
+    private static Map<String, Object> toResponseFormat(OpenAIChatCompletionModelOptions options) {
+        // 2026/11/06：实际适配能力已复核；携带 Schema 时映射严格结构输出。
+        if (options.getResponseFormat() == LLMResponseFormat.JSON && options.findResponseSchema().isPresent()) {
+            var schema = options.findResponseSchema().orElseThrow();
+            return Map.of("type", "json_schema", "json_schema", Map.of(
+                    "name", schema.name(), "strict", true, "schema", schema.schema()));
+        }
         return options.findResponseFormat()
                 .filter(format -> format == LLMResponseFormat.JSON)
-                .map(_ -> Map.of("type", "json_object"))
+                .map(_ -> Map.<String, Object>of("type", "json_object"))
                 .orElse(null);
     }
 

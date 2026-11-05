@@ -92,6 +92,7 @@
 | Agent | [部署说明](docs/development/agent-deployment.md) · [组件装配](docs/development/agent-composition.md) | 启用对话、装配记忆、人格与工具 |
 | 网页操作 | [聊天](docs/development/web-console-chat.md) · [工作区](docs/development/web-console-agent.md) · [任务与日志](docs/development/web-console-runtime.md) | 聊天、活动、记忆与运行状态 |
 | 插件开发 | [插件指南](docs/development/plugins/README.md) · [项目分层](docs/development/project-layers.md) | Core、Agent、工具、组件、事件与管理扩展 |
+| 代码审查 | [审查索引](docs/review/README.md) · [当前下一步实施](docs/review/4.8.3-l/next-steps.md) | 按版本区分待实施事项、已完成项与历史证据 |
 | 版本与计划 | [版本操作](docs/development/versioning.md) · [发布日志](docs/changelog/README.md) · [计划索引](docs/plan/README.md) | 构建版本、发布流程与开发记录 |
 
 ## 交流

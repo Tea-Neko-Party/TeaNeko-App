@@ -20,11 +20,14 @@ import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import org.zexnocs.teanekocore.utils.StableDigest;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
+import tools.jackson.databind.node.ObjectNode;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CompletionStage;
@@ -43,10 +46,15 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：长期事务入口和提交前复核资格，非空单字查询执行有界字面匹配。
+ * <br>2026/11/05：复用候选关系预检，逐项区分事务内来源失效并持久限制重复无效生成。
+ * <br>2026/11/06：证据、片段及租约期限包含实际排队耗时，避免使用入队时的过期快照。
+ * <br>2026/11/06：仅为旧作业缺失的管理版本补零，不放宽其他字段反序列化校验。
+ * <br>2026/11/06：持久化格式失败报告安全的类型与字段，不泄露 JSON 或反序列化异常正文。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
@@ -154,8 +162,9 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     @Override public CompletionStage<Optional<LongMemories.Batch>> claim(MemoryLayers.Stream stream, Instant now) {
         return data.transaction("领取长期记忆整理", () -> {
             if (!generation(stream.reference(), EasyDataLock.READ)) { return Optional.empty(); }
-            var row = dto("jobs").find(stream.id(), EasyDataLock.WRITE); var job = row == null ? Job.empty() : read(row, Job.class);
-            if (job.until().isAfter(now) || job.retryAt().isAfter(now)) { return Optional.empty(); }
+            var row = dto("jobs").find(stream.id(), EasyDataLock.WRITE); var job = row == null ? Job.empty() : readJob(row);
+            // 2026/11/05：暂停作业仍检查固定前缀是否变化；不变则不再调用模型。
+            if (job.until().isAfter(now) || !paused(job) && job.retryAt().isAfter(now)) { return Optional.empty(); }
             var selected = layer("medium:" + stream.id()).scan(sequence(job.through()), null, 4, EasyDataLock.READ).stream()
                     .map(item -> read(item, MemoryLayers.Segment.class)).toList();
             // 2026/11/03：到期前缀只推进跳过水位，不将失效片段反复送入模型。
@@ -165,7 +174,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 skipped = segment.through();
             }
             if (skipped != job.through()) {
-                job = new Job(skipped, null, Instant.EPOCH, Instant.EPOCH, 0, 0, "");
+                job = new Job(skipped, null, Instant.EPOCH, Instant.EPOCH, 0, 0, "", null, job.revision() + 1);
                 save(dto("jobs"), row, stream.id(), job);
                 row = dto("jobs").find(stream.id(), EasyDataLock.WRITE);
             }
@@ -185,9 +194,15 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 }
             }
             var fingerprint = LongMemories.fingerprint(mapper.writeValueAsString(segments), mapper.writeValueAsString(evidence));
+            var trouble = job.trouble();
+            boolean sameInput = trouble != null && trouble.fingerprint().equals(fingerprint);
+            if (paused(job) && sameInput) {
+                return Optional.empty();
+            }
             var id = UUID.randomUUID(); var batch = new LongMemories.Batch(stream, id, segments, evidence, fingerprint);
             save(dto("jobs"), row, stream.id(), new Job(job.through(), id, now.plus(settings.get().timeout()).plusSeconds(30),
-                    Instant.EPOCH, job.failures(), segments.getLast().through(), fingerprint));
+                    Instant.EPOCH, sameInput ? job.failures() : 0, segments.getLast().through(), fingerprint,
+                    sameInput ? trouble : null, job.revision() + 1));
             return Optional.of(batch);
         });
     }
@@ -215,37 +230,35 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             StyleObservations.@Nullable Target target, Instant now, Runnable guard) {
         var frozen = analysis.memories();
         if (frozen.size() > 8) { throw new IllegalArgumentException("长期候选数量超过预算。"); }
+        // 2026/11/06：保留调用者的业务时钟基准，同时计入进入事务前的等待时间。
+        var queuedAt = clock.instant();
         return data.transaction("提交长期记忆和画像证据", () -> {
+            // 2026/11/05：数据库回调可能排队，纯事实及空候选也须在事务内复核生命周期。
+            guard.run();
             if (!generation(batch.stream().reference(), EasyDataLock.WRITE)) { return false; }
             // 2026/11/03：支持清理原消息目录后继续识别旧代次索引与作业。
             lifecycle.registerInTransaction(batch.stream());
             var row = dto("jobs").find(batch.stream().id(), EasyDataLock.WRITE);
-            if (row == null) { return false; } var job = read(row, Job.class);
-            if (!owns(job, batch) || !job.until().isAfter(now)
+            if (row == null) { return false; } var job = readJob(row);
+            var elapsed = Duration.between(queuedAt, clock.instant());
+            var committedAt = elapsed.isNegative() ? now : now.plus(elapsed);
+            if (!owns(job, batch) || !job.until().isAfter(committedAt)
                     || !LongMemories.fingerprint(mapper.writeValueAsString(batch.segments()), mapper.writeValueAsString(batch.evidence())).equals(batch.fingerprint())) { return false; }
             for (var segment : batch.segments()) {
                 var actual = layer("medium:" + batch.stream().id()).find(sequence(segment.through()), EasyDataLock.READ);
                 if (actual == null || !read(actual, MemoryLayers.Segment.class).equals(segment)
-                        || !segment.createdAt().plus(settings.get().retention()).isAfter(now)) { return false; }
+                        || !segment.createdAt().plus(settings.get().retention()).isAfter(committedAt)) { return false; }
             }
-            for (var candidate : frozen) { validate(batch, candidate, now); }
-            // 2026/11/03：风格也使用同一真实原话验证，不能把摘要或助手文字作为观察样本。
-            for (var candidate : analysis.styles()) {
-                if (target == null || styles == null || !target.fields().contains(candidate.field())) { throw new IllegalArgumentException("表达观察没有合格目标或存储。"); }
-                for (var quote : candidate.quotes()) {
-                    if (!target.evidenceIds().contains(quote.evidenceId())) { throw new IllegalArgumentException("表达样本不属于本次人格目标。"); }
-                    var evidence = batch.evidence().stream().filter(value -> value.id().equals(quote.evidenceId())).findFirst().orElseThrow();
-                    var original = layer("short:" + batch.stream().id()).find(sequence(evidence.sequence()), EasyDataLock.READ);
-                    if (original == null || !read(original, MemoryLayers.Message.class).personality().equals(target.basis().identity())) {
-                        throw new IllegalArgumentException("表达样本的人格依据已改变。");
-                    }
-                    validate(batch, new LongMemories.Candidate(LongMemories.Kind.FACT, evidence.message().source().userId().orElseThrow(),
-                            candidate.field(), candidate.pattern(), LongMemories.Mode.ADD, List.of(quote), candidate.segments(), ""), now);
-                }
+            // 2026/11/05：固定关系与权威来源均需通过，混合批次任何一项失败都不写事实、风格或水位。
+            validateSources(batch, analysis, target, committedAt);
+            if (!analysis.styles().isEmpty() && styles == null) {
+                throw new IllegalStateException("当前长期存储未装配表达观察接收器。");
             }
-            for (var candidate : frozen) { merge(batch, candidate, now); }
-            if (!analysis.styles().isEmpty()) { Objects.requireNonNull(styles).acceptInTransaction(batch, Objects.requireNonNull(target), analysis.styles(), now, guard); }
-            save(dto("jobs"), row, batch.stream().id(), new Job(job.claimedThrough(), null, Instant.EPOCH, Instant.EPOCH, 0, 0, ""));
+            for (var candidate : frozen) { merge(batch, candidate, committedAt); }
+            if (!analysis.styles().isEmpty()) { Objects.requireNonNull(styles).acceptInTransaction(batch, Objects.requireNonNull(target), analysis.styles(), committedAt, guard); }
+            save(dto("jobs"), row, batch.stream().id(), new Job(job.claimedThrough(), null, Instant.EPOCH,
+                    Instant.EPOCH, 0, 0, "", null, job.revision() + 1));
+            guard.run();
             return true;
         });
     }
@@ -256,18 +269,172 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @return 实际提交阶段
      */
     @Override public CompletionStage<Void> retry(LongMemories.Batch batch, Instant now) {
+        // 2026/11/05：旧调用保持基础设施退避语义，不虚构无效模型结果。
+        return retry(batch, now, null);
+    }
+    /**
+     * 2026/11/05：固定输入连续无效三次后持久暂停；来源变化、撤权和基础设施故障不计该阈值。
+     * @param batch 原任务
+     * @param now 失败时刻
+     * @param failure 原失败，只持久化安全枚举
+     * @return 实际保存阶段
+     */
+    @Override public CompletionStage<Void> retry(LongMemories.Batch batch, Instant now, @Nullable Throwable failure) {
+        var classified = LongMemoryJobs.Failure.from(failure);
         return data.transaction("保存长期整理退避", () -> {
             var row = dto("jobs").find(batch.stream().id(), EasyDataLock.WRITE);
             if (row != null) {
-                var job = read(row, Job.class);
+                var job = readJob(row);
                 if (owns(job, batch)) {
                     int failures = Math.min(30, job.failures() + 1);
+                    var prior = job.trouble();
+                    int invalid = prior != null && prior.fingerprint().equals(batch.fingerprint()) ? prior.invalidAttempts() : 0;
+                    if (classified.invalidCandidate()) {
+                        invalid = Math.min(LongMemoryJobs.INVALID_LIMIT, invalid + 1);
+                    }
+                    var trouble = new Trouble(batch.fingerprint(), invalid, classified.code(), now);
                     save(dto("jobs"), row, batch.stream().id(), new Job(job.through(), null, Instant.EPOCH,
-                            now.plusSeconds(Math.min(3600, 30L << Math.min(7, failures - 1))), failures, 0, ""));
+                            now.plusSeconds(Math.min(3600, 30L << Math.min(7, failures - 1))), failures, 0, "",
+                            trouble, job.revision() + 1));
                 }
             }
             return true;
         }).thenApply(ignored -> null);
+    }
+
+    /**
+     * 2026/11/05：状态查询复核代次及管理授权，不触发后台任务。
+     * @param reference 当前分区
+     * @param now 观察时刻
+     * @param guard 原管理授权
+     * @return 有界安全状态
+     */
+    @Override public CompletionStage<LongMemoryJobs.Status> consolidationState(MemoryNamespaceReference reference,
+            Instant now, Runnable guard) {
+        return data.transaction("查看长期整理状态", () -> {
+            guard.run();
+            requireGeneration(reference);
+            var row = dto("jobs").find(MemoryLayers.stream(reference), EasyDataLock.READ);
+            var result = status(row == null ? Job.empty() : readJob(row), now);
+            guard.run();
+            return result;
+        });
+    }
+
+    /**
+     * 2026/11/05：按版本解除暂停并保存独立管理回执，所有旧租约立即失去提交权。
+     * @param reference 原空间与分区
+     * @param actor 可信管理主体
+     * @param revision 原作业版本
+     * @param operationId 幂等操作
+     * @param now 当前时间
+     * @param guard 事务前后授权
+     * @return 原恢复回执
+     * @throws IllegalStateException 当状态或版本已经变化时
+     */
+    @Override public CompletionStage<LongMemoryJobs.Status> resumeConsolidation(MemoryNamespaceReference reference,
+            AgentActorContext actor, long revision, UUID operationId, Instant now, Runnable guard) {
+        return data.transaction("恢复长期整理", () -> {
+            guard.run();
+            requireManager(reference, actor);
+            requireGeneration(reference);
+            var stream = MemoryLayers.stream(reference);
+            var receipts = dto(replays(reference));
+            var prior = receipts.find(operationId.toString(), EasyDataLock.WRITE);
+            if (prior != null) {
+                var receipt = read(prior, ReplayReceipt.class);
+                if (!receipt.actorId().equals(actor.userId().orElseThrow()) || receipt.revision() != revision
+                        || !receipt.stream().equals(stream)) {
+                    throw new IllegalStateException("整理恢复操作标识与原请求不一致。");
+                }
+                guard.run();
+                return receipt.status();
+            }
+            var row = dto("jobs").find(stream, EasyDataLock.WRITE);
+            var job = row == null ? Job.empty() : readJob(row);
+            if (job.revision() != revision || !paused(job)) {
+                throw new IllegalStateException("整理作业未暂停或版本已变化，请重新读取。");
+            }
+            var resumed = new Job(job.through(), null, Instant.EPOCH, Instant.EPOCH, 0, 0, "", null, job.revision() + 1);
+            save(dto("jobs"), row, stream, resumed);
+            var result = status(resumed, now);
+            save(receipts, null, operationId.toString(), new ReplayReceipt(actor.userId().orElseThrow(), stream, revision, now, result));
+            guard.run();
+            return result;
+        });
+    }
+
+    /**
+     * 2026/11/05：只读取原主体的恢复结果，轮询不再次重放。
+     * @param reference 原空间
+     * @param actor 管理主体
+     * @param operationId 原操作
+     * @param guard 当前授权
+     * @return 原回执
+     */
+    @Override public CompletionStage<LongMemoryJobs.Status> consolidationOperation(MemoryNamespaceReference reference,
+            AgentActorContext actor, UUID operationId, Runnable guard) {
+        return data.transaction("查询长期整理恢复回执", () -> {
+            guard.run();
+            requireManager(reference, actor);
+            requireGeneration(reference);
+            var row = dto(replays(reference)).find(operationId.toString(), EasyDataLock.READ);
+            if (row == null) {
+                throw new NoSuchElementException("整理恢复回执尚不存在。");
+            }
+            var receipt = read(row, ReplayReceipt.class);
+            if (!receipt.actorId().equals(actor.userId().orElseThrow())) {
+                throw new IllegalStateException("整理恢复回执不属于当前管理主体。");
+            }
+            guard.run();
+            return receipt.status();
+        });
+    }
+
+    /**
+     * 2026/11/05：管理身份与目标由宿主提供，模型来源不能调用恢复。
+     * @param reference 原目标
+     * @param actor 原身份
+     * @throws IllegalArgumentException 当来源不是该聊天的独立管理主体时
+     */
+    private static void requireManager(MemoryNamespaceReference reference, AgentActorContext actor) {
+        if (actor.origin() != AgentActorContext.Origin.MANAGEMENT || actor.userId().isEmpty()
+                || !actor.scope().equals(reference.scope())) {
+            throw new IllegalArgumentException("整理恢复需要当前聊天的独立管理身份。");
+        }
+    }
+
+    /**
+     * 2026/11/05：回执可在绑定版本变化后查询，但不同聊天与空间仍隔离。
+     * @param reference 原目标
+     * @return 无正文的回执分区
+     */
+    private static String replays(MemoryNamespaceReference reference) {
+        return "job-replays:" + space(reference) + ":"
+                + StableDigest.sha256(reference.scope().clientId(), reference.scope().scopeId());
+    }
+
+    /**
+     * @param job 当前持久作业
+     * @return 2026/11/05：达到同输入无效生成阈值时为真
+     */
+    private static boolean paused(Job job) {
+        return job.trouble() != null && job.trouble().invalidAttempts() >= LongMemoryJobs.INVALID_LIMIT;
+    }
+
+    /**
+     * 2026/11/05：公开状态不包含租约或原文，失效租约只显示待处理。
+     * @param job 持久状态
+     * @param now 观察时间
+     * @return 管理投影
+     */
+    private static LongMemoryJobs.Status status(Job job, Instant now) {
+        var trouble = job.trouble();
+        var state = paused(job) ? LongMemoryJobs.State.PAUSED : job.until().isAfter(now) ? LongMemoryJobs.State.RUNNING
+                : job.retryAt().isAfter(now) ? LongMemoryJobs.State.BACKOFF : LongMemoryJobs.State.READY;
+        return new LongMemoryJobs.Status(job.revision(), job.through(), state, job.failures(),
+                trouble == null ? 0 : trouble.invalidAttempts(), trouble == null ? "" : trouble.code(),
+                trouble == null ? null : trouble.at(), job.retryAt(), trouble == null ? "" : trouble.fingerprint());
     }
     /**
      * 按主体或字面话题索引读取，索引命中必须回查权威状态。
@@ -282,6 +449,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
         return data.transaction("检索长期记忆", () -> {
             requireGeneration(reference); String space = space(reference); var ids = new LinkedHashSet<UUID>(); boolean limited = false;
             var terms = LongMemories.terms(query, 8);
+            // 2026/11/05：没有索引词的非空查询仍作有界字面筛选，不能退化为列出全部最近项。
+            var literal = query.strip().toLowerCase(Locale.ROOT);
             var indices = new ArrayList<IEasyDataTransactionDto>();
             if (subjectId != null) { indices.add(dto("subject:" + space + ":" + subjectId)); }
             else if (!terms.isEmpty()) { for (var term : terms) { indices.add(dto("term:" + space + ":" + StableDigest.sha256(term).substring(0, 32))); } }
@@ -297,7 +466,10 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 var value = read(row, LongMemories.Entry.class);
                 if ((value.status() == LongMemories.Status.ACTIVE || value.status() == LongMemories.Status.CONFLICT)
                         && liveExplicit(space, value.id())
-                        && (subjectId == null || subjectId.equals(value.subjectId())) && (terms.isEmpty() || score(value, terms) > 0)) { values.add(value); }
+                        && (subjectId == null || subjectId.equals(value.subjectId()))
+                        && (terms.isEmpty() ? literal.isEmpty()
+                                || (value.attribute() + " " + value.text()).toLowerCase(Locale.ROOT).contains(literal)
+                                : score(value, terms) > 0)) { values.add(value); }
             }
             values.sort(Comparator.<LongMemories.Entry>comparingInt(value -> score(value, terms)).reversed()
                     .thenComparing(LongMemories.Entry::observedAt, Comparator.reverseOrder()).thenComparing(value -> value.id().toString()));
@@ -463,6 +635,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 var parts = scanned.getTarget().split(":");
                 MemoryNamespaceReference reference;
                 if (scanned.getTarget().equals("jobs")) { reference = lifecycle.streamReference(scanned.getKey()); }
+                // 2026/11/05：恢复回执同样按空间摘要定位，仅回收已退出的代次。
                 else if (parts.length >= 2 && parts[1].matches("[0-9a-f]{64}")) { reference = lifecycle.spaceReference(parts[1]); }
                 else { continue; }
                 if (reference == null) { continue; }
@@ -499,29 +672,32 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
         return row != null && read(row, MemoryLayers.Message.class).expiresAt().isAfter(now);
     }
     /**
-     * 事实仅由对应作者原话支持，事件必须引用本批中期片段。
+     * 2026/11/05：关系检查与生成阶段共用，权威原消息、期限和人格仍在提交事务内重新读取。
      * @param batch 固定输入
-     * @param candidate 待验证候选
+     * @param analysis 完整联合候选
+     * @param target 原观察目标
      * @param now 提交时刻
-     * @throws IllegalArgumentException 当证据越界、伪造或过期时
+     * @throws MemoryEvidenceException 当关系不成立或权威来源已失效时
      */
-    private void validate(LongMemories.Batch batch, LongMemories.Candidate candidate, Instant now) {
-        var segments = batch.segments().stream().filter(value -> candidate.segments().contains(value.id())).toList();
-        if (segments.size() != new HashSet<>(candidate.segments()).size()) { throw new IllegalArgumentException("长期候选引用了本批之外的片段。"); }
-        if (candidate.kind() == LongMemories.Kind.EPISODE && candidate.subjectId() != null) { throw new IllegalArgumentException("事件摘要不能冒充个人画像。"); }
-        for (var quote : candidate.quotes()) {
-            var evidence = batch.evidence().stream().filter(value -> value.id().equals(quote.evidenceId())).findFirst().orElseThrow(() -> new IllegalArgumentException("长期原话标识无效。"));
+    private void validateSources(LongMemories.Batch batch, StyleObservations.Analysis analysis,
+            StyleObservations.@Nullable Target target, Instant now) {
+        for (var use : LongMemoryEvidence.validate(batch, analysis, target)) {
+            var evidence = use.source();
             var row = layer("short:" + batch.stream().id()).find(sequence(evidence.sequence()), EasyDataLock.READ);
-            var original = row == null ? null : read(row, MemoryLayers.Message.class);
-            if (original == null || !original.message().equals(evidence.message()) || !original.expiresAt().isAfter(now)
-                    || original.message().role() != HistoryMessage.Role.USER || !original.message().text().contains(quote.text())
-                    || candidate.kind() != LongMemories.Kind.EPISODE && !original.message().source().userId().orElseThrow().equals(candidate.subjectId())
-                    || segments.stream().noneMatch(value -> evidence.sequence() >= value.from() && evidence.sequence() <= value.through())) {
-                throw new IllegalArgumentException("长期原话不支持当前主体或来源已失效。");
+            if (row == null) {
+                throw use.failure(batch, MemoryEvidenceException.Code.EVIDENCE_MISSING);
             }
-        }
-        if (!candidate.timeHint().isBlank() && candidate.quotes().stream().noneMatch(value -> value.text().contains(candidate.timeHint()))) {
-            throw new IllegalArgumentException("重要时间必须逐字来自已核对的原话。");
+            var original = read(row, MemoryLayers.Message.class);
+            if (!original.message().equals(evidence.message())) {
+                throw use.failure(batch, MemoryEvidenceException.Code.EVIDENCE_CHANGED);
+            }
+            if (!original.expiresAt().isAfter(now)) {
+                throw use.failure(batch, MemoryEvidenceException.Code.EVIDENCE_EXPIRED);
+            }
+            if (use.domain() == MemoryEvidenceException.Domain.STYLES
+                    && !original.personality().equals(Objects.requireNonNull(target).basis().identity())) {
+                throw use.failure(batch, MemoryEvidenceException.Code.STYLE_TARGET_CHANGED);
+            }
         }
     }
     /**
@@ -747,12 +923,38 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      */
     private static String sequence(long value) { return String.format(Locale.ROOT, "%020d", value); }
     /**
+     * 2026/11/06：旧格式没有管理版本，仅补此缺省；显式空值和其他损坏字段仍报错。
+     * @param row 持久作业
+     * @return 保留原水位、租约和退避的作业
+     * @throws MemoryStorageException 当已知旧字段兼容后仍无法解析时
+     */
+    private Job readJob(EasyDataRow row) {
+        try {
+            var node = mapper.readTree(row.getValue());
+            if (node instanceof ObjectNode object && !object.has("revision")) {
+                object.put("revision", 0);
+            }
+            return mapper.treeToValue(node, Job.class);
+        } catch (JacksonException failure) {
+            // 2026/11/06：只补已知缺省；其他不匹配须保留原记录并向扫描层报告。
+            throw new MemoryStorageException(Job.class, failure);
+        }
+    }
+    /**
      * @param row 原行
      * @param type 目标类型
      * @param <T> 数据类型
      * @return 已解析领域数据
+     * @throws MemoryStorageException 当持久 JSON 与领域结构不匹配时
      */
-    private <T> T read(EasyDataRow row, Class<T> type) { return mapper.readValue(row.getValue(), type); }
+    private <T> T read(EasyDataRow row, Class<T> type) {
+        try {
+            return mapper.readValue(row.getValue(), type);
+        } catch (JacksonException failure) {
+            // 2026/11/06：中期、原消息及长期记录均采用同一脱敏格式诊断。
+            throw new MemoryStorageException(type, failure);
+        }
+    }
     /**
      * 按原 DTO 版本保存，不绕过事务基础层。
      * @param dto 原事务目标
@@ -789,6 +991,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/05：增加可缺省的失败状态与管理版本，不重置原租约和水位。
+     * <br>2026/11/06：旧作业由专用读取入口补齐缺失版本，仍保留严格字段校验。
      *
      * @param through 已整理覆盖
      * @param lease 当前租约
@@ -797,13 +1001,43 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @param failures 连续失败数
      * @param claimedThrough 本次领取覆盖
      * @param fingerprint 本次输入指纹
+     * @param trouble 安全失败状态，旧记录缺省为空
+     * @param revision 管理并发版本，旧记录缺省为零
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    private record Job(long through, @Nullable UUID lease, Instant until, Instant retryAt, int failures, long claimedThrough, String fingerprint) {
+    private record Job(long through, @Nullable UUID lease, Instant until, Instant retryAt, int failures,
+                       long claimedThrough, String fingerprint, @Nullable Trouble trouble, long revision) {
         /** @return 尚无整理进度的任务 */
-        private static Job empty() { return new Job(0, null, Instant.EPOCH, Instant.EPOCH, 0, 0, ""); }
+        private static Job empty() { return new Job(0, null, Instant.EPOCH, Instant.EPOCH, 0, 0, "", null, 0); }
     }
+
+    /**
+     * 固定输入的失败计数，不保存候选或异常正文。
+     * @param fingerprint 原输入摘要
+     * @param invalidAttempts 无效生成次数
+     * @param code 最近安全原因
+     * @param at 最近失败时刻
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    private record Trouble(String fingerprint, int invalidAttempts, String code, Instant at) { }
+
+    /**
+     * 独立管理恢复的幂等回执，保留原操作者及期望版本。
+     * @param actorId 真实管理主体
+     * @param stream 原绑定分区，重放不得更换
+     * @param revision 原请求版本
+     * @param at 实际提交时间
+     * @param status 原提交结果
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    private record ReplayReceipt(UUID actorId, String stream, long revision, Instant at, LongMemoryJobs.Status status) { }
 }

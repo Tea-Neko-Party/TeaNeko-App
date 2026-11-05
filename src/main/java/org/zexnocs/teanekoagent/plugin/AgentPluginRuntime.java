@@ -47,10 +47,11 @@ import java.util.function.Supplier;
  * <br>2026/11/05：补充实例装配拒绝未注册组件的异常契约。
  * <br>2026/11/05：展开本次装配校验中的多语句和分支，保持执行顺序。
  *
+ * <br>2026/11/05：最终工具复核传递到实际选中的来源并保持插件代次检查。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentPluginRuntime {
@@ -474,6 +475,20 @@ public final class AgentPluginRuntime {
      * @version 4.6.0-l
      */
     private final class CombinedTools implements IAgentToolSource {
+        /**
+         * 2026/11/05：按原插件布局向各来源转交最终集合，复核不赋予新的工具权限。
+         * @param request 原请求
+         * @param input 原布局
+         * @param selected 最终集合
+         */
+        @Override public void verifySelection(AgentRunRequest request, AgentPromptInput input, List<LLMToolBinding> selected) {
+            checkInput(input);
+            base.verifySelection(request, input, selected);
+            for (var id : new TreeSet<>(input.plugins().keySet())) {
+                features.get(id).tools().verifySelection(request, input, selected);
+            }
+            checkInput(input);
+        }
         private final IAgentToolSource base;
         /** @param base 宿主原来源 */
         private CombinedTools(IAgentToolSource base) { this.base = base; }

@@ -72,16 +72,14 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/02：验证同 namespace 的共享记忆跨 scope 和用户进入实际模型输入。
  * <br>2026/11/02：注解条件撤销直接停止交互，不产生下一次模型请求。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：通过拆分后的实际工具入口执行原记忆集成流程。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class AgentMemoryToolIntegrationTest {
@@ -171,6 +169,7 @@ class AgentMemoryToolIntegrationTest {
             var tools = new AgentMemoryToolSource(memory, ignored -> policy.get(), recallSettings::get, db.mapper, executor);
             // 2026/11/05：测试夹具组合独立提供者，继续使用实际工具编译器和业务事务。
             var providers = List.of(tools, new MemoryProfileTool(tools), new MemoryAddTool(tools));
+            providers.forEach(TeaNekoAgentToolMethods::prepare);
             IAgentToolSource selectedTools = (definition, request, runtime) -> providers.stream()
                     .flatMap(provider -> TeaNekoAgentToolMethods.select(
                             provider, definition, request, runtime, null, db.mapper, executor).stream())

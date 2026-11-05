@@ -5,6 +5,7 @@ package org.zexnocs.teanekoagent.component.llm.framework.interaction;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
@@ -46,19 +47,19 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
 /**
  * 用真实阶段执行器验证自动往返、协议配对、深层快照和所有主要终止路径。
  * <br>2026/11/02：验证 HTTP 失败保留结构化诊断且不泄漏响应正文和原异常文本。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：明确非空选项断言并以两节点引用环验证拒绝行为，简化泛型推断。
  * <br>2026/11/05：验证初始化遇到已停止控制时不请求模型且只记录终止状态。
  * <br>2026/11/05：验证安全诊断传递与响应正文脱敏。
- *
+ * <br>2026/11/05：验证宿主遗漏模型预算时保留预检代码位置且不调用模型。
+ * <br>2026/11/05：验证末轮保留可信定义、禁用工具及内部调用标记不泄漏到最终答案。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：覆盖双竖线正文泄漏、一次协议纠正、原预算及已执行工具不重试。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 class LLMInteractionServiceTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -148,6 +149,7 @@ class LLMInteractionServiceTest {
     /**
      * 验证两轮六个工具、三次模型、严格 ID 回放及逐次 usage。
      * 2026/11/05：明确非空选项断言并以两节点引用环验证拒绝行为，简化泛型推断。
+     * 2026/11/05：工具历史续轮保留定义供协议编码，但 none 仍禁止执行。
      */
     @Test void completesMultipleRoundsWithOrderedToolsAndProviderState() {
         var effects = new ArrayList<String>();
@@ -160,7 +162,7 @@ class LLMInteractionServiceTest {
             reply(response("tool_calls", "提前答案不作为最终答案", call("a"), call("b"), call("c")));
             reply(response("tool_calls", "", call("d"), call("e"), call("f")));
             assertEquals("none", Objects.requireNonNull(prompts.getLast().getOptions()).getToolChoice());
-            assertTrue(Objects.requireNonNull(prompts.getLast().getOptions()).getTools().isEmpty());
+            assertEquals("work", Objects.requireNonNull(prompts.getLast().getOptions()).getTools().getFirst().getName());
             reply(response("stop", "最终答案"));
             var result = pending.toCompletableFuture().join();
             assertEquals(SUCCESS, result.status());
@@ -177,6 +179,153 @@ class LLMInteractionServiceTest {
             assertDoesNotThrow(parent::checkActive);
         }
         assertEquals(0, runtime.pendingTimers());
+    }
+
+    /**
+     * 2026/11/05：供应商再次泄漏时停止，双竖线及正文混排均不会当成工具执行。
+     * @param text 已出现的内部标记及普通正文混排
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "<｜DSML｜calls>\n<｜DSML｜invoke name=\"work\">private-argument</｜DSML｜invoke>\n</｜DSML｜calls>",
+            "我先查一下\n<|DSML|function_calls>private-argument</|DSML|function_calls>",
+            "<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"sticker_list\">\n\n</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>",
+            "我先查询：< | | DSML | | invoke name=\"work\">private-argument</ | | DSML | | invoke>",
+            "前缀<||DSML||function_calls>private-argument</||DSML||function_calls>后缀"
+    })
+    void rejectsInternalToolCallsInVisibleText(String text) {
+        var effects = new AtomicInteger();
+        try (var parent = runtime.parent(settings.limits())) {
+            var pending = service.interact(prompt(), tools((call, context) -> {
+                effects.incrementAndGet();
+                return CompletableFuture.completedStage("不应执行");
+            }), context(parent));
+            runtime.runAll();
+            reply(response("stop", text));
+            assertFalse(pending.toCompletableFuture().isDone());
+            assertEquals(0, effects.get());
+            reply(response("stop", text));
+            var result = pending.toCompletableFuture().join();
+            assertEquals(INVALID_RESPONSE, result.status());
+            assertEquals(2, result.modelAttempts());
+            assertTrue(result.finalCandidate().isEmpty());
+            assertEquals(0, effects.get());
+            assertNotNull(result.failure());
+            assertTrue(result.failure().description().contains("tool_calls"));
+            assertFalse(result.failure().toString().contains("private-argument"));
+        }
+    }
+
+    /** 2026/11/05：一次纠正后只执行真实结构化调用，错误正文和临时提示不进入正常历史。 */
+    @Test
+    void correctsToolProtocolOnceWithinOriginalBudget() {
+        var effects = new AtomicInteger();
+        try (var parent = runtime.parent(settings.limits())) {
+            var pending = service.interact(prompt(), tools((call, context) -> {
+                effects.incrementAndGet();
+                return CompletableFuture.completedStage("真实目录结果");
+            }), context(parent));
+            runtime.runAll();
+            reply(response("stop", "<｜｜DSML｜｜ invoke name=\"work\">private-argument</｜｜DSML｜｜ invoke>"));
+            assertEquals(0, effects.get());
+            assertEquals("auto", Objects.requireNonNull(prompts.getLast().getOptions()).getToolChoice());
+            assertEquals("system", prompts.getLast().getMessages().getLast().getRole().getValue());
+            assertTrue(prompts.getLast().getMessages().stream().flatMap(message -> message.getContents().stream())
+                    .filter(content -> content.getContentPart() instanceof TextLLMContentPart)
+                    .noneMatch(content -> ((TextLLMContentPart) content.getContentPart()).getText()
+                            .contains("private-argument")));
+            reply(response("tool_calls", "", call("real-call")));
+            assertEquals(1, effects.get());
+            assertEquals("none", Objects.requireNonNull(prompts.getLast().getOptions()).getToolChoice());
+            reply(response("stop", "正常答案"));
+            var result = pending.toCompletableFuture().join();
+            assertEquals(SUCCESS, result.status());
+            assertEquals(3, result.modelAttempts());
+            assertEquals(1, result.tools().size());
+            var history = result.committableTranscript().orElseThrow();
+            assertEquals(4, history.size());
+            assertTrue(history.stream().noneMatch(message -> "system".equals(message.getRole().getValue())));
+            assertTrue(history.stream().flatMap(message -> message.getContents().stream())
+                    .filter(content -> content.getContentPart() instanceof TextLLMContentPart)
+                    .noneMatch(content -> ((TextLLMContentPart) content.getContentPart()).getText().contains("DSML")));
+        }
+    }
+
+    /**
+     * 2026/11/05：本地或父预算不足、无工具和显式禁用均不得额外请求模型。
+     * @param scenario 原有预算或调用方式
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"local", "parent", "empty", "none"})
+    void doesNotCorrectWhenOriginalToolCapacityIsUnavailable(String scenario) {
+        var limited = new LLMCallLimits(2, 1, 1);
+        var local = scenario.equals("local") ? new LLMInteractionSettings(limited,
+                settings.modelTimeout(), settings.toolTimeout(), settings.turnTimeout()) : settings;
+        try (var parent = runtime.parent(scenario.equals("parent") ? limited : settings.limits())) {
+            var input = scenario.equals("none")
+                    ? new LLMPrompt(prompt().getMessages(), LLMModelOptions.builder().toolChoice("none").build()) : prompt();
+            var selected = scenario.equals("empty") ? new LLMToolSet(new ObjectMapper(), List.of())
+                    : tools((call, context) -> CompletableFuture.completedStage("不应执行"));
+            var pending = service.interact(input, selected, context(parent), local);
+            runtime.runAll();
+            reply(response("stop", "<｜｜DSML｜｜ calls>"));
+            var result = pending.toCompletableFuture().join();
+            assertEquals(INVALID_RESPONSE, result.status());
+            assertEquals(1, result.modelAttempts());
+            assertTrue(result.tools().isEmpty());
+        }
+    }
+
+    /** 2026/11/05：已经执行工具后不因错误正文重做动作，即使尚有模型额度。 */
+    @Test
+    void doesNotCorrectAfterToolSideEffects() {
+        var expanded = new LLMInteractionSettings(new LLMCallLimits(5, 4, 6),
+                settings.modelTimeout(), settings.toolTimeout(), settings.turnTimeout());
+        var effects = new AtomicInteger();
+        try (var parent = runtime.parent(expanded.limits())) {
+            var pending = service.interact(prompt(), tools((call, context) -> {
+                effects.incrementAndGet();
+                return CompletableFuture.completedStage("已完成");
+            }), context(parent), expanded);
+            runtime.runAll();
+            reply(response("tool_calls", "", call("done")));
+            reply(response("stop", "<｜｜DSML｜｜ calls>"));
+            assertEquals(INVALID_RESPONSE, pending.toCompletableFuture().join().status());
+            assertEquals(2, prompts.size());
+            assertEquals(1, effects.get());
+        }
+    }
+
+    /** 2026/11/05：协议纠正中的取消仍使用原控制，不执行迟到调用或继续请求。 */
+    @Test
+    void cancelsProtocolCorrectionWithoutExecutingLateToolCalls() {
+        try (var parent = runtime.parent(settings.limits())) {
+            var pending = service.interact(prompt(), tools((call, context) -> {
+                fail("取消的协议纠正不能执行工具。");
+                return CompletableFuture.completedStage("不应执行");
+            }), context(parent));
+            runtime.runAll();
+            reply(response("stop", "<｜｜DSML｜｜ calls>"));
+            parent.cancel();
+            var result = pending.toCompletableFuture().join();
+            assertEquals(CANCELLED, result.status());
+            assertEquals(2, result.modelAttempts());
+            reply(response("tool_calls", "", call("late")));
+            assertEquals(2, prompts.size());
+            assertTrue(result.tools().isEmpty());
+            assertEquals(0, runtime.pendingTimers());
+        }
+    }
+
+    /** 2026/11/05：用户询问协议时，代码围栏中的字面示例仍是正常正文。 */
+    @Test
+    void preservesToolMarkupInsideCodeExamples() {
+        try (var parent = runtime.parent(settings.limits())) {
+            var pending = service.interact(prompt(), new LLMToolSet(new ObjectMapper(), List.of()), context(parent));
+            runtime.runAll();
+            reply(response("stop", "示例：\n```text\n<｜DSML｜calls>\n</｜DSML｜calls>\n```\n这是代码说明"));
+            assertEquals(SUCCESS, pending.toCompletableFuture().join().status());
+        }
     }
 
     /**
@@ -384,6 +533,20 @@ class LLMInteractionServiceTest {
                 assertEquals(INVALID_INPUT, pending.toCompletableFuture().join().status());
             }
             runtime.runAll();
+            verifyNoInteractions(models);
+        }
+    }
+
+    /** 2026/11/05：未声明模型预算的宿主在预检中失败，诊断保留真实预算错误位置。 */
+    @Test
+    void retainsPreflightFailureWhenHostBudgetIsMissing() {
+        try (var parent = ExecutionControl.create()) {
+            var result = service.interact(prompt(), new LLMToolSet(new ObjectMapper(), List.of()), context(parent))
+                    .toCompletableFuture().join();
+            assertEquals(INVALID_INPUT, result.status());
+            var diagnostic = Objects.requireNonNull(result.failure());
+            assertTrue(diagnostic.types().contains(IllegalArgumentException.class.getName()));
+            assertTrue(diagnostic.location().contains("ResourceBudget.counter"));
             verifyNoInteractions(models);
         }
     }

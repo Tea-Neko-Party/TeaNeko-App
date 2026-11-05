@@ -33,10 +33,11 @@ import java.util.concurrent.Executor;
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：留言工具独立声明，仍复用原生来源权限和有界投影。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @TeaNekoAgentToolClass(value = "user-info", pluginId = InfoAgentPlugin.ID, toolPackage = "general.info", managedByFeature = true)
 public final class InfoAgentTools implements IAgentToolSource {
@@ -57,6 +58,8 @@ public final class InfoAgentTools implements IAgentToolSource {
      * @param executor 借用业务执行器
      */
     public InfoAgentTools(InfoService info, MessageBoardInfoService messages, NativeCommandBridge sources, ObjectMapper mapper, Executor executor) {
+        // 2026/11/05：单例创建时编译工具目录，高频选择只读缓存。
+        TeaNekoAgentToolMethods.prepare(this);
         this.info = Objects.requireNonNull(info); this.messages = Objects.requireNonNull(messages); this.sources = Objects.requireNonNull(sources);
         this.mapper = Objects.requireNonNull(mapper); this.executor = Objects.requireNonNull(executor);
     }

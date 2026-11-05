@@ -32,19 +32,34 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
+ * <br>2026/11/05：原生表情目录随表达组件独立装配并复核。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component
 public final class ExpressionFeature implements AgentFeature {
     private final ExpressionRuntime runtime;
+    private final @org.jspecify.annotations.Nullable NativeFaceService faces;
     /**
-     * 保存编译端口。
+     * 2026/11/05：保留独立旧宿主的纯文本合同；默认 Spring 装配使用完整原生目录服务。
+     * @param runtime 原表达运行时
+     */
+    public ExpressionFeature(ExpressionRuntime runtime) {
+        this.runtime = runtime;
+        this.faces = null;
+    }
+    /**
+     * 2026/11/05：保存编译及独立原生表情端口。
+     * @param faces 不读取图库的原生目录服务
      * @param runtime 表达运行时
      */
-    public ExpressionFeature(ExpressionRuntime runtime){this.runtime=runtime;}
+    @org.springframework.beans.factory.annotation.Autowired
+    public ExpressionFeature(ExpressionRuntime runtime, NativeFaceService faces) {
+        this.runtime = runtime;
+        this.faces = faces;
+    }
     /** @return 宿主插件 */
     @Override public String pluginId(){return "teaneko.agent";}
     /** @return 能力 ID */
@@ -52,7 +67,7 @@ public final class ExpressionFeature implements AgentFeature {
     /** @return 默认安装 */
     @Override public boolean defaultEnabled(){return true;}
     /** @return 唯一资料声明 */
-    @Override public Set<String> promptNames(){return Set.of(ExpressionRuntime.FRAGMENT);}
+    @Override public Set<String> promptNames(){return Set.of(ExpressionRuntime.FRAGMENT, NativeFaceService.FRAGMENT);}
     /** @return 不进行模型调用的合同来源 */
     @Override public IAgentPromptSource prompts(){
         return new IAgentPromptSource(){
@@ -66,7 +81,12 @@ public final class ExpressionFeature implements AgentFeature {
              * @return 完整合同或空
              */
             @Override public CompletionStage<List<AgentPromptFragment>> resolve(AgentDefinition definition,AgentRunRequest request,AgentRuntimeSnapshot snapshot,ExecutionControl control){
-                control.checkActive();return CompletableFuture.completedStage(runtime.enabled(request)?List.of(new AgentPromptFragment(ExpressionRuntime.FRAGMENT,runtime.contract(request),null)):List.of());
+                control.checkActive();
+                if (!runtime.enabled(request)) { return CompletableFuture.completedStage(List.of()); }
+                var fragments = new java.util.ArrayList<AgentPromptFragment>();
+                fragments.add(new AgentPromptFragment(ExpressionRuntime.FRAGMENT, runtime.contract(request), null));
+                if (faces != null) { fragments.addAll(faces.fragments(request)); }
+                return CompletableFuture.completedStage(List.copyOf(fragments));
             }
             /**
              * 配置或目录变更时拒绝旧合同。
@@ -78,6 +98,8 @@ public final class ExpressionFeature implements AgentFeature {
              */
             @Override public CompletionStage<Void> verify(AgentRunRequest request,AgentPromptInput input,ExecutionControl control){
                 control.checkActive();
+                // 2026/11/05：原生目录由表达组件复核，只有 FACE 不读取图库状态。
+                if (faces != null) { faces.verify(request, input); }
                 for(var fragment:input.fragments()){
                     if(fragment.name().equals(ExpressionRuntime.FRAGMENT)&&(!runtime.enabled(request)||!fragment.text().equals(runtime.contract(request)))){
                         return CompletableFuture.failedStage(new AgentPromptException(AgentPromptException.Reason.CHANGED));

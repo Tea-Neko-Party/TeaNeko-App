@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.component.memory.layered.ILayeredMemoryStore;
 import org.zexnocs.teanekoagent.component.memory.layered.ILongTermMemoryStore;
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryJobs;
 import org.zexnocs.teanekoagent.component.memory.namespace.IMemoryNamespaceStore;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceBindings;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
@@ -27,11 +28,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：接入持久整理状态与原管理权限下的暂停恢复，不调用模型。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentLayersConsoleService {
@@ -65,6 +67,12 @@ public final class AgentLayersConsoleService {
     public CompletionStage<Object> execute(ManagementContext context, AgentLayersConsole.Query query) {
         context.checkActive();
         var scope = AgentConsoleService.scope(context);
+        // 2026/11/05：只查询原操作结果，迟到轮询不能重复解除暂停。
+        if (query.action().equals("REPLAY_OPERATION")) {
+            var reference = new MemoryNamespaceReference(scope, new MemoryNamespaceId(query.namespace()), 0, query.generation());
+            return longTerm.consolidationOperation(reference, actor(context, query), Objects.requireNonNull(query.operationId()),
+                    context::checkActive).thenApply(state -> replayed(query, state));
+        }
         if (query.action().equals("OPERATION")) {
             var reference = new MemoryNamespaceReference(scope, new MemoryNamespaceId(query.namespace()), 0, query.generation());
             return longTerm.managementOperation(reference, actor(context, query), query.operationId(), context::checkActive)
@@ -77,7 +85,7 @@ public final class AgentLayersConsoleService {
                 context.checkActive();
                 if (found.isEmpty() && query.action().equals("READ")) {
                     return CompletableFuture.completedStage(new AgentLayersConsole.View(id.value(), 0, List.of(),
-                            List.of(), 0, new LongMemories.Result(List.of(), 0, false)));
+                            List.of(), 0, new LongMemories.Result(List.of(), 0, false), null));
                 }
                 var namespace = found.orElseThrow(() -> new NoSuchElementException("记忆空间尚未登记。"));
                 if (query.generation() >= 0 && query.generation() != namespace.generation()) {
@@ -86,6 +94,15 @@ public final class AgentLayersConsoleService {
                 long bindingRevision = bound.filter(value -> Objects.equals(value.namespaceId(), id))
                         .map(MemoryNamespaceReference::bindingRevision).orElse(0L);
                 var reference = new MemoryNamespaceReference(scope, id, bindingRevision, namespace.generation());
+                // 2026/11/05：恢复固定当前绑定，不能借跨空间查看恢复其他分区。
+                if (query.action().equals("REPLAY")) {
+                    if (bound.isEmpty() || !bound.get().equals(reference)) {
+                        throw new IllegalStateException("整理恢复仅允许当前聊天正在使用的记忆空间。");
+                    }
+                    return longTerm.resumeConsolidation(reference,
+                            actor(context, query), query.revision(), Objects.requireNonNull(query.operationId()),
+                            Instant.now(), context::checkActive).thenApply(state -> replayed(query, state));
+                }
                 if (!query.action().equals("READ")) {
                     return longTerm.manage(reference, actor(context, query), Objects.requireNonNull(query.id()),
                             query.revision(), query.text(), Objects.requireNonNull(query.operationId()), Instant.now(),
@@ -106,10 +123,25 @@ public final class AgentLayersConsoleService {
                             var episodes = view.segments().stream().map(value -> new AgentLayersConsole.Episode(value.id(),
                                     value.digest().brief(), value.digest().details(), value.occurredFrom(), value.occurredThrough())).toList();
                             return new AgentLayersConsole.View(id.value(), namespace.generation(), recent, episodes,
-                                    view.compressedThrough(), learned);
+                                    view.compressedThrough(), learned, null);
+                        }).thenCombine(longTerm.consolidationState(reference, Instant.now(), context::checkActive), (view, state) -> {
+                            context.checkActive();
+                            return new AgentLayersConsole.View(view.namespace(), view.generation(), view.recent(), view.episodes(),
+                                    view.compressedThrough(), view.longTerm(), state);
                         });
             });
         });
+    }
+
+    /**
+     * 2026/11/05：报告恢复提交，不声称模型已经重跑或水位已经推进。
+     * @param query 原操作
+     * @param state 原提交状态
+     * @return 与其他管理操作一致的回执
+     */
+    private AgentConsole.ChangeView replayed(AgentLayersConsole.Query query, LongMemoryJobs.Status state) {
+        return new AgentConsole.ChangeView(Objects.requireNonNull(query.operationId()), "APPLIED", query.namespace(),
+                query.generation(), state.revision(), "已解除本分区整理暂停；水位未推进，后续按当前开关、权限和模型预算重新处理。");
     }
 
     /**

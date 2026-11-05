@@ -30,10 +30,11 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：分开公共身份与提醒策略，并要求有效平台消息标识确认送达。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public final class NativeScheduleAdapter implements AgentScheduleService.Policy, AgentScheduleService.Action {
@@ -64,6 +65,17 @@ public final class NativeScheduleAdapter implements AgentScheduleService.Policy,
      * @return 当前准入阶段
      */
     @Override public CompletionStage<Void> check(AgentScheduledTask task, AgentScheduleService.Operation operation, AgentActorContext actor) {
+        return checkIdentity(task, operation, actor).thenRun(() -> validateReminder(task));
+    }
+
+    /**
+     * 2026/11/05：公共校验不限制动作参数，保留客户端、scope、当前成员身份及管理归属。
+     * @param task 固定任务
+     * @param operation 当前操作
+     * @param actor 权威操作人
+     * @return 当前身份与归属检查完成阶段
+     */
+    public CompletionStage<Void> checkIdentity(AgentScheduledTask task, AgentScheduleService.Operation operation, AgentActorContext actor) {
         return CompletableFuture.supplyAsync(() -> {
             validate(task, actor, operation);
             return destination(actor);
@@ -103,7 +115,8 @@ public final class NativeScheduleAdapter implements AgentScheduleService.Policy,
                 if (current.client() != target.client() || current.group() != target.group() || !current.id().equals(target.id())) {
                     throw new IllegalStateException("提醒发送目标已变更。");
                 }
-                return sender.sendAsync();
+                // 2026/11/05：非空响应不证明送达，提醒也必须取得有效消息 ID；异常回执由调度器记为结果不明。
+                return org.zexnocs.teanekoagent.component.expression.adapter.AgentReplySender.confirm(sender.sendWithFuture());
             })
                     .thenApply(sent -> AgentScheduleService.Outcome.COMPLETED);
         }, executor);
@@ -117,11 +130,9 @@ public final class NativeScheduleAdapter implements AgentScheduleService.Policy,
      * @throws IllegalStateException 当来源、规格或当前开关失效时
      */
     private void validate(AgentScheduledTask task, AgentActorContext actor, AgentScheduleService.Operation operation) {
-        var spec = task.spec(); var text = spec.arguments().get("text");
+        var spec = task.spec();
         if (actor.origin() != AgentActorContext.Origin.USER || !actor.scope().equals(spec.creator().scope())
-                || !spec.creator().targetId().equals(spec.creator().scope().scopeId())
-                || !"remind".equals(spec.action()) || !spec.arguments().keySet().equals(Set.of("text"))
-                || text == null || text.isBlank() || text.length() > 2000) {
+                || !spec.creator().targetId().equals(spec.creator().scope().scopeId())) {
             throw new IllegalStateException("提醒任务的来源或参数无效。");
         }
         if (operation == AgentScheduleService.Operation.CREATE || operation == AgentScheduleService.Operation.EXECUTE) {
@@ -131,6 +142,20 @@ public final class NativeScheduleAdapter implements AgentScheduleService.Policy,
                     || !actor.equals(spec.creator())) {
                 throw new IllegalStateException("提醒任务所在作用域未启用或创建者不匹配。");
             }
+        }
+    }
+
+    /**
+     * 2026/11/05：普通提醒单独验证动作名及参数，插件动作须提供自己的窄策略。
+     * @param task 原提醒任务
+     * @throws IllegalStateException 当动作或文字参数无效时
+     */
+    public void validateReminder(AgentScheduledTask task) {
+        var spec = task.spec();
+        var text = spec.arguments().get("text");
+        if (!"remind".equals(spec.action()) || !spec.arguments().keySet().equals(Set.of("text"))
+                || text == null || text.isBlank() || text.length() > 2000) {
+            throw new IllegalStateException("提醒任务的动作或参数无效。");
         }
     }
 

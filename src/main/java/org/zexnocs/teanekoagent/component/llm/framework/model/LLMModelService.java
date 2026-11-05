@@ -17,7 +17,6 @@ import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 大语言模型注册与调用服务。
@@ -35,10 +34,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：模型目录完整校验后原子发布，重扫失败保留原快照。
+ * <br>2026/11/06：按适配器 JSON 能力发送请求，路由覆盖不重置输出格式。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
@@ -131,7 +132,8 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * 模型注册表。
      * <br>键为模型适配器注册 ID，值为对应的模型适配器实例；使用并发映射以支持扫描和查询过程中的线程安全访问。
      */
-    private final Map<LLMModelId, ILLMModel> modelMap = new ConcurrentHashMap<>();
+    // 2026/11/05：查询只读取完整快照，显式重扫失败保留上一目录。
+    private volatile Map<LLMModelId, ILLMModel> modelMap = Map.of();
 
     /**
      * 创建大语言模型注册与调用服务。
@@ -193,14 +195,15 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      */
     @Override
     public ILLMModel getModel(LLMModelId modelId) {
-        var model = modelMap.get(modelId);
+        var snapshot = modelMap;
+        var model = snapshot.get(modelId);
         // 2026/11/04：别名只决定配置选择，实际执行仍使用扫描注册的协议 Bean 和插件守卫。
         if (model == null) {
             var adapter = routes != null ? routes.source(modelId.id()).adapter(modelId.id())
                     : llmFileConfigService.getConfig().findModelConfig(modelId)
                     .orElseThrow(() -> new IllegalArgumentException("所选模型没有注册或配置路由。"))
                     .adapterId();
-            model = modelMap.get(adapter);
+            model = snapshot.get(adapter);
         }
         if (model == null) {
             throw new IllegalArgumentException("LLM model is not registered: " + modelId);
@@ -293,7 +296,10 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
             throw new IllegalArgumentException("已解析参数的 provider 与调用路由不一致。");
         }
         LLMOptionBoundary.validate(options);
-        if (!model.supports(options)) {
+        // 2026/11/06：预检按适配后的原生能力检查，保留宿主 JSON 意图供实际调用告警。
+        var checked = options.findResponseFormat().orElse(LLMResponseFormat.TEXT) == LLMResponseFormat.JSON
+                ? model.getJsonOutputSupport(options.getModel()).adapt(options, false) : options;
+        if (!model.supports(checked)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + modelId);
         }
         LLMInputValidator.validate(prompt.getMessages(), model.getCapabilities(options.getModel()));
@@ -335,7 +341,10 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         } else if (fileEpoch != null) {
             fileEpoch.verify(options);
         }
-        var effective = new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED);
+        // 2026/11/06：实际请求仅发送声明支持的原生格式；不支持 JSON 时明确告警。
+        var nativeOptions = options.findResponseFormat().orElse(LLMResponseFormat.TEXT) == LLMResponseFormat.JSON
+                ? model.getJsonOutputSupport(options.getModel()).adapt(options, true) : options;
+        var effective = new LLMPrompt(prompt.getMessages(), nativeOptions, LLMOptionsPolicy.RESOLVED);
         // 2026/11/02：等待供应商实际完成后再复核，不把禁用解释为已经撤销远端请求。
         var token = pluginToken(model);
         var result = execution == null ? model.call(effective) : model.call(effective, execution);
@@ -368,17 +377,19 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
      * @throws IllegalStateException 当发现重复模型 ID 时抛出
      */
     @Override
-    protected void _scan() {
+    protected synchronized void _scan() {
+        var candidates = new java.util.LinkedHashMap<LLMModelId, ILLMModel>();
         var modelPairs = beanScanner.getBeansWithAnnotationAndInterface(LLMModel.class, ILLMModel.class);
         for (var pair : modelPairs.values()) {
             var annotation = pair.first();
             var model = pair.second();
             var modelId = parseModelId(annotation);
-            var existing = modelMap.putIfAbsent(modelId, model);
+            var existing = candidates.putIfAbsent(modelId, model);
             if (existing != null) {
-                throw new IllegalStateException("Duplicate LLM model id: " + modelId);
+                throw new IllegalStateException("模型注册 ID 重复：" + modelId);
             }
         }
+        modelMap = Map.copyOf(candidates);
     }
 
     /**
@@ -397,12 +408,11 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
     }
 
     /**
-     * 清空模型注册表。
-     * <br>通常由重新扫描流程调用，用于在重新加载模型 Bean 前释放旧注册信息。
+     * 2026/11/05：保留在线快照，候选目录全部校验后由扫描阶段替换。
      */
     @Override
     protected void _clear() {
-        modelMap.clear();
+        // 2026/11/05：重扫只在候选完成后替换目录，不提前清空在线快照。
     }
 
     /**
@@ -420,9 +430,9 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
                                                   ILLMModelOptions promptOptions) {
         var defaultOptions = defaults(modelId, baseOptions);
         var merged = LLMModelOptions.merge(defaultOptions, promptOptions);
-        return LLMModelOptions.merge(merged, LLMModelOptions.builder()
-                .provider(modelId.id())
-                .build());
+        // 2026/11/06：仅固定路由，不能用默认 TEXT 的临时覆盖对象清掉请求 JSON 选项。
+        merged.setProvider(modelId.id());
+        return merged;
     }
 
     /**

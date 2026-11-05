@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.component.llm.framework.model.interfaces;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMContextWindow;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSchema;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
 
 import java.util.List;
@@ -17,13 +18,19 @@ import java.util.Optional;
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：统一携带 JSON 输出结构，不借助供应商私有 metadata。
  *
  * @author zExNocs
  * @date 2026/03/23
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface ILLMModelOptions {
+    /** @return 初始化预编译的不可变输出结构，未要求结构时为空 */
+    default Optional<LLMJsonSchema> findResponseSchema() {
+        return Optional.empty();
+    }
+
     /**
      * 2026/11/04：读取随有效模型配置固定的本地上下文策略。
      * @return 显式上下文声明，未提供时为空

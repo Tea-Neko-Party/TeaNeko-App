@@ -5,14 +5,14 @@ package org.zexnocs.teanekoagent.component.memory.layered;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.JsonLLMTokenEstimator;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMContent;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.memory.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
@@ -22,8 +22,6 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
-import tools.jackson.core.StreamReadFeature;
-import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.*;
@@ -50,16 +48,17 @@ import java.util.stream.Collectors;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：统一 JSON 生成与解码，保留预算、动态准入及失败暂停分类。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompressor, AutoCloseable {
     private final Supplier<IAgentFactory> factory;
     private final AgentAccessGate gate;
     private final IAgentMemoryReferences references;
-    private final ILLMInteractionService interactions;
+    private final LLMJsonService json;
     private final Supplier<LayeredMemorySettings> settings;
     private final Function<AgentScope, LayeredMemoryPolicy> policies;
     private final ObjectMapper mapper;
@@ -78,18 +77,18 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
      * @param factory 懒实例工厂
      * @param gate 原统一门控
      * @param references 当前引用复核
-     * @param interactions 原 LLM 交互
+     * @param json 统一类型化 JSON 交互
      * @param settings 本地预算
      * @param policies 当前作用域策略
      * @param mapper 原转换器
      * @param executor 借用业务域
      */
     public LLMLayeredMemoryCompressor(Supplier<IAgentFactory> factory, AgentAccessGate gate, IAgentMemoryReferences references,
-            ILLMInteractionService interactions, Supplier<LayeredMemorySettings> settings, Function<AgentScope, LayeredMemoryPolicy> policies,
+            LLMJsonService json, Supplier<LayeredMemorySettings> settings, Function<AgentScope, LayeredMemoryPolicy> policies,
             ObjectMapper mapper, Executor executor) {
-        this.factory = factory; this.gate = gate; this.references = references; this.interactions = interactions;
+        this.factory = factory; this.gate = gate; this.references = references; this.json = json;
         this.settings = settings; this.policies = policies; this.executor = executor;
-        this.mapper = mapper.rebuild().enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION).enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build();
+        this.mapper = mapper;
     }
     /**
      * 在独立背景预算中生成摘要，候选内容仍须由原存储复核和提交。
@@ -136,15 +135,19 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
                             .collect(Collectors.toMap(item -> item.getKey().toString(), item -> Map.of("state", item.getValue().state(),
                                     "confirmed", item.getValue().confirmed(), "total", item.getValue().total(), "confirmedText",
                                     item.getValue().text().length() > 500 ? item.getValue().text().substring(0, 500) + "（尾部省略）" : item.getValue().text())))))).build()).build();
-            var prompt = new LLMPrompt(List.of(system, user), options, LLMOptionsPolicy.RESOLVED);
+            // 2026/11/06：结构说明在预算预检前加入，实际发送与估算使用同一输入。
+            var request = json.prepare(MemoryLayers.Digest.class,
+                    new LLMPrompt(List.of(system, user), options, LLMOptionsPolicy.RESOLVED));
+            var prompt = request.prompt();
             // 2026/11/04：与真实交互使用相同口径，计入元数据、JSON 包装和固定开销。
             if (new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens() > settings.get().maxInputBytes()) {
                 throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
             }
-            return check(instance, actor, batch, control).thenComposeAsync(ignored -> interactions.interact(prompt, new LLMToolSet(mapper, List.of()),
+            return check(instance, actor, batch, control).thenComposeAsync(ignored -> json.generate(request,
                     new ToolInvocationContext(control.id(), EntitySnapshot.of(EntityId.random(), ComponentPatch.empty()), control), controlSettings(),
-                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control()))), executor)
-                    .thenComposeAsync(result -> check(instance, actor, batch, control).thenApply(ignored -> decode(result)), executor);
+                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control())), ignoredResult -> { }), executor)
+                    .thenComposeAsync(result -> check(instance, actor, batch, control).thenApply(ignored -> result), executor)
+                    .exceptionally(failure -> { throw MemoryProcessingException.structured(failure); });
         }, executor).thenCompose(stage -> stage);
     }
     /**
@@ -182,32 +185,6 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
         var policy = settings.get();
         var timeout = policy.timeout();
         return new LLMInteractionSettings(policy.modelCallLimits(), timeout, timeout, timeout);
-    }
-    /**
-     * 只接受完整 JSON 候选，不把供应商推理或错误正文带入存储。
-     * 2026/11/04：返回安全分类和真实模型状态，解析失败不传播含原输出的异常消息。
-     * @param result 完整交互结果
-     * @return 严格候选
-     * @throws MemoryProcessingException 当模型失败、输出超限或格式不符时
-     */
-    private MemoryLayers.Digest decode(LLMInteractionResult result) {
-        if (result.status() != LLMInteractionResult.Status.SUCCESS) {
-            throw new MemoryProcessingException(MemoryProcessingException.Reason.MODEL_RESULT, result.status());
-        }
-        var text = result.finalCandidate().orElseThrow().getContents().stream().map(ILLMContent::getContentPart)
-                .filter(TextLLMContentPart.class::isInstance).map(TextLLMContentPart.class::cast).map(TextLLMContentPart::getText).collect(Collectors.joining());
-        if (text.length() > 8000) {
-            throw new MemoryProcessingException(MemoryProcessingException.Reason.OUTPUT_LIMIT, result.status());
-        }
-        try {
-            var root = mapper.readTree(text);
-            if (!root.isObject() || root.size() != 2 || !root.path("brief").isString() || !root.path("details").isString()) {
-                throw new MemoryProcessingException(MemoryProcessingException.Reason.INVALID_OUTPUT, result.status());
-            }
-            return new MemoryLayers.Digest(root.path("brief").stringValue(), root.path("details").stringValue());
-        } catch (tools.jackson.core.JacksonException | IllegalArgumentException failure) {
-            throw new MemoryProcessingException(MemoryProcessingException.Reason.INVALID_OUTPUT, result.status());
-        }
     }
     /**
      * 首次工作时创建拥有原登记关系的实例，不在构造扫描时生成。

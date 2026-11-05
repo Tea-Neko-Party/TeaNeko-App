@@ -24,6 +24,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.component.memory.AgentConversationState;
 import org.zexnocs.teanekoagent.component.memory.adapter.EasyDataMemoryManagementStore;
@@ -149,11 +150,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/05：验证自动失败原因与开关、撤权边界。
  * <br>2026/11/05：验证网页私聊的最小装配经过真实事件总线完成自动和命令回复。
+ * <br>2026/11/06：自主发言使用真实 JSON 合同并保持原发送管道。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -1133,9 +1135,10 @@ class AgentCommandIntegrationTest {
      * @return 自有独立预算的自主服务
      */
     private ProactiveService proactive(Harness h, ProactiveTargets targets, AgentRuntimeMonitor monitor, org.zexnocs.teanekoagent.runtime.IAgentTurnService turns) {
-        // 2026/11/03：自主消息也逐段等待实际平台确认及回执提交。
+        // 2026/11/06：局部装配加入真实 JSON 服务，继续等待逐段平台确认及回执提交。
         var service = new ProactiveService(h.configs, new AgentScopeConfigManager(), targets, h.references, h.personalities, h.history, h.attempts, turns,
-                new AgentFactory(h.registry), h.registry, h.automaticAccess, h.triggers, monitor, h.timers, h.workers, h.logger, h.db.mapper);
+                new AgentFactory(h.registry), h.registry, h.automaticAccess, h.triggers, monitor, h.timers, h.workers, h.logger, h.db.mapper,
+                LLMJsonTestSupport.create(mock(org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService.class), h.db.mapper));
         service.setDelivery(h.delivery);
         // 2026/11/03：复用既有自主场景核验实际共享队列，不另建用例。
         if (h.expression != null) { service.setCoordinator(h.expression.replies); }

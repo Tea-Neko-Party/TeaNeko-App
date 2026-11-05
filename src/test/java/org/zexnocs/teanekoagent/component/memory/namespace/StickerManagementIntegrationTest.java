@@ -183,7 +183,12 @@ class StickerManagementIntegrationTest {
          * @param id 原 ID
          * @return 当前目录条目
          */
-        Stickers.Entry entry(String id){return h.state().getEntries().values().stream().filter(e->e.getId().equals(id)).findFirst().orElseThrow();}
+        Stickers.Entry entry(String id) {
+            // 2026/11/05：断言公开管理对象时同时查独立删除目录，不要求墓碑常驻活动主行。
+            return h.catalog.transact(h.file.snapshot(), transaction -> transaction.state().getEntries().values().stream()
+                    .filter(entry -> entry.getId().equals(id)).findFirst()
+                    .or(() -> transaction.deletedById(id)).orElseThrow()).toCompletableFuture().join();
+        }
         /**
          * @param id 原 ID
          * @param action 明确动作

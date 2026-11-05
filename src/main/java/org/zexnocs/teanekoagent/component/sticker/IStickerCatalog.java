@@ -10,11 +10,12 @@ import java.util.function.Function;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：扩展同根事务中的独立删除目录，兼容原内嵌存储宿主。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface IStickerCatalog {
     /**
@@ -25,4 +26,15 @@ public interface IStickerCatalog {
      * @return 真实提交后的值
      */
     <T> CompletionStage<T> change(StickerSettings settings, Function<Stickers.State,T> action);
+
+    /**
+     * 2026/11/05：有界状态和独立删除决定须在同一根锁下提交。
+     * @param settings 固定配置
+     * @param action 不可逃逸的事务操作
+     * @param <T> 非空结果
+     * @return 真实提交后的值
+     */
+    default <T> CompletionStage<T> transact(StickerSettings settings, Function<StickerCatalogTransaction, T> action) {
+        return change(settings, state -> action.apply(() -> state));
+    }
 }

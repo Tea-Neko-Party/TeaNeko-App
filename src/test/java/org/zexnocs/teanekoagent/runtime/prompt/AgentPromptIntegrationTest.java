@@ -59,16 +59,16 @@ import static org.mockito.Mockito.*;
 /**
  * 通过真实 Agent 邮箱和 LLM 管线验证异步资料、历史隔离、资源停止和重放边界。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/05：拒绝重放时保留安全原因，不恢复已撤销来源或重复模型请求。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：整体禁用工具仍复核已提供资料的依赖，不发起无效模型请求。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 class AgentPromptIntegrationTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -172,6 +172,7 @@ class AgentPromptIntegrationTest {
     /**
      * 验证按需读取、实际工具依赖和总预算，正文只供原轮次使用，关闭后拒绝旧完成重放。
      * 2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+     * 2026/11/05：末次模型保留可信定义及 none 约束，不再以删除定义代表禁止调用。
      */
     @Test void skillWorkflowUsesOriginalBudgetAndKeepsInstructionsOutOfHistory() {
         var catalog = mock(ISkillCatalog.class);
@@ -185,7 +186,10 @@ class AgentPromptIntegrationTest {
             replies.getLast().complete(skillCall("skill_load", "{\"id\":\"sample\"}")); runtime.runAll();
             assertTrue(text(prompts.getLast().getMessages()).contains("专用于原轮次的流程正文"));
             replies.getLast().complete(skillCall("work", "{}")); runtime.runAll();
-            assertTrue(text(prompts.getLast().getMessages()).contains("工具完成")); assertTrue(Objects.requireNonNull(prompts.getLast().getOptions()).getTools().isEmpty());
+            assertTrue(text(prompts.getLast().getMessages()).contains("工具完成"));
+            var finalOptions = Objects.requireNonNull(prompts.getLast().getOptions());
+            assertEquals("none", finalOptions.getToolChoice());
+            assertTrue(finalOptions.getTools().stream().anyMatch(tool -> tool.getName().equals("work")));
             replies.getLast().complete(response(false)); runtime.runAll(); var done = result.join();
             assertEquals(AgentRunResult.Status.SUCCESS, done.status()); assertEquals(3, done.interaction().orElseThrow().attempts().size());
             var window = conversations.snapshot(handle, scope).orElseThrow().require(AgentConversationWindow.COMPONENT);
@@ -213,11 +217,58 @@ class AgentPromptIntegrationTest {
             assertTrue(base.select(handle.definition(), request(), gateRuntime(), new AgentPromptInput(request().messages(), List.of(), 1)).isEmpty());
         }
     }
+    /** 2026/11/05：白名单删除 Skill 依赖或加载器时，在实际模型调用前拒绝整轮。 */
+    @Test
+    void finalToolAllowlistCannotLeaveUnusableSkillCatalog() {
+        var catalog = mock(ISkillCatalog.class);
+        when(catalog.snapshot()).thenReturn(new SkillCatalogSnapshot(List.of(
+                new SkillDefinition("sample", "流程说明", 1, true, List.of("work"), "原始正文"))));
+        var skills = new AgentSkills(catalog, ignored -> new SkillPolicy(true, List.of("sample")), mapper, runtime);
+        for (var allowed : List.of("skill_load", "work")) {
+            var assembly = org.zexnocs.teanekoagent.component.AgentAssembly.parse(
+                    "{\"version\":1,\"components\":{\"llm\":{},\"tool\":{\"allowedTools\":\"" + allowed + "\"},\"skill\":{}}}");
+            var boundedGate = new AgentAccessGate(registry,
+                    ignored -> new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE, "", assembly),
+                    ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(gateRuntime())), logger);
+            try (var service = new AgentService(boundedGate,
+                    new LLMInteractionService(models, LLMInteractionSettings::defaults, runtime, runtime.scheduler),
+                    skills.tools((definition, request, config) -> List.of(new LLMToolBinding(
+                            LLMTool.builder().name("work").build(), (call, context) -> CompletableFuture.completedStage("完成")))),
+                    mapper, runtime, runtime.scheduler, runtime.clock, logger, null, skills.prompts(source))) {
+                var result = service.run(handle, request()).toCompletableFuture();
+                runtime.runAll();
+                assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, result.join().status());
+                assertTrue(prompts.isEmpty());
+            }
+        }
+    }
+
     /**
      * 从本夹具已有准入取得运行快照，不重复构造另一套模型参数。
      * @return 实际就绪设置
      */
     private AgentRuntimeSnapshot gateRuntime() { return gate.evaluate(handle, request().actor(), AgentActivity.SERVICE).runtime().orElseThrow(); }
+
+    /** 2026/11/05：没有工具活动时，空工具集也须经过资料依赖检查，但不调用工具选择器。 */
+    @Test
+    void disabledToolsStillVerifyExistingPromptDependencies() {
+        var disabled = new AgentFactory(registry).create(new AgentDefinition("无工具",
+                new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.SERVICE)));
+        var toolSource = mock(IAgentToolSource.class);
+        doThrow(new org.zexnocs.teanekoagent.component.sticker.StickerReplyException())
+                .when(toolSource).verifySelection(any(), any(), eq(List.of()));
+        try (var service = new AgentService(gate,
+                new LLMInteractionService(models, LLMInteractionSettings::defaults, runtime, runtime.scheduler),
+                toolSource, mapper, runtime, runtime.scheduler, runtime.clock, logger, null, source)) {
+            var result = service.run(disabled, request()).toCompletableFuture();
+            runtime.runAll();
+            assertTrue(result.isDone());
+            assertTrue(result.join().answer().isEmpty());
+            assertTrue(prompts.isEmpty());
+            verify(toolSource).verifySelection(any(), any(), eq(List.of()));
+            verifyNoMoreInteractions(toolSource);
+        }
+    }
 
     /** 验证连续轮次只携带本轮资料，原文授权与工具选择不接收资料伪造，实际诊断仍保留资料。 */
     @Test void temporaryDataReachesModelWithoutAccumulatingInHistoryOrAuthorization() {
@@ -308,15 +359,36 @@ class AgentPromptIntegrationTest {
         assertTrue(window().messages().isEmpty());
     }
 
-    /** 验证资料结果的进行中及完成后重放明确不可用，不重新读取资料、调用模型或重复工具。 */
+    /**
+     * 验证资料结果的进行中及完成后重放明确不可用，不重新读取资料、调用模型或重复工具。
+     * 2026/11/05：检查拒绝原因传递到发送侧，不用通用失效错误覆盖来源检查结论。
+     */
     @Test void supplementaryDataResultsCannotReplayWithoutSourceAuthorizationProtocol() {
         var request = request(); var original = mailbox.run(handle, request).toCompletableFuture(); runtime.runAll();
         var inflight = mailbox.retry(handle, request).toCompletableFuture(); runtime.runAll();
         replies.getFirst().complete(response(false)); runtime.runAll(); assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
         assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, inflight.join().status()); assertTrue(inflight.join().answer().isEmpty());
+        assertTrue(inflight.join().failureDescription().contains("原资料源不允许重放"));
         var replay = mailbox.retry(handle, request).toCompletableFuture(); var duplicate = mailbox.run(handle, request).toCompletableFuture(); runtime.runAll();
         assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, replay.join().status()); assertEquals(AgentRunResult.Status.REPLAY_UNAVAILABLE, duplicate.join().status());
         assertEquals(1, source.resolutions.get()); assertEquals(1, prompts.size()); assertEquals(1, window().turns().size());
+    }
+
+    /** 2026/11/05：资料重放抛错时保留首条固定原因，旧答案与模型原文均不能继续交付。 */
+    @Test
+    void replayFailureRetainsSafeSourceReason() {
+        var request = request();
+        var original = mailbox.run(handle, request).toCompletableFuture();
+        runtime.runAll();
+        replies.getFirst().complete(response(false));
+        runtime.runAll();
+        assertEquals(AgentRunResult.Status.SUCCESS, original.join().status());
+        source.replayVerifier = () -> CompletableFuture.failedStage(new AgentPromptException(AgentPromptException.Reason.CHANGED));
+        var replay = mailbox.retry(handle, request).toCompletableFuture();
+        runtime.runAll();
+        assertTrue(replay.join().answer().isEmpty());
+        assertEquals("当前参考资料的绑定或代次已变化。", replay.join().failureDescription());
+        assertEquals(1, prompts.size());
     }
 
     /** 验证原输入恰好填满预算时整项省略资料，实际选项覆盖调用者提示且普通缓存可重放。 */

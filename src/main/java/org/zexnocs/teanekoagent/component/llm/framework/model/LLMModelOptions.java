@@ -1,16 +1,17 @@
 package org.zexnocs.teanekoagent.component.llm.framework.model;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import lombok.*;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSchema;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 大语言模型请求参数的通用实现类。
@@ -21,10 +22,11 @@ import java.util.Optional;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：复制与合并保留不可变输出 Schema。
  * @author zExNocs
  * @date 2026/05/15
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Getter
 @Setter
@@ -98,6 +100,16 @@ public class LLMModelOptions implements ILLMModelOptions {
      */
     @Builder.Default
     private LLMResponseFormat responseFormat = LLMResponseFormat.TEXT;
+
+    /** 2026/11/06：通用输出 Schema；由适配器选择原生 Schema 或 JSON 对象模式。 */
+    @Nullable
+    private LLMJsonSchema responseSchema;
+
+    /** @return 本次不可变输出结构，未声明时为空 */
+    @Override
+    public Optional<LLMJsonSchema> findResponseSchema() {
+        return Optional.ofNullable(responseSchema);
+    }
 
     /**
      * 停止词列表。
@@ -176,6 +188,8 @@ public class LLMModelOptions implements ILLMModelOptions {
                 .topP(options.findTopP().orElse(null))
                 .presencePenalty(options.findPresencePenalty().orElse(null))
                 .responseFormat(options.findResponseFormat().orElse(LLMResponseFormat.TEXT))
+                // 2026/11/06：任意接口实现复制时保留结构合同。
+                .responseSchema(options.findResponseSchema().orElse(null))
                 .stopWords(options.findStopWords().orElse(null))
                 .stream(options.findStream().orElse(null))
                 .tools(options.findTools().orElse(null))
@@ -231,6 +245,8 @@ public class LLMModelOptions implements ILLMModelOptions {
                 .topP(overrides.findTopP().orElse(base.topP))
                 .presencePenalty(overrides.findPresencePenalty().orElse(base.presencePenalty))
                 .responseFormat(overrides.findResponseFormat().orElse(base.responseFormat))
+                // 2026/11/06：请求结构覆盖不能被模型默认选项丢弃。
+                .responseSchema(overrides.findResponseSchema().orElse(base.responseSchema))
                 .stopWords(overrides.findStopWords().orElse(base.stopWords))
                 .stream(overrides.findStream().orElse(base.stream))
                 .tools(overrides.findTools().orElse(base.tools))

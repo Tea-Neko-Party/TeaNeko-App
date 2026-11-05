@@ -21,11 +21,12 @@ import java.util.Map;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：补齐平台 NT 图片实际使用的可信媒体域名。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Getter @Setter @NoArgsConstructor
 @FileConfig(value="stickers",path="agent",type=FileConfigType.YAML)
@@ -39,7 +40,9 @@ public class AgentStickerFileConfig implements IFileConfigData {
     private int maintenanceSeconds=60;
     private List<Double> scoreWeights=List.of(.4,.2,.2,.1,.1);
     private double minConfidence=.85, minQuality=.65, replacementMargin=.08;
-    private List<String> allowedHosts=List.of("gchat.qpic.cn","multimedia.nt.qq.com","*.qpic.cn","*.gtimg.cn");
+    // 2026/11/05：补齐实际平台媒体域名，只增加准确主机，不放开任意 qq.com 子域。
+    private List<String> allowedHosts = List.of("gchat.qpic.cn", "multimedia.nt.qq.com",
+            "multimedia.nt.qq.com.cn", "gxh.vip.qq.com", "*.qpic.cn", "*.gtimg.cn");
     private List<String> privateHosts=List.of();
     // 2026/11/03：未声明归属的宿主监听保留原行为，第三方须明确选择。
     private List<String> eventPlugins=List.of();

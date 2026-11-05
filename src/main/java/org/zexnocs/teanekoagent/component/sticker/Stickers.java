@@ -5,7 +5,9 @@ package org.zexnocs.teanekoagent.component.sticker;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonType;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekocore.framework.description.Description;
 
 import java.time.Instant;
 import java.util.*;
@@ -19,11 +21,13 @@ import java.util.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：目录保留独立删除决定计数，不再内嵌所有已回收墓碑。
  *
+ * <br>2026/11/06：分析类型声明字段语义与输出容量，复用统一 JSON 合同。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class Stickers {
     /** 不实例化数据命名空间。 */
@@ -50,6 +54,7 @@ public final class Stickers {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param kind 视觉类型
      * @param confidence 类型置信度
      * @param worthKeeping 收藏建议
@@ -62,10 +67,21 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Analysis(Kind kind,double confidence,boolean worthKeeping,String visualDescription,String usageDescription,
-                           String primaryCategory,List<String> secondaryTags,double quality,String reasons){
+    // 2026/11/06：字段说明共用于模型提示、原生 Schema 和严格绑定。
+    @LLMJsonType(maxCharacters = 4096)
+    @Description("图片分类结果；普通插画、头像、照片或截图不能因画风被当作聊天表情包。")
+    public record Analysis(
+            @Description("视觉类型；有明确聊天反应用途才是 STICKER，无法确定为 UNKNOWN。") Kind kind,
+            @Description("类型置信度，0 至 1。") double confidence,
+            @Description("是否建议收藏；最终准入由宿主决定。") boolean worthKeeping,
+            @Description("非空客观画面描述，最多160字；不推测作者身份。") String visualDescription,
+            @Description("聊天用途与反讽歧义，最多80字。") String usageDescription,
+            @Description("从宿主提供的类别ID中选择，最多32字；非表情包可为空字符串。") String primaryCategory,
+            @Description("最多4个非空标签，每个最多24字。") List<String> secondaryTags,
+            @Description("表达清晰、易读与通用程度的综合分数，0 至 1。") double quality,
+            @Description("简短判定依据，最多160字。") String reasons){
         /**
          * 校验所有模型字段，额外字段由严格解析器拒绝。
          * @param kind 类型
@@ -235,7 +251,8 @@ public final class Stickers {
      */
     @Data @NoArgsConstructor public static class Quota {private long hour; private int downloads,analyses;}
     /**
-     * 一行目录事务快照；有界集合避免全表扫描及跨行激活竞态。
+     * 一行活动目录快照；已回收删除记录独立存储，仍由同一根锁仲裁。
+     * <br>2026/11/05：增加独立删除决定计数，旧记录由根事务迁移。
      * <br>2026/11/03：按真实区域保存有限轮次与机器人展示回执摘要。
      * <br>2026/11/03：管理回执与条目变更原子提交。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
@@ -247,9 +264,11 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
     @Data @NoArgsConstructor public static class State {
+        // 2026/11/05：仅保存独立删除行的计数；旧 JSON 缺省零，迁移在根事务内完成。
+        private long deletedDecisions;
         private long revision;
         private int inspection;
         private String storageIdentity="";

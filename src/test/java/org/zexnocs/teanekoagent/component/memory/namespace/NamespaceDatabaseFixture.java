@@ -44,13 +44,13 @@ import static org.mockito.Mockito.when;
  * 不替代 MySQL/JPA 实机测试；仓库访问由实际 EasyData 基础层发起。
  * <br>2026/11/03：复用固定域维护分页，保持真实事务、版本与回滚夹具。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/06：异步任务中的断言及其他致命失败也完成观察阶段，避免测试无期限等待。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 final class NamespaceDatabaseFixture implements AutoCloseable {
     final TeaNekoAgentEasyDataRepository repository = mock(TeaNekoAgentEasyDataRepository.class);
@@ -62,6 +62,8 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
     final EasyDataMemoryFactStore facts;
     final EasyDataMemoryRecallStore recall;
     final AtomicReference<Runnable> beforeCommit = new AtomicReference<>(() -> {});
+    // 2026/11/05：可暂停指定事务的真实回调入口，覆盖入队后撤权的时间窗口。
+    final AtomicReference<java.util.function.Consumer<String>> beforeTask = new AtomicReference<>(ignored -> {});
     final AtomicReference<Runnable> beforeNamespaceLock = new AtomicReference<>(() -> {});
     final AtomicReference<Runnable> afterFactPage = new AtomicReference<>(() -> {});
     final AtomicInteger retries = new AtomicInteger();
@@ -258,6 +260,7 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
     private void execute(IDatabaseTaskConfig task, CompletableFuture<ITaskResult<Void>> result) {
         for (int attempt = 0; attempt <= 8; attempt++) {
             try {
+                beforeTask.get().accept(task.getName());
                 var current = snapshot(); transaction.set(current);
                 TransactionSynchronizationManager.setActualTransactionActive(true); TransactionSynchronizationManager.initSynchronization();
                 for (var operation : task.__getTasksWithTransaction()) { operation.call(); }
@@ -270,7 +273,11 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
             } catch (ObjectOptimisticLockingFailureException | DataIntegrityViolationException conflict) {
                 retries.incrementAndGet();
                 if (attempt == 8) { result.completeExceptionally(conflict); }
-            } catch (Exception failure) { result.completeExceptionally(failure); return; }
+            } catch (Throwable failure) {
+                // 2026/11/06：异步测试任务不能丢弃 Error，否则外层 Future 永远无法观察失败。
+                result.completeExceptionally(failure);
+                return;
+            }
             finally {
                 var current = transaction.get();
                 if (current != null) { for (int i = current.locks.size() - 1; i >= 0; i--) { current.locks.get(i).unlock(); } }

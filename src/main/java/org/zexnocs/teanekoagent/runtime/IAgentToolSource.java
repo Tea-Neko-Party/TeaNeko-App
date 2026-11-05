@@ -15,10 +15,11 @@ import java.util.List;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：提供最终工具集复核扩展点，不扩大授权。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @FunctionalInterface
 public interface IAgentToolSource {
@@ -42,4 +43,12 @@ public interface IAgentToolSource {
     default List<LLMToolBinding> select(AgentDefinition definition, AgentRunRequest request, AgentRuntimeSnapshot runtime, AgentPromptInput input) {
         return select(definition, request, runtime);
     }
+
+    /**
+     * 2026/11/05：在白名单、插件及客户端过滤后检查依赖完整性，不增加或恢复任何工具。
+     * @param request 原可信请求
+     * @param input 实际资料布局
+     * @param selected 最终获准工具
+     */
+    default void verifySelection(AgentRunRequest request, AgentPromptInput input, List<LLMToolBinding> selected) { }
 }

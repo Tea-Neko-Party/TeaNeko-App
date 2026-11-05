@@ -19,18 +19,18 @@ import java.lang.reflect.Method;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 大语言模型工具注册与调用服务。
+ * 兼容及独立宿主的大语言模型工具目录；当前 Agent 使用 TeaNekoAgentToolRegistry。
  * <br>扫描所有 {@link ILLMTool} Bean，并按工具名称统一执行模型发起的 tool call。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：兼容工具目录完整构建后发布，失败不清空在线目录。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 public class LLMToolService extends AbstractScanner implements ILLMToolService {
@@ -46,9 +46,10 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
 
     /**
      * 工具注册表。
-     * <br>键为工具名称，值为对应的工具定义；使用并发映射以支持扫描和查询过程中的线程安全访问。
+     * <br>键为工具名称，值为对应的工具定义；使用不可变快照支持扫描和查询并发。
      */
-    private final Map<String, ILLMTool> toolMap = new ConcurrentHashMap<>();
+    // 2026/11/05：兼容宿主目录同样以不可变快照发布，重扫失败不破坏可用工具。
+    private volatile Map<String, ILLMTool> toolMap = Map.of();
 
     /**
      * 创建大语言模型工具注册与调用服务。
@@ -133,33 +134,36 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
      * @throws IllegalStateException 当发现重复工具名称时抛出
      */
     @Override
-    protected void _scan() {
-        scanToolBeans();
-        scanToolProviders();
+    protected synchronized void _scan() {
+        var candidates = new LinkedHashMap<String, ILLMTool>();
+        scanToolBeans(candidates);
+        scanToolProviders(candidates);
+        toolMap = Map.copyOf(candidates);
     }
 
     /**
-     * 清空工具注册表。
-     * <br>通常由重新扫描流程调用，用于在重新加载工具 Bean 前释放旧注册信息。
+     * 2026/11/05：候选完成前保留在线工具目录，失败不发布半成品。
      */
     @Override
     protected void _clear() {
-        toolMap.clear();
+        // 2026/11/05：保留当前目录直至候选完整发布。
     }
 
     /**
      * 扫描并注册手写的 {@link ILLMTool} Bean。
+     * @param candidates 尚未发布的完整候选目录
      */
-    private void scanToolBeans() {
+    private void scanToolBeans(Map<String, ILLMTool> candidates) {
         for (var tool : beanScanner.getBeansOfType(ILLMTool.class).values()) {
-            registerTool(tool);
+            registerTool(candidates, tool);
         }
     }
 
     /**
      * 扫描并注册注解式工具提供者。
+     * @param candidates 尚未发布的完整候选目录
      */
-    private void scanToolProviders() {
+    private void scanToolProviders(Map<String, ILLMTool> candidates) {
         var providers = new LinkedHashMap<String, Object>();
         for (var entry : beanScanner.getBeansWithAnnotation(LLMToolProvider.class).entrySet()) {
             providers.put(entry.getKey(), entry.getValue().second());
@@ -168,20 +172,21 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
             providers.putIfAbsent(entry.getKey(), entry.getValue());
         }
         for (var bean : providers.values()) {
-            scanToolProvider(bean);
+            scanToolProvider(candidates, bean);
         }
     }
 
     /**
      * 扫描单个工具提供者 Bean。
      *
+     * @param candidates 尚未发布的完整候选目录
      * @param bean 工具提供者 Bean
      */
-    private void scanToolProvider(Object bean) {
+    private void scanToolProvider(Map<String, ILLMTool> candidates, Object bean) {
         var beanClass = beanScanner.getBeanClass(bean);
         var providerPackage = resolveProviderPackage(bean, beanClass);
         for (var method : findToolMethods(beanClass)) {
-            registerTool(createTool(bean, method, providerPackage));
+            registerTool(candidates, createTool(bean, method, providerPackage));
         }
     }
 
@@ -218,15 +223,16 @@ public class LLMToolService extends AbstractScanner implements ILLMToolService {
     /**
      * 注册工具定义。
      *
+     * @param candidates 尚未发布的完整候选目录
      * @param tool 工具定义
      * @throws IllegalStateException 当工具名称为空或重复时抛出
      */
-    private void registerTool(ILLMTool tool) {
+    private void registerTool(Map<String, ILLMTool> candidates, ILLMTool tool) {
         var toolName = tool.getName();
         if (toolName == null || toolName.isBlank()) {
             throw new IllegalStateException("LLM tool name must not be blank: " + tool.getClass().getName());
         }
-        var existing = toolMap.putIfAbsent(toolName, tool);
+        var existing = candidates.putIfAbsent(toolName, tool);
         if (existing != null) {
             throw new IllegalStateException("Duplicate LLM tool name: " + toolName);
         }

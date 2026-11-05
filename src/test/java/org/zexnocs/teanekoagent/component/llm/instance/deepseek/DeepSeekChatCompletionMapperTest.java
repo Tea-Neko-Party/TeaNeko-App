@@ -22,13 +22,13 @@ import java.util.Map;
  * DeepSeek Chat Completion 请求与响应映射测试。
  * <br>验证参与者名称、可选请求字段和供应商推理内容的映射边界。
  * <br>2026/11/02：验证推理强度使用顶层字段，独立配置时不生成缺失 type 的 thinking 对象。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：验证推理字段只经供应商元数据续轮回传，不混入用户可见正文。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 class DeepSeekChatCompletionMapperTest {
     /** 2026/11/02：复现只有推理强度配置时的真实请求格式，并核对显式思考开关的独立语义。 */
@@ -193,6 +193,7 @@ class DeepSeekChatCompletionMapperTest {
 
     /**
      * 验证供应商内部推理内容不会作为普通 assistant 正文暴露给上层 Agent。
+     * 2026/11/05：同一字段须原样回传到后续请求，避免思考模式的工具续轮丢失状态。
      */
     @Test
     void toResultDoesNotExposeProviderReasoningAsAssistantContent() {
@@ -215,6 +216,9 @@ class DeepSeekChatCompletionMapperTest {
                 .orElse("");
 
         Assertions.assertEquals("", mappedText);
+        var request = DeepSeekChatCompletionMapper.toRequest(new LLMPrompt(List.of(mappedMessage)),
+                LLMModelOptions.empty(), "https://example.test", "/chat/completions", "测试密钥");
+        Assertions.assertEquals("private provider reasoning", request.getMessages().getFirst().get("reasoning_content"));
     }
 
     /**

@@ -1,7 +1,5 @@
 package org.zexnocs.teanekoagent.component.memory.namespace;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
@@ -19,6 +17,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
 import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
 import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
@@ -56,24 +55,22 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 /**
  * 复用既有事务夹具验证人格实际生效、共享补正、切换回滚和旧轮失效，不增加数据结构镜像测试。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04��ʹ�ÿ�ѡ��ʽԤ����Լ��֤�˸�ѧϰ�볬ʱ��
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class PersonalityIntegrationTest {
@@ -146,7 +143,13 @@ class PersonalityIntegrationTest {
          * 复用事务、模型和邮箱夹具，仅按需要启用实际后台候选交接。
          * @param automatic 是否启用自动学习
          */
-        Harness(boolean automatic) {
+        Harness(boolean automatic) { this(automatic, false); }
+        /**
+         * 2026/11/05：可选使用真实默认学习工厂，验证按 scope 选择联合或独立通路。
+         * @param automatic 是否向后台交接真实轮次
+         * @param routed 是否采用生产学习工厂
+         */
+        Harness(boolean automatic, boolean routed) {
             var character = new AgentPersonalityDefinition(); character.setId("teaneko"); character.setDisplayName("TeaNeko");
             character.getIdentity().setName("TeaNeko"); character.getCoreTraits().add("文件人格：认真解释，轻松交流。");
             character.getLearningPolicy().getMutableFields().add("speaking detail"); file.setCharacters(List.of(character));
@@ -159,13 +162,14 @@ class PersonalityIntegrationTest {
             var runtime = new AgentRuntimeSnapshot(new LLMModelOptionsSnapshot(LLMModelOptions.builder().provider("test").model("离线模型").maxTokens(30).build()),
                     ModelCapabilities.textOnly(), LLMInteractionSettings.defaults());
             var gate = new AgentAccessGate(registry, target -> new AgentScopePolicy(settings.containsKey(target.scopeId()),
-                    settings.containsKey(target.scopeId()) && settings.get(target.scopeId()).isEnabled(), AgentScopePolicy.Mode.ACTIVE),
+                    settings.containsKey(target.scopeId()) && settings.get(target.scopeId()).isEnabled(), AgentScopePolicy.Mode.ACTIVE, "",
+                    settings.containsKey(target.scopeId()) ? settings.get(target.scopeId()).assembly() : org.zexnocs.teanekoagent.component.AgentAssembly.legacyDefaults()),
                     ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime)), logger);
             var models = mock(ILLMModelService.class);
             when(models.resolveOptions(any(ILLMPrompt.class))).thenAnswer(call -> call.<ILLMPrompt>getArgument(0).getOptions());
             when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
                 ILLMPrompt prompt = call.getArgument(0);
-                if (db.mapper.writeValueAsString(prompt.getMessages().getFirst()).contains("只输出 {}")) {
+                if (prompt.getOptions().findResponseSchema().map(schema -> schema.name().startsWith("PersonalityLearningOutput")).orElse(false)) {
                     var response = new CompletableFuture<ILLMResult>(); pending.add(response); return new TaskFuture<>(logger, "后台人格模型", response);
                 }
                 prompts.add(call.getArgument(0)); beforeReply.run();
@@ -181,7 +185,19 @@ class PersonalityIntegrationTest {
                         : CompletableFuture.failedStage(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED));
             });
             var interactions = new LLMInteractionService(models, LLMInteractionSettings::defaults, workers, timers);
-            learner = new PersonalityLearningService(gate, personality, references, interactions, learningPolicy::get, db.mapper, workers, timers, Clock.systemUTC(), reports::add);
+            if (routed) {
+                var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+                var observations = mock(StyleObservationService.class);
+                when(observations.enabled(any())).thenReturn(true);
+                beans.registerSingleton("observations", observations);
+                learner = new org.zexnocs.teanekoagent.component.personality.configuration.PersonalityLearningConfig()
+                        .personalityLearning(gate, personality, references, LLMJsonTestSupport.create(interactions, db.mapper),
+                                new org.springframework.mock.env.MockEnvironment(), db.mapper, workers, timers,
+                                logger, beans.getBeanProvider(StyleObservationService.class), configs, new AgentScopeConfigManager());
+            } else {
+                learner = new PersonalityLearningService(gate, personality, references, LLMJsonTestSupport.create(interactions, db.mapper),
+                        learningPolicy::get, db.mapper, workers, timers, Clock.systemUTC(), reports::add);
+            }
             turns = new AgentService(gate, interactions,
                     (definition, input, config) -> List.of(), db.mapper, workers, timers, clock, logger, automatic ? references : null, IAgentPromptSource.empty(), personality);
             mailbox = new AgentConversationService(turns, AgentQueueSettings::defaults, workers, timers, clock, logger,
@@ -392,6 +408,54 @@ class PersonalityIntegrationTest {
                 .message(LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(text).build()).build()).build())).build();
     }
     /**
+     * 2026/11/05：只有 LLM 与人格的真实对话仍可自动采样，候选在下一轮生效且不建立记忆引用。
+     * @throws Exception 当有界模型或后台报告等待失败时
+     */
+    @Test
+    void personalityLearnsWithoutInstallingMemory() throws Exception {
+        try (var h = new Harness(true)) {
+            h.settings.get(scope.scopeId()).setComponents(
+                    "{\"version\":1,\"components\":{\"llm\":{},\"personality\":{\"personalityLearningEnabled\":true}}}");
+            var input = request(scope);
+            var first = h.mailbox.run(h.handle, input).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertEquals(AgentRunResult.Status.SUCCESS, first.status());
+            assertNull(first.memoryReference());
+            h.awaitLearning().complete(learningResponse(
+                    "{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"先给简短结论，再举例\",\"confidence\":0.9}}"));
+            assertEquals(PersonalityLearningService.Outcome.APPLIED, h.awaitReport().outcome());
+            var next = h.mailbox.run(h.handle, request(scope)).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertTrue(Objects.requireNonNull(next.promptTranscript()).input().personality().adjustmentsJson().contains("先给简短结论"));
+        }
+    }
+
+    /**
+     * 2026/11/05：生产工厂不因存在全局观察 Bean 停用无记忆或关闭历史/摘要的聊天学习。
+     * @throws Exception 当模型阶段未在期限内进入时
+     */
+    @Test
+    void defaultLearningFactoryFallsBackForEachScopeWithoutCompressionInput() throws Exception {
+        for (String mode : List.of("无记忆", "关闭历史", "关闭摘要")) {
+            try (var h = new Harness(true, true)) {
+                var config = h.settings.get(scope.scopeId());
+                if (mode.equals("无记忆")) {
+                    config.setComponents("{\"version\":1,\"components\":{\"llm\":{},\"personality\":{}}}");
+                } else if (mode.equals("关闭历史")) {
+                    config.setHistoryCaptureEnabled(false);
+                } else {
+                    config.setAutoSummaryEnabled(false);
+                }
+                assertEquals(AgentRunResult.Status.SUCCESS,
+                        h.mailbox.run(h.handle, request(scope)).toCompletableFuture().get(5, TimeUnit.SECONDS).status());
+                h.awaitLearning().complete(learningResponse(
+                        "{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"先说结论，再给示例\",\"confidence\":0.9}}"));
+                org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5))
+                        .until(() -> !h.learner.reports().isEmpty());
+                assertEquals(PersonalityLearningService.Outcome.APPLIED, h.learner.reports().getFirst().outcome());
+            }
+        }
+    }
+
+    /**
      * 验证真实互动后台生成、提交确认及下一轮应用，等待期间前台正常回答，重放不重复学习。
      * @throws Exception 当后台等待中断或未按时完成时
      */
@@ -400,7 +464,7 @@ class PersonalityIntegrationTest {
             var input = request(scope); var first = h.mailbox.run(h.handle, input).toCompletableFuture().join();
             assertEquals(AgentRunResult.Status.SUCCESS, first.status()); var pending = h.awaitLearning();
             assertEquals(AgentRunResult.Status.SUCCESS, h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join().status());
-            pending.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"表达更简洁，保持温和\",\"confidence\":0.9}"));
+            pending.complete(learningResponse("{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"表达更简洁，保持温和\",\"confidence\":0.9}}"));
             var report = h.awaitReport(); assertEquals(PersonalityLearningService.Outcome.APPLIED, report.outcome());
             assertEquals(input.requestId(), report.requestId()); assertEquals(1, report.tokenUsage().size());
             var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
@@ -422,16 +486,16 @@ class PersonalityIntegrationTest {
             h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384L, 131072, Duration.ofDays(30)));
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var disabled = h.awaitLearning();
             h.settings.get(scope.scopeId()).setPersonalityLearningEnabled(false);
-            disabled.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"迟到表达\",\"confidence\":1}"));
+            disabled.complete(learningResponse("{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"迟到表达\",\"confidence\":1}}"));
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
             assertTrue(h.personality.resolve(scope, control).toCompletableFuture().join().adjustmentsJson().isEmpty());
             h.settings.get(scope.scopeId()).setPersonalityLearningEnabled(true); h.settings.get(scope.scopeId()).setPersonalityCorrectionsEnabled(false);
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
-            h.awaitLearning().complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"保持轻松表达\",\"confidence\":0.8}"));
+            h.awaitLearning().complete(learningResponse("{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"保持轻松表达\",\"confidence\":0.8}}"));
             assertEquals(PersonalityLearningService.Outcome.APPLIED, h.awaitReport().outcome());
             assertTrue(h.personality.resolve(scope, control).toCompletableFuture().join().adjustmentsJson().isEmpty());
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
-            h.awaitLearning().complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"伪造候选\",\"confidence\":1,\"locked\":true}"));
+            h.awaitLearning().complete(learningResponse("{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"伪造候选\",\"confidence\":1,\"locked\":true}}"));
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
             var key = h.store.binding(scope).toCompletableFuture().join().orElseThrow().correctionKey();
             assertEquals(1, h.store.state(key).toCompletableFuture().join().orElseThrow().corrections().size());
@@ -451,7 +515,7 @@ class PersonalityIntegrationTest {
             h.learningPolicy.set(new PersonalityLearningSettings(true, Duration.ZERO, Duration.ofSeconds(5), 1, 16384L, 131072, Duration.ofDays(30)));
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); var stale = h.awaitLearning();
             h.bindingRevision.incrementAndGet(); h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join();
-            stale.complete(learningResponse("{\"field\":\"speaking detail\",\"text\":\"旧空间候选\",\"confidence\":1}"));
+            stale.complete(learningResponse("{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"旧空间候选\",\"confidence\":1}}"));
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());
             h.mailbox.run(h.handle, request(scope)).toCompletableFuture().join(); h.awaitLearning(); h.handle.close();
             assertEquals(PersonalityLearningService.Outcome.REJECTED, h.awaitReport().outcome());

@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMM
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSupport;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 
@@ -18,13 +19,23 @@ import java.util.List;
  * <br>新的模型供应商需要实现该接口并使用 {@link LLMModel} 标注，才能注册到 TeaNeko Agent。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：由适配器显式声明原生 JSON 输出能力，未知实现不假定支持。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface ILLMModel {
+    /**
+     * 按具体模型声明原生输出约束；默认仅可使用结构提示和本地校验。
+     * @param model 实际供应商模型名
+     * @return 当前适配器可发送的格式能力
+     */
+    default LLMJsonSupport getJsonOutputSupport(String model) {
+        return LLMJsonSupport.NONE;
+    }
+
     /**
      * 获取模型调用使用的供应商 ID。
      * <br>该值用于 base options、能力校验和供应商日志，不参与模型注册；注册 ID 由 {@link LLMModel#id()} 提供。

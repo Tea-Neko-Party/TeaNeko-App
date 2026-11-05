@@ -47,10 +47,11 @@ import java.util.stream.Collectors;
  *
  * <br>2026/11/05：按聊天配置发送具体失败原因，保留停止与关闭边界。
  *
+ * <br>2026/11/05：表达交付复核保留原拒绝状态，并区别目标与计划变化。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentCommandGateway implements AutoCloseable {
@@ -392,8 +393,15 @@ public final class AgentCommandGateway implements AutoCloseable {
             if (expressionDelivery == null || control == null) { return CompletableFuture.failedStage(new IllegalStateException("表达计划缺少实际交付装配。")); }
             return expressionDelivery.send(data, request, result, control, () -> agents.retry(target, request).thenAccept(checked -> {
                 synchronized (chats) { if (closed) { throw new IllegalStateException("Agent 命令入口已关闭。"); } }
-                if (checked.status() != AgentRunResult.Status.SUCCESS || !NativeCommandBridge.actor(data).equals(request.actor()) || !Objects.equals(checked.replyPlan(), result.replyPlan())) {
-                    throw new IllegalStateException("表达回复的原结果或目标已失效。");
+                // 2026/11/05：与自动入口一致保留复核失败分类，不放过失效计划或目标。
+                if (checked.status() != AgentRunResult.Status.SUCCESS) {
+                    throw new AgentDeliveryException(checked);
+                }
+                if (!NativeCommandBridge.actor(data).equals(request.actor())) {
+                    throw new AgentDeliveryException("命令回复的发送者或聊天目标已变化，已停止交付。");
+                }
+                if (!Objects.equals(checked.replyPlan(), result.replyPlan())) {
+                    throw new AgentDeliveryException("命令回复的原表达计划已变化，已停止交付。");
                 }
             }));
         }

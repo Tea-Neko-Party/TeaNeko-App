@@ -1,7 +1,5 @@
 package org.zexnocs.teanekoagent.component.llm.instance.openai.responses;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.model.AbstractLLMModel;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
@@ -11,6 +9,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSupport;
 import org.zexnocs.teanekoagent.component.llm.instance.openai.OpenAIVisionCapabilities;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -18,6 +17,8 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 
 import java.util.List;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * OpenAI Responses API 模型适配器。
@@ -29,13 +30,24 @@ import java.util.List;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：声明 Responses 原生 Schema 输出能力。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @LLMModel(id = OpenAIResponsesModel.PROVIDER)
 public class OpenAIResponsesModel extends AbstractLLMModel {
+    /**
+     * 2026/11/06：Responses 协议以 text.format 承载原生结构约束。
+     * @param model 实际模型名称
+     * @return 原生 Schema 能力，远端拒绝仍保留真实 HTTP 错误
+     */
+    @Override
+    public LLMJsonSupport getJsonOutputSupport(String model) {
+        return LLMJsonSupport.SCHEMA;
+    }
+
     /** OpenAI 模型适配器注册 ID。 */
     public static final String PROVIDER = "openai";
 

@@ -46,10 +46,11 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/05：自动回复失败可提示具体原因，取消和撤权不补发。
  *
+ * <br>2026/11/05：发送前复核分别报告拒绝状态、目标和计划变化，保留原诊断。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Service
 public final class AgentAutomaticGateway implements AutoCloseable {
@@ -242,6 +243,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
 
     /**
      * 每段发送前重放原授权检查，禁止因旧成功结果绕过当前引用、资料、人格和触发约束。
+     * 2026/11/05：拒绝状态与目标或计划变化分别报告，失败仍阻止实际发送。
      * @param data 原发送目标
      * @param target 原实例
      * @param request 原固定请求
@@ -283,8 +285,14 @@ public final class AgentAutomaticGateway implements AutoCloseable {
             return expressionDelivery.send(data, request, result, control, () -> agents.retry(target, request).thenAccept(checked -> {
                 synchronized (this) { if (closed) { throw new IllegalStateException("自动回复入口已关闭。"); } }
                 triggers.verify(ticket);
-                if (checked.status() != AgentRunResult.Status.SUCCESS || !java.util.Objects.equals(checked.replyPlan(), result.replyPlan()) || !NativeCommandBridge.actor(data).equals(request.actor())) {
-                    throw new IllegalStateException("自动表达回复的原结果或目标已失效。");
+                if (checked.status() != AgentRunResult.Status.SUCCESS) {
+                    throw new AgentDeliveryException(checked);
+                }
+                if (!NativeCommandBridge.actor(data).equals(request.actor())) {
+                    throw new AgentDeliveryException("自动回复的发送者或聊天目标已变化，已停止交付。");
+                }
+                if (!java.util.Objects.equals(checked.replyPlan(), result.replyPlan())) {
+                    throw new AgentDeliveryException("自动回复的原表达计划已变化，已停止交付。");
                 }
             })).thenApply(ignored -> true);
         }

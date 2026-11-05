@@ -43,17 +43,15 @@ import static org.mockito.Mockito.*;
  * 覆盖实际工具集中的 UUID 查询、留言分页及权限撤销，不访问平台或数据库。
  * <br>2026/11/02：注解绑定提前拒绝类型溢出，权限撤销停止交互。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：经独立工具入口验证原资料及留言权限。
- *
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 class InfoAgentToolsTest {
     private final UUID target = UUID.randomUUID();
@@ -93,7 +91,9 @@ class InfoAgentToolsTest {
      * @return 当前请求可使用的工具绑定
      */
     private List<LLMToolBinding> select() {
-        return java.util.stream.Stream.of(tools, new InfoUserMessagesTool(tools))
+        var providers = List.of(tools, new InfoUserMessagesTool(tools));
+        providers.forEach(TeaNekoAgentToolMethods::prepare);
+        return providers.stream()
                 .flatMap(provider -> TeaNekoAgentToolMethods.select(
                         provider, definition, request, null, null, mapper, Runnable::run).stream())
                 .toList();

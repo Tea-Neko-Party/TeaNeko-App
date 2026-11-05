@@ -24,11 +24,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：提供安全失败分类、持久暂停状态及版本化管理恢复合同。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public interface ILongTermMemoryStore {
     /**
@@ -108,6 +109,60 @@ public interface ILongTermMemoryStore {
      * @return 退避提交阶段
      */
     CompletionStage<Void> retry(LongMemories.Batch batch, Instant now);
+    /**
+     * 2026/11/05：传入真实原因，生产存储限制同输入的重复无效生成。
+     * @param batch 原任务
+     * @param now 失败时刻
+     * @param failure 实际异常，不得原样序列化
+     * @return 退避或暂停已持久化的阶段
+     */
+    default CompletionStage<Void> retry(LongMemories.Batch batch, Instant now, @Nullable Throwable failure) {
+        return retry(batch, now);
+    }
+
+    /**
+     * 2026/11/05：查看当前分区后台状态，不领取任务或调用模型。
+     * @param reference 固定分区引用
+     * @param now 观察时刻
+     * @param guard 事务内管理权限
+     * @return 不含原话的状态
+     * @throws UnsupportedOperationException 当自定义存储未实现此管理能力时
+     */
+    default CompletionStage<LongMemoryJobs.Status> consolidationState(MemoryNamespaceReference reference,
+            Instant now, Runnable guard) {
+        throw new UnsupportedOperationException("当前长期存储未提供整理状态管理。");
+    }
+
+    /**
+     * 2026/11/05：只解除指定版本的暂停，不推进水位、不直接生成；原操作幂等。
+     * @param reference 原空间与分区
+     * @param actor 独立管理主体
+     * @param revision 读取时的作业版本
+     * @param operationId 原操作标识
+     * @param now 当前时间
+     * @param guard 事务内授权复核
+     * @return 同事务保存的恢复回执
+     * @throws UnsupportedOperationException 当自定义存储未实现恢复时
+     */
+    default CompletionStage<LongMemoryJobs.Status> resumeConsolidation(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.runtime.AgentActorContext actor, long revision, UUID operationId,
+            Instant now, Runnable guard) {
+        throw new UnsupportedOperationException("当前长期存储未提供整理恢复。");
+    }
+
+    /**
+     * 2026/11/05：查询原恢复回执，不再次解除暂停。
+     * @param reference 原空间引用
+     * @param actor 原管理主体
+     * @param operationId 原操作
+     * @param guard 当前权限
+     * @return 原提交的状态快照
+     * @throws UnsupportedOperationException 当自定义存储未提供回执时
+     */
+    default CompletionStage<LongMemoryJobs.Status> consolidationOperation(MemoryNamespaceReference reference,
+            org.zexnocs.teanekoagent.runtime.AgentActorContext actor, UUID operationId, Runnable guard) {
+        throw new UnsupportedOperationException("当前长期存储未提供整理恢复回执。");
+    }
     /**
      * 按用户或话题索引召回共享空间，不按来源 scope 隐式过滤。
      * @param reference 原授权空间

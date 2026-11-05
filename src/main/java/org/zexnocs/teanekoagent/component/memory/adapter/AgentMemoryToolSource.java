@@ -47,10 +47,11 @@ import java.util.concurrent.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：每类仅声明一个工具，画像和新增入口复用本类访问及回执逻辑。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @TeaNekoAgentToolClass(value = "builtin-tools", toolPackage = "agent.memory", managedByFeature = true, requires = "memory")
 public final class AgentMemoryToolSource implements IAgentToolSource {
@@ -83,6 +84,8 @@ public final class AgentMemoryToolSource implements IAgentToolSource {
      * @throws NullPointerException 当依赖为空时
      */
     public AgentMemoryToolSource(MemoryAccessService access, IMemoryAccessPolicy policies, IMemoryRecallDefaults defaults, ObjectMapper mapper, Executor executor) {
+        // 2026/11/05：单例创建时编译工具目录，高频选择只读缓存。
+        TeaNekoAgentToolMethods.prepare(this);
         this.access = Objects.requireNonNull(access, "记忆访问服务不能为空。"); this.policies = Objects.requireNonNull(policies, "记忆开关端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "记忆读取默认策略不能为空。"); this.executor = Objects.requireNonNull(executor, "记忆工具执行器不能为空。");
         this.mapper = Objects.requireNonNull(mapper, "记忆工具 JSON 转换器不能为空。").rebuild()

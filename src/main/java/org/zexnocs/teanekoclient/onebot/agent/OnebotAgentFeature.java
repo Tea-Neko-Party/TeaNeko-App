@@ -22,10 +22,11 @@ import java.util.concurrent.Executor;
 /**
  * OneBot 主动向工具装配贡献平台工具与资料，保留原能力标识及资料所有权。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class OnebotAgentFeature implements AgentFeature {
     private final IAgentPromptSource promptSource;
@@ -86,6 +87,8 @@ public final class OnebotAgentFeature implements AgentFeature {
                 return support.verifyReplay(request, input, control);
             }
         };
+        // 2026/11/05：在能力装配时编译实际工具，选择阶段不做发现。
+        List.of(messages, senders, groups).forEach(TeaNekoAgentToolMethods::prepare);
         this.tools = List.of(messages, senders, groups);
         this.mapper = mapper;
         this.executor = executor;

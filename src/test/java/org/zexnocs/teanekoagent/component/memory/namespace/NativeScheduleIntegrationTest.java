@@ -53,17 +53,14 @@ import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Sta
 /**
  * 实际原生任务入口到专用数据库及发送适配的必要闭环，不连接真实平台。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class NativeScheduleIntegrationTest {
@@ -95,7 +92,7 @@ class NativeScheduleIntegrationTest {
         final Map<String, UUID> ids = Map.of("alice", UUID.randomUUID(), "bob", UUID.randomUUID());
         final AtomicReference<Instant> now = new AtomicReference<>(Instant.parse("2029-01-01T00:00:00Z"));
         final EasyDataScheduleStore store = new EasyDataScheduleStore(db.data, db.mapper);
-        final CompletableFuture<Void> sent = new CompletableFuture<>();
+        final CompletableFuture<org.zexnocs.teanekoapp.response.api.IMessageSendResponseData> sent = new CompletableFuture<>();
         final CompletableFuture<Void> sending = new CompletableFuture<>();
         final AgentScheduleService schedules;
         final AgentScheduleLifecycle lifecycle;
@@ -115,7 +112,7 @@ class NativeScheduleIntegrationTest {
                 return new TaskFuture<>(logger, "当前成员", CompletableFuture.completedFuture(member));
             }).when(members).get(anyString(), anyString());
             when(messages.getGroupBuilder("42")).thenReturn(sender); when(messages.getPrivateBuilder("alice")).thenReturn(sender);
-            when(sender.sendAsync()).thenAnswer(ignored -> { sending.complete(null); return sent; });
+            when(sender.sendWithFuture()).thenAnswer(ignored -> { sending.complete(null); return new TaskFuture<>(logger, "提醒发送", sent); });
             var adapter = new NativeScheduleAdapter(scope -> new AgentScopePolicy(true, enabled.get(), AgentScopePolicy.Mode.PASSIVE_BASIC),
                     clients, new TeaNekoScopeService(clients), users, Runnable::run);
             var clock = mock(Clock.class); when(clock.instant()).thenAnswer(ignored -> now.get());
@@ -166,8 +163,32 @@ class NativeScheduleIntegrationTest {
             f.now.set(task.nextFire()); var tick = f.schedules.tick().toCompletableFuture(); f.sending.join(); assertFalse(tick.isDone());
             f.sent.completeExceptionally(new IllegalStateException("平台确认未知。")); tick.join();
             assertEquals(INDETERMINATE, f.store.find(task.id()).toCompletableFuture().join().orElseThrow().status());
-            f.schedules.tick().toCompletableFuture().join(); verify(f.sender, times(1)).sendAsync();
+            f.schedules.tick().toCompletableFuture().join(); verify(f.sender, times(1)).sendWithFuture();
             verify(f.sender).setRetryCount(0); verify(f.sender).setRecordFailed(false); verify(f.sender).addTextMessage("提醒：开会");
+        }
+    }
+
+    /**
+     * 2026/11/05：非空但缺消息 ID 的回执只记为结果不明，禁止再次发送。
+     * @throws Exception 当有界平台阶段等待失败时
+     */
+    @Test
+    void missingMessageIdDoesNotConfirmReminder() throws Exception {
+        try (var f = new Fixture()) {
+            var data = f.source("alice", "创建提醒", "native-group@42");
+            var actor = NativeCommandBridge.actor(data);
+            var first = f.now.get().plusSeconds(5);
+            var spec = new org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Spec("检查回执", actor,
+                    "remind", Map.of("text", "内容"), first, "UTC", 0);
+            var task = f.schedules.create(UUID.randomUUID(), spec).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            f.now.set(first);
+            var tick = f.schedules.tick().toCompletableFuture();
+            f.sending.get(5, TimeUnit.SECONDS);
+            f.sent.complete(mock(org.zexnocs.teanekoapp.response.api.IMessageSendResponseData.class));
+            tick.get(5, TimeUnit.SECONDS);
+            assertEquals(INDETERMINATE, f.store.find(task.id()).toCompletableFuture().join().orElseThrow().status());
+            f.schedules.tick().toCompletableFuture().get(5, TimeUnit.SECONDS);
+            verify(f.sender, times(1)).sendWithFuture();
         }
     }
 
@@ -185,7 +206,7 @@ class NativeScheduleIntegrationTest {
             f.commands.inspect(alice, bobTask.id().toString(), true, null).toCompletableFuture().join();
             f.now.set(bobTask.nextFire()); f.schedules.tick().toCompletableFuture().join();
             assertEquals(PAUSED, f.store.find(own.tasks().getFirst().id()).toCompletableFuture().join().orElseThrow().status());
-            verify(f.sender, never()).sendAsync();
+            verify(f.sender, never()).sendWithFuture();
             f.enabled.set(true);
             var privateData = f.source("alice", "private", "private@" + f.ids.get("alice"));
             f.commands.create(privateData, "2029-01-01T08:00:20+08:00", "Asia/Shanghai", 0, List.of("私聊"), null).toCompletableFuture().join();

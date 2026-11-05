@@ -29,10 +29,11 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：组合独立工具 Bean，保留内置能力标识与共享访问服务。
  *
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class MemoryToolConfig {
@@ -88,6 +89,9 @@ public class MemoryToolConfig {
             AgentMemoryToolSource memory, MemoryProfileTool profile, MemoryAddTool add,
             ObjectProvider<AgentHistoryToolSource> history, ObjectProvider<AgentCommandToolSource> commands,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor) {
+        // 2026/11/05：在能力装配时编译实际工具，选择阶段不做发现。
+        TeaNekoAgentToolMethods.prepare(profile);
+        TeaNekoAgentToolMethods.prepare(add);
         var historyTools = history.getIfAvailable();
         var commandTools = commands.getIfAvailable();
         // 2026/11/02：原权限策略原样保留，仅改变装配身份。

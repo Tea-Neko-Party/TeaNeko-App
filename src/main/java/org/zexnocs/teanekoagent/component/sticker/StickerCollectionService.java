@@ -3,20 +3,19 @@ package org.zexnocs.teanekoagent.component.sticker;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.scheduling.annotation.Scheduled;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.*;
@@ -28,19 +27,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * 非阻塞入队与持久后台执行；任务控制由本服务拥有，普通聊天不等待视觉结果。
  * <br>2026/11/03：重新分析读取已有文件，受原额度、当前来源及管理版本保护。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
- *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：采集宿主声明一次模型请求及零工具预算，修复空预算导致视觉交互预检失败。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -95,7 +91,10 @@ public final class StickerCollectionService implements AutoCloseable {
         try{CompletableFuture.runAsync(this::run,executor).whenComplete((ignored,failure)->{busy.set(false);if(failure!=null){warn(failure);}});}
         catch(RuntimeException failure){busy.set(false);warn(failure);}
     }
-    /** 在虚拟域等待独立后台任务，所有外部动作都有控制且不会阻塞事件或模型回调线程。 */
+    /**
+     * 在虚拟域等待独立后台任务，所有外部动作都有控制且不会阻塞事件或模型回调线程。
+     * 2026/11/05：宿主显式声明模型和工具次数维度，与视觉分析的单次零工具交互保持一致。
+     */
     private void run(){
         var config=library.settings();if(closed){return;}var ports=registry.select(config);
         var identity=ports.assets().identity(config);var work=await(ports.catalog(),library.claim(config,ports,identity)).orElse(null);
@@ -105,7 +104,8 @@ public final class StickerCollectionService implements AutoCloseable {
             for(var blob:await(ports.catalog(),library.inspect(config,ports))){if(!ports.assets().exists(blob,config)){await(ports.catalog(),library.unavailable(config,ports,blob));}}return;
         }
         if(work.cleanup()){cleanup(config,ports,work);return;}
-        try(var control=ExecutionControl.withDeadline(new ResourceBudget(Map.of()),Instant.now().plus(config.timeout()),Clock.systemUTC(),scheduler)){
+        try (var control = ExecutionControl.withDeadline(new LLMCallLimits(1, 0, 0).newBudget(),
+                Instant.now().plus(config.timeout()), Clock.systemUTC(), scheduler)) {
             active.set(control);if(closed){control.cancel();}library.check(config,ports,work.job().getSource(),control);
             if(!ports.analyzer().ready(work.job().getSource(),config)){await(ports.catalog(),library.defer(config,ports,work,Duration.ofMinutes(5)));return;}
             // 2026/11/03：管理刷新不重新下载、不重复发布原文件；提示只作为低信任资料。

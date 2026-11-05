@@ -14,6 +14,7 @@ v4.8.0-l 中，`framework`、`instance`、`file_config` 和 `configuration` 是�
 | [`tool`](tool/README.md) | Function Tool/schema、工具注册、本轮可信绑定及异步执行。 |
 | `../file_config` | 解析本地模型参数；默认路由与凭据通过独立端口注入。 |
 | [`interaction`](interaction/README.md) | 有限自动往返、共享次数/token 预算、预留结算、阶段控制、不可变 transcript 和逐次 usage。 |
+| [`structured`](structured/README.md) | 按 Java 类型生成 JSON Schema、适配原生 JSON 选项、异步返回对象及安全诊断。 |
 | `interfaces` | Prompt、Result、Choice、Usage 等公共接口。 |
 
 # 二. 模型接入
@@ -406,7 +407,7 @@ CompletionStage<LLMToolMessage> message = pending.thenApply(ToolInvocationResult
 
 注解式工具支持 `CompletionStage<?>` 返回值，等待完成后才转换字符串/JSON；`CompletionStage<Void>` 完成后得到空字符串。方法可声明 `ToolInvocationContext` 参数，由宿主注入且不生成 schema。普通业务参数仍按原方法签名生成 schema。
 
-`LLMToolService.call(...)` 保留旧同步便捷语义，不验证本轮可见范围；异步或需要可信上下文的方法会在执行前明确拒绝此入口。新交互链应使用 `LLMToolSet`，详见[工具协议与离线用例](tool/README.md)。`LLMInteractionExecution` 已在其上增加共享次数预算、末次关闭工具、顺序工具批次及独立阶段时限，使用方式见[交互阶段执行](interaction/README.md)。自动模型/工具循环与完整结果汇总留待后续编排层实现。
+`LLMToolService` 是兼容及独立宿主 API，本节相关示例不代表当前 Agent 的自动注册链。当前 Agent 使用 [注解工具目录](../../../../../../../../../docs/development/plugins/agent-tools.md)。`LLMToolService.call(...)` 保留旧同步便捷语义，不验证本轮可见范围；异步或需要可信上下文的方法会在执行前明确拒绝此入口。新交互链应使用 `LLMToolSet`，详见[工具协议与离线用例](tool/README.md)。`LLMInteractionExecution` 已实现自动模型/工具循环、结果汇总、共享次数预算、末次关闭工具、顺序工具批次及独立阶段时限，见[交互阶段执行](interaction/README.md)。
 
 # 六. 供应商适配器职责
 

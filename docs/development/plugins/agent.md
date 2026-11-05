@@ -147,7 +147,7 @@ IAgentPromptSource.resolve 返回完整资料；verify 在原模型、工具及�
 
 | 需要扩展 | 接入方式及边界 |
 | --- | --- |
-| 持久任务动作 | 提供 AgentTaskAction Bean；声明 pluginId、兼容的动作 id 和 AgentScheduleService.Action。与内置 remind 重名拒绝；复用原 Timer、存储、权限、防重及真实终态 |
+| 持久任务动作 | 提供 AgentTaskAction Bean；声明 pluginId、动作 id、AgentScheduleService.Action 和动作自身 Policy。创建/执行同时通过公共身份与动作策略，动作在副作用前等待 guard；与内置 remind 重名拒绝，复用原 Timer、存储、防重及真实终态。旧三参构造保留，但默认拒绝创建/执行，插件须补充窄策略 |
 | 知识检索 | 实现 IKnowledgeSource，复用 AgentExtensionTools.knowledgeSearch 及其资料/策略适配，通过 Feature 注册；继续保留来源、revision、完整性和重放检查 |
 | 文件/代码后端 | 实现 IAgentFileAccess 或 IAgentCodeExecutor，经 AgentExtensionTools 生成工具；必须显式提供 IAgentExtensionPolicy，不能因注册 Bean 就开放宿主文件或 shell |
 | 模型供应商 | 实现 ILLMModel，标记 @LLMModel 与 @PluginOwned；继续使用统一 model.yml、原 ExecutionPolicy 和实际 IO 取消；模型服务在完成时复核插件版本 |
@@ -159,7 +159,7 @@ IAgentPromptSource.resolve 返回完整资料；verify 在原模型、工具及�
 | 平台回执 | 实现 IAgentDeliveryStore 并注册 Bean，AgentDeliveryService 复用原发送链；先占用、等待真实平台消息 ID、逐段记录。已确认重放跳过传输，未知占用禁止自动补发；按原 scope/绑定/generation 读取并有界清理，不把生成或已接受当成对方已读 |
 | 回复协议、指令与内容 | Spring Bean 分别声明 @TeaNekoReplyProtocol、@TeaNekoReplyDirective、@TeaNekoReplyPartHandler 并实现对应接口，按精确 ID/版本注册；复用 scanner 和原插件归属。内容 resolve 可异步，宿主统一冻结计划、控制节奏并检查真实回执，见[表达扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/README.md#扩展开发) |
 | 表情包采集后端 | Spring Bean 实现 IStickerAnalyzer、IStickerAssetStore、IStickerAdmissionPolicy 或 IStickerCatalog，并声明对应 @TeaNekoSticker 注解；本地配置精确选择标识，复用原插件代次。目录回调保持短事务，分析和文件动作在事务外；类型、容量、来源及迟到提交仍由宿主复核，见[素材扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展开发) |
-| 类别选图与原生表情 | teaneko.agent:media-replies 依赖 expression；sticker_list 只在实际资料保留时安装，编译只接受本轮成功完整回执。客户端 Bean 实现 IExpressionClientAdapter 并声明 @TeaNekoExpressionClient，提供明确能力、目录和独立确认；资源发送覆写 IReplyPartHandler 的 ReplySendContext 重载并在异步动作后再次守卫，详见[客户端扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展客户端编码) |
+| 类别选图与原生表情 | sticker 的 teaneko.agent:media-replies 依赖 expression；sticker_list 只在实际资料保留时安装，编译只接受本轮成功完整回执。expression 独立提供 native_faces 原生表情目录，无需安装 sticker/tool。客户端 Bean 实现 IExpressionClientAdapter 并声明 @TeaNekoExpressionClient；资源发送覆写 IReplyPartHandler 的 ReplySendContext 重载并在异步动作后再次守卫，详见[客户端扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展客户端编码) |
 | Skill | 继续经现有本地目录校验/发布与 Skill 策略选择；插件功能配套的 Skill 资源按部署说明安装，不因 JAR 存在就自动发布目录或增加权限 |
 | 显式工作流 | 借用已有 AgentWorkflowService 安排实例，共享原父预算；不透明地自动调用其他 Agent 不属于注册能力 |
 | 管理页面 | 贡献 ManagementResource，按 [管理扩展](management.md) 提供脱敏查询或明确管理操作 |

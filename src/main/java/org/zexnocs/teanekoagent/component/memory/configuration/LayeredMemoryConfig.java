@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.memory.adapter.*;
 import org.zexnocs.teanekoagent.component.memory.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.layered.*;
@@ -49,10 +49,12 @@ import java.util.function.Supplier;
  * <br>2026/11/05：长期工具按独立 Bean 聚合，保持原能力及 Prompt 所有权。
  *
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+ * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
+ * <br>2026/11/06：装配统一类型化 JSON 生成服务。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class LayeredMemoryConfig {
@@ -89,7 +91,7 @@ public class LayeredMemoryConfig {
      * @param factory 懒实例工厂
      * @param gate 统一准入
      * @param references 固定空间复核
-     * @param interactions 原模型交互
+     * @param json 统一类型化 JSON模型交互
      * @param configs 原作用域配置
      * @param manager 登记声明
      * @param environment 本地预算
@@ -99,9 +101,9 @@ public class LayeredMemoryConfig {
      */
     @Bean(destroyMethod = "close") @ConditionalOnMissingBean(ILayeredMemoryCompressor.class)
     public LLMLayeredMemoryCompressor layeredMemoryCompressor(ObjectProvider<IAgentFactory> factory, AgentAccessGate gate,
-            IAgentMemoryReferences references, ILLMInteractionService interactions, IConfigDataService configs, AgentScopeConfigManager manager,
+            IAgentMemoryReferences references, LLMJsonService json, IConfigDataService configs, AgentScopeConfigManager manager,
             Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor) {
-        return new LLMLayeredMemoryCompressor(factory::getObject, gate, references, interactions, settings(environment), policies(configs, manager), mapper, executor);
+        return new LLMLayeredMemoryCompressor(factory::getObject, gate, references, json, settings(environment), policies(configs, manager), mapper, executor);
     }
     /**
      * 注册恢复式后台处理器，单批模型请求有独立时限和次数预算。
@@ -148,7 +150,7 @@ public class LayeredMemoryConfig {
      * @param factory 懒实例工厂
      * @param gate 原准入
      * @param references 当前引用
-     * @param interactions 原模型交互
+     * @param json 统一类型化 JSON模型交互
      * @param configs 实际 scope 配置
      * @param manager 登记声明
      * @param environment 本地开关
@@ -159,9 +161,9 @@ public class LayeredMemoryConfig {
      */
     @Bean(destroyMethod = "close") @ConditionalOnMissingBean(ILongTermMemoryConsolidator.class)
     public LLMLongTermMemoryConsolidator longTermMemoryConsolidator(ObjectProvider<IAgentFactory> factory, AgentAccessGate gate,
-            IAgentMemoryReferences references, ILLMInteractionService interactions, IConfigDataService configs, AgentScopeConfigManager manager,
+            IAgentMemoryReferences references, LLMJsonService json, IConfigDataService configs, AgentScopeConfigManager manager,
             Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor, ObjectProvider<StyleObservationService> observations) {
-        return new LLMLongTermMemoryConsolidator(factory::getObject, gate, references, interactions, settings(environment),
+        return new LLMLongTermMemoryConsolidator(factory::getObject, gate, references, json, settings(environment),
                 scope -> longPolicies(configs, manager, environment).apply(scope).learn()
                         || observations.getIfAvailable() != null && observations.getObject().enabled(scope), mapper, executor);
     }
@@ -234,6 +236,8 @@ public class LayeredMemoryConfig {
     public AgentFeature longTermMemoryFeature(LongTermMemoryAccess access, LongTermMemoryTools tools,
             LongTermProfileTool profile, LongTermForgetTool forget, LongTermCorrectTool correct, ObjectMapper mapper,
             @Qualifier("virtualExecutor") ExecutorService executor) {
+        // 2026/11/05：在能力装配时编译实际工具，选择阶段不做发现。
+        java.util.stream.Stream.of(tools, profile, forget, correct).forEach(TeaNekoAgentToolMethods::prepare);
         var prompts = new LongTermMemoryPromptSource(access, mapper, executor);
         return new SourceAgentFeature("teaneko.agent", "long-memory", true,
                 (definition, request, runtime) -> java.util.stream.Stream.of(tools, profile, forget, correct)

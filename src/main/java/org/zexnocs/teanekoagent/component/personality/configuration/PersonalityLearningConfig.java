@@ -8,7 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.*;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
@@ -31,10 +31,12 @@ import java.util.concurrent.ScheduledExecutorService;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：按聊天实际历史与压缩通路选择独立人格采样。
+ * <br>2026/11/06：装配统一类型化 JSON 生成服务。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Configuration(proxyBeanMethods = false)
 public class PersonalityLearningConfig {
@@ -43,25 +45,26 @@ public class PersonalityLearningConfig {
      * @param gate 全活动门控
      * @param personalities 原人格源
      * @param references 原空间复核
-     * @param interactions 原有限交互
+     * @param json 统一类型化 JSON有限交互
      * @param environment 本地预算
      * @param mapper JSON 转换器
      * @param executor 借用业务执行器
      * @param scheduler 借用截止调度器
      * @param logger 非敏感用量日志
+     * @param configs 当前聊天配置
+     * @param manager Agent 配置声明
      * @param observations 可选持久观察服务
      * @return 可替换后台学习策略
      */
     @Bean(destroyMethod = "close") @ConditionalOnMissingBean(IAgentPersonalityLearning.class)
     public PersonalityLearningService personalityLearning(AgentAccessGate gate, IAgentPersonalitySource personalities, IAgentMemoryReferences references,
-            ILLMInteractionService interactions, Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
-            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, ObjectProvider<StyleObservationService> observations) {
-        return new PersonalityLearningService(gate, personalities, references, interactions, () -> new PersonalityLearningSettings(
-                // 2026/11/03：默认联合整理已承担观察，不对同一聊天重复消耗模型预算。
-                environment.getProperty("tea-neko.agent.personality-learning.enabled", Boolean.class, true)
-                        && !(observations.getIfAvailable() != null
-                        && environment.getProperty("tea-neko.agent.personality-learning.observation-enabled", Boolean.class, true)
-                        && environment.getProperty("tea-neko.agent.memory.layered.enabled", Boolean.class, true)),
+            LLMJsonService json, Environment environment, ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, ObjectProvider<StyleObservationService> observations,
+            org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService configs,
+            org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager manager) {
+        return new PersonalityLearningService(gate, personalities, references, json, () -> new PersonalityLearningSettings(
+                // 2026/11/05：总开关不再按全局 Bean 存在关闭，实际通路按每个 scope 选择。
+                environment.getProperty("tea-neko.agent.personality-learning.enabled", Boolean.class, true),
                 Duration.ofSeconds(environment.getProperty("tea-neko.agent.personality-learning.cooldown-seconds", Long.class, 300L)),
                 Duration.ofSeconds(environment.getProperty("tea-neko.agent.personality-learning.timeout-seconds", Long.class, 45L)),
                 environment.getProperty("tea-neko.agent.personality-learning.max-model-calls", Integer.class, 1),
@@ -70,6 +73,16 @@ public class PersonalityLearningConfig {
                 environment.getProperty("tea-neko.agent.personality-learning.max-input-bytes", Long.class, 131072L),
                 Duration.ofDays(environment.getProperty("tea-neko.agent.personality-learning.retention-days", Long.class, 30L))),
                 mapper, executor, scheduler, Clock.systemUTC(), report -> logger.info("Agent 人格学习", "后台候选结束，状态=" + report.outcome()
-                        + "，模型状态=" + report.modelStatus() + "，独立预算用量=" + report.budgetUsage()));
+                        + "，模型状态=" + report.modelStatus() + "，独立预算用量=" + report.budgetUsage()), result -> {
+                    var reference = result.memoryReference();
+                    var observation = observations.getIfAvailable();
+                    if (reference == null || observation == null || !observation.enabled(reference.scope())
+                            || !environment.getProperty("tea-neko.agent.memory.layered.enabled", Boolean.class, true)) {
+                        return true;
+                    }
+                    return configs.getConfigData(manager,
+                            org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData.class, reference.scope().scopeId())
+                            .map(config -> !config.isHistoryCaptureEnabled() || !config.isAutoSummaryEnabled()).orElse(true);
+                });
     }
 }

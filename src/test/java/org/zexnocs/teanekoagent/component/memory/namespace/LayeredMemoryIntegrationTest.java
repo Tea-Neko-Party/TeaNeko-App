@@ -35,13 +35,14 @@ import static org.mockito.Mockito.*;
  * 复用真实 EasyData 事务夹具验证短期采集、中期租约、恢复与迟到提交，外部模型不启动。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证结构化失败原因不泄漏原文，失败保留原消息并按租约退避。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：关闭处理器后等待实际退避结束，迟到模型结果仍不得提交。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class LayeredMemoryIntegrationTest {
@@ -197,7 +198,10 @@ class LayeredMemoryIntegrationTest {
             assertFalse(h.layers.commit(batch, new MemoryLayers.Digest("旧片段", "不应交付"), now.plusSeconds(1)).toCompletableFuture().join());
         }
     }
-    /** 后台等待真实生成；等待中撤销策略则保留原消息且不推进水位，关闭不取消外部生成任务。 */
+    /**
+     * 后台等待真实生成；等待中撤销策略则保留原消息且不推进水位，关闭不取消外部生成任务。
+     * 2026/11/05：关闭后的停止已由批次退避处理，调用方等待其真实完成而非外层抢先抛出异常。
+     */
     @Test void processorRejectsLateResultAfterPolicyChange() {
         try (var h = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
             for (int i = 1; i <= 8; i++) { h.append(i); }
@@ -221,7 +225,8 @@ class LayeredMemoryIntegrationTest {
                     ignored -> new LayeredMemoryPolicy(true, true, true), Runnable::run, timers,
                     Clock.fixed(now.plusSeconds(61), ZoneOffset.UTC), mock(ILogger.class))) {
                 var work = processor.drain().toCompletableFuture(); restarted.orTimeout(5, TimeUnit.SECONDS).join();
-                processor.close(); assertThrows(CompletionException.class, () -> work.orTimeout(5, TimeUnit.SECONDS).join());
+                processor.close();
+                work.orTimeout(5, TimeUnit.SECONDS).join();
                 assertFalse(late.isCancelled());
                 late.complete(new MemoryLayers.Digest("关闭后结果", "不能交付"));
                 assertEquals(0, h.layers.read(reference, now, settings.retention()).toCompletableFuture().join().compressedThrough());
@@ -236,6 +241,8 @@ class LayeredMemoryIntegrationTest {
             var gate = mock(org.zexnocs.teanekoagent.runtime.access.AgentAccessGate.class);
             var references = mock(IAgentMemoryReferences.class); var configs = mock(org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService.class);
             var beans = context.getBeanFactory();
+            // 2026/11/06：局部装配复用真实 JSON 合同，启动仍不调用模型。
+            beans.registerSingleton("structuredOutput", org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport.create(models, h.db.mapper));
             beans.registerSingleton("agentData", h.db.data); beans.registerSingleton("namespaceStore", h.db.store);
             beans.registerSingleton("json", h.db.mapper); beans.registerSingleton("interactions", models); beans.registerSingleton("gate", gate);
             beans.registerSingleton("references", references); beans.registerSingleton("configs", configs);

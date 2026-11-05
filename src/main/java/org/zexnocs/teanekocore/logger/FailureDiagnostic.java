@@ -9,6 +9,7 @@ import java.util.*;
  * 可安全记录的异常结构，不读取异常消息、请求、响应正文、请求头或抑制异常。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/05：提供共享的 HTTP、网络及业务安全原因，未知错误保留代码位置。
+ * <br>2026/11/05：继承业务异常携带的安全诊断，不将已有 HTTP 状态和原始位置丢失为未知异常。
  *
  * @param types 有界原因链中的异常类型，按外层到内层排列
  * @param location 最深可观察异常的代码位置
@@ -17,7 +18,7 @@ import java.util.*;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 public record FailureDiagnostic(List<String> types, String location, @Nullable Integer httpStatus,
                                 @Nullable String reason) {
@@ -46,6 +47,7 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
 
     /**
      * 遍历至多十六层原因，识别循环且不调用 getMessage 或异常 toString。
+     * 2026/11/05：跨结果传播时合并原脱敏快照，仍保留异常类型的有界长度。
      * @param failure 实际观察到的失败
      * @return 只含类型、状态和位置的结构
      */
@@ -58,6 +60,7 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
         Integer status = null;
         // 2026/11/05：只读取显式安全契约，不调用第三方异常的消息或响应正文。
         String reason = null;
+        FailureDiagnostic inherited = null;
         while (current != null && types.size() < 16 && visited.add(current)) {
             types.add(current.getClass().getName());
             deepest = current;
@@ -66,6 +69,13 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
             }
             if (current instanceof IFailureReason known) {
                 reason = known.failureReason();
+                var diagnostic = known.failureDiagnostic();
+                if (diagnostic != null) {
+                    inherited = diagnostic;
+                    if (diagnostic.httpStatus() != null) {
+                        status = diagnostic.httpStatus();
+                    }
+                }
             }
             if (current instanceof org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException stopped) {
                 reason = stopped.reason() == org.zexnocs.teanekocore.actuator.execution.ExecutionControl.StopReason.DEADLINE_EXCEEDED
@@ -84,6 +94,18 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
                 }
             }
             location = selected.getClassName() + "." + selected.getMethodName() + ":" + selected.getLineNumber();
+        }
+        // 2026/11/05：使用实际观察过的原错误类型和位置，不伪造 Throwable 或响应对象。
+        if (inherited != null) {
+            location = inherited.location();
+            for (var type : inherited.types()) {
+                if (types.size() == 16) {
+                    break;
+                }
+                if (!types.contains(type)) {
+                    types.add(type);
+                }
+            }
         }
         return new FailureDiagnostic(types, location, status, reason);
     }

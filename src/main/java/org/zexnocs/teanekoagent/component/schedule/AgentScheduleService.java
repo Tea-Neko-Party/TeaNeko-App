@@ -19,7 +19,7 @@ import java.util.function.Supplier;
 import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Status.*;
 
 /**
- * 显式装配的单宿主任务调度服务；原 Timer 驱动分页扫描，数据库仲裁每次发生的执行权。
+ * 显式装配的单宿主任务调度服务；原 Timer 驱动到期索引发现，数据库仲裁每次发生的执行权。
  * 不默认安装动作或权限实现，不以保存的创建者信息代替当前权限。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
@@ -29,10 +29,11 @@ import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Sta
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：到期索引按可用槽位领取，慢动作不阻塞后续发现。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -48,7 +49,7 @@ public final class AgentScheduleService implements AutoCloseable {
     private final AtomicBoolean started = new AtomicBoolean();
     private final AtomicBoolean scanning = new AtomicBoolean();
     private volatile boolean closed;
-    private String cursor = "";
+    private final java.util.concurrent.Semaphore executionSlots = new java.util.concurrent.Semaphore(4);
 
     /**
      * 只接收可信宿主安装的动作，构造不启动后台任务。
@@ -155,23 +156,60 @@ public final class AgentScheduleService implements AutoCloseable {
         return recover("").thenRun(() -> {
             if (closed) { return; }
             var config = timers.registerByDelay("Agent 持久化任务", "Agent 计划任务扫描", () -> {
-                tick().toCompletableFuture().join(); return EmptyTaskResult.INSTANCE;
+                // 2026/11/05：Timer 只触发有界发现，已开始的慢动作占自身槽位，不阻塞下一次到期发现。
+                tick().whenComplete((ignored, failure) -> {
+                    if (failure != null) {
+                        org.slf4j.LoggerFactory.getLogger(AgentScheduleService.class).error("Agent 计划扫描或落库失败：{}",
+                                org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
+                    }
+                });
+                return EmptyTaskResult.INSTANCE;
             }, Duration.ofSeconds(1), Void.class);
             config.setLivable(() -> !closed);
         });
     }
 
     /**
-     * 每次只扫描一百条，扫描互斥；迟到超过三十秒不补跑动作。
-     * @return 本页实际执行及状态提交完成阶段
+     * 2026/11/05：只按当前空闲槽位读取到期索引，发现互斥，动作有界并发；迟到不补跑。
+     * @return 本批实际执行及状态提交完成阶段
      */
     public CompletionStage<Void> tick() {
         if (closed || !scanning.compareAndSet(false, true)) { return CompletableFuture.completedFuture(null); }
-        return store.page(cursor).thenCompose(tasks -> {
-            CompletionStage<Void> chain = CompletableFuture.completedFuture(null);
-            for (var task : tasks) { chain = chain.thenCompose(ignored -> dispatch(task)); }
-            return chain.thenRun(() -> cursor = tasks.size() < 100 ? "" : tasks.getLast().id().toString());
-        }).whenComplete((ignored, failure) -> scanning.set(false));
+        int available = executionSlots.availablePermits();
+        if (available == 0) { scanning.set(false); return CompletableFuture.completedStage(null); }
+        CompletionStage<List<AgentScheduledTask>> discovery;
+        try {
+            discovery = store.due(clock.instant(), available);
+        } catch (RuntimeException failure) {
+            scanning.set(false);
+            return CompletableFuture.failedStage(failure);
+        }
+        return discovery.handle((tasks, failure) -> {
+            var reserved = new ArrayList<AgentScheduledTask>();
+            try {
+                if (failure != null) { throw new java.util.concurrent.CompletionException(failure); }
+                for (var task : tasks) {
+                    if (!executionSlots.tryAcquire()) { break; }
+                    reserved.add(task);
+                }
+                return reserved;
+            } finally {
+                // 2026/11/05：先预留容量并结束发现，再启动动作，避免动作同步回调延长发现互斥。
+                scanning.set(false);
+            }
+        }).thenCompose(tasks -> {
+            var work = new ArrayList<CompletableFuture<Void>>();
+            for (var task : tasks) {
+                CompletionStage<Void> action;
+                try {
+                    action = dispatch(task);
+                } catch (RuntimeException rejected) {
+                    action = CompletableFuture.failedStage(rejected);
+                }
+                work.add(action.whenComplete((ignored, rejected) -> executionSlots.release()).toCompletableFuture());
+            }
+            return CompletableFuture.allOf(work.toArray(CompletableFuture[]::new));
+        });
     }
 
     /**

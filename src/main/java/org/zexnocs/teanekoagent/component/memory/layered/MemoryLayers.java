@@ -1,14 +1,17 @@
 package org.zexnocs.teanekoagent.component.memory.layered;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonType;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.utils.StableDigest;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 分层记忆的不可变数据契约，来源和处理覆盖与生成正文分开保存。
@@ -16,10 +19,11 @@ import java.util.UUID;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：摘要类型加入统一 JSON 输出声明及字段描述。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class MemoryLayers {
     /** 禁止实例化只提供数据契约的类型。 */
@@ -131,14 +135,19 @@ public final class MemoryLayers {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
      * @param brief 简短摘要
      * @param details 完整片段摘要，保留决定、纠正、重要日期及待办
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Digest(String brief, String details) {
+    // 2026/11/06：模型结构说明由类型生成，持久数据字段不变。
+    @LLMJsonType(maxCharacters = 8000)
+    public record Digest(
+            @Description("非空简短摘要，尽量200字内，最多600字。") String brief,
+            @Description("非空完整摘要，保留决定、纠正、重要日期和待办；尽量1200字内，最多4000字。") String details) {
         /**
          * 拒绝空摘要和超过既定容量的生成结果。
          * @param brief 简短摘要

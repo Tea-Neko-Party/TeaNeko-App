@@ -31,7 +31,8 @@ replacement-margin: 0.08
 # 依次为质量、独立人类、衰减频率、近期使用、类别稀缺；总和须为1。
 score-weights: [0.40, 0.20, 0.20, 0.10, 0.10]
 # 每次重定向均须仍在可信主机内。自建媒体主机须显式加入，私有地址另加 private-hosts。
-allowed-hosts: [gchat.qpic.cn, multimedia.nt.qq.com, '*.qpic.cn', '*.gtimg.cn']
+# 2026/11/05：补齐 NT 图片及平台表情素材的实际域名，不放开其他 qq.com 子域。
+allowed-hosts: [gchat.qpic.cn, multimedia.nt.qq.com, multimedia.nt.qq.com.cn, gxh.vip.qq.com, '*.qpic.cn', '*.gtimg.cn']
 private-hosts: []
 # 允许参与后台采集决策及只读提交通知的插件 ID，最多16项；仅安装插件不会自动获准。
 event-plugins: []

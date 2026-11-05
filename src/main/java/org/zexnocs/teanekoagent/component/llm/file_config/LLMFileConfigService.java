@@ -21,10 +21,11 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：路由身份覆盖保留基础 JSON 选项。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Service
 @RequiredArgsConstructor
@@ -82,12 +83,9 @@ public class LLMFileConfigService implements ILLMFileConfigService {
      * @return 文件默认参数
      */
     private LLMModelOptions defaults(LLMModelId modelId, @org.jspecify.annotations.Nullable ILLMModelOptions baseOptions) {
-        var base = LLMModelOptions.merge(
-                baseOptions,
-                LLMModelOptions.builder()
-                        .provider(modelId.id())
-                        .build()
-        );
+        // 2026/11/06：路由只修改 provider，不重置基础 JSON 格式。
+        var base = LLMModelOptions.copyOf(baseOptions);
+        base.setProvider(modelId.id());
         var entry = getConfig()
                 .findModelConfig(modelId)
                 .orElseThrow(() -> new LLMConfigurationException("Selected LLM route has no entry in model.yml."));

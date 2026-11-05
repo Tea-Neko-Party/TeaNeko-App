@@ -19,10 +19,11 @@ import java.util.UUID;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：容量结果单独公开缓存占用与持久删除决定数量。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class StickerManagement {
     /** 禁止实例化数据命名空间。 */ private StickerManagement(){}
@@ -246,12 +247,53 @@ public final class StickerManagement {
      * @param accountedBytes 保守占用
      * @param maxBytes 磁盘预算
      * @param categories 各主类别有效数
+     * @param cacheEntries 仍占缓存或文件的条目数，旧构造为 -1
+     * @param deletedDecisions 已回收文件的持久删除决定数，旧构造为 -1
+     * @param catalogCharacters 主目录 JSON 字符数，未知为 -1
+     * @param catalogCharacterLimit 主目录字符上限，未知为 -1
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
-    public record Capacity(int active,int disabled,int pending,int maxActive,long accountedBytes,long maxBytes,Map<String,Long> categories){
+    public record Capacity(int active,int disabled,int pending,int maxActive,long accountedBytes,long maxBytes,Map<String,Long> categories,
+                           long cacheEntries, long deletedDecisions, long catalogCharacters, long catalogCharacterLimit){
+        /**
+         * 2026/11/05：兼容旧宿主构造，未提供的独立容量以 -1 表示未知，不冒充为零。
+         * @param active 有效项
+         * @param disabled 人工停用项
+         * @param pending 在途作业
+         * @param maxActive 有效上限
+         * @param accountedBytes 实际计量
+         * @param maxBytes 字节上限
+         * @param categories 类别统计
+         */
+        public Capacity(int active, int disabled, int pending, int maxActive, long accountedBytes, long maxBytes,
+                Map<String, Long> categories) {
+            this(active, disabled, pending, maxActive, accountedBytes, maxBytes, categories, -1, -1);
+        }
+        /**
+         * 2026/11/05：原九参宿主可继续提供计数，不虚构持久容量。
+         * @param active 有效项
+         * @param disabled 停用项
+         * @param pending 在途项
+         * @param maxActive 有效上限
+         * @param accountedBytes 保守磁盘计量
+         * @param maxBytes 磁盘上限
+         * @param categories 类别统计
+         * @param cacheEntries 缓存条目
+         * @param deletedDecisions 删除决定
+         */
+        public Capacity(int active, int disabled, int pending, int maxActive, long accountedBytes, long maxBytes,
+                Map<String, Long> categories, long cacheEntries, long deletedDecisions) {
+            this(active, disabled, pending, maxActive, accountedBytes, maxBytes, categories, cacheEntries, deletedDecisions, -1, -1);
+        }
+
+        /** @return 2026/11/05：主目录达到字符上限的八成时告警，删除行总量不占用该额度 */
+        @com.fasterxml.jackson.annotation.JsonProperty("catalogNearLimit")
+        public boolean catalogNearLimit() {
+            return catalogCharacters >= 0 && catalogCharacterLimit > 0 && catalogCharacters >= catalogCharacterLimit * 4 / 5;
+        }
         /** 校验请求或固定集合。
          * @param active 有效项
          * @param disabled 人工停用项
@@ -260,6 +302,10 @@ public final class StickerManagement {
          * @param accountedBytes 保守占用
          * @param maxBytes 磁盘预算
          * @param categories 各主类别有效数
+         * @param cacheEntries 缓存条目数
+         * @param deletedDecisions 独立删除决定数
+         * @param catalogCharacters 主目录字符数
+         * @param catalogCharacterLimit 主目录字符上限
          */
         public Capacity{categories=Map.copyOf(categories);}
     }

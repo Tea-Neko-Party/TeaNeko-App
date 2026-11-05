@@ -21,17 +21,48 @@ import java.util.Map;
 /**
  * LLM 模型注解注册测试。
  * <br>验证模型服务只扫描带有 {@link LLMModel} 注解的接口实现，并使用注解 ID 注册模型。
- *
  * <br>2026/11/04：为配置别名查询声明空目录，保留未知模型拒绝断言。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 class LLMModelServiceRegistrationTest {
+    /**
+     * 2026/11/05：重扫发现期间保留旧快照，候选冲突后也不能发布空目录或半成品。
+     * @throws Exception 当有界线程协调失败时
+     */
+    @Test void reloadPublishesOnlyCompleteCatalogAndRetainsSnapshotOnConflict() throws Exception {
+        var scanner = Mockito.mock(IBeanScanner.class);
+        var annotation = Mockito.mock(LLMModel.class);
+        Mockito.when(annotation.id()).thenReturn("stable");
+        var original = Mockito.mock(ILLMModel.class);
+        var pair = IndependentPair.of(annotation, original);
+        Mockito.when(scanner.getBeansWithAnnotationAndInterface(LLMModel.class, ILLMModel.class)).thenReturn(Map.of("old", pair));
+        var service = new LLMModelService(scanner, Mockito.mock(ILLMFileConfigService.class), Mockito.mock(IDefaultModelResolver.class));
+        service.init();
+        var entered = new java.util.concurrent.CompletableFuture<Void>();
+        var release = new java.util.concurrent.CompletableFuture<Void>();
+        Mockito.when(scanner.getBeansWithAnnotationAndInterface(LLMModel.class, ILLMModel.class)).thenAnswer(call -> {
+            entered.complete(null);
+            release.orTimeout(5, java.util.concurrent.TimeUnit.SECONDS).join();
+            return Map.of("first", pair, "duplicate", pair);
+        });
+        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            var reload = java.util.concurrent.CompletableFuture.runAsync(service::reload, executor);
+            try {
+                entered.get(5, java.util.concurrent.TimeUnit.SECONDS);
+                Assertions.assertSame(original, service.getModel(LLMModelId.of("stable")));
+                Assertions.assertEquals(1, service.getModels().size());
+            } finally { release.complete(null); }
+            Assertions.assertThrows(java.util.concurrent.ExecutionException.class,
+                    () -> reload.get(5, java.util.concurrent.TimeUnit.SECONDS));
+            Assertions.assertSame(original, service.getModel(LLMModelId.of("stable")));
+            Assertions.assertEquals(1, service.getModels().size());
+        }
+    }
     /**
      * 验证注册 ID 完全来自注解，且不再执行纯接口扫描。
      */

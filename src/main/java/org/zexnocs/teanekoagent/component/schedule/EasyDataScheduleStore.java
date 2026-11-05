@@ -20,10 +20,11 @@ import java.util.function.UnaryOperator;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：活动到期索引与任务状态同事务维护，启动恢复补建历史索引。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class EasyDataScheduleStore {
     /**
@@ -76,12 +77,14 @@ public final class EasyDataScheduleStore {
             }
             boolean changed = java.util.Set.of(AgentScheduledTask.Status.ACTIVE, AgentScheduledTask.Status.RUNNING,
                     AgentScheduledTask.Status.PAUSED).contains(task.status());
+            var previousTask = task;
             if (changed) {
                 task = new AgentScheduledTask(task.id(), task.spec(), task.nextFire(), AgentScheduledTask.Status.CANCELLED,
                         Math.addExact(task.revision(), 1), "管理入口已取消未来计划；已开始的外部动作不能保证撤销");
                 taskRow.setValue(mapper.writeValueAsString(task));
                 guard.run();
                 tasks.save(taskRow);
+                index(previousTask, task);
             }
             var receipt = new ScheduleManagement.Receipt(query.operationId(), changed ? "APPLIED" : "UNCHANGED",
                     task.id().toString(), -1, task.revision(), "未来计划状态已确认；取消不表示在途外部动作已撤销。", now);
@@ -121,7 +124,9 @@ public final class EasyDataScheduleStore {
                 if (!old.spec().equals(task.spec())) { throw new IllegalArgumentException("任务请求标识已用于不同规格。"); }
                 return old;
             }
-            dto.save(dto.create(task.id().toString(), mapper.writeValueAsString(task))); return task;
+            dto.save(dto.create(task.id().toString(), mapper.writeValueAsString(task)));
+            index(null, task);
+            return task;
         });
     }
 
@@ -138,6 +143,8 @@ public final class EasyDataScheduleStore {
             var old = mapper.readValue(row.getValue(), AgentScheduledTask.class); var next = update.apply(old);
             if (!next.id().equals(old.id()) || !next.spec().equals(old.spec())) { throw new IllegalStateException("不能改变任务身份或原规格。"); }
             if (!next.equals(old)) { row.setValue(mapper.writeValueAsString(next)); dto.save(row); }
+            // 2026/11/05：恢复过程也修复旧部署缺少的到期索引，不能仅处理状态已变化的记录。
+            index(old, next);
             return next;
         });
     }
@@ -156,7 +163,9 @@ public final class EasyDataScheduleStore {
             }
             var dto = data.get("tasks").atomic(); var row = dto.find(expected.id().toString(), EasyDataLock.WRITE);
             if (row == null || !mapper.readValue(row.getValue(), AgentScheduledTask.class).equals(expected)) { return false; }
-            row.setValue(mapper.writeValueAsString(next)); dto.save(row); return true;
+            row.setValue(mapper.writeValueAsString(next)); dto.save(row);
+            index(expected, next);
+            return true;
         });
     }
 
@@ -181,5 +190,50 @@ public final class EasyDataScheduleStore {
         return data.transaction("分页读取 Agent 计划任务", () -> data.get("tasks").atomic()
                 .scan(after, null, 100, EasyDataLock.NONE).stream()
                 .map(row -> mapper.readValue(row.getValue(), AgentScheduledTask.class)).toList());
+    }
+
+    /**
+     * 2026/11/05：运行时只扫描已到期的活动索引，历史终态和远期任务不占用发现容量。
+     * @param now 当前绝对时间
+     * @param limit 当前可用执行槽位，最多一百项
+     * @return 经权威状态过滤的到期候选，执行权仍由后续版本交换决定
+     */
+    public CompletionStage<List<AgentScheduledTask>> due(java.time.Instant now, int limit) {
+        if (limit < 1 || limit > 100) { throw new IllegalArgumentException("计划发现容量无效。"); }
+        return data.transaction("读取到期 Agent 计划", () -> data.get("due").atomic()
+                .scan("", dueKey(now, new UUID(-1, -1)) + "~", limit, EasyDataLock.NONE).stream()
+                .map(link -> data.get("tasks").atomic().find(link.getValue(), EasyDataLock.NONE))
+                .filter(Objects::nonNull).map(row -> mapper.readValue(row.getValue(), AgentScheduledTask.class))
+                .filter(task -> task.status() == AgentScheduledTask.Status.ACTIVE && !task.nextFire().isAfter(now)).toList());
+    }
+
+    /**
+     * 2026/11/05：与权威任务同事务维护活动索引，不为终态保留扫描项。
+     * @param previous 旧状态，新任务为空
+     * @param next 已校验的新状态
+     */
+    private void index(@org.jspecify.annotations.Nullable AgentScheduledTask previous, AgentScheduledTask next) {
+        var index = data.get("due").atomic();
+        if (previous != null && previous.status() == AgentScheduledTask.Status.ACTIVE
+                && (next.status() != AgentScheduledTask.Status.ACTIVE || !previous.nextFire().equals(next.nextFire()))) {
+            var old = index.find(dueKey(previous.nextFire(), previous.id()), EasyDataLock.WRITE);
+            if (old != null) { index.delete(old); }
+        }
+        if (next.status() == AgentScheduledTask.Status.ACTIVE) {
+            String key = dueKey(next.nextFire(), next.id());
+            var row = index.find(key, EasyDataLock.WRITE);
+            if (row == null) { index.save(index.create(key, next.id().toString())); }
+        }
+    }
+
+    /**
+     * 为同一时间的任务生成稳定且可排序的索引键。
+     * @param at 绝对发生时间
+     * @param id 稳定任务 ID
+     * @return 纳秒精度固定宽度、按绝对时间排序的索引键
+     */
+    private static String dueKey(java.time.Instant at, UUID id) {
+        return java.time.format.DateTimeFormatter.ofPattern("uuuuMMddHHmmssSSSSSSSSS", java.util.Locale.ROOT)
+                .withZone(java.time.ZoneOffset.UTC).format(at) + ":" + id;
     }
 }

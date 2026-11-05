@@ -33,10 +33,12 @@ import java.util.concurrent.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：重新分析复用客户端发现缓存，连接资格仍在操作时读取。
  *
+ * <br>2026/11/05：容量查询区分缓存占用和删除决定，不暴露来源。
+ * <br>2026/11/05：分页合并独立删除记录，显式恢复与根目录容量及版本同事务仲裁。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.2-l
+ * @version 4.8.3-l
  */
 @Component
 public final class StickerManagementService {
@@ -84,21 +86,23 @@ public final class StickerManagementService {
      * @return 同快照分页及容量
      */
     public CompletionStage<StickerManagement.Page> query(ManagementContext context,StickerManagement.Query query){
-        return begin(context,StickerManagementResources.QUERY).thenCompose(s->finish(context,s,StickerManagementResources.QUERY,s.storage().catalog().change(s.settings(),state->{
+        return begin(context,StickerManagementResources.QUERY).thenCompose(s->finish(context,s,StickerManagementResources.QUERY,s.storage().catalog().transact(s.settings(),transaction->{
+            // 2026/11/05：管理分页查询删除索引，不加载所有历史墓碑。
+            var state = transaction.state();
             verify(context,s);var active=state.getEntries().values().stream().filter(e->e.getState()==Stickers.EntryStatus.ACTIVE).toList();var categories=new TreeMap<String,Long>();
             s.settings().categories().keySet().forEach(c->categories.put(c,active.stream().filter(e->e.getAnalysis()!=null&&e.getAnalysis().primaryCategory().equals(c)).count()));
             long bytes=state.getEntries().values().stream().map(Stickers.Entry::getBlob).filter(Objects::nonNull).mapToLong(Stickers.Blob::bytes).sum()+state.getJobs().values().stream().mapToLong(Stickers.Job::getReserved).sum();
-            var capacity=new StickerManagement.Capacity(active.size(),(int)state.getEntries().values().stream().filter(e->e.getState()==Stickers.EntryStatus.DISABLED).count(),(int)state.getJobs().values().stream().filter(StickerManagementService::pending).count(),s.settings().maxActive(),bytes,s.settings().maxStorageBytes(),categories);
+            var capacity=new StickerManagement.Capacity(active.size(),(int)state.getEntries().values().stream().filter(e->e.getState()==Stickers.EntryStatus.DISABLED).count(),(int)state.getJobs().values().stream().filter(StickerManagementService::pending).count(),s.settings().maxActive(),bytes,s.settings().maxStorageBytes(),categories,
+                    StickerLibrary.cacheSize(state), transaction.deletedCount(), transaction.catalogCharacters(),
+                    transaction.catalogCharacterLimit());
             if(query.kind()==StickerManagement.QueryKind.JOBS){
                 var jobs=state.getJobs().values().stream().filter(j->j.getId().toString().compareTo(query.after())>0).sorted(Comparator.comparing(j->j.getId().toString())).limit(query.limit()+1L).toList();
                 var page=jobs.stream().limit(query.limit()).map(j->new StickerManagement.JobView(j.getId(),j.getStatus(),j.getReason(),j.getStickerId(),j.getSource().scope(),j.isRefresh(),j.getCreated())).toList();
                 return new StickerManagement.Page(state.getRevision(),List.of(),page,jobs.size()>query.limit()?page.getLast().id().toString():"",capacity);
             }
-            var entries=state.getEntries().values().stream().filter(e->e.getId().compareTo(query.after())>0&&(query.state()==null||e.getState()==query.state())
-                    &&(query.category().isEmpty()||e.getAnalysis()!=null&&e.getAnalysis().primaryCategory().equals(query.category())))
-                    .sorted(Comparator.comparing(Stickers.Entry::getId)).limit(query.limit()+1L).toList();
-            var page=entries.stream().limit(query.limit()).map(StickerManagementService::view).toList();
-            return new StickerManagement.Page(state.getRevision(),page,List.of(),entries.size()>query.limit()?page.getLast().id():"",capacity);
+            var entries = transaction.page(query);
+            var page = entries.items().stream().map(StickerManagementService::view).toList();
+            return new StickerManagement.Page(state.getRevision(), page, List.of(), entries.next(), capacity);
         })));
     }
     /**
@@ -119,9 +123,11 @@ public final class StickerManagementService {
      */
     public CompletionStage<StickerManagement.ChangeResult> change(ManagementContext context,StickerManagement.Change request){
         String digest=StableDigest.sha256(mapper.writeValueAsString(request));
-        return begin(context,StickerManagementResources.CHANGE).thenComposeAsync(s->s.storage().catalog().change(s.settings(),state->{
+        return begin(context,StickerManagementResources.CHANGE).thenComposeAsync(s->s.storage().catalog().transact(s.settings(),transaction->{
+            // 2026/11/05：管理只载入一个目标，提交后删除项重新归档，不扩大主目录。
+            var state = transaction.state();
             verify(context,s);var previous=original(state,context,request,digest);if(previous!=null){return new Preparation(previous,null);}
-            var entry=entry(state,request.id(),request.expectedRevision());return new Preparation(null,entry.getBlob());
+            var entry=entry(transaction,request.id(),request.expectedRevision());return new Preparation(null,entry.getBlob());
         }).thenComposeAsync(prepared->{
             if(prepared.previous()!=null){return finish(context,s,StickerManagementResources.CHANGE,CompletableFuture.completedStage(replay(prepared.previous())));}
             Stickers.Source source=null;
@@ -132,11 +138,12 @@ public final class StickerManagementService {
                 volume=verifyVolume(s);
             }
             var fixedSource=source;var expectedVolume=volume;
-            return authorize(context,StickerManagementResources.CHANGE).thenCompose(ignored->s.storage().catalog().change(s.settings(),state->{
+            return authorize(context,StickerManagementResources.CHANGE).thenCompose(ignored->s.storage().catalog().transact(s.settings(),transaction->{
+                var state = transaction.state();
                 verify(context,s);var previous=original(state,context,request,digest);if(previous!=null){return replay(previous);}
                 var now=Instant.now();state.getOperations().values().removeIf(op->op.at().plus(Duration.ofHours(24)).isBefore(now));
                 if(state.getOperations().size()>=512){throw new IllegalStateException("管理操作回执窗口已满，请等待过期记录回收。");}
-                var e=entry(state,request.id(),request.expectedRevision());if(e.isDeleting()||e.getState()==Stickers.EntryStatus.DELETING){throw new IllegalStateException("素材字节正在回收，请稍后按最新版本操作。");}
+                var e=entry(transaction,request.id(),request.expectedRevision());if(e.isDeleting()||e.getState()==Stickers.EntryStatus.DELETING){throw new IllegalStateException("素材字节正在回收，请稍后按最新版本操作。");}
                 if(!expectedVolume.isEmpty()&&!state.getStorageIdentity().equals(expectedVolume)){throw new IllegalStateException("目录与实际素材卷不一致。");}
                 UUID jobId=null;switch(request.action()){
                     case PIN -> {existing(e);e.setPinned(true);}
@@ -144,7 +151,12 @@ public final class StickerManagementService {
                     case DISABLE -> {existing(e);e.setState(Stickers.EntryStatus.DISABLED);}
                     case ENABLE -> {if(e.getState()!=Stickers.EntryStatus.DISABLED){throw new IllegalStateException("只可启用已人工停用的素材。");}eligible(e,s.settings());capacity(state,e,s.settings());e.setState(Stickers.EntryStatus.ACTIVE);e.setActivatedAt(now);}
                     case DELETE -> {e.setState(Stickers.EntryStatus.DELETED);e.setPinned(false);}
-                    case RESTORE -> {if(e.getState()!=Stickers.EntryStatus.DELETED){throw new IllegalStateException("只有删除墓碑可以显式恢复。");}e.setState(e.getBlob()==null?Stickers.EntryStatus.CACHED:Stickers.EntryStatus.DISABLED);e.setCachedUntil(now);}
+                    case RESTORE -> {
+                        if(e.getState()!=Stickers.EntryStatus.DELETED){throw new IllegalStateException("只有删除墓碑可以显式恢复。");}
+                        if(e.getBlob()==null && StickerLibrary.cacheSize(state)>=2048){throw new IllegalStateException("素材缓存已满，请先释放容量再恢复。");}
+                        transaction.restoreDeleted(e);
+                        e.setState(e.getBlob()==null?Stickers.EntryStatus.CACHED:Stickers.EntryStatus.DISABLED);e.setCachedUntil(now);
+                    }
                     case PATCH -> {existing(e);var old=Objects.requireNonNull(e.getAnalysis());var details=Objects.requireNonNull(request.details());if(old.kind()!=Stickers.Kind.STICKER||!s.settings().categories().containsKey(details.category())){throw new IllegalArgumentException("只能修正表情包的受控类别和描述。");}
                         if(e.getState()==Stickers.EntryStatus.ACTIVE){capacityForCategory(state,e,details.category(),s.settings());}
                         e.setAnalysis(new Stickers.Analysis(old.kind(),old.confidence(),true,details.visualDescription(),details.usageDescription(),details.category(),details.tags(),old.quality(),"管理员修正用途与类别"));}
@@ -259,6 +271,24 @@ public final class StickerManagementService {
      * @return 固定当前版本条目
      */
     private static Stickers.Entry entry(Stickers.State state,String id,long revision){var e=state.getEntries().values().stream().filter(v->v.getId().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("素材不存在。"));if(e.getRevision()!=revision){throw new IllegalStateException("素材版本已变化，请读取最新版本。");}return e;}
+
+    /**
+     * 2026/11/05：载入一个独立删除项供原管理动作修改，版本校验和再归档仍在同一事务。
+     * @param transaction 原根事务
+     * @param id 公开标识
+     * @param revision 期望版本
+     * @return 本事务可修改的条目
+     * @throws IllegalArgumentException 当条目不存在时
+     * @throws IllegalStateException 当版本已经变化时
+     */
+    private static Stickers.Entry entry(StickerCatalogTransaction transaction, String id, long revision) {
+        var state = transaction.state();
+        if (state.getEntries().values().stream().noneMatch(value -> value.getId().equals(id))) {
+            var deleted = transaction.deletedById(id).orElseThrow(() -> new IllegalArgumentException("素材不存在。"));
+            state.getEntries().put(deleted.getHash(), deleted);
+        }
+        return entry(state, id, revision);
+    }
     /** @param e 原条目 */
     private static void existing(Stickers.Entry e){if(e.getBlob()==null||!Set.of(Stickers.EntryStatus.ACTIVE,Stickers.EntryStatus.DISABLED).contains(e.getState())){throw new IllegalStateException("此操作只适用于有文件的有效或人工停用素材。");}}
     /**

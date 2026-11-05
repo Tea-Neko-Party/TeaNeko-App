@@ -13,7 +13,6 @@ import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -31,10 +30,11 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/05：无参与插件的精简宿主无需插件目录。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Component
 public final class StickerEvents implements IStickerLifecycle {
@@ -79,8 +79,10 @@ public final class StickerEvents implements IStickerLifecycle {
     private Set<String> selected(){
         var names=List.copyOf(files.requireCurrent(AgentStickerFileConfig.class).getEventPlugins());
         if(names.size()>16||names.stream().anyMatch(v->!v.matches("[a-z][a-z0-9_.-]{0,63}"))||names.stream().distinct().count()!=names.size()){throw new IllegalArgumentException("素材事件插件列表无效。");}
-        var registry=plugins.getIfAvailable();if(registry==null&&!names.isEmpty()){throw new IllegalStateException("素材事件插件缺少原目录。");}
-        return names.stream().filter(Objects.requireNonNull(registry)::isEnabled).collect(java.util.stream.Collectors.toUnmodifiableSet());
+        // 2026/11/05：无插件选择的精简宿主无需插件目录，避免方法引用接收者被提前求值。
+        if (names.isEmpty()) { return Set.of(); }
+        var registry=plugins.getIfAvailable();if(registry==null){throw new IllegalStateException("素材事件插件缺少原目录。");}
+        return names.stream().filter(registry::isEnabled).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
     /** 观察失败按分钟合并，不输出原资料或链接。 */
     private void warn(){long now=System.currentTimeMillis(),previous=warning.get();if(now-previous>60000&&warning.compareAndSet(previous,now)){logger.error(StickerEvents.class.getName(),"素材提交通知未被全部观察；业务已提交，请按管理资源查询当前状态。");}}

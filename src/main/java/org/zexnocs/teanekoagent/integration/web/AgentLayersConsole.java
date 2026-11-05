@@ -4,6 +4,7 @@ package org.zexnocs.teanekoagent.integration.web;
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryJobs;
 
 import java.time.Instant;
 import java.util.List;
@@ -16,11 +17,12 @@ import java.util.UUID;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：展示后台整理状态并提供版本化暂停恢复。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class AgentLayersConsole {
     /** 禁止实例化契约容器。 */
@@ -32,7 +34,8 @@ public final class AgentLayersConsole {
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
-     * @param action READ、EDIT、FORGET 或 OPERATION
+     * <br>2026/11/05：新增 REPLAY 和 REPLAY_OPERATION，沿用固定空间和操作回执。
+     * @param action READ、EDIT、FORGET、OPERATION、REPLAY 或 REPLAY_OPERATION
      * @param namespace 空串使用当前绑定
      * @param generation 原代次，首次读取为 -1
      * @param subjectId 可选长期主体过滤
@@ -44,7 +47,7 @@ public final class AgentLayersConsole {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
     public record Query(String action, String namespace, long generation, @Nullable UUID subjectId, String topic,
             @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text) {
@@ -61,12 +64,14 @@ public final class AgentLayersConsole {
          * @throws IllegalArgumentException 当动作或参数范围无效时
          */
         public Query {
-            if (!Set.of("READ", "EDIT", "FORGET", "OPERATION").contains(action) || namespace == null
+            // 2026/11/05：恢复只接受已读取的作业版本，不混用长期条目版本。
+            if (!Set.of("READ", "EDIT", "FORGET", "OPERATION", "REPLAY", "REPLAY_OPERATION").contains(action) || namespace == null
                     || namespace.length() > 128 || generation < -1 || topic == null || topic.length() > 1024
                     || text != null && (text.isBlank() || text.length() > 512)
                     || !action.equals("READ") && (operationId == null || namespace.isBlank() || generation < 0)
                     || action.equals("EDIT") && (id == null || text == null || revision < 0)
-                    || action.equals("FORGET") && (id == null || text != null || revision < 0)) {
+                    || action.equals("FORGET") && (id == null || text != null || revision < 0)
+                    || action.equals("REPLAY") && (revision < 0 || id != null || text != null)) {
                 throw new IllegalArgumentException("分层记忆管理参数无效。");
             }
         }
@@ -121,11 +126,12 @@ public final class AgentLayersConsole {
      * @param episodes 最近至多六份中期摘要
      * @param compressedThrough 原压缩水位
      * @param longTerm 原有界长期召回，不冒充全量目录
+     * @param consolidation 当前分区整理状态，空间尚不存在时为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
     public record View(String namespace, long generation, List<Recent> recent, List<Episode> episodes,
-                       long compressedThrough, LongMemories.Result longTerm) {}
+                       long compressedThrough, LongMemories.Result longTerm, LongMemoryJobs.@Nullable Status consolidation) {}
 }

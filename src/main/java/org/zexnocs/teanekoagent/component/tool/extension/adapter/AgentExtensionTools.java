@@ -44,10 +44,11 @@ import static org.zexnocs.teanekoagent.component.tool.extension.AgentExtensionCa
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/05：向基础来源传递最终工具集依赖复核。
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class AgentExtensionTools {
     private static final String FRAGMENT = "agent_extensions";
@@ -342,6 +343,15 @@ public final class AgentExtensionTools {
      * @version 4.8.0-l
      */
     private record ToolSource(IAgentToolSource delegate, List<LLMToolBinding> bindings) implements IAgentToolSource {
+        /**
+         * 2026/11/05：扩展包装保留底层对最终工具依赖的复核。
+         * @param request 原请求
+         * @param input 实际布局
+         * @param selected 最终工具
+         */
+        @Override public void verifySelection(AgentRunRequest request, AgentPromptInput input, List<LLMToolBinding> selected) {
+            delegate.verifySelection(request, input, selected);
+        }
         /**
          * 旧入口没有布局时保持原工具策略。
          * @param definition 定义

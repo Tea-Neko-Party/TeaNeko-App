@@ -11,18 +11,26 @@ import org.zexnocs.teanekoagent.component.expression.AgentReplyPlan.Mode;
 import org.zexnocs.teanekoagent.component.expression.*;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentExpressionFileConfig;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentMediaReplyFileConfig;
+import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionService;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
+import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatCompletionMapper;
+import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatCompletionResponseData;
 import org.zexnocs.teanekoagent.component.memory.adapter.EasyDataDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.history.AgentDeliveryService;
 import org.zexnocs.teanekoagent.component.sticker.*;
@@ -30,11 +38,13 @@ import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileCo
 import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
+import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
 import org.zexnocs.teanekoagent.runtime.*;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
+import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.fake_client.FakeClient;
 import org.zexnocs.teanekoapp.fake_client.FakeTeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -42,6 +52,8 @@ import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContentPart;
 import org.zexnocs.teanekoclient.onebot.agent.OnebotExpressionClient;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
+import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
@@ -60,6 +72,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
@@ -69,25 +82,39 @@ import static org.mockito.Mockito.*;
 /**
  * 复用事务与平台夹具验证从完整目录到独立发送、回执、回避及实际文件占用的闭环。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：验证生产插件令牌往返、哈希碰撞键序和资源防篡改。
- *
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：空图库明确提供空类别，未启用媒体能力不产生空值异常。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：补充真实工具目录、供应商协议纠正、图片交付及目录失效的离线闭环。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class MediaReplyIntegrationTest{
     @TempDir Path directory;
+
+    /** 2026/11/05：空图库与原生表情关闭时仍说明本轮资源状态，缺少表达能力则不注入资料。 */
+    @Test
+    void explainsEmptyGalleryWithoutInventingResources() {
+        try (var h = new Harness(directory); var control = ExecutionControl.create()) {
+            h.scope.setNativeExpressionsEnabled(false);
+            var request = h.request("空图库");
+            var input = h.input(request, control);
+            var fragment = input.fragments().stream().filter(value -> value.name().equals(StickerReplyService.FRAGMENT))
+                    .findFirst().orElseThrow();
+            assertTrue(fragment.text().contains("\"categories\":[]"));
+            assertTrue(fragment.text().contains("收藏不等于发送"));
+            assertFalse(h.service.canList(request, input));
+            h.scope.setExpressionEnabled(false);
+            assertTrue(h.service.fragments(request, control).toCompletableFuture().join().isEmpty());
+        }
+    }
     /** 2026/11/04：资源签名必须能经实际应用的 Jackson 模块往返，普通文字不能被表情资料阻断。 */
     @Test
     void resourcesRoundTripWithApplicationMapper() {
@@ -109,16 +136,167 @@ class MediaReplyIntegrationTest{
                 assertDoesNotThrow(() -> h.service.verify(request, input, control).toCompletableFuture().join());
                 if (size == 2) {
                     // 2026/11/04：规范化只消除键顺序差异，不允许修改目录内容后沿用原签名。
-                    var changed = input.fragments().stream().map(fragment -> fragment.name().equals(StickerReplyService.FRAGMENT)
+                    var changed = input.fragments().stream().map(fragment -> fragment.name().equals(NativeFaceService.FRAGMENT)
                             ? new AgentPromptFragment(fragment.name(), fragment.text().replace("微笑", "篡改描述"),
                             fragment.expiresAt(), fragment.transientToolResults()) : fragment).toList();
                     var tampered = new AgentPromptInput(request.messages(), changed, 0);
-                    assertThrows(CompletionException.class, () -> h.service.verify(request, tampered, control)
-                            .toCompletableFuture().join());
+                    assertThrows(IllegalArgumentException.class, () -> h.context.getBean(NativeFaceService.class).verify(request, tampered));
                 }
             }
         }
     }
+    /**
+     * 2026/11/05：通过真实组件选择链验证表达独立提供 FACE，加入工具或图库仍只保留一份目录。
+     * @throws Exception 当有界离线发送等待失败时
+     */
+    @Test
+    void expressionAssemblyProvidesNativeFacesWithoutGalleryAccess() throws Exception {
+        try (var h = new Harness(directory); var control = ExecutionControl.create()) {
+            // 2026/11/05：复用相同组件宿主验证单独表达及完整图库链。
+            var host = h.host();
+            for (String extras : List.of("", ",\"tool\":{}", ",\"tool\":{},\"sticker\":{}")) {
+                var assembly = org.zexnocs.teanekoagent.component.AgentAssembly.parse(
+                        "{\"version\":1,\"components\":{\"llm\":{},\"expression\":{}" + extras + "}}");
+                var definition = new org.zexnocs.teanekoagent.runtime.AgentDefinition("原生表情",
+                        new org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot(null), Set.of(AgentActivity.COMMAND), Set.of(), assembly);
+                var request = h.request("独立表情" + extras.length());
+                // 未装图库时只要发生图库事务就使测试失败，验证目录和 FACE 发送都不借用该写锁。
+                h.db.beforeTask.set(name -> {
+                    if (extras.isEmpty() && name.contains("表情包")) { throw new AssertionError("原生表情不应访问图库事务"); }
+                });
+                var fragments = host.prompts(org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.empty())
+                        .resolve(definition, request, null, control).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                assertEquals(1, fragments.stream().filter(fragment -> fragment.name().equals(NativeFaceService.FRAGMENT)).count());
+                var input = new AgentPromptInput(request.messages(), fragments, 0);
+                String nonce = ExpressionRuntime.nonce(request.requestId());
+                var interaction = h.interaction(request, input, null, "⟦TNK:" + nonce + "|FACE|id=14|wait=0⟧");
+                var plan = Objects.requireNonNull(h.runtime.compile(request, input, interaction, control).toCompletableFuture().get(5, TimeUnit.SECONDS));
+                h.send(request, plan).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            }
+            assertEquals(3, h.client.getSentMessages().size());
+        }
+    }
+
+    /**
+     * 2026/11/05：从用户样例纠正到真实结构化查询，经过生产协议映射、资料签名和独立图片交付。
+     * @throws Exception 当有界离线等待或本地图片编码失败时
+     */
+    @Test
+    void correctsDsmlAndSendsStickerThroughActualComponentTools() throws Exception {
+        var settings = LLMInteractionSettings.defaults();
+        try (var h = new Harness(directory, true);
+             var control = ExecutionControl.withDeadline(settings.limits().newBudget(),
+                     Instant.now().plusSeconds(15), Clock.systemUTC(), h.timers)) {
+            var sticker = h.seed(7);
+            var host = h.host();
+            var assembly = org.zexnocs.teanekoagent.component.AgentAssembly.parse(
+                    "{\"version\":1,\"components\":{\"llm\":{},\"expression\":{},\"tool\":{},\"sticker\":{}}}");
+            var definition = new AgentDefinition("测试表情包", new LLMModelOptionsSnapshot(null),
+                    Set.of(AgentActivity.COMMAND, AgentActivity.TOOL), Set.of(), assembly);
+            var request = h.request("主动要表情包");
+            var runtime = new AgentRuntimeSnapshot(new LLMModelOptionsSnapshot(null), ModelCapabilities.textOnly(), settings);
+            var fragments = host.prompts(org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.empty())
+                    .resolve(definition, request, runtime, control).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var snapshot = EntitySnapshot.of(EntityId.random(), ComponentPatch.builder()
+                    .put(AgentPluginRuntime.SELECTION, host.select(definition))
+                    .put(AgentComponents.ACTOR, request.actor()).build());
+            var input = host.stamp(new AgentPromptInput(request.messages(), fragments, 0), snapshot);
+            var source = host.tools((selected, call, state) -> List.of());
+            var bindings = source.select(definition, request, runtime, input);
+            source.verifySelection(request, input, bindings);
+            assertEquals(List.of("sticker_list"), bindings.stream().map(binding -> binding.definition().getName()).toList());
+            assertThrows(StickerReplyException.class, () -> source.verifySelection(request, input, List.of()));
+            var models = mock(ILLMModelService.class);
+            var attempts = new AtomicInteger();
+            var mapper = h.context.getBean(tools.jackson.databind.ObjectMapper.class);
+            when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
+                ILLMPrompt prompt = call.getArgument(0);
+                var wire = DeepSeekChatCompletionMapper.toRequest(prompt, LLMModelOptions.copyOf(prompt.getOptions()),
+                        "https://offline.invalid", "/chat/completions", "离线测试凭据");
+                var sent = mapper.valueToTree(wire);
+                assertEquals("sticker_list", sent.path("tools").get(0).path("function").path("name").asString());
+                var schema = sent.path("tools").get(0).path("function").path("parameters");
+                assertTrue(schema.path("properties").has("categoryId"));
+                assertEquals("categoryId", schema.path("required").get(0).asString());
+                int attempt = attempts.incrementAndGet();
+                String finish = attempt == 2 ? "tool_calls" : "stop";
+                Map<String, Object> message;
+                if (attempt == 1) {
+                    assertEquals("auto", sent.path("tool_choice").asString());
+                    assertTrue(mapper.writeValueAsString(sent.path("messages")).contains("happy"));
+                    message = Map.of("role", "assistant", "content",
+                            "<｜｜DSML｜｜ calls>\n<｜｜DSML｜｜ invoke name=\"sticker_list\">\n\n"
+                                    + "</｜｜DSML｜｜ invoke>\n</｜｜DSML｜｜ calls>");
+                } else if (attempt == 2) {
+                    assertEquals("auto", sent.path("tool_choice").asString());
+                    message = Map.of("role", "assistant", "content", "", "reasoning_content", "离线透明状态",
+                            "tool_calls", List.of(Map.of("id", "real-list", "type", "function", "function",
+                                    Map.of("name", "sticker_list", "arguments", "{\"categoryId\":\"happy\"}"))));
+                } else {
+                    assertEquals(3, attempt);
+                    assertEquals("none", sent.path("tool_choice").asString());
+                    var tool = prompt.getMessages().stream().filter(value -> "tool".equals(value.getRole().getValue()))
+                            .findFirst().orElseThrow();
+                    var page = mapper.readValue(assertInstanceOf(TextLLMContentPart.class,
+                            tool.getContents().getFirst().getContentPart()).getText(), MediaReplies.Page.class);
+                    assertTrue(page.complete());
+                    assertEquals(sticker.getId(), page.items().getFirst().id());
+                    String head = "⟦TNK:" + ExpressionRuntime.nonce(request.requestId()) + "|";
+                    message = Map.of("role", "assistant", "content", head + "BEGIN|protocol=teaneko:expression|v=1⟧\n"
+                            + head + "STICKER|id=" + page.items().getFirst().id() + "|mode=reply|wait=0⟧\n" + head + "END⟧");
+                }
+                var response = mapper.convertValue(Map.of("choices", List.of(
+                        Map.of("index", 0, "finish_reason", finish, "message", message))), DeepSeekChatCompletionResponseData.class);
+                return new TaskFuture<>(h.logger, "离线表情包模型", CompletableFuture.completedFuture(
+                        DeepSeekChatCompletionMapper.toResult(response)));
+            });
+            var interactions = new LLMInteractionService(models, () -> settings, h.workers, h.timers);
+            var result = interactions.interact(new LLMPrompt(input.messages()), new LLMToolSet(mapper, bindings),
+                    new ToolInvocationContext(request.requestId(), snapshot, control)).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertEquals(LLMInteractionResult.Status.SUCCESS, result.status(), () -> String.valueOf(result.failure()));
+            assertEquals(3, result.modelAttempts());
+            assertEquals(1, result.tools().size());
+            assertEquals(ToolInvocationResult.Status.SUCCESS, result.tools().getFirst().status());
+            var plan = Objects.requireNonNull(h.runtime.compile(request, input, result, control)
+                    .toCompletableFuture().get(5, TimeUnit.SECONDS));
+            h.send(request, plan).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var messages = h.client.getSentMessages();
+            assertEquals(1, messages.size());
+            assertEquals(2, messages.getFirst().getMessages().size());
+            assertEquals(1, messages.getFirst().getMessages().stream()
+                    .filter(part -> part.getContentPart() instanceof IReplyTeaNekoContentPart).count());
+            assertTrue(messages.getFirst().getMessages().stream().anyMatch(part ->
+                    part.getContentPart() instanceof IImageTeaNekoContentPart image && image.getUrl().startsWith("base64://")));
+            assertEquals(1, h.state().getEntries().get(sticker.getHash()).getRobotShows());
+        }
+    }
+
+    /**
+     * 2026/11/05：目录变更、资料被改写或工具被过滤都明确报错，不谎报为空图库。
+     * @throws Exception 当本地图片编码失败时
+     */
+    @Test
+    void distinguishesUnavailableDirectoryFromEmptyGallery() throws Exception {
+        try (var h = new Harness(directory, true); var control = ExecutionControl.create()) {
+            h.seed(8);
+            var request = h.request("目录检查");
+            var input = h.input(request, control);
+            assertTrue(h.service.canList(request, input));
+            var changed = input.fragments().stream().map(fragment -> fragment.name().equals(StickerReplyService.FRAGMENT)
+                    ? new AgentPromptFragment(fragment.name(), fragment.text().replace("\"happy\"", "\"angry\""),
+                    fragment.expiresAt(), fragment.transientToolResults()) : fragment).toList();
+            var tampered = new AgentPromptInput(request.messages(), changed, 0);
+            var failure = assertThrows(StickerReplyException.class, () -> h.service.canList(request, tampered));
+            assertTrue(failure.failureReason().contains("并非图库为空"));
+            var recheck = assertThrows(CompletionException.class,
+                    () -> h.service.verify(request, tampered, control).toCompletableFuture().join());
+            assertInstanceOf(StickerReplyException.class, recheck.getCause());
+            h.scope.setStickerReplyEnabled(false);
+            assertThrows(StickerReplyException.class, () -> h.service.canList(request, input));
+            assertFalse(h.service.canList(request, h.input(request, control)));
+        }
+    }
+
     /**
      * 测试客户端显式声明媒体能力，实际编码直接借用已注册 OneBot 适配器。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
@@ -170,11 +348,13 @@ class MediaReplyIntegrationTest{
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/05：夹具提供现有客户端目录依赖，不连接真实客户端。
+     * <br>2026/11/05：复用组件宿主完成模型到图片发送的离线验证。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
     private static final class Harness implements AutoCloseable{
         // 2026/11/04：在单个夹具内切换碰撞键集合，覆盖生产令牌的嵌套 Map。
@@ -213,13 +393,38 @@ class MediaReplyIntegrationTest{
                 when(plugins.isEnabled(anyString())).thenReturn(true);
                 beans.registerSingleton("plugins", plugins);
             }
+            // 2026/11/05：素材策略使用已发布客户端目录，独立测试提供该依赖而不启动平台连接。
+            beans.registerSingleton("clients", mock(TeaNekoClientScanner.class));
             beans.registerSingleton("manager",new AgentScopeConfigManager());beans.registerSingleton("virtualExecutor",workers);beans.registerSingleton("taskExecutor",timers);beans.registerSingleton("logger",logger);beans.registerSingleton("scanner",new BeanScanner(context,logger));
             beans.registerSingleton("ledger",new AgentDeliveryService(ledger,workers,Clock.systemUTC(),()->Duration.ofDays(7)));
             context.register(org.zexnocs.teanekoagent.component.expression.configuration.AgentExpressionConfig.class,org.zexnocs.teanekoagent.component.sticker.configuration.AgentStickerConfig.class,
                     EasyDataStickerCatalog.class, LocalStickerAssets.class, WeightedStickerAdmission.class,OnebotExpressionClient.class,ClientAdapter.class,StickerReplyService.class,StickerReplyTools.class,MediaReplyFeature.class,
-                    ExpressionReplyProtocol.class,TextReplyDirective.class,PlainReplyProtocol.class,JsonReplyProtocol.class,TextReplyHandler.class,ImageReplyHandler.class,StickerReplyDirective.class,FaceReplyDirective.class,StickerReplyHandler.class,FaceReplyHandler.class,ExpressionDelivery.class);
+                    ExpressionReplyProtocol.class,TextReplyDirective.class,PlainReplyProtocol.class,JsonReplyProtocol.class,TextReplyHandler.class,ImageReplyHandler.class,StickerReplyDirective.class,FaceReplyDirective.class,StickerReplyHandler.class,FaceReplyHandler.class,ExpressionDelivery.class,NativeFaceService.class);
             context.refresh();verifyNoInteractions(files,configs,bridge);catalog=context.getBean(IStickerCatalog.class);assets=context.getBean(LocalStickerAssets.class);service=context.getBean(StickerReplyService.class);tools=context.getBean(StickerReplyTools.class);runtime=context.getBean(ExpressionRuntime.class);queue=context.getBean(ReplyCoordinator.class);delivery=context.getBean(ExpressionDelivery.class);
             db.store.create(new MemoryNamespace(MemoryNamespaceId.SHARED,0,0,Instant.now(),null,null),10).toCompletableFuture().join();
+        }
+        /**
+         * 2026/11/05：装配测试所需真实组件及媒体工具，省略无关业务工具。
+         * @return 持有独立插件目录的宿主
+         */
+        AgentPluginRuntime host() {
+            var beans = context.getBeanFactory();
+            var plugins = new org.zexnocs.teanekocore.plugin.PluginRegistry(List.of(
+                    () -> new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent", "1", 1, Set.of())));
+            var features = List.<org.zexnocs.teanekoagent.plugin.AgentFeature>of(
+                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "llm",
+                            new org.zexnocs.teanekoagent.component.llm.LLMComponent(mock(org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser.class))),
+                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "expression",
+                            new ExpressionComponent(new ExpressionCompileSystem(beans.getBeanProvider(ExpressionRuntime.class)))),
+                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "tool",
+                            new org.zexnocs.teanekoagent.component.tool.ToolComponent()),
+                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "sticker", new StickerComponent()),
+                    new ExpressionFeature(runtime, context.getBean(NativeFaceService.class)),
+                    context.getBean(MediaReplyFeature.class),
+                    new org.zexnocs.teanekoagent.plugin.SourceAgentFeature("teaneko.agent", "builtin-tools", true,
+                            (definition, request, state) -> List.of(), org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.empty()));
+            return new AgentPluginRuntime(plugins, features,
+                    beans.getBeanProvider(org.zexnocs.teanekocore.event.interfaces.IEventService.class));
         }
         /**
          * @param group 真实区域
@@ -231,7 +436,7 @@ class MediaReplyIntegrationTest{
          * @param control 当前控制
          * @return 原表达与真实资源资料
          */
-        AgentPromptInput input(AgentRunRequest request,ExecutionControl control){var fragments=new ArrayList<AgentPromptFragment>();fragments.add(new AgentPromptFragment(ExpressionRuntime.FRAGMENT,runtime.contract(request)));fragments.addAll(service.fragments(request,control).toCompletableFuture().join());return new AgentPromptInput(request.messages(),fragments,0);}
+        AgentPromptInput input(AgentRunRequest request,ExecutionControl control){var fragments=new ArrayList<AgentPromptFragment>();fragments.add(new AgentPromptFragment(ExpressionRuntime.FRAGMENT,runtime.contract(request)));fragments.addAll(context.getBean(NativeFaceService.class).fragments(request));fragments.addAll(service.fragments(request,control).toCompletableFuture().join());return new AgentPromptInput(request.messages(),fragments,0);}
         /**
          * @param value 区分原图的像素
          * @return 发布并激活的真实文件条目
@@ -352,8 +557,9 @@ class MediaReplyIntegrationTest{
             assertEquals(sad.getId(),h.service.sticker(new ReplyCompileContext(request,input,control,List.of(output,validTool),List.of()),sad.getId()).toCompletableFuture().join().item().id());
             assertThrows(CompletionException.class,()->h.service.list(request,input,"thanks",control).toCompletableFuture().join());
             assertThrows(IllegalArgumentException.class,()->new StickerReplyDirective().parse(new ReplyPlans.Directive("STICKER",Map.of("id","valid_id","mode","at"),"")));
-            var permit=h.service.face(new ReplyCompileContext(request,input,control),"14");h.scope.setNativeExpressionsEnabled(false);
-            assertThrows(CompletionException.class,()->h.service.sendFace(new ReplySendContext(h.sources.get(request.requestId()),request,0,control,()->CompletableFuture.completedStage(null)),permit,Mode.PLAIN).toCompletableFuture().join());assertTrue(h.client.getSentMessages().isEmpty());
+            var faces = h.context.getBean(NativeFaceService.class);
+            var permit=faces.face(new ReplyCompileContext(request,input,control),"14");h.scope.setNativeExpressionsEnabled(false);
+            assertThrows(CompletionException.class,()->faces.sendFace(new ReplySendContext(h.sources.get(request.requestId()),request,0,control,()->CompletableFuture.completedStage(null)),permit,Mode.PLAIN).toCompletableFuture().join());assertTrue(h.client.getSentMessages().isEmpty());
         }
     }
 }

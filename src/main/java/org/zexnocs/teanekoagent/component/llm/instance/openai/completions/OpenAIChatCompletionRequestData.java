@@ -20,10 +20,11 @@ import java.util.Map;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：响应格式字段支持完整嵌套 JSON Schema。
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Getter
 @Setter
@@ -96,7 +97,8 @@ public class OpenAIChatCompletionRequestData implements IAPIRequestData {
 
     /** 输出格式。 */
     @JsonProperty("response_format")
-    private Map<String, String> responseFormat;
+    // 2026/11/06：Schema 模式包含嵌套结构，不能限制为字符串值。
+    private Map<String, Object> responseFormat;
 
     /** Function Tool 定义。 */
     private List<Map<String, Object>> tools;

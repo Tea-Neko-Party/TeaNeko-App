@@ -66,6 +66,8 @@ models:
 
 DeepSeek 返回的 `choices` 会转换为 `LLMChoice`，`message.tool_calls` 会转换为 `LLMToolCall`，`usage` 会转换为 `LLMUsage`，包括 cache hit/miss token 和 reasoning token。
 
+`reasoning_content` 作为供应商元数据保存，工具续轮时回传，不作为聊天正文。工具预算耗尽后，已有工具历史的请求仍保留本轮获准的工具定义，同时设置 `tool_choice=none`；执行预算不会因此恢复。正文泄漏 DSML 时，由[有限交互](../../framework/interaction/README.md#内部工具标记泄漏)在原预算内至多纠正一次；不把标记当成工具执行，也不直接发送给用户。
+
 当前适配器使用 `org.zexnocs.teanekocore.api_response` 统一发起 API 请求，不直接创建 `WebClient`。
 
 

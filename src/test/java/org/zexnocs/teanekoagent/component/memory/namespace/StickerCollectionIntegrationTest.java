@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.component.sticker.*;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
@@ -37,15 +38,14 @@ import static org.mockito.Mockito.mock;
  * 复用原真实 DTO 事务夹具验证共享图库、一次分析、持久作业及资源回收。
  * <br>2026/11/03：管理收尾复用同一夹具，避免建立第二套事务替身。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
+ * <br>2026/11/05：采集调用边界验证真实模型交互必需的父预算，防止模拟视觉端口掩盖空预算错误。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 @Timeout(20)
 class StickerCollectionIntegrationTest {
@@ -57,11 +57,12 @@ class StickerCollectionIntegrationTest {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/05：视觉替身保留真实交互的宿主预算契约。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.3-l
      */
     @TeaNekoStickerAnalyzer("test") public static final class Analyzer implements IStickerAnalyzer {
         final AtomicInteger calls=new AtomicInteger();
@@ -74,6 +75,7 @@ class StickerCollectionIntegrationTest {
          */
         @Override public boolean ready(Stickers.Source source, StickerSettings settings){return true;}
         /**
+         * 2026/11/05：同真实 LLM 预检一样读取三个预算维度，缺少声明时测试立即失败。
          * @param source 来源
          * @param prepared 真实预览
          * @param settings 配置
@@ -81,6 +83,9 @@ class StickerCollectionIntegrationTest {
          * @return 一次离线判定
          */
         @Override public CompletionStage<Stickers.Analysis> analyze(Stickers.Source source, IStickerAssetStore.Prepared prepared, StickerSettings settings, ExecutionControl control){
+            assertEquals(1, control.budget().remaining(LLMCallLimits.MODEL_REQUESTS));
+            assertEquals(0, control.budget().remaining(LLMCallLimits.TOOL_ROUNDS));
+            assertEquals(0, control.budget().remaining(LLMCallLimits.TOOL_EXECUTIONS));
             calls.incrementAndGet();assertFalse(prepared.previews().isEmpty());return pending==null?CompletableFuture.completedStage(analysis(kind.get())):pending;
         }
     }
@@ -139,6 +144,43 @@ class StickerCollectionIntegrationTest {
         /** 释放本测试拥有的资源，随后关闭事务夹具。 */
         @Override public void close(){service.close();executor.close();scheduler.shutdownNow();context.close();db.close();}
     }
+    /**
+     * 2026/11/05：已回收文件的删除决定不挤占新缓存，同图再次出现仍不得复活。
+     * @throws Exception 当本地图像编码失败时
+     */
+    @Test
+    void reclaimedDeletionDecisionsDoNotFillAnalysisCache() throws Exception {
+        try (var h = new Harness(directory)) {
+            String blocked = org.zexnocs.teanekocore.utils.StableDigest.sha256("已删除图片");
+            h.catalog.change(h.file.snapshot(), state -> {
+                for (int index = 0; index < 2048; index++) {
+                    var entry = new Stickers.Entry();
+                    entry.setHash(index == 0 ? blocked : org.zexnocs.teanekocore.utils.StableDigest.sha256("删除" + index));
+                    entry.setId("stk_" + entry.getHash().substring(0, 32));
+                    entry.setState(Stickers.EntryStatus.DELETED);
+                    entry.setCreated(Instant.now());
+                    state.getEntries().put(entry.getHash(), entry);
+                }
+                return true;
+            }).toCompletableFuture().join();
+            assertEquals(Stickers.JobStatus.SAVED, h.collect(source("群甲", png(11))).getStatus());
+            assertEquals(1, StickerLibrary.cacheSize(h.state()));
+            var settings = h.file.snapshot();
+            var ports = h.registry.select(settings);
+            var receipt = h.library.offer(source("群乙", png(12))).toCompletableFuture().join();
+            var work = h.library.claim(settings, ports, ports.assets().identity(settings)).toCompletableFuture().join().orElseThrow();
+            assertEquals(receipt.jobId(), work.job().getId());
+            try (var control = ExecutionControl.create()) {
+                assertEquals("DONE", h.library.attach(settings, ports, work,
+                        new Stickers.Blob(blocked, "png", 32, 8, 8, 1), control).toCompletableFuture().join());
+            }
+            assertEquals("MANAGED_BLOCKED", h.state().getJobs().get(receipt.jobId()).getReason());
+            // 2026/11/05：主目录只保留有界活动状态，人工决定已按指纹独立存储。
+            assertEquals(1, h.state().getEntries().size());
+            assertEquals(2048, h.catalog.transact(settings, StickerCatalogTransaction::deletedCount).toCompletableFuture().join());
+        }
+    }
+
     /**
      * 同图跨 scope 只分析一次，画作拒绝也缓存；重建宿主后仍能继续并回收损坏素材。
      * @throws Exception 当本地图像编码失败时

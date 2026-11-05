@@ -18,10 +18,11 @@ import java.util.Objects;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：完整输入预算计入结构化输出 Schema。
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.3-l
  */
 public final class JsonLLMTokenEstimator implements ILLMTokenEstimator {
     private final ObjectMapper mapper;
@@ -44,7 +45,14 @@ public final class JsonLLMTokenEstimator implements ILLMTokenEstimator {
         var tools = options == null ? List.of() : options.findTools().orElse(List.of());
         var metadata = options == null ? Map.of() : options.getMetadata();
         var output = new CountingOutput();
-        mapper.writeValue(output, Map.of("messages", prompt.getMessages(), "tools", tools, "metadata", metadata));
+        // 2026/11/06：结构描述作为供应商请求的一部分计入完整预算，不能免费追加。
+        var schema = options == null ? Map.of() : options.findResponseSchema().map(value -> value.schema()).orElse(Map.of());
+        var payload = new java.util.LinkedHashMap<String, Object>();
+        payload.put("messages", prompt.getMessages());
+        payload.put("tools", tools);
+        payload.put("metadata", metadata);
+        if (!schema.isEmpty()) { payload.put("responseSchema", schema); }
+        mapper.writeValue(output, payload);
         long overhead = 256L + 64L * prompt.getMessages().size() + 256L * tools.size();
         long tokens = output.count > Long.MAX_VALUE - overhead ? Long.MAX_VALUE : output.count + overhead;
         return new LLMTokenEstimate(tokens, "utf8-json-v1");
