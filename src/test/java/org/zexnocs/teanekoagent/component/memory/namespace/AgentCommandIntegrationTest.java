@@ -5,6 +5,9 @@ package org.zexnocs.teanekoagent.component.memory.namespace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
+import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.zexnocs.teanekoagent.component.AgentAssembly;
 import org.zexnocs.teanekoagent.component.expression.ExpressionSettings;
 import org.zexnocs.teanekoagent.component.expression.ReplyCoordinator;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
@@ -50,6 +53,7 @@ import org.zexnocs.teanekoagent.component.tool.command.CommandInvocationReceipt;
 import org.zexnocs.teanekoagent.component.tool.command.ICommandAttemptStore;
 import org.zexnocs.teanekoagent.configuration.file_config.personality.AgentPersonalityFileConfig;
 import org.zexnocs.teanekoagent.integration.command.*;
+import org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy;
 import org.zexnocs.teanekoagent.integration.config.AgentNamespaceConfigFields;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
@@ -69,6 +73,7 @@ import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
 import org.zexnocs.teanekoapp.command.TeaNekoCommandConverter;
 import org.zexnocs.teanekoapp.command.TeaNekoCommandErrorHandler;
+import org.zexnocs.teanekoapp.command.TeaNekoCommandReceiver;
 import org.zexnocs.teanekoapp.command.TeaNekoHelpSubCommandHandler;
 import org.zexnocs.teanekoapp.config.TeaNekoConfigCommand;
 import org.zexnocs.teanekoapp.fake_client.FakeClient;
@@ -77,6 +82,7 @@ import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
+import org.zexnocs.teanekoclient.web.*;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
@@ -88,8 +94,8 @@ import org.zexnocs.teanekocore.command.*;
 import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.command.easydata.CommandEasyData;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
-import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataQueryService;
-import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
+import org.zexnocs.teanekocore.database.configdata.ConfigDataService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.*;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManagerScanner;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
@@ -99,11 +105,17 @@ import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
+import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
+import org.zexnocs.teanekocore.utils.scanner.ClassScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -133,8 +145,10 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：覆盖协调器取消提示、准入等待超时及迟到结果不再启动模型。
+ * <br>2026/11/05：超时提示经过真实配置服务转发，验证失败回执策略使用管理器实例。
  *
  * <br>2026/11/05：验证自动失败原因与开关、撤权边界。
+ * <br>2026/11/05：验证网页私聊的最小装配经过真实事件总线完成自动和命令回复。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -143,6 +157,84 @@ import static org.mockito.Mockito.*;
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
+    /**
+     * 2026/11/05：网页私聊经真实消息事件、监听器、命令与自动 Agent 链写回原房间。
+     * @throws Exception 当网页入站或模型回复未在有界时间内结束时
+     */
+    @Test
+    void webPrivateMessagesReachAgentThroughOriginalEventBus() throws Exception {
+        try (var h = new Harness(false, false, false); var automatic = automatic(h);
+             var context = new AnnotationConfigApplicationContext()) {
+            h.automaticAnswer.set("网页回复已送达");
+            h.config.setComponents(AgentAssembly.MINIMAL);
+            var store = new WebChatStore(h.db.data.inNamespace("web-chat-loop")::get,
+                    h.db.mapper, () -> new WebChatSettings().limits());
+            var tasks = mock(ITaskService.class, CALLS_REAL_METHODS);
+            doAnswer(call -> {
+                ITaskConfig<Void> task = call.getArgument(1);
+                var result = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return task.getCallable().call();
+                    } catch (Exception failure) {
+                        throw new CompletionException(failure);
+                    }
+                }, h.workers);
+                return TaskFuture.fromStage(h.logger, task.getName(), result);
+            }).when(tasks).subscribeWithFuture(any(UUID.class), any(), eq(Void.class));
+            var users = mock(ITeaUserService.class);
+            when(users.getOrCreate(any(), anyString())).thenReturn(TaskFuture.fromStage(h.logger, "网页测试身份",
+                    CompletableFuture.completedStage(UUID.randomUUID())));
+            context.registerBean(ILogger.class, () -> h.logger);
+            context.registerBean(PluginAccess.class, () -> new PluginAccess(mock(PluginRegistry.class)));
+            context.registerBean(IEventService.class, () -> spy(new EventService(h.logger,
+                    context.getBean(EventHandlerScanner.class), tasks)));
+            context.registerBean(ITeaUserService.class, () -> users);
+            context.registerBean("virtualExecutor", Executor.class, () -> h.workers);
+            context.registerBean(ObjectMapper.class, () -> h.db.mapper);
+            context.registerBean(WebChatStore.class, () -> store);
+            context.registerBean(TeaNekoCommandReceiver.class,
+                    () -> new TeaNekoCommandReceiver(h.converter, h.dispatcher,
+                            new TeaNekoCommandErrorHandler(h.logger), h.help, h.logger));
+            context.registerBean(NativeAgentReceiver.class, () -> receiver(h, automatic));
+            AutoConfigurationPackages.register(context, "org.zexnocs.teanekoclient.web");
+            context.register(BeanScanner.class, ClassScanner.class, EventHandlerScanner.class, TeaNekoClientScanner.class,
+                    WebTransport.class, WebMessageFactory.class, WebImages.class, WebMessageSenderTools.class,
+                    WebToolbox.class, WebTeaNekoClient.class, WebChatService.class, TeaNekoScopeService.class);
+            context.refresh();
+            context.getBean(EventHandlerScanner.class).init();
+            var service = context.getBean(WebChatService.class);
+            service.home(() -> {}).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var room = service.create(new WebChat.CreateRoom(UUID.randomUUID(),
+                    "PRIVATE", "测试私聊", List.of(WebChat.DEFAULT_PROFILE)), () -> {})
+                    .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            int replies = 0;
+            for (String text : List.of("你好", "/agent chat 你好")) {
+                var request = new WebChat.Send(UUID.randomUUID(), WebChat.DEFAULT_PROFILE,
+                        text, false, "", "", Instant.now());
+                service.submit(room.id(), request, () -> {}).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5)).until(() ->
+                        !service.operation(room.id(), request.operationId(), () -> {}).toCompletableFuture()
+                                .get(1, TimeUnit.SECONDS).status().equals("PERSISTED"));
+                var page = store.page(room.id(), 0, () -> {}).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                assertEquals(++replies, page.items().stream().filter(message -> message.bot()
+                        && message.parts().stream().anyMatch(part -> part.value().equals("网页回复已送达"))).count());
+            }
+            assertEquals(2, h.prompts.size());
+            // 2026/11/05：入站通知失败必须返回可定位的回执，原异常文本不能泄露。
+            var bus = context.getBean(IEventService.class);
+            doReturn(TaskFuture.fromStage(h.logger, "入站故障", CompletableFuture.failedStage(
+                    new IllegalStateException("不应出现在回执的测试密钥")))).when(bus).pushEventWithFuture(any());
+            var failed = new WebChat.Send(UUID.randomUUID(), WebChat.DEFAULT_PROFILE,
+                    "故障消息", false, "", "", Instant.now());
+            service.submit(room.id(), failed, () -> {}).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            org.awaitility.Awaitility.await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> {
+                var receipt = service.operation(room.id(), failed.operationId(), () -> {}).toCompletableFuture().get(1, TimeUnit.SECONDS);
+                assertEquals("INDETERMINATE", receipt.status());
+                assertTrue(receipt.note().contains("通知消息监听器"));
+                assertFalse(receipt.note().contains("测试密钥"));
+            });
+        }
+    }
     /**
      * 受控原生命令，业务由用例完成；非静态测试类不参与应用自动扫描。
      * <br>2026/11/04：校正 @since 为首次引入版本。
@@ -474,6 +566,7 @@ class AgentCommandIntegrationTest {
 
     /**
      * 2026/11/05：资料等待超时只提示一次，迟到资料不登记执行或发起模型；原队列等实际收尾。
+     * 2026/11/05：回执开关经过真实配置服务及默认方法，避免模拟顶层服务掩盖参数类型错误。
      * @throws Exception 当有界异步验证未完成时
      */
     @Test
@@ -493,6 +586,13 @@ class AgentCommandIntegrationTest {
                     scope -> h.config.toPolicy(), h.bridge, references, h.bindings, h.namespaces, () -> 1, h.timers, attempts)) {
                 gateway.setExpressions(Objects.requireNonNull(h.expression).sending, replies);
                 var source = h.source("甲", CommandPermission.MEMBER, "/agent chat 等待资料");
+                var manager = new AgentScopeConfigManager();
+                var reader = mock(IConfigDataGetService.class, CALLS_REAL_METHODS);
+                when(reader.getConfigData(AgentScopeConfigManager.class.getAnnotation(ConfigManager.class),
+                        AgentScopeConfigData.class, source.getScopeId())).thenReturn(Optional.of(h.config));
+                var configs = new ConfigDataService(mock(IConfigDataRegisterService.class), reader,
+                        mock(IConfigDataSetService.class));
+                gateway.installFailureReplies(new AgentFailureReplyPolicy(configs, manager));
                 var pending = gateway.chat(source, "等待资料", null);
                 assertTrue(entered.await(5, TimeUnit.SECONDS));
                 pending.toCompletableFuture().get(5, TimeUnit.SECONDS);
@@ -1150,7 +1250,8 @@ class AgentCommandIntegrationTest {
     @Test
     void automaticFailureExplainsProtocolAndHonorsReplySwitch() throws Exception {
         try (var h = new Harness(false, true, true); var automatic = automatic(h)) {
-            automatic.installFailureReplies(new org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy(h.configs));
+            // 2026/11/05：独立夹具也传入管理器实例，保持生产配置读取契约。
+            automatic.installFailureReplies(new AgentFailureReplyPolicy(h.configs, new AgentScopeConfigManager()));
             h.automaticAnswer.set("⟦TNK:wrong|BEGIN|protocol=teaneko:expression|v=1⟧\n错误信封");
             assertFalse(receiver(h, automatic).receive(incoming(h, "甲", "你好", true))
                     .toCompletableFuture().get(10, TimeUnit.SECONDS));

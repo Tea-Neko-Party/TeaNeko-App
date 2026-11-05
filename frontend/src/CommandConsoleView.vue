@@ -7,6 +7,7 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
+import ConsoleIcon from './ConsoleIcon.vue'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 
 const {advanced} = useConsolePreferences()
@@ -124,7 +125,8 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); original.value = 
 <template>
   <!-- 2026/11/04：收起常驻长说明，实际发送标记与操作回执保持可见。 -->
   <div class="command-console">
-    <div class="section-title"><h2>{{ target.name }}</h2><ElButton :disabled="busy" @click="emit('selectTarget')">选择其他聊天</ElButton></div>
+    <!-- 2026/11/05：与聊天和 Agent 工作区统一返回图标，不改变进行中操作的禁用约束。 -->
+    <div class="section-title"><h2>{{ target.name }}</h2><button class="icon-button" :disabled="busy" aria-label="返回聊天列表" title="返回聊天列表" @click="emit('selectTarget')"><ConsoleIcon name="back" /></button></div>
     <DetailPanel title="指令台说明"><p>以网页管理员身份执行 TeaNeko 命令，继续检查原命令权限和平台连接。标注“会向真实聊天发送”的命令会产生外部消息。</p></DetailPanel>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElCard v-if="catalog" shadow="never" class="runtime-card"><div class="editor-heading"><h3>当前目标 · {{ catalog.targetName }}</h3><ElTag :type="catalog.state.state === 'READY' ? 'success' : 'warning'">{{ states[catalog.state.state] ?? catalog.state.state }}</ElTag></div><p>{{ catalog.state.explanation }}</p><p class="small muted">目录时刻：{{ new Date(catalog.observedAt).toLocaleString('zh-CN') }}；新受理需使用五分钟内的目录。下方最多显示 100 个明确声明的管理方法，最终仍按当前权限和作用域校验。</p><RefreshButton :disabled="locked" @click="run(load)" label="刷新目录与连接" /></ElCard>

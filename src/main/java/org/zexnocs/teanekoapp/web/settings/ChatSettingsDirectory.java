@@ -5,6 +5,7 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import tools.jackson.databind.ObjectMapper;
 
@@ -13,18 +14,19 @@ import java.util.Map;
 
 /**
  * 自动投影已启用的配置管理器；专用适配器覆盖同一管理器，重复声明明确失败。
- * 首次管理请求才扫描，避免配置目录装配期间提前实例化业务插件。
+ * 在重载服务初始化阶段扫描，避免目录构造期间提前实例化业务插件。
+ * <br>2026/11/05：目录接入显式重扫生命周期，查询不触发首次扫描或失败重试。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Service
-public final class ChatSettingsDirectory {
+public final class ChatSettingsDirectory implements IScanner {
     private final IBeanScanner scanner;
     private final ObjectMapper mapper;
-    private @Nullable Map<String, Entry> entries;
+    private volatile @Nullable Map<String, Entry> entries;
 
     /**
      * @param scanner 原注解扫描器
@@ -35,11 +37,39 @@ public final class ChatSettingsDirectory {
         this.mapper = mapper;
     }
 
-    /** @return 不可变配置目录，启用与授权仍在每次调用检查 */
-    public synchronized Map<String, Entry> entries() {
-        if (entries != null) {
-            return entries;
+    /**
+     * 2026/11/05：只读取已发布目录，初始化失败不能由页面请求反复触发扫描。
+     * @return 不可变配置目录，启用与授权仍在每次调用检查
+     * @throws IllegalStateException 当目录尚未成功初始化时
+     */
+    public Map<String, Entry> entries() {
+        var current = entries;
+        if (current == null) {
+            throw new IllegalStateException("聊天配置目录尚未成功初始化，请检查初始化日志并显式重扫。");
         }
+        return current;
+    }
+
+    /** 2026/11/05：由原重载服务初始化一次，构造时不发现业务 Bean。 */
+    @Override
+    public synchronized void init() {
+        if (entries == null) {
+            reload();
+        }
+    }
+
+    /** 2026/11/05：完整目录校验成功后一次发布，失败保留上一目录。 */
+    @Override
+    public synchronized void reload() {
+        entries = discover();
+    }
+
+    /**
+     * 2026/11/05：仅在初始化或显式重扫时发现管理器和专用配置区。
+     * @return 已校验的完整配置目录
+     * @throws IllegalArgumentException 当管理器或专用配置区声明冲突时
+     */
+    private Map<String, Entry> discover() {
         var found = new LinkedHashMap<String, Entry>();
         scanner.getBeansWithAnnotation(ConfigManager.class).values().forEach(pair -> {
             var manager = pair.first();
@@ -77,8 +107,7 @@ public final class ChatSettingsDirectory {
                     item.getValue().type(), TeaNekoChatSettings.class));
             found.put(item.getKey(), new Entry(item.getKey(), annotation.group(), item.getValue().type(), bean));
         }
-        entries = Map.copyOf(found);
-        return entries;
+        return Map.copyOf(found);
     }
 
     /**

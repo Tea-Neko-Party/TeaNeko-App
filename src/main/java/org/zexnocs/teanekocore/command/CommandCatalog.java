@@ -1,14 +1,12 @@
 package org.zexnocs.teanekocore.command;
 
 import org.jspecify.annotations.Nullable;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.*;
 import org.zexnocs.teanekocore.command.interfaces.ICommandPermissionManager;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.plugin.PluginAccess;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import java.lang.reflect.Method;
 import java.lang.reflect.ParameterizedType;
 import java.util.*;
@@ -18,31 +16,30 @@ import java.util.*;
  * 目录不执行命令，不取得平台发送能力；全局说明读取由宿主提供管理员授权。
  * <br>2026/11/04：增加独立中文指令名称用于选择与说明卡片。
  * <br>2026/11/04：分别投影主指令默认规则、方法有效规则及权限组，供控制台展示继承差异。
+ * <br>2026/11/05：查询使用扫描阶段缓存的类型说明，不在页面及补全查询中调用底层 Bean 扫描器。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.7-l
+ * @version 4.8.2-l
  */
 @Service
 public final class CommandCatalog {
     private final CommandScanner scanner;
-    private final IBeanScanner beans;
     private final ICommandPermissionManager permissions;
     private final ICommandScopeManager scopes;
     private final PluginAccess plugins;
 
     /**
+     * 2026/11/05：查询仅依赖命令缓存，不注入底层 Bean 扫描器。
      * @param scanner 已注册命令
-     * @param beans 原 Bean 类型发现
      * @param permissions 原权限规则
      * @param scopes 原客户端与范围规则
      * @param plugins 原插件归属
      */
-    public CommandCatalog(CommandScanner scanner, IBeanScanner beans, ICommandPermissionManager permissions,
+    public CommandCatalog(CommandScanner scanner, ICommandPermissionManager permissions,
                           ICommandScopeManager scopes, PluginAccess plugins) {
         this.scanner = scanner;
-        this.beans = beans;
         this.permissions = permissions;
         this.scopes = scopes;
         this.plugins = plugins;
@@ -55,15 +52,16 @@ public final class CommandCatalog {
      */
     public List<Entry> list(@Nullable CommandData<?> context, Runnable guard) {
         guard.run();
-        var maps = new LinkedHashSet<>(scanner.getPrefixCommandMap().values());
-        scanner.getRegexpCommandKeys().forEach(key -> maps.add(scanner.getRegexpCommand(key)));
+        // 2026/11/05：目录投影固定同一完整注册快照，显式重扫期间不混合两套命令。
+        var maps = scanner.getRegisteredCommands();
         var entries = new ArrayList<Entry>();
         for (var map : maps) {
             // 2026/11/04：声明关闭的命令与实际分发器保持一致，不进入说明或补全目录。
             if (!map.getCommandAnnotation().enable()) {
                 continue;
             }
-            var parent = AnnotatedElementUtils.findMergedAnnotation(beans.getBeanClass(map.getCommand()), Description.class);
+            // 2026/11/05：复用原命令扫描的完整元数据，权限和插件状态仍实时判断。
+            var parent = map.getDescription();
             var method = map.getDefaultCommandMethod();
             if (method != null) {
                 add(entries, map, method, null, context, parent);

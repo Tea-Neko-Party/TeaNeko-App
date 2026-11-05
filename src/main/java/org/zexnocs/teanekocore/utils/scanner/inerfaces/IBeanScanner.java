@@ -8,9 +8,13 @@ import java.util.Map;
 
 /**
  * Bean 扫描器接口，定义了扫描 Bean 的基本方法。
+ * <br>2026/11/05：所有入口仅用于单例创建、初始化或低频显式重扫；目标类型及批量发现结果由专用 Scanner 缓存。
+ * 高频业务通过专用目录查询，不直接调用本接口。
  *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.2
+ * @version 4.8.2-l
  */
 public interface IBeanScanner {
     /**

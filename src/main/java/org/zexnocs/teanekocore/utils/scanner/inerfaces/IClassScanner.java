@@ -6,10 +6,12 @@ import java.util.Set;
 
 /**
  * 类扫描器接口，扫描不用定义为 bean 的类与其注解。
+ * <br>2026/11/05：仅供单例创建、初始化或低频显式重扫使用；高频查询必须经过实现 IScanner 的业务缓存目录。
  *
  * @author zExNocs
  * @date 2026/02/27
  * @since 4.0.10
+ * @version 4.8.2-l
  */
 public interface IClassScanner {
     /**

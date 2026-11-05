@@ -44,10 +44,11 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：用已有有界等待工具替代循环休眠，限制单次终态查询等待。
+ * <br>2026/11/05：指令台使用原命令缓存，移除运行期 Bean 类型发现依赖。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(15)
 class ClientConsoleIntegrationTest {
@@ -159,11 +160,12 @@ class ClientConsoleIntegrationTest {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/05：指令台只依赖已注册命令数据，移除底层 Bean 类型发现依赖。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     private static final class Root implements AutoCloseable {
         final CompletableFuture<CommandData<?>> dispatched = new CompletableFuture<>();
@@ -174,6 +176,7 @@ class ClientConsoleIntegrationTest {
         final ClientConsoleService service;
 
         /**
+         * 2026/11/05：使用已登记方法查询指令台，不注入底层 Bean 扫描器。
          * @param operations 原实际事务存储
          * @throws Exception 当命令方法或目录装配失败时
          */
@@ -199,7 +202,6 @@ class ClientConsoleIntegrationTest {
                             .getAnnotation(TeaNekoClientManagement.class), adapter)));
             doReturn(OnebotManagementAdapter.class).when(beans).getBeanClass(adapter);
             var command = new ConsoleCommands();
-            doReturn(ConsoleCommands.class).when(beans).getBeanClass(command);
             var status = ConsoleCommands.class.getMethod("status", CommandData.class);
             var say = ConsoleCommands.class.getMethod("say", CommandData.class, List.class);
             var map = CommandMapData.builder().command(command).commandAnnotation(ConsoleCommands.class.getAnnotation(Command.class))
@@ -234,7 +236,8 @@ class ClientConsoleIntegrationTest {
             ObjectProvider<PluginRegistry> provider = new org.springframework.beans.factory.support.StaticListableBeanFactory()
                     .getBeanProvider(PluginRegistry.class);
             var clients = new ClientManagementDirectory(beans, provider);
-            service = new ClientConsoleService(clients, operations, dispatcher, commands, beans, files,
+            // 2026/11/05：底层扫描器仅供管理适配器初始化，指令台查询读取命令缓存。
+            service = new ClientConsoleService(clients, operations, dispatcher, commands, files,
                     new PluginAccess(mock(PluginRegistry.class)), Runnable::run);
         }
 

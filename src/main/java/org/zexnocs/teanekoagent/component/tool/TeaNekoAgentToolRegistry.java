@@ -15,6 +15,7 @@ import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
 
@@ -29,29 +30,80 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/04：公开已启用插件的注解工具目录，不执行工具方法。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：工具声明和说明由可重扫目录缓存，页面查询不再遍历全部 Bean 定义。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Component
-public final class TeaNekoAgentToolRegistry {
+public final class TeaNekoAgentToolRegistry implements IScanner {
     private final ConfigurableListableBeanFactory beans;
     private final ObjectMapper mapper;
     private final ExecutorService executor;
+    // 2026/11/05：只固定声明和说明，不缓存插件启用或工具执行资格。
+    private volatile List<Declaration> discovered = List.of();
+    private boolean initialized;
 
     /**
-     * 仅保存容器与借用资源，不实例化工具提供者。
+     * 2026/11/05：初始化时只发现类型元数据，不实例化工具提供者。
      * @param beans Spring 元数据目录
      * @param mapper 项目转换器
      * @param executor 原业务执行器
      */
     public TeaNekoAgentToolRegistry(ConfigurableListableBeanFactory beans, ObjectMapper mapper,
-            @Qualifier("virtualExecutor") ExecutorService executor) { this.beans = beans; this.mapper = mapper; this.executor = executor; }
+            @Qualifier("virtualExecutor") ExecutorService executor) {
+        this.beans = beans;
+        this.mapper = mapper;
+        this.executor = executor;
+        init();
+    }
+
+    /** 首次发现工具声明，原重载服务再次初始化时不重复扫描。 */
+    @Override
+    public synchronized void init() {
+        if (!initialized) {
+            reload();
+        }
+    }
+
+    /**
+     * 显式重扫类型和说明，校验完成后一次发布；失败保留上一目录。
+     * 已创建 Agent 的能力组成保持原实例生命周期，不在这里替换运行中管线。
+     *
+     * @throws IllegalArgumentException 当工具名称重复或类型声明无法解析时
+     */
+    @Override
+    public synchronized void reload() {
+        var found = new ArrayList<Declaration>();
+        var names = new HashSet<String>();
+        for (var beanName : new TreeSet<>(List.of(beans.getBeanDefinitionNames()))) {
+            var type = type(beanName);
+            if (type == null) {
+                continue;
+            }
+            var annotation = AnnotatedElementUtils.findMergedAnnotation(type, TeaNekoAgentToolClass.class);
+            if (annotation == null) {
+                continue;
+            }
+            for (var name : TeaNekoAgentToolMethods.names(type)) {
+                if (!names.add(name)) {
+                    throw new IllegalArgumentException("注解工具名称重复：" + name);
+                }
+            }
+            var owned = AnnotatedElementUtils.findMergedAnnotation(type, PluginOwned.class);
+            String owner = !annotation.pluginId().isBlank() ? annotation.pluginId()
+                    : owned == null ? "teaneko.agent" : owned.value();
+            found.add(new Declaration(beanName, type, annotation, owner, TeaNekoAgentToolMethods.describe(type)));
+        }
+        discovered = List.copyOf(found);
+        initialized = true;
+    }
 
     /**
      * 合并原能力和新发现的工具类，工具重名在目录构造阶段拒绝。
+     * 2026/11/05：合并只读取已发现声明，不重新遍历 Spring 容器。
      * @param existing 原有能力，不修改其拥有关系
      * @return 原能力与自动能力的不可变集合
      * @throws IllegalArgumentException 当注解工具或归属声明冲突时
@@ -59,15 +111,13 @@ public final class TeaNekoAgentToolRegistry {
     public List<AgentFeature> combine(List<AgentFeature> existing) {
         var keys = new HashSet<String>(); existing.forEach(value -> keys.add(value.key()));
         var result = new ArrayList<>(existing); var groups = new TreeMap<String, List<String>>();
-        var declarations = new HashMap<String, TeaNekoAgentToolClass>(); var owners = new HashMap<String, String>(); var names = new HashSet<String>();
-        for (var beanName : new TreeSet<>(List.of(beans.getBeanDefinitionNames()))) {
-            var type = type(beanName);
-            if (type == null) { continue; }
-            var annotation = AnnotatedElementUtils.findMergedAnnotation(type, TeaNekoAgentToolClass.class);
-            if (annotation == null) { continue; }
-            for (var name : TeaNekoAgentToolMethods.names(type)) { if (!names.add(name)) { throw new IllegalArgumentException("注解工具名称重复：" + name); } }
-            var owned = AnnotatedElementUtils.findMergedAnnotation(type, PluginOwned.class);
-            var plugin = !annotation.pluginId().isBlank() ? annotation.pluginId() : owned == null ? "teaneko.agent" : owned.value();
+        var declarations = new HashMap<String, TeaNekoAgentToolClass>();
+        var owners = new HashMap<String, String>();
+        for (var declaration : discovered) {
+            var beanName = declaration.name();
+            var type = declaration.type();
+            var annotation = declaration.annotation();
+            var plugin = declaration.owner();
             var id = annotation.value().isBlank() ? "tools-" + StableDigest.sha256("annotated-agent-tools-v1", type.getName(), beanName).substring(0, 12) : annotation.value();
             var key = plugin + ":" + id;
             if (annotation.managedByFeature()) {
@@ -136,25 +186,15 @@ public final class TeaNekoAgentToolRegistry {
 
     /**
      * 2026/11/04：说明目录仅公开已启用插件的真实注解工具，不执行模型或业务方法。
+     * 2026/11/05：说明读取已发现缓存，每次仍实时筛选插件启用状态。
      * @param plugins 当前插件启用边界
      * @return 按工具名排序且去重的公开说明
      */
     public List<TeaNekoAgentToolMethods.Documentation> describe(org.zexnocs.teanekocore.plugin.PluginRegistry plugins) {
         var result = new TreeMap<String, TeaNekoAgentToolMethods.Documentation>();
-        for (var name : beans.getBeanDefinitionNames()) {
-            var type = type(name);
-            if (type == null) {
-                continue;
-            }
-            var annotation = AnnotatedElementUtils.findMergedAnnotation(type, TeaNekoAgentToolClass.class);
-            if (annotation == null) {
-                continue;
-            }
-            var owned = AnnotatedElementUtils.findMergedAnnotation(type, PluginOwned.class);
-            String owner = !annotation.pluginId().isBlank() ? annotation.pluginId()
-                    : owned == null ? "teaneko.agent" : owned.value();
-            if (plugins.isEnabled(owner)) {
-                for (var item : TeaNekoAgentToolMethods.describe(type)) {
+        for (var declaration : discovered) {
+            if (plugins.isEnabled(declaration.owner())) {
+                for (var item : declaration.documentation()) {
                     if (result.putIfAbsent(item.name(), item) != null) {
                         throw new IllegalArgumentException("工具目录存在重名声明。");
                     }
@@ -163,4 +203,20 @@ public final class TeaNekoAgentToolRegistry {
         }
         return List.copyOf(result.values());
     }
+
+    /**
+     * 不包含工具实例或执行资格的静态发现结果。
+     *
+     * @param name 原 Bean 名
+     * @param type 实际提供者类型
+     * @param annotation 原声明
+     * @param owner 插件归属
+     * @param documentation 参数与用途说明
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.2-l
+     * @version 4.8.2-l
+     */
+    private record Declaration(String name, Class<?> type, TeaNekoAgentToolClass annotation, String owner,
+                               List<TeaNekoAgentToolMethods.Documentation> documentation) {}
 }

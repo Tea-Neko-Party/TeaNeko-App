@@ -1,216 +1,104 @@
 <p align="center">
-<img src="docs/img/cover.png" alt="TeaNeko-App Cover" width="1441" />
+<img src="docs/img/cover.png" alt="TeaNeko App" width="1441" />
 <br>
-
-<!-- 项目信息 -->
-<img src="https://img.shields.io/github/license/Tea-Neko-Party/TeaNeko-App" alt="License">
+<img src="https://img.shields.io/github/license/Tea-Neko-Party/TeaNeko-App" alt="许可证">
 <img src="https://img.shields.io/github/repo-size/Tea-Neko-Party/TeaNeko-App" alt="Repo Size">
-<img src="https://img.shields.io/github/v/tag/Tea-Neko-Party/TeaNeko-App?style=flat-square" alt="Version">
-
-<!-- 技术栈 -->
+<img src="https://img.shields.io/github/v/tag/Tea-Neko-Party/TeaNeko-App?style=flat-square" alt="版本">
 <img src="https://img.shields.io/badge/Java-25-orange" alt="Java 25">
-<img src="https://img.shields.io/badge/Spring_Boot-4.1.2-brightgreen" alt="Spring Boot 4.1.2">
-<img src="https://img.shields.io/badge/Gradle-9.8.0-02303A" alt="Gradle 9.8.0">
-
 </p>
 
-TeaNeko App 是专注于多平台聊天机器人的架构，允许扩展平台适配器和插件。Agent 已提供图文对话、记忆与人格、后台摘要/补正、原权限命令工具、Skill、提醒任务、自主候选及内部异步客户端；统一入口见 [Agent 功能说明](src/main/java/org/zexnocs/teanekoagent/README.md)，首次部署和实机验收见 [Agent 部署说明](docs/development/agent-deployment.md)。
+# TeaNeko App
 
----
+**可装配 Agent 的多平台聊天机器人。**
 
-## 🚀 构建说明
-| 步骤 | 说明                                      | bash                                                          |
-|:--:|-----------------------------------------|---------------------------------------------------------------|
-| 1  | - 安装 Java 25<br> - 安装 Node.js 22.12 或以上版本及 npm（源码构建和前端开发需要）<br> - 安装任意兼容 `JDBC` 的数据库环境 |                                                               |
-| 2  | 克隆该项目                                   | `git clone https://github.com/Tea-Neko-Party/TeaNeko-App.git` |
-| 3  | 配置数据库连接信息                               | 位于 `src/main/resources/application-dev.properties`            |
-| 4  | 构建项目                                    | `./gradlew build -x test`                                     |
-| 5  | 复制项目样板配置                                | `./gradlew copyTemplatesToConfig`                             |
-| 6  | 根据注释配置 `config` 目录下配置文件                 |                                                               |
-| 7  | 使用开发配置启动项目                            | `./gradlew bootRun -PspringProfile=dev`                        |
+通过平台客户端或网页聊天与 Agent 对话，在 Web 控制台管理模型、聊天配置、记忆和运行状态。
 
----
+[构建与启动](#构建与启动) · [平台接入](#平台客户端部署) · [开发环境](#开发环境) · [详细文档](#详细文档) · [问题反馈](https://github.com/Tea-Neko-Party/TeaNeko-App/issues)
 
-版本升级、更新日志及独立 Agent Git 提交入口见 [版本操作说明](docs/development/versioning.md)。
+## 核心能力
 
-插件开发见 [插件指南](docs/development/plugins/README.md)，按 Core、Agent 和管理扩展划分，包含工具、组件、System、事件与异步环绕示例。v4.8.0-l 的依赖方向、完整组件目录及客户端迁移见[项目分层](docs/development/project-layers.md)。
+| 场景 | 能力 |
+| --- | --- |
+| Agent 对话 | 图文输入、模型路由及工具调用 |
+| 组件装配 | 按聊天选择上下文、记忆、人格、表达等组件 |
+| Web 管理 | 模型与聊天配置、活动与记忆、任务、日志及机器状态 |
+| 平台接入 | OneBot 11 反向 WebSocket、独立网页聊天 |
+| 插件开发 | 注解工具、组件与系统、事件监听及管理接口 |
 
-版本功能与升级说明见 [发布日志](docs/changelog/README.md)，当前计划及已完成记录见 [计划索引](docs/plan/README.md)。
+## 构建与启动
 
-## ⚙️ 平台客户端部署
-该项目的应用端口位于 `src/main/resources/application.properties` 中 `server.port` 配置，默认为 `6691`。
+需要 **JDK 25、Node.js 22.12 或以上版本、npm 和 MySQL**。使用仓库自带的 Gradle Wrapper，无需另装 Gradle；Windows PowerShell 将下文的 `./gradlew` 替换为 `.\gradlew.bat`。
+
+| 步骤 | 命令或配置位置 | 说明 |
+| :---: | --- | --- |
+| 1 · 获取源码 | `git clone https://github.com/Tea-Neko-Party/TeaNeko-App.git`<br>`cd TeaNeko-App` | 后续命令均在项目根目录执行 |
+| 2 · 执行权限 | `chmod +x gradlew` | 仅 Linux / macOS 首次使用时执行 |
+| 3 · 生成配置 | `./gradlew copyTemplatesToConfig` | 补充缺少的模板，不覆盖已有配置 |
+| 4 · 配置连接 | `src/main/resources/application-prod.properties`<br>`config/web/security.yml` | 分别配置数据库、控制台 HTTPS 来源与可信代理 |
+| 5 · 构建项目 | `./gradlew bootJar` | 自动安装前端依赖、检查并打包网页，无需单独执行 npm |
+| 6 · 启动服务 | `./gradlew bootRun` | 默认 **`prod`**，同一后端提供网页和 API，不启动 Vite |
+
+构建产物为 `build/libs/TeaNeko-App-版本号.jar`；需要构建并运行测试时使用 `./gradlew build`。生产通过 HTTPS 代理访问 `https://你的域名/console/`。环境变量、JAR 部署及更多命令见下方“详细文档”中的构建指南。
+
+## Web 控制台
+
+控制台模板默认启用；已有配置不自动更改。生产使用后端提供的网页，本地联合开发使用 Vite。
+
+启动后从后端 INFO 日志获取登录地址和管理员令牌。未指定令牌时每次启动随机生成，也可在 `config/web/security.yml` 配置。完整登录、HTTPS、模型与文件配置说明见下方文档导航。
+
+## 平台客户端部署
+
+各平台通过客户端适配器接入，通用端口集中在 `src/main/resources/application.properties`：
+
+| 用途 | 默认端口 | 协议 |
+| --- | --- | --- |
+| 后端服务与客户端直连 | `6691` | HTTP / WS |
+| 本地开发前端 | `5173` | HTTPS / WSS，仅 `web-dev` 使用 |
+| 生产公开入口 | 由 TLS 代理配置，通常为 `443` | HTTPS / WSS，可自定义端口 |
+
+生产只对外开放 TLS 入口；同机或 Docker 内网客户端可直接连接后端 WS，6691 的可达范围由防火墙和容器网络控制。
 
 <details>
-<summary>Onebot 11</summary>
+<summary>OneBot 11 快速接入</summary>
 
----
+支持 [OneBot 11 协议](https://github.com/botuniverse/onebot-11/blob/master/api/public.md) 的反向 WebSocket 客户端。
 
-本项目原生支持 [Onebot 11 协议](https://github.com/botuniverse/onebot-11/blob/master/api/public.md) 的任意客户端。
+1. 在 `config/web/security.yml` 的 `machine-tokens.onebot` 设置机器令牌。
+2. 在客户端新建反向 WebSocket 连接，填写同一令牌。
+3. 同机使用 `ws://127.0.0.1:6691/ws/onebot`；Docker 同网络使用 `ws://后端服务名:6691/ws/onebot`；公网使用 `wss://你的域名/ws/onebot`，自定义端口写在域名后。
 
-配置说明：
-- 创建 WebSocket 客户端
-- 配置服务器地址 `ws://<服务器地址>:<应用端口>/ws/onebot`
-
-你可以使用：
-- [NapCat](https://github.com/NapNeko/NapCatQQ)
-- [LLOnebot](https://github.com/LLOneBot/LuckyLilliaBot)
-- ~~(已归档) [Lagrange.Core](https://github.com/LagrangeDev/Lagrange.Core/tree/master)~~
-
----
+6691 默认不提供 TLS，不能直接改写为 `wss://localhost:6691`。非空机器令牌通过 Bearer 认证传递；更多令牌策略、Docker、证书与独立 WSS 端口配置见[客户端部署说明](docs/development/web-console-clients.md)。
 
 </details>
 
----
+## 开发环境
 
-## 🛠️ 开发配置说明
-
-开发环境下，位于 `src/main/resources/` 目录下额外创建新配置文件 `application-dev.properties`，内容同 `application-prod.properties`。
-
-并在运行虚拟机参数下添加
+复制 `application-prod.properties` 为同目录的 `application-dev.properties`，配置测试数据库，再显式启动联合开发：
 
 ```shell
--Dspring.profiles.active=dev
+./gradlew bootRun -PspringProfile=dev,web-dev
 ```
 
-开发热重启会断开 OneBot 连接，平台端应启用自动重连；客户端在停机前关闭连接并释放收发执行器。停机期间关闭握手遇到已关闭通道仅记调试日志，运行期传输故障仍记错误。
+访问 [本机开发控制台](https://localhost:5173/console/)，首次接受开发证书。IntelliJ 的工作目录设为项目根目录，Active profiles 填 `dev,web-dev`。开发代理和登录设置、插件编写方法见下方文档。
 
-默认关闭 DevTools 的条件装配差异报告，保留自动热重启。需要比较装配变化时设置 `spring.devtools.restart.log-condition-evaluation-delta=true`。运行中的项目执行 `clean`、强制重新编译或整批覆盖 class 文件会触发多次重启，甚至在编译未完成时临时缺少业务 Bean；这类构建应先停止 IntelliJ 中的应用，构建完成后重新运行。
+## 详细文档
 
-IntelliJ 直接运行主类时，可在 VM options 加入 `--enable-native-access=ALL-UNNAMED`，允许 Netty 的原生库访问并消除 Java 25 的原生访问提示；Gradle 的 `bootRun` 和可执行 JAR 已有对应配置。
+| 分类 | 文档 | 内容 |
+| --- | --- | --- |
+| 构建与运行 | [构建指南](docs/development/build-and-run.md) | 数据库、Gradle 任务、JAR 部署与开发环境 |
+| Web 部署 | [控制台配置](docs/development/web-console.md) | HTTPS、登录令牌、代理、端口与排错 |
+| 平台接入 | [客户端与机器令牌](docs/development/web-console-clients.md) | OneBot、Docker、WS / WSS 与认证 |
+| 模型与配置 | [模型配置](docs/development/web-console-models.md) · [文件配置](docs/development/web-console-files.md) | 添加模型、API 密钥、环境变量与应用修改 |
+| Agent | [部署说明](docs/development/agent-deployment.md) · [组件装配](docs/development/agent-composition.md) | 启用对话、装配记忆、人格与工具 |
+| 网页操作 | [聊天](docs/development/web-console-chat.md) · [工作区](docs/development/web-console-agent.md) · [任务与日志](docs/development/web-console-runtime.md) | 聊天、活动、记忆与运行状态 |
+| 插件开发 | [插件指南](docs/development/plugins/README.md) · [项目分层](docs/development/project-layers.md) | Core、Agent、工具、组件、事件与管理扩展 |
+| 版本与计划 | [版本操作](docs/development/versioning.md) · [发布日志](docs/changelog/README.md) · [计划索引](docs/plan/README.md) | 构建版本、发布流程与开发记录 |
 
----
+## 交流
 
-## 🌐 Web 控制台配置
+- [Issues](https://github.com/Tea-Neko-Party/TeaNeko-App/issues)：报告问题或提出建议。
+- [Pull requests](https://github.com/Tea-Neko-Party/TeaNeko-App/pulls)：提交改进。
 
-Web 默认关闭，提供 Agent、聊天配置、本地文件配置、任务、日志、客户端指令和网页聊天管理。完整字段和操作说明见 [Web 控制台部署与开发](docs/development/web-console.md)。以下命令均在项目根目录执行，Windows 使用 PowerShell；其他系统将 `.\gradlew.bat` 换成 `./gradlew`。
+## 许可证
 
-网页聊天按房间进入，私聊首次登记默认启用 Agent（已有关闭决定保留，仍需总开关和模型就绪）；聊天页输入 `/` 可按所选成员权限补全指令与子指令，完整说明见“指令一览”。“模型配置”独立展示供应商样板、自定义连接及手动/环境变量密钥输入，保存与应用分开，见[模型配置教程](docs/development/web-console-models.md)。
-
-聊天配置分为 Agent 与其他功能，管理员可按平台和聊天直接登记、修改、注销适用且已启用的配置，无需本地 `settings-sections` 或 `settings-groups` 放行。Agent 工作区使用独立的平台、账号和聊天选择器。任务与日志观测配置仍可通过 `file-sections` 中的 `core.runtime` 开放，保存后单独应用。
-
-v4.8.0-l 起，Agent 可按聊天装配组件。新登记默认只有 LLM；需要上下文、记忆、人格或工具时，在聊天设置中安装相应组件。已有登记保留原行为。LLM 可选系统模型或当前聊天私有配置；侧栏“API 文档”提供指令、组件/系统和工具说明，详见[装配教程](docs/development/agent-composition.md)。
-
-右上角“外观设置”可预览和保存网页背景、前景文字与强调色，配色只保存在当前浏览器，支持恢复默认。刷新及目录更新使用带动作提示的图标按钮；详细操作见[控制台说明](docs/development/web-console.md)。
-
-“任务与日志”可按分类、规则类型、状态和名称筛选实际定时任务；Spring 与关键维护任务只读，可管理的 Core Timer 保留暂停、恢复和原回执查询。详见[任务与定时规则](docs/development/web-console-runtime.md)。
-
-概览可查看 CPU、物理内存、JVM 内存与运行时长，仅在页面可见时自动刷新。版本读取实际构建清单或生成资源，Gradle 构建和类路径启动共用原版本来源。
-
-控制台默认使用简洁模式，右上角可切换高级模式和主题，切换会保留当前草稿。聊天配置名称简短、说明直接显示，未登记时先显示登记按钮；网页聊天支持加号或拖放添加图片、预览和移除附件，并可直达当前会话的设置与活动。桌面侧栏可折叠，手机使用抽屉导航。浅色背景为 `#F5F3ED`，本地文件配置保存后仍需单独应用。
-
-### 统一端口配置
-
-两个端口统一在 `src/main/resources/application.properties` 设置：
-
-```properties
-server.port=6691
-tea-neko.web.frontend.port=5173
-```
-
-`server.port` 是后端 HTTP/WebSocket 端口；`tea-neko.web.frontend.port` 是本机 Vite 的 HTTPS/WSS 开发端口。它们由两个进程分别监听，不能设置成同一个端口。修改后重启对应开发进程。Vite 自动派生 `/api/`、`/ws/` 的代理目标和转发来源，无须再编辑 `vite.config.ts` 中的数字。
-
-联合启动时，后端把 Spring 实际监听端口和前端配置传给 Vite，因此后端 Profile、环境变量或启动参数覆盖端口后，代理也会跟随。单独执行 `npm run dev` 时读取上述文件中的十进制端口值；若后端另有运行时覆盖，可通过 `TEANEKO_BACKEND_PORT`、`TEANEKO_FRONTEND_PORT` 环境变量传入实际值。
-
-`config/web/security.yml` 的 `public-origin` 仍声明允许的完整访问来源；改变开发前端端口后须同步修改该地址，浏览器和 OneBot 连接也使用新端口。生产环境由后端提供静态页面，只使用后端端口，外部 HTTPS 地址由生产代理决定。下文地址均以默认端口为例。
-
-### 本地启用
-
-在 `config/web/security.yml` 修改以下字段，保留已有的配置区、文件区和管理资源白名单：
-
-```yaml
-enabled: true
-public-origin: 'https://localhost:5173'
-admin-token: '${TEANEKO_WEB_ADMIN_TOKEN:}'
-trusted-proxies: ['127.0.0.1']
-```
-
-`public-origin` 是浏览器实际使用的 HTTPS 来源，不包含 `/console/` 或末尾斜线。上例信任本机 Vite 开发代理，后端默认端口为 `6691`。`admin-token` 可直接填写三十二至二百五十六字符、不含空白的随机令牌；上例从环境变量读取，未设置时每次启动自动生成。
-
-如果需要网页指令台，在原文件中设置 `console-prefixes: ['/console']`。其余白名单及参数见 [完整配置示例](docs/development/web-console.md#首次启用)。
-
-### 一条命令启动前后端
-
-先准备好 `application-dev.properties` 中的数据库等后端配置，再执行：
-
-```powershell
-.\gradlew.bat bootRun "-PspringProfile=dev,web-dev"
-```
-
-`dev` 加载开发配置；`web-dev` 启用自动启动前端的组件，不要求存在同名配置文件。Gradle 会安装并构建前端依赖，后端就绪后自动启动 Vite。看到 `VITE ... ready` 后，访问 **https://localhost:5173/console/**，首次接受本地开发自签证书。
-
-正常关闭或 DevTools 热重启后端时，会清理本实例启动的前端及子进程。单独使用 `dev` 只启动后端；启用 `security.yml` 或打印登录链接并不表示 Vite 已启动。若要手动启动前端，在 `frontend` 目录执行 `npm ci`、`npm run dev`，此时不添加 `web-dev`。
-
-### IntelliJ 启动前后端
-
-打开 **运行 → 编辑配置**，选择后端运行配置，将 **Working directory** 设为项目根目录。首次执行 `.\gradlew.bat webInstall` 准备前端依赖，然后任选一种方式设置 Profile：
-
-| 配置位置 | 填写内容 |
-| --- | --- |
-| Spring Boot 配置的 **Active profiles** | `dev,web-dev` |
-| **VM options（虚拟机选项）** | `-Dspring.profiles.active=dev,web-dev` |
-| **Program arguments（程序参数）** | `--spring.profiles.active=dev,web-dev` |
-
-Active profiles 表示本次启用的配置环境；未显示时可在 Modify options 中启用，或直接采用 VM options。将原来的 `dev` 设置替换为上表对应值，避免保留相互冲突的设置。`--spring.profiles.active=...` 必须放在程序参数中，放进 VM options 会导致 JVM 报 `Unrecognized option`。
-
-### 登录与保存令牌
-
-启用 Web 后，后端启动 INFO 日志会显示网站地址、当前登录令牌和带 `#token=...` 的快捷链接。随机令牌同时保存在 `data/web/runtime-admin-token`，重启后更新；后端日志含管理员凭据，应限制其访问权限，启动凭据不会进入网页日志窗口。
-
-快捷链接会自动填入令牌并移除当前地址中的令牌，仍需点击登录；也兼容 `?token=...`，推荐使用不发送给服务器的 `#token=...`。勾选“在此浏览器保存令牌”并成功登录后，下次访问会自动填入；取消勾选并成功登录即可清除。随机令牌变更后需要重新登录并更新保存值。
-
-服务端登录会话不写入磁盘，后端重启或开发热重启后需重新登录；浏览器保存的令牌不受影响。聊天记录、Agent 记忆与配置仍正常存储在数据库中。
-
-### 生产环境启动
-
-准备生产数据库配置，并将 `config/web/security.yml` 中的 `public-origin` 改为正式来源，例如 `https://console.example.com`。`trusted-proxies` 填实际反向代理的传输地址；代理与后端同机时通常为 `127.0.0.1`。
-
-使用 Gradle 启动生产环境：
-
-```powershell
-.\gradlew.bat bootRun "-PspringProfile=prod"
-```
-
-也可构建后部署 JAR，下面以 `4.7.0-l` 为例，实际文件名以 `version.properties` 对应版本为准：
-
-```powershell
-.\gradlew.bat bootJar
-java -jar build/libs/TeaNeko-App-4.7.0-l.jar --spring.profiles.active=prod
-```
-
-生产环境由后端直接提供构建好的前端页面，只使用 `prod`，不添加 `web-dev`；运行已打包 JAR 不需要 Node。配置 HTTPS 反向代理转发到后端 `http://127.0.0.1:6691`，覆盖设置 `X-Forwarded-Proto` 和 `X-Forwarded-Host`，并限制公网直接访问后端端口。访问地址为 **`https://你的域名/console/`**，不再使用开发端口 `5173`。
-
-### 启用 Web 后的 OneBot 连接
-
-启用 Web 会同时要求机器连接使用独立认证和 HTTPS/WSS。继续使用 OneBot 时，在安全配置中设置：
-
-```yaml
-machine-tokens:
-  onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
-```
-
-启动前设置该环境变量。在 OneBot 客户端配置反向地址 `wss://你的域名/ws/onebot` 和对应 Bearer 认证令牌，反向代理须支持 WebSocket 升级。机器令牌允许 0～256 字符；明确设置 `onebot: ''` 表示允许任意令牌或省略认证头，省略整个客户端则拒绝连接。非空值不能含空白或与管理员令牌相同。
-
-网页“客户端 → 机器令牌”支持查看、复制、修改、移除和空白放行。先保存，再单独应用；应用后使用原管理员令牌重新登录。完整流程见[客户端与机器令牌](docs/development/web-console-clients.md)。
-
-本地 `web-dev` 开发时使用 `wss://localhost:5173/ws/onebot`，Vite 会将连接和认证头转发到后端。OneBot 客户端须信任开发自签证书；浏览器接受证书不代表机器客户端已信任。`6691` 默认是 HTTP 端口，直接使用 `wss://localhost:6691` 会报 `WRONG_VERSION_NUMBER` 或 HTTP 方法包含无效字符，应连接提供 TLS 的代理入口。
-
-### 无法打开网页时
-
-- **连接被拒绝**：确认后端成功启动，实际启用 `dev,web-dev`，并看到 Vite 的就绪输出；`6691` 是后端端口，`5173` 是开发前端端口。
-- **Vite 立即退出**：查看后端终端中的 Vite 错误，检查 Node 版本、工作目录、前端依赖和端口占用；自动启动不会接管已有的手动 Vite 进程。
-- **页面可打开但无法登录**：检查 `enabled`、`public-origin` 是否与浏览器地址一致，以及 `trusted-proxies` 是否包含实际代理地址；使用当前启动的令牌。
-
----
-
-## 🤝 交流
-|   交流方式   | 说明                                      |
-|:--------:|-----------------------------------------|
-|  Issue   | 欢迎提交 Issue 来报告 Bug 或提出功能建议。             |
-|    PR    | 欢迎 fork 项目并提交 PR 来改进项目。                 |
-| QQ Group | [开发交流群](https://qm.qq.com/q/8pFJ2yOure) |
-
----
-
-## 📄 许可证
-
-本项目遵循仓库中的 `LICENSE` 协议。
+本项目采用 [GNU GPLv3](LICENSE)，允许使用、修改和再分发。分发本项目及其衍生版本时，须遵守相应的许可证和源码提供要求；简要解释见 [GNU 许可说明](https://www.gnu.org/licenses/gpl-faq.html)，完整条款以仓库 LICENSE 为准。

@@ -279,8 +279,10 @@ tasks {
         jvmArgs("--enable-native-access=ALL-UNNAMED")
         // 2026/11/04：运行版本由 processResources 生成，不再由启动参数声明。
 
-        // 使用 prod 作为默认的 Spring profile，除非通过命令行参数覆盖
-        systemProperty("spring.profiles.active", project.findProperty("springProfile") ?: "prod")
+        // 2026/11/05：仅在显式指定 Gradle 参数时覆盖环境，默认沿用 application.properties 的 prod 配置。
+        project.findProperty("springProfile")?.let { profile ->
+            systemProperty("spring.profiles.active", profile)
+        }
 
         /* 配置内存
         // 4G: -Xms512m -Xmx3072m

@@ -2,6 +2,7 @@ package org.zexnocs.teanekoagent.component.llm.file_config.form;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
@@ -9,6 +10,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
 import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
@@ -31,16 +33,21 @@ import java.util.regex.Pattern;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：复用已编译正则的表达式生成目录，保持非法模式在注册边界失败。
+ * <br>2026/11/05：扩展 Bean 仅首次访问时发现，后续目录读取仍实时检查模型注册及插件启用状态。
+ * <br>2026/11/05：接入扫描器生命周期，模型与凭据目录重扫成功后整体发布。
+ * <br>2026/11/05：扩展发现固定在初始化或显式重扫，页面查询不触发首次扫描或失败重试。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Service
-public final class LLMConfigurationDirectory {
+public final class LLMConfigurationDirectory implements IScanner {
     private final IBeanScanner scanner;
     private final ILLMModelService models;
     private final PluginAccess plugins;
+    // 2026/11/05：只固定容器中的扩展声明，不缓存按当前启用状态筛选后的公开目录。
+    private volatile @Nullable Discovery discovery;
 
     /**
      * @param scanner 原注解及接口发现
@@ -53,12 +60,20 @@ public final class LLMConfigurationDirectory {
         this.plugins = plugins;
     }
 
+    /** 2026/11/05：仅首次初始化时发现声明，普通目录查询复用已发布缓存。 */
+    @Override
+    public synchronized void init() {
+        if (discovery == null) {
+            reload();
+        }
+    }
+
     /**
-     * 2026/11/04：只从业务 id 建立注册目录，Bean 名独立管理。
-     * 2026/11/05：复用已编译正则的表达式生成目录，保持非法模式在注册边界失败。
-     * @return 无秘密的实际模型样板及输入协议，重复声明明确失败
+     * 2026/11/05：模型与凭据声明全部校验成功后原子替换，失败不暴露半套新目录。
+     * @throws IllegalArgumentException 当扩展版本、标识或声明唯一性无效时
      */
-    public Catalog describe() {
+    @Override
+    public synchronized void reload() {
         var adapters = new AnnotatedBeanRegistry<>(scanner, LLMConfigurationAdapter.class,
                 ILLMConfigurationAdapter.class, declaration -> {
                     if (declaration.version() != 1) {
@@ -68,9 +83,25 @@ public final class LLMConfigurationDirectory {
                 });
         var inputs = new AnnotatedBeanRegistry<>(scanner, LLMCredentialInput.class, ILLMCredentialInput.class,
                 LLMCredentialInput::id);
+        discovery = new Discovery(adapters, inputs);
+    }
+
+    /**
+     * 2026/11/04：只从业务 id 建立注册目录，Bean 名独立管理。
+     * 2026/11/05：复用已编译正则的表达式生成目录，保持非法模式在注册边界失败。
+     * 2026/11/05：复用扩展发现结果，每次仍按实际模型注册和插件状态重新投影。
+     * @return 无秘密的实际模型样板及输入协议，重复声明明确失败
+     * @throws IllegalStateException 当目录尚未成功初始化时
+     */
+    public Catalog describe() {
+        // 2026/11/05：查询只读完整发现快照，不在高频页面路径启动或重试底层扫描。
+        var fixed = discovery;
+        if (fixed == null) {
+            throw new IllegalStateException("模型配置目录尚未成功初始化，请检查初始化日志并显式重扫。");
+        }
         var routes = new ArrayList<Route>();
         var registered = models.getModels();
-        for (var entry : adapters.entries().entrySet().stream()
+        for (var entry : fixed.adapters().entries().entrySet().stream()
                 .sorted(java.util.Comparator.comparing(value -> value.getKey().id())).toList()) {
             var model = registered.get(entry.getKey());
             var bean = entry.getValue().bean();
@@ -88,7 +119,7 @@ public final class LLMConfigurationDirectory {
                     entry.getValue().type().getAnnotation(LLMConfigurationAdapter.class).icon()));
         }
         var modes = new ArrayList<CredentialMode>();
-        for (var entry : inputs.entries().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
+        for (var entry : fixed.inputs().entries().entrySet().stream().sorted(Map.Entry.comparingByKey()).toList()) {
             var bean = entry.getValue().bean();
             if (!plugins.enabled(bean, method(ILLMCredentialInput.class, "describe"))) {
                 continue;
@@ -100,6 +131,19 @@ public final class LLMConfigurationDirectory {
         }
         return new Catalog(List.copyOf(routes), List.copyOf(modes));
     }
+
+    /**
+     * 一次完整发现的声明缓存，不保存启用结果或凭据。
+     *
+     * @param adapters 模型配置扩展
+     * @param inputs 凭据输入扩展
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.2-l
+     * @version 4.8.2-l
+     */
+    private record Discovery(AnnotatedBeanRegistry<LLMModelId, ILLMConfigurationAdapter> adapters,
+                             AnnotatedBeanRegistry<String, ILLMCredentialInput> inputs) {}
 
     /**
      * @param type 原声明接口

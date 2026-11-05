@@ -24,6 +24,7 @@ import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.Entity;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
@@ -49,6 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：邮箱交付及重放保留安全诊断而不保存异常对象。
+ * <br>2026/11/05：会话准备和策略加载失败保留首个安全原因，避免只返回通用配置错误。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -537,6 +539,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 在锁外固定策略和监听，再登记请求；执行链查询也在锁外，状态改变时重试登记。
+     * 2026/11/05：策略加载失败记录安全代码位置，并保留到未入队的拒绝结果。
      * @param handle 实例拥有者
      * @param request 可信请求
      * @param parent 可选借用父控制
@@ -561,7 +564,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             settings = Objects.requireNonNull(defaults.resolve(), "排队策略不能为空。");
             retention = Objects.requireNonNull(conversations.resolve(), "会话保留策略不能为空。");
         } catch (RuntimeException failure) {
-            report(); return immediate(handle, request, AgentRunResult.Status.CONFIGURATION_ERROR, parent);
+            var diagnostic = FailureDiagnostic.from(failure);
+            report(request.requestId(), diagnostic);
+            return CompletableFuture.completedStage(rejectedResult(handle, request,
+                    AgentRunResult.Status.CONFIGURATION_ERROR, parent).withFailure(diagnostic));
         }
         try { identity = engine.identity(request); }
         catch (RuntimeException failure) { return immediate(handle, request, AgentRunResult.Status.INVALID_INPUT, parent); }
@@ -948,6 +954,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 锁外准备冷句柄，先公布拥有关系和完成观察，再启动真实业务。
+     * 2026/11/05：准入观察失败保留原异常的安全诊断，不在状态转换时丢失代码位置。
      * @param entry 已选中的请求
      */
     private void dispatch(Entry entry) {
@@ -969,7 +976,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                         entry.assembly = decision.scope().orElseThrow().assembly();
                         prepareMemory(entry);
                     }, executor).exceptionally(failure -> {
-                        stop(entry, AgentMemoryBoundary.status(failure), false);
+                        stop(entry, AgentMemoryBoundary.status(failure), false, failure);
                         return null;
                     });
         } catch (ExecutionStoppedException stopped) {
@@ -983,6 +990,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 2026/11/04：只有记忆组件读取空间；无记忆装配直接进入人格或模型准备。
+     * 2026/11/05：空间准备失败与实际终止状态一并保留安全诊断。
      * @param entry 已通过出队准入并固定装配的请求
      */
     private void prepareMemory(Entry entry) {
@@ -1008,13 +1016,14 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             alignMemory(reference, entry);
             preparePersonality(entry, reference);
         }, executor).exceptionally(failure -> {
-            stop(entry, AgentMemoryBoundary.status(failure), false);
+            stop(entry, AgentMemoryBoundary.status(failure), false, failure);
             return null;
         });
     }
 
     /**
      * 在固定记忆引用之后、读取历史之前解析人格；自动入站采集已固定的人格不随排队刷新。
+     * 2026/11/05：人格准备失败保留原始异常的安全位置，不记录对话或配置原值。
      * @param entry 当前队首
      * @param reference 可选固定记忆引用
      */
@@ -1038,7 +1047,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                         throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
                     }
                     alignPersonality(entry, snapshot.identity(), snapshot.correctionKey()); startPrepared(entry, reference);
-                }, executor).exceptionally(failure -> { stop(entry, AgentMemoryBoundary.status(failure), false); return null; });
+                }, executor).exceptionally(failure -> {
+                    stop(entry, AgentMemoryBoundary.status(failure), false, failure);
+                    return null;
+                });
     }
 
     /**
@@ -1071,6 +1083,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 引用协调完成后才取得当前窗口，继续保留原文凭据；冷句柄公布与实际启动保留原拥有关系。
+     * 2026/11/05：窗口策略读取失败保留安全诊断，不只发布通用配置错误。
      * @param entry 当前队首
      * @param reference 本轮固定引用，无记忆模式为空
      */
@@ -1105,7 +1118,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 } catch (RuntimeException ignored) { report(); entry.summary = null; }
             }
             try { entry.options = Objects.requireNonNull(policy.resolve(entry.handle, entry.request), "窗口策略不能为空。"); }
-            catch (RuntimeException failure) { report(); stop(entry, AgentRunResult.Status.CONFIGURATION_ERROR, false); return; }
+            catch (RuntimeException failure) {
+                stop(entry, AgentRunResult.Status.CONFIGURATION_ERROR, false, failure);
+                return;
+            }
             entry.lifetime.checkActive();
             final AgentConversationEngine.Prepared prepared;
             try {
@@ -1143,25 +1159,48 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 记录首个终止原因；运行中的请求等待底层结束回执后才释放运行槽，取消抛错不能替代结束确认。
+     * 2026/11/05：无异常的生命周期终止沿用原入口，不虚构失败诊断。
      * @param entry 待终止请求
      * @param status 明确原因
      * @param waitingOnly 是否只允许结束尚未启动业务的请求
      */
     private void stop(Entry entry, AgentRunResult.Status status, boolean waitingOnly) {
+        stop(entry, status, waitingOnly, null);
+    }
+
+    /**
+     * 2026/11/05：首个终止状态与安全诊断在同一锁内固定，迟到异常不覆盖取消或已有失败。
+     *
+     * @param entry 待终止请求
+     * @param status 已分类的终止状态
+     * @param waitingOnly 是否只允许终止尚未启动的请求
+     * @param failure 可选实际异常，只保存类型、公开原因及代码位置
+     */
+    private void stop(Entry entry, AgentRunResult.Status status, boolean waitingOnly, @Nullable Throwable failure) {
+        var diagnostic = failure == null ? null : FailureDiagnostic.from(failure);
         var now = activityTime(entry);
         final AgentRunExecution running;
         final Entry next;
+        final boolean first;
         synchronized (lock) {
             if (entry.phase == Phase.FINISHED || waitingOnly && !beforeStart(entry.phase)) { return; }
-            if (entry.stopped == null) { entry.stopped = status; }
+            first = entry.stopped == null;
+            if (first) {
+                entry.stopped = status;
+                entry.preparationFailure = diagnostic;
+            }
             running = entry.phase == Phase.RUNNING ? entry.execution : null;
             next = running == null ? detach(entry, now) : null;
+        }
+        if (first && diagnostic != null
+                && (status == AgentRunResult.Status.CONFIGURATION_ERROR || status == AgentRunResult.Status.FAILED)) {
+            report(entry.request.requestId(), diagnostic);
         }
         drainRetired();
         if (running != null) {
             if (entry.cancellationRequested.compareAndSet(false, true)) {
                 if (memory != null) { entry.lifetime.cancel(); }
-                try { running.cancel(); } catch (RuntimeException failure) { report(); }
+                try { running.cancel(); } catch (RuntimeException cancellationFailure) { report(); }
             }
         } else { deliver(entry, result(entry, null, null), next); }
     }
@@ -1330,6 +1369,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
 
     /**
      * 形成当前请求结果，不接受其他请求或实例的结果，也不复制原始异常文本。
+     * 2026/11/05：准备阶段尚未创建轮次结果时，继续保留首个失败的安全诊断。
      * @param entry 原始请求拥有者
      * @param raw 实际轮次结果
      * @param failure 可选失败
@@ -1351,7 +1391,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 raw == null ? entry.memoryReference : raw.memoryReference(), raw == null ? null : raw.promptTranscript())
                 // 2026/11/05：邮箱交付保留管线原因，不能只剩笼统 FAILED 状态。
                 .withFailure(failure != null ? org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure)
-                        : raw == null ? null : raw.failure());
+                        : entry.preparationFailure != null ? entry.preparationFailure : raw == null ? null : raw.failure());
     }
 
     /**
@@ -1437,6 +1477,21 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private void report() {
         try { logger.error(AgentConversationService.class.getName(), "Agent 邮箱配置或调度失败，请检查本地策略和执行资源。"); }
         catch (RuntimeException ignored) { /* 诊断不参与执行准入。 */ }
+    }
+
+    /**
+     * 2026/11/05：按请求记录准备失败的安全原因，日志故障不阻止邮箱结束与推进后继请求。
+     *
+     * @param requestId 当前请求标识
+     * @param diagnostic 不含原值及异常对象的诊断
+     */
+    private void report(UUID requestId, FailureDiagnostic diagnostic) {
+        try {
+            logger.error(AgentConversationService.class.getName(),
+                    "Agent 会话准备失败。请求=" + requestId + "，" + diagnostic);
+        } catch (RuntimeException ignored) {
+            // 2026/11/05：观测端故障不能替代原始业务失败或阻止资源释放。
+        }
     }
 
     /** 关闭本服务拥有的运行与等待项，锁外取消，不关闭实例、独立轮次端口或借用执行器。 */
@@ -1538,10 +1593,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/05：保存首次准备失败的安全诊断，不持有异常对象或配置原值。
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     private static final class Entry {
         final AgentHandle handle;
@@ -1559,6 +1615,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         final AtomicBoolean cancellationRequested = new AtomicBoolean();
         volatile Phase phase = Phase.NEW;
         volatile AgentRunResult.@Nullable Status stopped;
+        // 2026/11/05：与首次终止状态一起由邮箱锁发布，交付只读取安全诊断。
+        volatile @Nullable FailureDiagnostic preparationFailure;
         @Nullable Mailbox mailbox;
         @Nullable AgentRunExecution execution;
         @Nullable AgentConversationStamp stamp;

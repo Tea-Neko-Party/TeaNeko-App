@@ -13,6 +13,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
+import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
 import org.zexnocs.teanekocore.file_config.FileTypeScanner;
 import org.zexnocs.teanekocore.file_config.api.FileConfig;
@@ -58,6 +59,7 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/05：验证保存版本检测、失败脱敏、凭据释放与运行配置隔离。
  * <br>2026/11/05：验证环境变量缺失的安全说明、原文件保留以及环境模板与小数的联合保存。
+ * <br>2026/11/05：配置管理复用专用类型目录，模型换代校验只使用运行缓存查询。
  *
  * @author zExNocs
  * @date 2026/11/03
@@ -88,7 +90,10 @@ class FileSettingsIntegrationTest {
         when(fixture.scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class)).thenReturn(declarations);
         doReturn(RuntimeFileSettingsAdapter.class).when(fixture.scanner).getBeanClass(runtime);
         security.setFileSections(List.of("core.runtime"));
-        var service = new FileSettingsService(new FileSettingsDirectory(fixture.scanner, fixture.classes, fixture.parsers),
+        // 2026/11/05：自动管理目录在初始化时发现声明，页面不触发底层扫描。
+        var directory = new FileSettingsDirectory(fixture.scanner, fixture.types, fixture.parsers);
+        directory.init();
+        var service = new FileSettingsService(directory,
                 fixture.files, mock(PluginRegistry.class), fixture.journal, Runnable::run);
         var current = result(service.read("core.runtime", () -> {}));
         assertEquals("APPLIED", result(service.apply("core.runtime",
@@ -298,12 +303,14 @@ class FileSettingsIntegrationTest {
 
     /**
      * 使用同一真实文件缓存换代后，旧解析参数拒绝新凭据，新解析参数得到新凭据。
+     * 2026/11/05：模型参数与凭据校验不得通过文档编辑入口读取版本。
      * @throws Exception 当临时文件操作失败时
      */
     @Test
     void modelEpochPreventsOldParametersUsingNewCredential() throws Exception {
         var fixture = new Fixture(root);
-        var epoch = new LLMFileConfigurationEpoch(fixture.files);
+        var queries = spy(fixture.files);
+        var epoch = new LLMFileConfigurationEpoch(queries);
         var options = new LLMFileConfigService(fixture.files);
         options.installEpoch(epoch);
         var credentials = new FileLLMCredentialResolver(fixture.files);
@@ -322,6 +329,7 @@ class FileSettingsIntegrationTest {
         assertThrows(LLMConfigurationException.class, () -> credentials.require("deepseek", old));
         var current = options.getDefaultOptions(LLMModelId.of("deepseek"), LLMModelOptions.builder().build());
         assertEquals("second-key", credentials.require("deepseek", current).apiKey());
+        verify(queries, never()).withDocument(any(), any());
     }
 
     /**
@@ -368,6 +376,7 @@ class FileSettingsIntegrationTest {
      * <br>2026/11/04：测试模型文件显式声明上下文容量和输出额度。
      * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
      * <br>2026/11/05：独立维护模拟环境属性，避免开发机密钥影响变量缺失与就绪分支。
+     * <br>2026/11/05：类型目录与配置服务共享同一发现缓存。
      *
      * @author zExNocs
      * @date 2026/11/03
@@ -381,6 +390,8 @@ class FileSettingsIntegrationTest {
         // 2026/11/04：自动元数据与文件服务共用扫描器，避免测试另一套命名策略。
         final FileTypeScanner parsers;
         final IClassScanner classes;
+        // 2026/11/05：管理目录和配置服务共享一份可显式重扫的类型缓存。
+        final FileConfigScanner types;
         final Path path;
         final FileConfigService files;
         final FileConfigOperations journal;
@@ -411,7 +422,8 @@ class FileSettingsIntegrationTest {
             Files.writeString(path, "name: 原名称\nsecret: '${TEST_SECRET}'\nunknown: {保留: 未知字段}\nmetadata: 不应回显的值\n");
             // 2026/11/04：文件换代夹具声明容量，继续验证旧参数不可获取新凭据。
             Files.writeString(config.resolve("agent/model.yml"), "default-model-id: deepseek\nmodels:\n  - id: deepseek\n    model: test-model\n    max-tokens: 2048\n    context-window-tokens: 131072\n    api-key: first-key\n");
-            files = new FileConfigService(parsers, classes, mock(ILogger.class), config);
+            types = new FileConfigScanner(classes);
+            files = new FileConfigService(parsers, types, mock(ILogger.class), config);
             files.reload();
             files.get(WebSecurityFileConfig.class).setFileSections(List.of("test.value", "agent.models"));
             IFileSettingsAdapter modelAdapter = new AgentFileSettings.Models(files, new LLMFileConfigService(files));
@@ -421,7 +433,9 @@ class FileSettingsIntegrationTest {
             doReturn(Adapter.class).when(scanner).getBeanClass(adapter);
             doReturn(AgentFileSettings.Models.class).when(scanner).getBeanClass(modelAdapter);
             journal = new FileConfigOperations(mapper, directory.resolve("journal"));
-            this.directory = new FileSettingsDirectory(scanner, classes, parsers);
+            this.directory = new FileSettingsDirectory(scanner, types, parsers);
+            // 2026/11/05：显式模拟生产重载服务的目录初始化阶段。
+            this.directory.init();
             service = service(journal);
         }
 

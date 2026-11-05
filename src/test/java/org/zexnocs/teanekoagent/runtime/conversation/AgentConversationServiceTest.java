@@ -33,11 +33,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：覆盖准备阶段失败的安全诊断及后继请求推进。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class AgentConversationServiceTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -642,6 +643,34 @@ class AgentConversationServiceTest {
         var result = service.run(handle, request).toCompletableFuture(); runtime.runAll();
         assertEquals(IAgentService.CancelResult.NOT_OWNER, service.cancel(handle, actor.scope(), request.requestId(), UUID.randomUUID()));
         assertFalse(result.isDone()); complete(request);
+    }
+
+    /**
+     * 2026/11/05：准入观察失败保留类型和代码位置，隐藏原始异常文本，并继续推进同邮箱后继。
+     */
+    @Test
+    void preparationFailureKeepsDiagnosticAndAdvancesNextRequest() {
+        var port = mock(IAgentTurnService.class);
+        var checks = new AtomicInteger();
+        when(port.checkAccess(any(), any())).thenAnswer(call -> checks.getAndIncrement() == 0
+                ? CompletableFuture.failedStage(new IllegalStateException("不应导出的测试配置原值"))
+                : backend.checkAccess(call.getArgument(0), call.getArgument(1)));
+        when(port.prepare(any(), any())).thenAnswer(call -> backend.prepare(call.getArgument(0), call.getArgument(1)));
+        try (var queued = new AgentConversationService(port, settings::get, runtime, runtime.scheduler, runtime.clock, logger)) {
+            var first = queued.run(handle, request()).toCompletableFuture();
+            var next = request();
+            var second = queued.run(handle, next).toCompletableFuture();
+            runtime.runAll();
+            var result = first.join();
+            assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, result.status());
+            var diagnostic = Objects.requireNonNull(result.failure());
+            assertTrue(diagnostic.types().contains(IllegalStateException.class.getName()));
+            assertTrue(diagnostic.location().contains("AgentConversationServiceTest"));
+            assertFalse(result.failureDescription().contains("不应导出的测试配置原值"));
+            assertFalse(second.isDone());
+            complete(next);
+            assertEquals(AgentRunResult.Status.SUCCESS, second.join().status());
+        }
     }
 
     /** 验证头部准备失败会推进下一项，不把失败当作永久占用的运行槽。 */

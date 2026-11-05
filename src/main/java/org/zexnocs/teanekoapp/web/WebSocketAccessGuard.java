@@ -5,7 +5,6 @@ import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
-import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
@@ -20,11 +19,12 @@ import java.util.Map;
  * 握手只保存已验证机器凭据的校验值，启用控制面或更换凭据后旧连接不能继续收发。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/05：握手兼容直接 WS 与代理 WSS，持续校验仍绑定同一机器令牌。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.2-l
  */
 @Component
 public final class WebSocketAccessGuard implements IClientConnectionGuard {
@@ -37,6 +37,7 @@ public final class WebSocketAccessGuard implements IClientConnectionGuard {
     }
 
     /**
+     * 2026/11/05：传输可为 WS 或 WSS，不能将 Docker 来源当作本机身份或跳过机器令牌。
      * @param request 原握手请求
      * @param response 原响应
      * @param handler 实际客户端
@@ -50,10 +51,7 @@ public final class WebSocketAccessGuard implements IClientConnectionGuard {
             String path = request.getURI().getPath();
             String client = path.substring(path.lastIndexOf('/') + 1);
             var settings = credentials.settings();
-            if (settings.enabled() && (!(request instanceof ServletServerHttpRequest servlet)
-                    || !WebAccessFilter.secureTransport(servlet.getServletRequest(), settings))) {
-                return false;
-            }
+            // 2026/11/05：内网 WS 与公开 WSS 共用机器认证，不按是否经过 TLS 代理决定令牌校验。
             if (!credentials.machine(client, request.getHeaders().getFirst("Authorization"))) {
                 return false;
             }

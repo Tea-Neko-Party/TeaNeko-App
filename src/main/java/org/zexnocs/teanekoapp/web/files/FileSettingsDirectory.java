@@ -3,15 +3,15 @@ package org.zexnocs.teanekoapp.web.files;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
+import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileTypeScanner;
-import org.zexnocs.teanekocore.file_config.api.FileConfig;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileDocumentParser;
 import org.zexnocs.teanekocore.framework.config.ConfigSchema;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -21,35 +21,74 @@ import java.util.Map;
 /**
  * 文件配置的专用与自动投影目录；敏感类型和认证根不进入自动表单。
  * 所有项仍受本地 file-sections 白名单与原插件归属约束。
+ * <br>2026/11/05：文件类型复用专用扫描器缓存，管理目录不另行扫描类路径。
+ * <br>2026/11/05：查询不触发初始化或失败重试，发现仅由扫描生命周期执行。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Service
-public final class FileSettingsDirectory {
+public final class FileSettingsDirectory implements IScanner {
     private final IBeanScanner scanner;
-    private final IClassScanner classes;
+    private final FileConfigScanner classes;
     private final FileTypeScanner parsers;
-    private @Nullable Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries;
+    private volatile @Nullable Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries;
 
     /**
+     * 2026/11/05：类型发现由可重扫的 Core 目录提供。
      * @param scanner 已注册 Spring 适配器
      * @param classes 原文件类型目录
      * @param parsers 原格式解析器
      */
-    public FileSettingsDirectory(IBeanScanner scanner, IClassScanner classes, FileTypeScanner parsers) {
+    public FileSettingsDirectory(IBeanScanner scanner, FileConfigScanner classes, FileTypeScanner parsers) {
         this.scanner = scanner;
         this.classes = classes;
         this.parsers = parsers;
     }
 
-    /** @return 首次实际管理时建立的固定目录 */
-    public synchronized Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries() {
-        if (entries != null) {
-            return entries;
+    /**
+     * 2026/11/05：只读取初始化时发布的目录，不由页面请求触发发现或失败重试。
+     * @return 原重载服务初始化或显式重扫发布的完整目录
+     * @throws IllegalStateException 当目录尚未成功初始化时
+     */
+    public Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries() {
+        var current = entries;
+        if (current == null) {
+            throw new IllegalStateException("文件配置目录尚未成功初始化，请检查初始化日志并显式重扫。");
         }
+        return current;
+    }
+
+    /** 2026/11/05：首次初始化目录，已初始化的页面查询只读取缓存。 */
+    @Override
+    public synchronized void init() {
+        if (entries == null) {
+            reload();
+        }
+    }
+
+    /** 2026/11/05：显式重建全部管理声明，校验完成后发布，失败保留旧目录。 */
+    @Override
+    public synchronized void reload() {
+        entries = discover();
+    }
+
+    /**
+     * 2026/11/05：目录重新发现晚于配置类型与解析器加载。
+     * @return 低于原配置加载的初始化优先级
+     */
+    @Override
+    public int getPriority() {
+        return -100;
+    }
+
+    /**
+     * 2026/11/05：只在初始化或显式重扫时构建专用与自动投影，不修改读者可见的目录。
+     * @return 经全部声明校验的完整管理目录
+     */
+    private Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> discover() {
         var found = new LinkedHashMap<>(new AnnotatedBeanRegistry<>(scanner, TeaNekoFileSettings.class,
                 IFileSettingsAdapter.class, declaration -> {
                     if (!declaration.value().matches("[a-z][a-z0-9_.-]{0,63}") || declaration.version() != 1) {
@@ -64,7 +103,7 @@ public final class FileSettingsDirectory {
             }
             FileSettingsPolicy.validateSchema(entry.bean());
         }
-        for (var item : classes.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class).entrySet()) {
+        for (var item : classes.declarations().entrySet()) {
             var declaration = item.getValue();
             if (types.contains(item.getKey()) || declaration.sensitive()) {
                 continue;
@@ -93,8 +132,7 @@ public final class FileSettingsDirectory {
                 throw new IllegalArgumentException("文件管理标识冲突：" + id);
             }
         }
-        entries = Map.copyOf(found);
-        return entries;
+        return Map.copyOf(found);
     }
 
     /**

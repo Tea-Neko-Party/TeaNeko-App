@@ -1,42 +1,43 @@
 package org.zexnocs.teanekocore.command;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.Command;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
+import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
-import java.util.Collection;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.*;
 
 /**
  * 指令扫描器
  * 扫描指令、默认指令和子指令
  *
+ * 修改记录：<br>
+ * 2026/11/05：扫描时保存合并的类型说明，完整前缀和正则目录一次发布，失败重扫保留旧缓存。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.8.2-l
  * @see Command
  * @see DefaultCommand
  * @see SubCommand
  */
 @Service("commandScanner")
-public class CommandScanner extends AbstractScanner {
+public class CommandScanner implements IScanner {
     /// 日志
     private final ILogger logger;
 
-    /// 前缀指令映射表，key为指令名，value为指令数据
-    private final Map<String, CommandMapData> prefixCommandMap = new ConcurrentHashMap<>();
-
-    /// 正则指令映射表，key为指令名，value为指令数据
-    private final Map<String, CommandMapData> regexpCommandMap = new ConcurrentHashMap<>();
+    // 2026/11/05：前缀和正则目录共同发布，不先清空运行中请求可见的数据。
+    private volatile Commands commands = new Commands(Map.of(), Map.of());
+    private boolean initialized;
     private final IBeanScanner iBeanScanner;
 
     /**
@@ -57,7 +58,8 @@ public class CommandScanner extends AbstractScanner {
      * @return 前缀与注册命令数据的映射，类型为 {@code Map<String, CommandMapData>}
      */
     protected Map<String, CommandMapData> getPrefixCommandMap() {
-        return prefixCommandMap;
+        // 2026/11/05：读取完整发现快照，不向调用方暴露可变注册表。
+        return commands.prefix();
     }
 
     /**
@@ -71,7 +73,8 @@ public class CommandScanner extends AbstractScanner {
         if(command == null || command.isBlank()) {
             return null;
         }
-        return prefixCommandMap.get(command);
+        // 2026/11/05：键查询只访问当前已发布快照。
+        return commands.prefix().get(command);
     }
 
     /**
@@ -80,7 +83,8 @@ public class CommandScanner extends AbstractScanner {
      * @return 正则命令标识集合，类型为 {@code Collection<String>}
      */
     public Collection<String> getRegexpCommandKeys() {
-        return regexpCommandMap.keySet();
+        // 2026/11/05：旧快照游标在显式重扫期间仍可安全遍历。
+        return commands.regexp().keySet();
     }
 
     /**
@@ -94,13 +98,43 @@ public class CommandScanner extends AbstractScanner {
         if(command == null || command.isBlank()) {
             return null;
         }
-        return regexpCommandMap.get(command);
+        // 2026/11/05：键查询只访问当前已发布快照。
+        return commands.regexp().get(command);
+    }
+
+    /**
+     * 2026/11/05：按同一发现快照列出命令，并去除前缀与正则别名重复项。
+     * @return 完整快照中的真实注册命令
+     */
+    protected Collection<CommandMapData> getRegisteredCommands() {
+        var current = commands;
+        var found = new LinkedHashSet<>(current.prefix().values());
+        found.addAll(current.regexp().values());
+        return List.copyOf(found);
+    }
+
+    /** 2026/11/05：首次初始化成功后不重复发现，失败由显式重扫修复。 */
+    @Override
+    public synchronized void init() {
+        if (!initialized) {
+            _scan();
+        }
+    }
+
+    /** 2026/11/05：重新发现不清理旧目录，完整校验后再替换。 */
+    @Override
+    public synchronized void reload() {
+        _scan();
     }
 
     /**
      * 扫描指令。
+     * 2026/11/05：同时固定类型说明，全部扫描成功后一次发布两类目录。
+     * @throws IllegalArgumentException 当命令方法不符合公开异步契约时
      */
     protected synchronized void _scan() {
+        var prefixCommandMap = new LinkedHashMap<String, CommandMapData>();
+        var regexpCommandMap = new LinkedHashMap<String, CommandMapData>();
         var beanPairs = iBeanScanner.getBeansWithAnnotation(Command.class);
         for(var pair: beanPairs.values()) {
             var annotation = pair.first();
@@ -119,7 +153,7 @@ public class CommandScanner extends AbstractScanner {
             // 获取默认和子指令方法
             Method defaultCommandMethod = null;
             DefaultCommand defaultCommandAnnotation = null;
-            var subCommandMap = new ConcurrentHashMap<String, Pair<SubCommand, Method>>();
+            var subCommandMap = new LinkedHashMap<String, Pair<SubCommand, Method>>();
             for(var method: clazz.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(DefaultCommand.class) || method.isAnnotationPresent(SubCommand.class)) {
                     CommandMethodContract.requireAsync(method);
@@ -154,9 +188,11 @@ public class CommandScanner extends AbstractScanner {
             var commandMapData = CommandMapData.builder()
                     .command(bean)
                     .commandAnnotation(annotation)
+                    // 2026/11/05：目标类型与合并注解只在发现阶段解析。
+                    .description(AnnotatedElementUtils.findMergedAnnotation(clazz, Description.class))
                     .defaultCommandMethod(defaultCommandMethod)
                     .defaultCommandAnnotation(defaultCommandAnnotation)
-                    .subCommandMap(subCommandMap)
+                    .subCommandMap(Map.copyOf(subCommandMap))
                     .build();
             for(var command: commandNames) {
                 var __checkCommand = commandMap.get(command);
@@ -171,14 +207,19 @@ public class CommandScanner extends AbstractScanner {
                 commandMap.put(command, commandMapData);
             }
         }
+        commands = new Commands(Map.copyOf(prefixCommandMap), Map.copyOf(regexpCommandMap));
+        initialized = true;
     }
 
     /**
-     * 清理原始数据的方法。
+     * 一次发布的完整命令发现结果，不包含动态权限或插件启用结果。
+     *
+     * @param prefix 前缀目录
+     * @param regexp 正则目录
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.2-l
+     * @version 4.8.2-l
      */
-    @Override
-    protected void _clear() {
-        prefixCommandMap.clear();
-        regexpCommandMap.clear();
-    }
+    private record Commands(Map<String, CommandMapData> prefix, Map<String, CommandMapData> regexp) {}
 }

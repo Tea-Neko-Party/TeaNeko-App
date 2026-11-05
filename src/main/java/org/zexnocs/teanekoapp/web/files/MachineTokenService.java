@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.socket.WebSocketHandler;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
+import org.zexnocs.teanekoapp.web.WebSocketEndpoints;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
@@ -23,10 +24,13 @@ import java.util.function.Function;
  * 只编辑认证文件中的机器令牌；复用原文件类型锁、原子替换及持久回执。
  * 应用前确认其他认证根字段与当前运行值一致，不顺带应用本机尚未确认的设置。
  *
+ * 修改记录：<br>
+ * 2026/11/05：返回公开连接地址及代理监听端口，保持令牌查看与普通目录隔离。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Service
 public final class MachineTokenService {
@@ -37,6 +41,7 @@ public final class MachineTokenService {
     private final TeaNekoClientScanner scanner;
     private final FileConfigOperations operations;
     private final Executor executor;
+    private final WebSocketEndpoints endpoints;
     private final Semaphore slots = new Semaphore(16);
 
     /**
@@ -44,16 +49,19 @@ public final class MachineTokenService {
      * @param clients 已注册的平台及插件代次
      * @param scanner 实际机器 WebSocket 目录
      * @param operations 私有持久回执账本
+     * @param endpoints 实际监听与公开连接信息
      * @param executor 原虚拟线程执行域
      */
     public MachineTokenService(IFileConfigService files, ClientManagementDirectory clients,
-            TeaNekoClientScanner scanner, FileConfigOperations operations,
+            TeaNekoClientScanner scanner, FileConfigOperations operations, WebSocketEndpoints endpoints,
             @Qualifier("virtualExecutor") Executor executor) {
         this.files = files;
         this.clients = clients;
         this.scanner = scanner;
         this.operations = operations;
         this.executor = executor;
+        // 2026/11/05：连接资料取自服务端生效配置，不采信浏览器提供的地址。
+        this.endpoints = endpoints;
     }
 
     /**
@@ -66,8 +74,13 @@ public final class MachineTokenService {
             var disk = parse(document, snapshot).snapshot();
             var active = files.requireCurrent(WebSecurityFileConfig.class).snapshot();
             var values = clients.list().stream().filter(value -> machine(value.clientId()))
-                    .map(value -> new MachineTokens.Client(value.clientId(), value.name(),
-                            policy(disk.machineTokens(), value.clientId()), policy(active.machineTokens(), value.clientId())))
+                    // 2026/11/05：公开连接端口可能由 TLS 代理提供，与后端监听端口分别展示。
+                    .map(value -> {
+                        var address = endpoints.address(value.clientId(), active.publicOrigin());
+                        return new MachineTokens.Client(value.clientId(), value.name(),
+                                policy(disk.machineTokens(), value.clientId()), policy(active.machineTokens(), value.clientId()),
+                                address.toString(), address.getPort() == -1 ? 443 : address.getPort(), endpoints.backendPort());
+                    })
                     .toList();
             guard.run();
             return new MachineTokens.View(snapshot.revision(), document.runtime(), values);

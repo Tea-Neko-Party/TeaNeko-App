@@ -18,8 +18,7 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
@@ -28,14 +27,18 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：验证显示名称独立于命令前缀和原权限。
  *
  * <br>2026/11/04：验证主指令默认规则和方法有效权限组的独立投影。
+ * <br>2026/11/05：验证重复目录查询不调用底层 Bean 扫描器，类型说明仍正确投影。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.7-l
+ * @version 4.8.2-l
  */
 class CommandCatalogTest {
-    /** 2026/11/04：作用域、权限、原始数据类型与管理来源共同限定补全目录。 */
+    /**
+     * 2026/11/04：作用域、权限、原始数据类型与管理来源共同限定补全目录。
+     * 2026/11/05：初始化后禁止目录读取重新发现 Bean，保留原类型说明及实时授权。
+     */
     @Test
     void completionUsesOriginalRulesWhileGlobalCatalogKeepsDetailedDocumentation() {
         var bean = new Example();
@@ -51,13 +54,16 @@ class CommandCatalogTest {
         when(plugins.enabled(any(), any())).thenReturn(true);
         when(scopes.inScope(any(), any(SubCommand.class), any())).thenReturn(true);
         when(permissions.hasPermission(any(), any(SubCommand.class), any())).thenReturn(true);
-        var catalog = new CommandCatalog(scanner, beans, permissions, scopes, plugins);
+        var catalog = new CommandCatalog(scanner, permissions, scopes, plugins);
+        clearInvocations(beans);
         var context = CommandData.builder().rawData(new Object()).permission(CommandPermission.MEMBER).build();
         var allowed = catalog.list(context, () -> {});
         assertEquals(List.of("echo"), allowed.stream().map(CommandCatalog.Entry::subcommand).toList());
         assertEquals("/example echo <text>", allowed.getFirst().usage());
         // 2026/11/04：中文显示名独立于调用前缀和权限过滤。
         assertEquals("测试目录", allowed.getFirst().displayName());
+        // 2026/11/05：父级说明来自发现缓存，而非查询时反射或扫描。
+        assertEquals("测试命令的完整说明。", allowed.getFirst().introduction());
         // 2026/11/04：主规则与方法有效规则分开投影，权限组差异不改变原授权服务。
         assertEquals("MEMBER", allowed.getFirst().defaultPermission());
         assertEquals("OWNER", allowed.getFirst().permission());
@@ -74,6 +80,14 @@ class CommandCatalogTest {
         assertTrue(catalog.list(context, () -> {}).isEmpty());
         when(plugins.enabled(any(), any())).thenReturn(false);
         assertTrue(catalog.list(null, () -> {}).isEmpty());
+        verifyNoInteractions(beans);
+        // 2026/11/05：失败重扫保留完整命令快照，后续查询不自动重试发现。
+        doThrow(new IllegalStateException("测试命令发现失败。")).when(beans).getBeanClass(bean);
+        assertThrows(IllegalStateException.class, scanner::reload);
+        clearInvocations(beans);
+        when(plugins.enabled(any(), any())).thenReturn(true);
+        assertEquals(3, catalog.list(null, () -> {}).size());
+        verifyNoInteractions(beans);
     }
 
     /**

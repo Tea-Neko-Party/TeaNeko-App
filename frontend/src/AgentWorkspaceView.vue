@@ -7,6 +7,7 @@ import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
+import ConsoleIcon from './ConsoleIcon.vue'
 
 const {advanced} = useConsolePreferences()
 
@@ -277,7 +278,8 @@ onBeforeUnmount(() => { clearInterval(timer); window.removeEventListener('before
   <div class="agent-workspace">
     <div v-if="!embedded" class="section-title">
       <h2>{{ targetName }}</h2>
-      <ElButton @click="emit('selectTarget')">选择其他聊天</ElButton>
+      <!-- 2026/11/05：目标返回入口统一使用图标并保留可访问名称。 -->
+      <button class="icon-button" aria-label="返回聊天列表" title="返回聊天列表" @click="emit('selectTarget')"><ConsoleIcon name="back" /></button>
       </div>
     <div class="agent-tabs" role="tablist" aria-label="Agent 管理分区">
       <button v-for="item in [{ id: 'activity', name: '活动时间线' }, { id: 'layers', name: '短中长期记忆' }, { id: 'memory', name: '记忆证据' }, { id: 'profile', name: '用户画像' }, { id: 'personality', name: '人格与补正' }, { id: 'schedules', name: '持久计划' }]" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="choosePanel(item.id)">{{ item.name }}</button>

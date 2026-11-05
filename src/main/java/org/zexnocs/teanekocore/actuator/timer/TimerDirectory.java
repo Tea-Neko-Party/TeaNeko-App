@@ -5,8 +5,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.actuator.runtime.RuntimeMonitor;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
-import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerViewSource;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Instant;
 import java.util.*;
@@ -19,11 +17,12 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：合并真实调度来源，按注解分类并在分页前筛选；关键任务保持只读。
+ * <br>2026/11/05：分页复用专用来源缓存，不在页面轮询中发现 Bean。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Component
 public final class TimerDirectory {
@@ -31,14 +30,14 @@ public final class TimerDirectory {
     private final Map<UUID, Entry> ids = new ConcurrentHashMap<>();
     private final LinkedHashMap<UUID, Operation> operations = new LinkedHashMap<>();
     private final Map<String, String> categoryNames = new ConcurrentHashMap<>();
-    private @Nullable IBeanScanner scanner;
+    private @Nullable TimerSourceScanner scanner;
 
     /**
-     * 2026/11/04：仅保存原 scanner，不在业务装配阶段提前发现调度来源。
-     * @param scanner 宿主扫描器
+     * 2026/11/05：只保存专用缓存目录，发现由初始化或手动重扫触发。
+     * @param scanner 已装配的调度来源扫描器
      */
     @Autowired
-    public void installSources(IBeanScanner scanner) {
+    public void installSources(TimerSourceScanner scanner) {
         this.scanner = scanner;
     }
 
@@ -101,6 +100,7 @@ public final class TimerDirectory {
     }
 
     /**
+     * 2026/11/05：来源实例读取缓存，任务状态仍在每次页面查询实时取得。
      * @param after 当前进程排他 UUID 游标
      * @param limit 一至一百项
      * @param category 精确分类键，空值不限
@@ -120,7 +120,7 @@ public final class TimerDirectory {
                 .map(this::view).toList());
         var sourceIds = new HashSet<String>();
         if (scanner != null) {
-            for (var source : scanner.getBeansOfType(ITimerViewSource.class).values()) {
+            for (var source : scanner.views()) {
                 String id = source.source();
                 if (!id.matches("[a-z][a-z0-9_.-]{0,63}") || id.equals("core") || !sourceIds.add(id)) {
                     throw new IllegalArgumentException("定时观测来源标识无效或重复。");

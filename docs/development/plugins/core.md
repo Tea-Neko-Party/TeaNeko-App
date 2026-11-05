@@ -18,6 +18,14 @@ Core 的身份为 `teaneko.core`，Agent 为 `teaneko.agent`。入口参考 [Plu
 
 事件监听器、命令、TaskStage 仍使用各自原注解。@EventListener 本身带组件语义，避免同时被默认组件扫描和 @Bean 重复装配；可像示例一样给配置与监听器使用相同 ConditionalOnProperty 条件，或由外部未扫描包的插件配置显式提供 Bean。
 
+## 扫描与查询
+
+`IClassScanner`、`IBeanScanner` 的所有入口，以及 Bean 定义、注解和方法的目录发现，只用于单例创建、初始化或低频显式重扫；指定 Bean 的目标类型也在此阶段解析并缓存。消息处理、权限复核、模型调用和页面轮询读取业务专用 Scanner 的缓存；新扫描器实现 `IScanner`，在 `init()` / `reload()` 中发现并校验完整结果后一次发布，不先清空读者正在使用的目录。失败重扫保留上一完整目录。
+
+优先复用已有目录，例如 `TeaNekoClientScanner`、`FileConfigScanner`、`TimerSourceScanner`。缓存保存类型、注解、Bean 和静态说明；插件启停、权限、连接与任务状态仍在查询或执行时复核。文件配置普通查询使用 `get()` / `requireCurrent()`，同一发布版本的短同步查询使用 `withRuntime()`，原文档编辑才使用 `withDocument()`。
+
+目录在原 `ReloadService` 初始化阶段建立，业务查询不触发首次发现或失败后的自动重试。首次初始化失败时查询明确报告未就绪；重载服务仍保留该对象的登记，修复声明后可显式重扫。直接构造目录的测试或独立宿主须先调用 `init()`，不要借助首个业务请求扫描来完成装配。
+
 ## 归属与逻辑生命周期
 
 在命令类、事件监听类或 TaskStage 类添加 @PluginOwned("插件ID")；方法上的归属优先于类声明。模型适配器也使用该注解。归属必须在 PluginRegistry 注册，否则实际调用明确失败。未声明归属的历史 Bean 保留宿主行为，第三方不得借此绕过启停。

@@ -257,6 +257,16 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .web-chat-workspace > .web-chat-tabs > .el-tabs__header { padding-right: 178px; }
 .web-chat-role { position: absolute; top: 0; right: 0; z-index: 1; display: flex; align-items: center; gap: 8px; height: 40px; color: var(--muted); font-size: 13px; }
 .web-chat-role .el-select { width: 132px; margin: 0; }
+/* 2026/11/05：聊天配置采用逐卡展开，标题和独立操作在桌面与窄屏保持相同定位。 */
+.config-section-card { margin-bottom: 12px; }
+/* 2026/11/05：长连接地址可换行，查看令牌和修改动作分别排列。 */
+.connection-address { overflow-wrap: anywhere; }
+.token-display { display: grid; gap: 10px; }
+.token-value-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.token-value-row > .el-input { flex: 1; min-width: 0; }
+.config-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; border: 0; padding: 2px 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
+.config-section-heading > span { display: flex; align-items: center; gap: 8px; }
+.config-section-content { padding-top: 16px; }
 .web-messages { display: flex; flex-direction: column; gap: 14px; max-height: 720px; overflow-y: auto; padding: 8px 4px; }
 .web-bubble { padding: 16px 20px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); max-width: 92%; }
 /* 2026/11/05：只有当前选中身份的消息在右侧，机器人及其他成员在左侧。 */

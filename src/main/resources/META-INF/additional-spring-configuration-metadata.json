@@ -11,6 +11,18 @@
   ],
   "properties": [
     {
+      "name": "tea-neko.websocket.port",
+      "type": "java.lang.Integer",
+      "defaultValue": 0,
+      "description": "机器 WebSocket 的本机 HTTP 代理监听端口；0 共用 server.port，非零只绑定 127.0.0.1，修改后重启。"
+    },
+    {
+      "name": "tea-neko.websocket.public-origin",
+      "type": "java.lang.String",
+      "defaultValue": "",
+      "description": "公开 WSS 来源，可独立设置域名和端口，例如 wss://bot.example:7443；留空继承控制台 HTTPS 来源。TLS 代理负责实际监听，同机或 Docker 内网可使用机器令牌直接 WS 连接后端。"
+    },
+    {
       "name": "tea-neko.web.frontend.port",
       "type": "java.lang.Integer",
       "defaultValue": 5173,

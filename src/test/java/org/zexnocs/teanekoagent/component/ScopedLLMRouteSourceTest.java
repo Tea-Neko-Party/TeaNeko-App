@@ -43,13 +43,14 @@ import static org.mockito.Mockito.*;
  * 私有模型使用原 DTO、配置来源及凭据边界，不依赖系统模型文件，不请求真实网络。
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/05：显式初始化来源目录，模型查询不触发 Bean 发现。
  *
  * <br>2026/11/05：适配模型专属 configuration 包，保留原私有路由隔离验证。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class ScopedLLMRouteSourceTest {
     /** 验证专有路由的实际协议、独立凭据与配置撤销，秘密不进入普通模型选项。 */
@@ -74,6 +75,8 @@ class ScopedLLMRouteSourceTest {
                 .thenReturn(Map.of("private", new IndependentPair<>(ScopedLLMRouteSource.class.getAnnotation(LLMRouteSource.class), source)));
         doReturn(ScopedLLMRouteSource.class).when(scanner).getBeanClass(source);
         var routes = new LLMRouteDirectory(scanner);
+        // 2026/11/05：模拟原重载服务的低频初始化，后续请求只读来源缓存。
+        routes.init();
         var files = mock(IFileConfigService.class);
         var credentials = new FileLLMCredentialResolver(files);
         credentials.installRoutes(routes);

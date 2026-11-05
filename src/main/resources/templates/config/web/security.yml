@@ -1,12 +1,13 @@
-# 默认关闭 Web 控制面。启用前配置 HTTPS 代理和以下唯一外部来源。
+# 2026/11/05：默认启用本机 Web 控制台；生产部署须修改为正式 HTTPS 来源及实际代理地址。
 enabled: true
 public-origin: 'https://localhost:5173'
-# 空值时每次启动生成一次，保存在受限 data/web/runtime-admin-token，不写入日志。
+# 空值时每次启动生成一次，保存在受限 data/web/runtime-admin-token，并通过后端启动日志提示。
 admin-token: '${TEANEKO_WEB_ADMIN_TOKEN:}'
 idle-minutes: 30
 absolute-hours: 8
 # 仅信任明确代理，代理必须覆盖转发协议/主机头；不要填任意来源。
-trusted-proxies: []
+# 2026/11/05：信任默认仅绑定本机的 Vite 开发代理；生产部署按实际代理地址修改。
+trusted-proxies: ['127.0.0.1']
 # 开启 Web 后，机器 /ws/{client} 入口要求独立 Bearer 凭据，不能复用管理员令牌。
 # machine-tokens:
 #   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'

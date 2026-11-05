@@ -11,7 +11,6 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileDocumentParser;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileTypeParser;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -44,11 +43,13 @@ import java.util.function.Supplier;
  * </pre>
  * <br>4.2.1: 支持从模板中读取。
  * <br>2026/11/03：原加载、写入和受限文档操作共用类型锁，记录真实加载版本与发布代次。
+ * <br>2026/11/05：配置类型在服务创建时扫描一次，文档访问与重载复用固定目录，避免模型校验反复扫描类路径。
+ * <br>2026/11/05：类型发现交给可重扫的专用目录，运行版本查询只访问缓存和原类型锁。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.0
- * @version 4.7.0-l
+ * @version 4.8.2-l
  */
 @Service
 public class FileConfigService implements IFileConfigService {
@@ -63,7 +64,8 @@ public class FileConfigService implements IFileConfigService {
 
     /// scanner
     private final FileTypeScanner fileTypeScanner;
-    private final IClassScanner iClassScanner;
+    // 2026/11/05：业务查询只读取专用扫描器缓存，类型重扫与配置值重载分别处理。
+    private final FileConfigScanner scanner;
     private final ILogger iLogger;
     // 2026/11/03：锁只按已声明类型创建，文件路径不来自远程请求。
     private final Path rootPath;
@@ -72,30 +74,32 @@ public class FileConfigService implements IFileConfigService {
 
     /**
      * @param parsers 原格式注册表
-     * @param scanner 原类型扫描器
+     * @param scanner 已发现的配置类型目录
      * @param logger 原日志
      */
     @Autowired
-    public FileConfigService(FileTypeScanner parsers, IClassScanner scanner, ILogger logger) {
+    public FileConfigService(FileTypeScanner parsers, FileConfigScanner scanner, ILogger logger) {
         this(parsers, scanner, logger, ROOT_PATH);
     }
 
     /**
      * 为独立宿主和临时目录测试固定根路径，不作为远程配置入口。
+     * 2026/11/05：复用专用扫描目录，构造与访问文档均不执行底层发现。
      * @param parsers 原解析器
      * @param scanner 原类型目录
      * @param logger 原日志
      * @param root 固定宿主根目录
      */
-    public FileConfigService(FileTypeScanner parsers, IClassScanner scanner, ILogger logger, Path root) {
+    public FileConfigService(FileTypeScanner parsers, FileConfigScanner scanner, ILogger logger, Path root) {
         fileTypeScanner = Objects.requireNonNull(parsers);
-        iClassScanner = Objects.requireNonNull(scanner);
+        this.scanner = Objects.requireNonNull(scanner);
         iLogger = Objects.requireNonNull(logger);
         rootPath = Objects.requireNonNull(root);
     }
 
     /**
      * 2026/11/03：新文档 API 不把未注册类、任意路径或不支持的格式当作编辑入口。
+     * 2026/11/05：仅查询当前容器的注册目录，保留类型锁、路径和解析器校验。
      * @param type 原注册类型
      * @param action 锁内短操作
      * @param <T> 返回类型
@@ -104,8 +108,7 @@ public class FileConfigService implements IFileConfigService {
     @Override
     public <T> T withDocument(Class<? extends IFileConfigData> type,
             java.util.function.Function<FileConfigDocument, T> action) {
-        var declarations = iClassScanner.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class);
-        var annotation = declarations.get(type);
+        var annotation = scanner.declarations().get(type);
         if (annotation == null || Path.of(annotation.path()).isAbsolute()
                 || !annotation.value().matches("[a-zA-Z0-9_-]{1,64}")) {
             throw new IllegalArgumentException("文件配置类型未注册或声明路径无效。");
@@ -156,6 +159,24 @@ public class FileConfigService implements IFileConfigService {
         } finally {
             lock.unlock();
         }
+    }
+
+    /**
+     * 2026/11/05：运行查询借用原类型锁，避免仅查询发布代次却创建文档、读取模板或发现类型。
+     *
+     * @param type 已注册配置类型
+     * @param action 同一发布版本内的短同步查询，不等待其他线程或网络
+     * @param <T> 返回类型
+     * @return 实际查询结果
+     * @throws IllegalArgumentException 当类型未注册时
+     */
+    @Override
+    public <T> T withRuntime(Class<? extends IFileConfigData> type,
+            java.util.function.Function<FileConfigDocument.Stamp, T> action) {
+        if (!scanner.declarations().containsKey(type)) {
+            throw new IllegalArgumentException("文件配置类型未注册。");
+        }
+        return locked(type, () -> action.apply(stamp(type)));
     }
 
     /**
@@ -282,7 +303,8 @@ public class FileConfigService implements IFileConfigService {
 
     /**
      * 热重载方法。
-     * 扫描所有配置并逐类发布完成状态；失败保留最后有效值供 get 使用，requireCurrent 明确拒绝。
+     * 2026/11/05：只重载目录中已发现类型的配置值；类型变化通过专用扫描器显式重扫。
+     * 失败保留最后有效值供 get 使用，requireCurrent 明确拒绝。
      */
     @Override
     public void reload() {
@@ -298,8 +320,7 @@ public class FileConfigService implements IFileConfigService {
             return;
         }
 
-        var pairs = iClassScanner.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class);
-        for (var pair : pairs.entrySet()) {
+        for (var pair : scanner.declarations().entrySet()) {
             var clazz = pair.getKey();
             // 2026/11/03：每个类型单独持锁，不把全局重载锁带入模块回调。
             var lock = locks.computeIfAbsent(clazz, ignored -> new ReentrantLock());

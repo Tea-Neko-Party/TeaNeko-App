@@ -22,11 +22,13 @@ import java.util.concurrent.TimeUnit;
  * 修改记录：<br>
  * 2026/11/04：提供前后端联合开发启动，直接运行 Node，避免 npm 命令包装进程滞留。
  * <br>2026/11/04：向 Vite 传递实际后端端口和统一配置的前端端口。
+ * <br>2026/11/05：联合开发启动向 Vite 传递独立的 WebSocket 代理端口。
+ * <br>2026/11/05：默认生产环境使用打包网页，本服务只供显式启用的本地联合开发使用。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.2-l
  */
 @Component
 @Profile("web-dev")
@@ -83,6 +85,9 @@ public final class WebFrontendDevelopment implements DisposableBean {
                 .redirectError(ProcessBuilder.Redirect.INHERIT);
         launcher.environment().put("TEANEKO_BACKEND_PORT", Integer.toString(backendPort));
         launcher.environment().put("TEANEKO_FRONTEND_PORT", Integer.toString(port));
+        // 2026/11/05：与后端连接器读取同一 Spring 配置，保留 Profile 和启动参数覆盖。
+        launcher.environment().put("TEANEKO_WEBSOCKET_PORT",
+                environment.getProperty("tea-neko.websocket.port", "0"));
         Process process = launcher.start();
         frontend = process;
         process.onExit().thenAccept(this::exited);

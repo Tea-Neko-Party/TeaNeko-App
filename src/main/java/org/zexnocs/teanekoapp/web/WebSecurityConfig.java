@@ -36,6 +36,7 @@ import java.util.Set;
  * <br>2026/11/05：补全单个聊天名称读取的管理员路由，修复活动时间线被前置查询阻断。
  *
  * <br>2026/11/05：模型检测及房间删除继续要求管理员会话和防伪校验。
+ * <br>2026/11/05：机器入口允许内网直接 WS，沿用独立令牌校验；网页 API 继续要求 HTTPS。
  *
  * @author zExNocs
  * @date 2026/11/03
@@ -46,6 +47,7 @@ import java.util.Set;
 @EnableWebSecurity
 public class WebSecurityConfig {
     /**
+     * 2026/11/05：机器传输兼容同机及 Docker 网桥 WS，不依赖来源 IP 或代理头放行认证。
      * @param http 框架安全构建器
      * @param credentials 唯一本地认证提供方
      * @param mapper 安全 DTO 序列化
@@ -114,10 +116,8 @@ public class WebSecurityConfig {
                         .requestMatchers("/ws/*").access((authentication, context) -> {
                             try {
                                 String path = Objects.requireNonNull(context).getRequest().getServletPath();
-                                var settings = credentials.settings();
-                                boolean secure = !settings.enabled()
-                                        || WebAccessFilter.secureTransport(context.getRequest(), settings);
-                                return new AuthorizationDecision(secure && credentials.machine(path.substring("/ws/".length()),
+                                // 2026/11/05：机器入口按独立令牌鉴权，WS 网络边界由部署监听与防火墙控制。
+                                return new AuthorizationDecision(credentials.machine(path.substring("/ws/".length()),
                                         context.getRequest().getHeader("Authorization")));
                             } catch (RuntimeException failure) {
                                 return new AuthorizationDecision(false);

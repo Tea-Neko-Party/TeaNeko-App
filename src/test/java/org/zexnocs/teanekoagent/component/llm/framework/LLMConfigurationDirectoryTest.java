@@ -26,11 +26,13 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：通过真实组件扫描验证业务标识不会占用框架 Environment Bean 名。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：确认扩展只发现一次，插件状态与实际模型注册仍实时更新。
+ * <br>2026/11/05：凭据目录重扫失败时保留已发布的完整模型配置目录。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class LLMConfigurationDirectoryTest {
     /** 2026/11/04：复现实际包扫描的命名路径，避免显式注册夹具绕过启动冲突。 */
@@ -55,7 +57,10 @@ class LLMConfigurationDirectoryTest {
         }
     }
 
-    /** 2026/11/04：只读公开样板，不访问运行凭据、文件或供应商网络。 */
+    /**
+     * 2026/11/04：只读公开样板，不访问运行凭据、文件或供应商网络。
+     * 2026/11/05：真实重载生命周期验证失败初始化不由查询重试，显式重扫恢复后复用缓存及实时启停。
+     */
     @Test
     void discoversProviderAdaptersAndFiltersByActualModelAndPlugin() {
         try (var context = new AnnotationConfigApplicationContext()) {
@@ -66,13 +71,23 @@ class LLMConfigurationDirectoryTest {
             when(models.getModels()).thenReturn(Map.of(LLMModelId.of(route), mock(ILLMModel.class)));
             context.registerBean(ILLMModelService.class, () -> models);
             context.registerBean(PluginAccess.class, () -> plugins);
-            context.registerBean(org.zexnocs.teanekocore.logger.ILogger.class,
-                    () -> mock(org.zexnocs.teanekocore.logger.ILogger.class));
-            context.register(BeanScanner.class, LLMConfigurationDirectory.class, DeepSeekConfigurationAdapter.class,
+            var logger = mock(org.zexnocs.teanekocore.logger.ILogger.class);
+            // 2026/11/05：由真实重载服务在容器就绪前初始化，目录查询不触发扫描。
+            context.registerBean(org.zexnocs.teanekocore.logger.ILogger.class, () -> logger);
+            var scanner = spy(new BeanScanner(context, logger));
+            // 2026/11/05：首次初始化失败由原重载服务保留恢复入口，业务查询不能反复扫描。
+            doThrow(new IllegalStateException("测试首次凭据目录初始化失败。")).doCallRealMethod().when(scanner)
+                    .getBeansWithAnnotationAndInterface(LLMCredentialInput.class, ILLMCredentialInput.class);
+            context.registerBean(BeanScanner.class, () -> scanner);
+            context.register(org.zexnocs.teanekocore.reload.ReloadService.class,
+                    LLMConfigurationDirectory.class, DeepSeekConfigurationAdapter.class,
                     KimiConfigurationAdapter.class, OpenAIResponsesConfigurationAdapter.class,
                     OpenAICompletionsConfigurationAdapter.class, ManualCredentialInput.class, EnvironmentCredentialInput.class);
             context.refresh();
             var directory = context.getBean(LLMConfigurationDirectory.class);
+            assertThrows(IllegalStateException.class, directory::describe);
+            verify(scanner, times(1)).getBeansWithAnnotationAndInterface(LLMCredentialInput.class, ILLMCredentialInput.class);
+            context.getBean(org.zexnocs.teanekocore.reload.ReloadService.class).reloadAll();
             var catalog = directory.describe();
             assertEquals(1, catalog.routes().size());
             assertEquals(route, catalog.routes().getFirst().id());
@@ -83,6 +98,21 @@ class LLMConfigurationDirectoryTest {
             assertEquals("${MODEL_API_KEY}", environment.prefix() + "MODEL_API_KEY" + environment.suffix());
             when(plugins.enabled(any(), any())).thenReturn(false);
             assertTrue(directory.describe().routes().isEmpty());
+            assertTrue(directory.describe().inputs().isEmpty());
+            when(plugins.enabled(any(), any())).thenReturn(true);
+            assertEquals(1, directory.describe().routes().size());
+            when(models.getModels()).thenReturn(Map.of());
+            assertTrue(directory.describe().routes().isEmpty());
+            verify(scanner, times(2)).getBeansWithAnnotationAndInterface(
+                    LLMConfigurationAdapter.class, ILLMConfigurationAdapter.class);
+            verify(scanner, times(2)).getBeansWithAnnotationAndInterface(
+                    LLMCredentialInput.class, ILLMCredentialInput.class);
+            // 2026/11/05：显式重扫失败不使已经发布的凭据输入目录消失。
+            var originalInputs = directory.describe().inputs();
+            doThrow(new IllegalStateException("测试凭据目录重扫失败。")).when(scanner)
+                    .getBeansWithAnnotationAndInterface(LLMCredentialInput.class, ILLMCredentialInput.class);
+            assertThrows(IllegalStateException.class, directory::reload);
+            assertEquals(originalInputs, directory.describe().inputs());
         }
     }
 }

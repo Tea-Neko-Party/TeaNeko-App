@@ -33,11 +33,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证方法声明、分页前分类、只读门禁与实际 Spring 注册任务关联。
+ * <br>2026/11/05：重复页面观测只读来源缓存，显式重扫失败保留旧目录。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Timeout(10)
 class RuntimeObservationTest {
@@ -88,7 +89,10 @@ class RuntimeObservationTest {
                 org.zexnocs.teanekocore.actuator.runtime.RuntimeManagement.Query.class).category());
     }
 
-    /** 读取实际 Spring 注解处理器持有的任务；原包装、方法关联、隐藏、身份和只读均使用真实对象。 */
+    /**
+     * 读取实际 Spring 注解处理器持有的任务；原包装、方法关联、隐藏、身份和只读均使用真实对象。
+     * 2026/11/05：分页不重复发现 Bean，显式失败重扫不破坏已有任务展示。
+     */
     @Test
     void springScheduledTasksRemainReadOnlyAndRetainActualMethodMetadata() {
         try (var context = new AnnotationConfigApplicationContext()) {
@@ -97,10 +101,13 @@ class RuntimeObservationTest {
             context.refresh();
             var scanner = mock(IBeanScanner.class);
             when(scanner.getBeansOfType(ScheduledTaskHolder.class)).thenReturn(context.getBeansOfType(ScheduledTaskHolder.class));
-            var source = new SpringTimerViewSource(scanner);
+            var sources = new TimerSourceScanner(scanner);
+            var source = new SpringTimerViewSource(sources);
             when(scanner.getBeansOfType(ITimerViewSource.class)).thenReturn(Map.of("spring", source));
+            sources.init();
+            sources.init();
             var directory = new TimerDirectory();
-            directory.installSources(scanner);
+            directory.installSources(sources);
             var page = directory.page("", 10, "agent.memory", "FIXED_DELAY", "", "测试");
             assertEquals(1, page.items().size());
             var item = page.items().getFirst();
@@ -109,6 +116,11 @@ class RuntimeObservationTest {
             assertEquals("ACTIVE", item.state());
             assertNotNull(item.rule().nextFire());
             assertTrue(item.actions().isEmpty());
+            assertEquals(item.id(), directory.page("", 10).items().getFirst().id());
+            verify(scanner, times(1)).getBeansOfType(ITimerViewSource.class);
+            verify(scanner, times(1)).getBeansOfType(ScheduledTaskHolder.class);
+            when(scanner.getBeansOfType(ITimerViewSource.class)).thenThrow(new IllegalStateException("测试重扫失败。"));
+            assertThrows(IllegalStateException.class, sources::reload);
             assertEquals(item.id(), directory.page("", 10).items().getFirst().id());
             assertThrows(java.util.NoSuchElementException.class, () -> directory.change(item.id(),
                     new TimerDirectory.Change(UUID.randomUUID(), 1, true), () -> {}));

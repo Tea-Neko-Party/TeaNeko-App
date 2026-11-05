@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.zexnocs.teanekoagent.component.sticker.*;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.fake_client.FakeClient;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -53,6 +54,7 @@ import static org.zexnocs.teanekoagent.component.memory.namespace.StickerCollect
 
 /**
  * 复用真实 DTO 与文件夹具，仅检查全局管理、删除保护及刷新与人工写入的仲裁。
+ * <br>2026/11/05：客户端目录按实际初始化流程建立，管理请求只查缓存。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
@@ -62,7 +64,7 @@ import static org.zexnocs.teanekoagent.component.memory.namespace.StickerCollect
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(30)
 class StickerManagementIntegrationTest {
@@ -117,6 +119,7 @@ class StickerManagementIntegrationTest {
     }
     /**
      * 共用既有存储，新增真实资源注册与显式授权；不启动 HTTP 或真实模型。
+     * <br>2026/11/05：初始化客户端缓存供重新分析定位来源。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
@@ -126,7 +129,7 @@ class StickerManagementIntegrationTest {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.2-l
      */
     private static final class Fixture implements AutoCloseable {
         final Hook hook=new Hook();
@@ -136,7 +139,10 @@ class StickerManagementIntegrationTest {
         final Observer observer=new Observer();
         final ManagementGateway gateway;
         final AgentScope refreshScope;
-        /** @param path 测试目录 */
+        /**
+         * 2026/11/05：模拟原重载服务初始化客户端目录，不让业务调用触发扫描。
+         * @param path 测试目录
+         */
         @SuppressWarnings("unchecked")
         Fixture(Path path){
             h=new Harness(path,hook);var logger=mock(ILogger.class);var beans=h.context.getBeanFactory();
@@ -154,7 +160,12 @@ class StickerManagementIntegrationTest {
                 catch(Exception failure){return TaskFuture.fromStage(logger,"素材事件",CompletableFuture.failedStage(failure));}
             });
             var events=new EventService(logger,handlers,tasks);events.installPluginAccess(new PluginAccess(plugins));beans.registerSingleton("events",events);
-            h.context.register(StickerEvents.class,StickerManagementService.class,StickerManagementResources.Catalog.class,StickerManagementResources.Preview.class,StickerManagementResources.Change.class,StickerManagementResources.Operation.class);
+            // 2026/11/05：管理入口复用客户端缓存目录，不再在操作时发现客户端 Bean。
+            h.context.register(TeaNekoClientScanner.class, StickerEvents.class,
+                    StickerManagementService.class, StickerManagementResources.Catalog.class,
+                    StickerManagementResources.Preview.class, StickerManagementResources.Change.class,
+                    StickerManagementResources.Operation.class);
+            h.context.getBean(TeaNekoClientScanner.class).init();
             hook.target=h.context.getBean(StickerEvents.class);h.file.setEventPlugins(List.of("test.stickers"));
             gateway=new ManagementGateway(plugins,List.of(h.context.getBean(StickerManagementResources.Catalog.class),h.context.getBean(StickerManagementResources.Preview.class),h.context.getBean(StickerManagementResources.Change.class),h.context.getBean(StickerManagementResources.Operation.class)),beans.getBeanProvider(ManagementAuthority.class));
         }

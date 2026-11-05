@@ -1,12 +1,15 @@
 package org.zexnocs.teanekoclient.web;
 
 import jakarta.annotation.PreDestroy;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
+import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
 
@@ -22,6 +25,7 @@ import java.util.concurrent.*;
  * <br>2026/11/04：进入房间时调用模块准备扩展，入站回执等待实际异步业务阶段。
  *
  * <br>2026/11/05：删除房间时撤销旧来源并阻止迟到发送。
+ * <br>2026/11/05：记录入站阶段与安全根因，异步失败不再只有笼统回执。
  *
  * @author zExNocs
  * @date 2026/11/03
@@ -38,6 +42,7 @@ public final class WebChatService {
     private final IEventService events;
     private final ObjectMapper mapper;
     private final Executor executor;
+    private final ILogger logger;
     private final UUID instance = UUID.randomUUID();
     private final ConcurrentMap<UUID, Work> active = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Gate> gates = new ConcurrentHashMap<>();
@@ -83,10 +88,11 @@ public final class WebChatService {
      * @param messages 原消息映射
      * @param events 原事件服务
      * @param mapper 固定请求摘要
+     * @param logger 安全入站诊断
      * @param executor 借用原业务执行域
      */
     public WebChatService(WebChatStore store, WebTeaNekoClient client, ITeaUserService users, TeaNekoScopeService scopes,
-            WebMessageFactory messages, IEventService events, ObjectMapper mapper,
+            WebMessageFactory messages, IEventService events, ObjectMapper mapper, ILogger logger,
             @Qualifier("virtualExecutor") Executor executor) {
         this.store = store;
         this.client = client;
@@ -95,6 +101,8 @@ public final class WebChatService {
         this.messages = messages;
         this.events = events;
         this.mapper = mapper;
+        // 2026/11/05：仅记录操作标识、处理阶段和脱敏根因，不记录聊天或凭据。
+        this.logger = logger;
         this.executor = executor;
     }
 
@@ -236,11 +244,12 @@ public final class WebChatService {
                     });
                 } else {
                     work.accepted.complete(claim.receipt());
+                    logger.info(getClass().getName(), "网页消息已受理。操作=" + request.operationId() + "，聊天=" + room.id());
                     try {
                         dispatch(room.id(), request.operationId(), claim, work);
                     } catch (RuntimeException rejected) {
-                        facts(room.id(), request.operationId(), "INDETERMINATE")
-                                .whenComplete((receipt, saveFailure) -> release(request.operationId(), work));
+                        facts(room.id(), request.operationId(), "INDETERMINATE", work, rejected)
+                                .whenComplete((receipt, saveFailure) -> finished(request.operationId(), work, saveFailure));
                     }
                 }
             });
@@ -259,16 +268,25 @@ public final class WebChatService {
      */
     private void dispatch(String room, UUID operation, WebChatStore.Claim claim, Work work) {
         CompletableFuture.runAsync(work.guard, executor)
-                .thenCompose(ignored -> messages.create(claim.room(), Objects.requireNonNull(claim.message()), work.guard, work.guard))
+                .thenCompose(ignored -> {
+                    // 2026/11/05：持久受理后的阶段可通过原回执查询，便于区分停在身份转换还是模型业务。
+                    work.phase = "转换网页消息与身份";
+                    return messages.create(claim.room(), Objects.requireNonNull(claim.message()), work.guard, work.guard);
+                })
                 .thenCompose(data -> {
                     data.checkCommandSource();
+                    work.phase = "通知消息监听器";
                     var event = new WebMessageReceiveEvent(data);
                     return TaskStages.successful(events.pushEventWithFuture(event), "网页消息入站")
                             // 2026/11/04：事件通知结束后继续等待实际命令和 Agent 工作，不阻塞通知线程。
-                            .thenCompose(ignored -> event.processingCompletion())
+                            .thenCompose(ignored -> {
+                                work.phase = "等待命令或 Agent 处理";
+                                return event.processingCompletion();
+                            })
                             .thenApply(ignored -> event.isCancelled() ? "REJECTED" : "DISPATCHED");
-                }).handle((status, failure) -> facts(room, operation, failure == null ? status : "INDETERMINATE"))
-                .thenCompose(stage -> stage).whenComplete((receipt, failure) -> release(operation, work));
+                }).handle((status, failure) -> facts(room, operation,
+                        failure == null ? status : "INDETERMINATE", work, failure))
+                .thenCompose(stage -> stage).whenComplete((receipt, failure) -> finished(operation, work, failure));
     }
 
     /**
@@ -290,13 +308,41 @@ public final class WebChatService {
      * @param room 原聊天
      * @param operation 原编号
      * @param status 已发生的入站事实
+     * @param work 当前进程工作及已知阶段
+     * @param failure 实际失败，正常完成时为空
      * @return 宿主事实保存阶段；撤权不使已发生事实丢失，也不新增执行权限
      */
-    private CompletionStage<WebChat.Receipt> facts(String room, UUID operation, String status) {
+    private CompletionStage<WebChat.Receipt> facts(String room, UUID operation, String status,
+                                                   Work work, @Nullable Throwable failure) {
         try {
-            return store.finish(room, operation, status, () -> {});
-        } catch (RuntimeException failure) {
-            return CompletableFuture.failedStage(failure);
+            // 2026/11/05：异步链的错误必须同时有可查询回执和可关联日志，不吞掉根因。
+            if (failure == null) {
+                return store.finish(room, operation, status, () -> {});
+            }
+            var diagnostic = FailureDiagnostic.from(failure);
+            logger.error(getClass().getName(), "网页消息处理失败。操作=" + operation
+                    + "，阶段=" + work.phase + "，" + diagnostic);
+            return store.finish(room, operation, status,
+                    "消息处理失败（" + work.phase + "）：" + diagnostic.description() + " 已发生动作不会撤销，不自动重发。", () -> {});
+        } catch (RuntimeException saveFailure) {
+            return CompletableFuture.failedStage(saveFailure);
+        }
+    }
+
+    /**
+     * 2026/11/05：持久回执失败同样可定位，实际异步完成后才释放处理槽。
+     * @param operation 原操作编号
+     * @param work 当前工作
+     * @param failure 最终回执写入失败，成功时为空
+     */
+    private void finished(UUID operation, Work work, @Nullable Throwable failure) {
+        try {
+            if (failure != null) {
+                logger.error(getClass().getName(), "网页消息回执未能保存。操作=" + operation
+                        + "，" + FailureDiagnostic.from(failure));
+            }
+        } finally {
+            release(operation, work);
         }
     }
 
@@ -308,7 +354,13 @@ public final class WebChatService {
      */
     public CompletionStage<WebChat.Receipt> operation(String room, UUID operation, Runnable guard) {
         check(guard);
-        return store.operation(room, operation, instance, () -> active.containsKey(operation), guard);
+        // 2026/11/05：进行中阶段只用于当前观察，不改写最终持久事实或触发重放。
+        return store.operation(room, operation, instance, () -> active.containsKey(operation), guard).thenApply(receipt -> {
+            var work = active.get(operation);
+            return work != null && receipt.status().equals("PERSISTED")
+                    ? new WebChat.Receipt(receipt.operationId(), receipt.messageId(), receipt.status(), work.phase)
+                    : receipt;
+        });
     }
 
     /**
@@ -388,13 +440,16 @@ public final class WebChatService {
     /**
      * 原入站通知的物理工作，不代表 Agent 全轮业务完成。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/05：记录正在等待的入站阶段，不保存用户正文。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.8.2-l
      */
     private static final class Work {
+        // 2026/11/05：跨异步观察线程可见，原操作编号仍唯一拥有处理链。
+        volatile String phase = "等待入站执行";
         final String digest;
         final Runnable guard;
         final CompletableFuture<WebChat.Receipt> accepted = new CompletableFuture<>();

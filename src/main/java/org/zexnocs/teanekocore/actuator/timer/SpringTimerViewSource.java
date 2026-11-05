@@ -6,7 +6,6 @@ import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ReflectionUtils;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerViewSource;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -15,19 +14,23 @@ import java.util.*;
 /**
  * 读取 Spring 实际注册任务，按原方法声明展示；不创建调度器，不接管暂停或取消。
  * 弱键仅维持同一活任务的观测标识，不延长已移除任务及其业务对象的生命周期。
+ * <br>2026/11/05：复用任务持有者发现缓存，观测时不遍历 Spring Bean 目录。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 @Component
 public final class SpringTimerViewSource implements ITimerViewSource {
-    private final IBeanScanner scanner;
+    private final TimerSourceScanner scanner;
     private final Map<ScheduledTask, UUID> ids = new WeakHashMap<>();
 
-    /** @param scanner 原宿主扫描器，查询时才读取已完成注册的任务 */
-    public SpringTimerViewSource(IBeanScanner scanner) {
+    /**
+     * 2026/11/05：查询只读取已发现的任务持有者，构造不扫描容器。
+     * @param scanner 专用调度来源目录
+     */
+    public SpringTimerViewSource(TimerSourceScanner scanner) {
         this.scanner = scanner;
     }
 
@@ -38,6 +41,7 @@ public final class SpringTimerViewSource implements ITimerViewSource {
     }
 
     /**
+     * 2026/11/05：持有者缓存不替代实时任务集合，已移除任务不会继续展示。
      * @param limit 最大观测数量
      * @return 原任务的只读窗口，同一任务由多个持有者公开时只展示一次
      */
@@ -45,7 +49,7 @@ public final class SpringTimerViewSource implements ITimerViewSource {
     public synchronized List<TimerDirectory.View> snapshot(int limit) {
         var seen = Collections.newSetFromMap(new IdentityHashMap<ScheduledTask, Boolean>());
         var result = new ArrayList<TimerDirectory.View>();
-        for (var holder : scanner.getBeansOfType(ScheduledTaskHolder.class).values()) {
+        for (var holder : scanner.holders()) {
             for (var scheduled : holder.getScheduledTasks()) {
                 if (!seen.add(scheduled)) {
                     continue;

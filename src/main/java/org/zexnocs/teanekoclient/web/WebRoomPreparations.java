@@ -4,6 +4,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
 import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -13,16 +14,17 @@ import java.util.concurrent.CompletionStage;
  *
  * 修改记录：<br>
  * 2026/11/04：扩展以业务 id 注册，不依赖 Spring Bean 名。
+ * <br>2026/11/05：准备扩展由扫描生命周期初始化或重扫，房间请求只读缓存。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.7.5-l
+ * @version 4.8.2-l
  */
 @Service
-public final class WebRoomPreparations {
+public final class WebRoomPreparations implements IScanner {
     private final IBeanScanner scanner;
-    private @org.jspecify.annotations.Nullable AnnotatedBeanRegistry<String, IWebRoomPreparation> registry;
+    private volatile @org.jspecify.annotations.Nullable AnnotatedBeanRegistry<String, IWebRoomPreparation> registry;
     private final ObjectProvider<PluginAccess> plugins;
 
     /**
@@ -35,20 +37,41 @@ public final class WebRoomPreparations {
     }
 
     /**
-     * 2026/11/04：独立 id 保持扩展键稳定，不占用容器名称。
-     * @return 首次实际进入房间时才发现的准备扩展，避免模块构造环
+     * 2026/11/05：在原重载服务初始化阶段发现一次，避免模块构造环。
      */
-    private synchronized AnnotatedBeanRegistry<String, IWebRoomPreparation> registry() {
+    @Override
+    public synchronized void init() {
         if (registry == null) {
-            registry = new AnnotatedBeanRegistry<>(scanner, WebRoomPreparation.class, IWebRoomPreparation.class,
+            reload();
+        }
+    }
+
+    /**
+     * 2026/11/05：准备扩展全部校验成功后一次替换，失败保留上一目录。
+     * @throws IllegalArgumentException 当扩展标识无效或重复时
+     */
+    @Override
+    public synchronized void reload() {
+        registry = new AnnotatedBeanRegistry<>(scanner, WebRoomPreparation.class, IWebRoomPreparation.class,
                 declaration -> {
                     if (!declaration.id().matches("[a-z][a-z0-9_.-]{0,63}")) {
                         throw new IllegalArgumentException("房间准备扩展标识无效。");
                     }
                     return declaration.id();
                 });
+    }
+
+    /**
+     * 2026/11/05：房间请求只查询缓存，不在初始化失败后重新发现 Bean。
+     * @return 已发布的完整准备扩展目录
+     * @throws IllegalStateException 当目录尚未成功初始化时
+     */
+    private AnnotatedBeanRegistry<String, IWebRoomPreparation> registry() {
+        var current = registry;
+        if (current == null) {
+            throw new IllegalStateException("网页房间准备目录尚未成功初始化，请检查初始化日志并显式重扫。");
         }
-        return registry;
+        return current;
     }
 
     /**

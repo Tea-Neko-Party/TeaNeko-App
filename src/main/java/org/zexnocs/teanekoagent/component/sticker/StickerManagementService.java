@@ -9,14 +9,14 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
-import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
+import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
+import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.plugin.management.ManagementAuthority;
 import org.zexnocs.teanekocore.plugin.management.ManagementContext;
 import org.zexnocs.teanekocore.plugin.management.ManagementResource;
 import org.zexnocs.teanekocore.utils.StableDigest;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -31,11 +31,12 @@ import java.util.concurrent.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：重新分析复用客户端发现缓存，连接资格仍在操作时读取。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Component
 public final class StickerManagementService {
@@ -45,7 +46,8 @@ public final class StickerManagementService {
     private final ObjectProvider<ManagementAuthority> authorities;
     private final ObjectProvider<IStickerLifecycle> lifecycle;
     private final PluginRegistry plugins;
-    private final IBeanScanner scanner;
+    // 2026/11/05：重新分析只查询已注册客户端，不在管理请求中发现 Bean。
+    private final TeaNekoClientScanner clients;
     private final tools.jackson.databind.ObjectMapper mapper;
     private final Executor executor;
     private final Semaphore previews=new Semaphore(2,true);
@@ -57,13 +59,24 @@ public final class StickerManagementService {
      * @param authorities 唯一显式授权
      * @param lifecycle 可选通知
      * @param plugins 原插件代次
-     * @param scanner 当前真实客户端
+     * 2026/11/05：复用可重扫客户端目录，连接状态在实际操作时读取。
+     * @param clients 当前真实客户端缓存目录
      * @param mapper 原转换器
      * @param executor 借用业务域
      */
-    public StickerManagementService(StickerExtensionRegistry registry,StickerLibrary library,IFileConfigService files,ObjectProvider<ManagementAuthority> authorities,
-            ObjectProvider<IStickerLifecycle> lifecycle,PluginRegistry plugins,IBeanScanner scanner,tools.jackson.databind.ObjectMapper mapper,@Qualifier("virtualExecutor") Executor executor){
-        this.registry=registry;this.library=library;this.files=files;this.authorities=authorities;this.lifecycle=lifecycle;this.plugins=plugins;this.scanner=scanner;this.mapper=mapper;this.executor=executor;
+    public StickerManagementService(StickerExtensionRegistry registry, StickerLibrary library, IFileConfigService files,
+            ObjectProvider<ManagementAuthority> authorities, ObjectProvider<IStickerLifecycle> lifecycle,
+            PluginRegistry plugins, TeaNekoClientScanner clients, tools.jackson.databind.ObjectMapper mapper,
+            @Qualifier("virtualExecutor") Executor executor) {
+        this.registry = registry;
+        this.library = library;
+        this.files = files;
+        this.authorities = authorities;
+        this.lifecycle = lifecycle;
+        this.plugins = plugins;
+        this.clients = clients;
+        this.mapper = mapper;
+        this.executor = executor;
     }
     /**
      * @param context 已认证全局身份
@@ -267,11 +280,23 @@ public final class StickerManagementService {
      */
     private static void capacityForCategory(Stickers.State state,Stickers.Entry e,String category,StickerSettings settings){if(state.getEntries().values().stream().filter(v->v!=e&&v.getState()==Stickers.EntryStatus.ACTIVE&&v.getAnalysis()!=null&&v.getAnalysis().primaryCategory().equals(category)).count()>=settings.maxPerCategory()){throw new IllegalStateException("目标类别容量已满。");}}
     /**
+     * 2026/11/05：复用客户端发现缓存，仍要求唯一匹配且当前自身份可用。
      * @param scope 明确分析区域
      * @param operation 原操作
      * @return 不携带用户权限的真实区域定位
      */
-    private Stickers.Source refreshSource(AgentScope scope,UUID operation){var clients=scanner.getBeansOfType(ITeaNekoClient.class).values().stream().filter(c->c.getClientId().equals(scope.clientId())).toList();if(clients.size()!=1){throw new IllegalArgumentException("重新分析区域没有唯一真实客户端。");}var self=clients.getFirst().getTeaNekoToolbox().getSelfPlatformId().orElseThrow(()->new IllegalStateException("重新分析客户端尚未就绪。"));var system=new UUID(0,0);return new Stickers.Source(scope,system,"",self,"refresh-"+operation,0,Instant.now(),true,system,"");}
+    private Stickers.Source refreshSource(AgentScope scope, UUID operation) {
+        var found = clients.getHandlerMap().values().stream().map(Pair::second)
+                .filter(client -> client.getClientId().equals(scope.clientId())).toList();
+        if (found.size() != 1) {
+            throw new IllegalArgumentException("重新分析区域没有唯一真实客户端。");
+        }
+        var self = found.getFirst().getTeaNekoToolbox().getSelfPlatformId()
+                .orElseThrow(() -> new IllegalStateException("重新分析客户端尚未就绪。"));
+        var system = new UUID(0, 0);
+        return new Stickers.Source(scope, system, "", self, "refresh-" + operation, 0,
+                Instant.now(), true, system, "");
+    }
     /**
      * @param job 后台任务
      * @return 是否尚未形成终态

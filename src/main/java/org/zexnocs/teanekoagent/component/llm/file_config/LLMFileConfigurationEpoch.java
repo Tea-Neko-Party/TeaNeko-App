@@ -20,11 +20,12 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：版本校验使用运行缓存查询，不再创建原文档或读取配置模板。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Component
 public final class LLMFileConfigurationEpoch {
@@ -38,12 +39,13 @@ public final class LLMFileConfigurationEpoch {
     }
 
     /**
+     * 2026/11/05：同步构造借用原发布锁，不进入文档编辑路径。
      * @param action 仅同步构造参数或请求，不等待异步网络
      * @param <T> 返回类型
      * @return 同一文件锁内的结果
      */
     public <T> T fixed(Supplier<T> action) {
-        return files.withDocument(LLMModelFileConfig.class, document -> action.get());
+        return files.withRuntime(LLMModelFileConfig.class, stamp -> action.get());
     }
 
     /**
@@ -69,11 +71,11 @@ public final class LLMFileConfigurationEpoch {
     }
 
     /**
+     * 2026/11/05：直接读取缓存版本，保留加载失败与换代拒绝。
      * @return 当前有效缓存代次，不携带凭据或文件正文
      */
     private String current() {
-        return files.withDocument(LLMModelFileConfig.class, document -> {
-            var stamp = document.runtime();
+        return files.withRuntime(LLMModelFileConfig.class, stamp -> {
             if (!stamp.current()) {
                 throw new LLMConfigurationException("当前模型文件未成功加载。");
             }

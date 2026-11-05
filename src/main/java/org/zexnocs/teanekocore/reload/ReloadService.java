@@ -13,8 +13,13 @@ import java.util.concurrent.CopyOnWriteArrayList;
 /**
  * 将所有的 IReloadable 实现类进行管理，并提供一个统一的 reload 方法来调用它们的 reload 方法。
  *
+ * 修改记录：<br>
+ * 2026/11/05：初始化失败的扫描器仍保留在重载目录，修复配置后可由显式重扫恢复。
+ *
  * @author zExNocs
  * @date 2026/02/11
+ * @since 4.0.2
+ * @version 4.8.2-l
  */
 @Service
 public class ReloadService implements IReloadService {
@@ -31,13 +36,14 @@ public class ReloadService implements IReloadService {
 
     /**
      * 添加一个 IReloadable 实现类到管理列表中。
-     * 并调用一次该实现类的 init 方法，以确保它在添加时已经被正确加载。
+     * 2026/11/05：先登记再初始化，初始化失败仍允许后续显式重载，不由业务查询重试发现。
      * @param reloadable 需要添加的 IReloadable 实现类。
+     * @throws RuntimeException 当初始化失败时，已登记对象仍保留供显式重载
      */
     @Override
     public void addReloadable(IReloadable reloadable) {
-        reloadable.init();
         this.reloadableSet.add(reloadable);
+        reloadable.init();
     }
 
     /**

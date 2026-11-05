@@ -1,6 +1,6 @@
 # Web 控制台部署与开发
 
-当前开发版本：4.7.6-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，本批聊天室与模型改进见[实施记录](../plan/old/4.7.6-console-polish.md)。
+当前开发版本：4.8.2-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，模型与聊天补丁见[实施记录](../plan/old/4.8.2-web-model-chat.md)。
 
 ## 界面与模式
 
@@ -16,13 +16,13 @@
 
 右上角“外观设置”提供网页背景、前景文字和强调色的拾色器及十六进制输入。先在弹窗预览，保存后立即应用并保存在当前浏览器；面板、边框及按钮颜色随之派生。“恢复默认配色”继续使用原浅色、深色或系统主题，不修改服务端配置。刷新和更新目录使用统一图标，悬停提示与无障碍标签保留完整动作名称。
 
-概览中的客户端详情卡片独立展开，同一行其他卡片不随之拉高。Agent 工作区拥有独立聊天目录，已明确指定聊天时直接显示该聊天的内容；通过“选择其他聊天”展开目录。网页聊天的“聊天设置”和“活动与记忆”直接携带当前会话跳转，切换目标仍须处理已有草稿或待确认操作。
+概览中的客户端详情卡片独立展开，同一行其他卡片不随之拉高。Agent 工作区通过返回图标切换聊天。聊天配置使用可展开卡片，每张卡片独立登记、应用修改或取消登记；切换卡片保留各自草稿与原操作编号。网页聊天的“聊天设置”和“活动与记忆”直接携带当前会话，切换目标仍须处理已有草稿或待确认操作。
 
 ## 构建与入口
 
 概览机器状态卡片显示系统/程序 CPU、物理内存、JVM 堆用量和程序所在磁盘容量。页面可见时每 5 秒更新，切换页面、隐藏或退出时停止请求。首次 CPU 建立基准，无法提供的值显示暂不可用；详细口径见[机器指标](web-console-runtime.md#机器指标)。
 
-构建需要 JDK 25、Node 22.12 或以上版本及 npm；运行已打包 JAR 不需要 Node。前端使用 Vue 3、TypeScript 6、Vite 和 Element Plus，锁文件固定经过核验的组合；当前 Vue 类型检查工具未兼容 TypeScript 7，不能仅升级该依赖就假设构建可用。
+构建与生产运行命令见[构建指南](build-and-run.md)。构建需要 JDK 25、Node 22.12 或以上版本及 npm；运行已打包的生产 JAR 不需要 Node。前端使用 Vue 3、TypeScript 6、Vite 和 Element Plus，依赖由锁文件固定。
 
 ```powershell
 .\gradlew.bat bootJar
@@ -36,7 +36,7 @@ processResources 依赖 webBuild，后者按锁文件 npm ci、类型检查和�
 
 ## 首次启用
 
-默认 enabled=false，Web API 返回控制台未启用；已有机器接入保持原行为。开启前先准备 HTTPS，并限制后端端口不被公网直接访问。
+模板默认 `enabled: true`，默认 `prod` 由后端提供打包网页，不启动 Vite；已有配置不自动覆盖。生产部署需设置正式 HTTPS 来源及实际可信代理，并限制后端端口不被公网直接访问。显式关闭控制台后，Web API 返回控制台未启用。
 
 在本地 config/web/security.yml 配置：
 
@@ -71,7 +71,7 @@ public-origin 必须是完整 HTTPS 来源，不带路径或末尾斜线。直�
 
 2026/11/04：启用 Web 后，后端启动 INFO 日志输出网站地址、当前登录令牌和 `https://你的域名/console/#token=令牌` 快捷链接。启动登录信息不进入网页日志窗口；后端日志包含管理员凭据，应按凭据管理其访问权限。推荐使用片段形式；同时兼容 `?token=令牌`，查询形式可能被服务器或代理访问日志记录。
 
-启用 Web 后，已注册 /ws/{client} 机器入口须使用 HTTPS/WSS，并满足该客户端的机器令牌策略，不能使用管理会话代替。OneBot 须配置对应反向 WSS 地址；非空令牌使用 Authorization Bearer 头，明确空白放行时可不提供该头。握手后每次实际收发继续复核，令牌变更或配置不可用会使原证明失效；已受理的业务不宣称回滚。
+启用 Web 后，已注册 `/ws/{client}` 机器入口支持直接 WS 和代理 WSS，并满足该客户端的机器令牌策略，不能使用管理会话代替。内网 WS 不依赖回环 IP 或代理头判断同机，因此适用于 Docker 网桥；其可达范围由后端监听、端口发布和防火墙控制。非空令牌使用 Authorization Bearer 头，明确空白放行时可不提供该头。网页 API 仍要求 HTTPS。握手后每次实际收发继续复核，令牌变更或配置不可用会使原证明失效；已受理的业务不宣称回滚。
 
 启动失败日志包含阶段及固定原因：`SECURITY_CONFIG_INVALID` 表示安全配置校验失败，`CREDENTIAL_PREPARATION_FAILED` 表示根凭据准备或受限文件写入失败，`TOKEN_FILE_READ` 表示启动提示读取失败。根据阶段检查 `config/web/security.yml`、环境变量及 `data/web` 权限，不通过异常原文导出秘密。
 
@@ -97,13 +97,28 @@ public-origin: 'https://localhost:5173'
 trusted-proxies: ['127.0.0.1']
 ```
 
-机器客户端仍需另配 machine-tokens。本地 OneBot 使用 `wss://localhost:5173/ws/onebot`，由 Vite 转发到 `ws://127.0.0.1:6691/ws/onebot`，客户端携带配置的机器 Bearer 令牌。开发自签证书须被该机器客户端信任；浏览器接受证书不代表 OneBot 客户端也会信任。正式部署使用受信任证书。
+机器客户端仍需另配 machine-tokens。同机 OneBot 可直接使用 `ws://127.0.0.1:6691/ws/onebot`；需要开发 WSS 时使用 `wss://localhost:5173/ws/onebot`，由 Vite 转发到后端，实际端口随 `tea-neko.web.frontend.port` 配置。两种传输均使用机器 Bearer 令牌。开发自签证书须被机器客户端信任；浏览器接受证书不代表 OneBot 客户端也会信任。正式公网部署使用受信任证书。
 
 `6691` 默认提供 HTTP，不直接提供 TLS；不要连接 `wss://localhost:6691/ws/onebot`，否则客户端会报 `WRONG_VERSION_NUMBER`，后端会报 HTTP 方法包含 `0x16 0x03` 等无效字符。这是 TLS 握手被普通 HTTP 端口解析，发生在令牌验证之前。
 
+### 开发连接排错
+
+- 后端报告 HTTP 方法包含 `0x16 0x03`：连接方把 TLS 握手发送到了 HTTP 端口。本机可使用 `ws://127.0.0.1:6691/ws/onebot`，WSS 则连接提供 TLS 的实际代理端口，不能直接对 HTTP 后端使用 `wss://`。
+- 客户端报告 `self signed certificate`：已经接入 TLS，但客户端尚未信任 Vite 的开发证书；该错误发生在 WebSocket 握手及令牌校验之前。
+
+启动开发前端后，在项目根目录执行：
+
+```powershell
+npm --prefix frontend run dev:certificate
+$env:NODE_EXTRA_CA_CERTS = (Resolve-Path 'frontend/node_modules/.vite/basic-ssl/teaneko-dev-ca.pem').Path
+# 随后在同一窗口启动使用 Node.js 的 OneBot 客户端。
+```
+
+导出文件只包含公钥证书，不含私钥。原始 `_cert.pem` 同时包含私钥，不应交给客户端。`NODE_EXTRA_CA_CERTS` 只在 Node.js 进程启动时读取，浏览器接受证书或后端设置变量均不能改变另一个已运行客户端的信任状态。客户端使用独立证书配置时，导入导出的 PEM 文件；开发证书更新后重新导出并重启客户端。正式环境使用受信任证书的反向代理入口。
+
 ### 随后端自动启动前端
 
-2026/11/04：本地开发可额外启用 `web-dev` Profile。保持原有后端 Profile，并将应用工作目录设为项目根目录；已配置的 Web 认证和 HTTPS 来源仍按上文要求准备。
+默认 `./gradlew bootRun` 使用 `prod`，网页由后端直接提供。本地联合开发须显式选择 `dev,web-dev`，工作目录设为项目根目录，并将安全配置设为本机 HTTPS 来源与可信开发代理。
 
 在 IntelliJ 的后端运行配置中，将 Active profiles 设置为 `dev,web-dev`；也可在 VM options 设置 `-Dspring.profiles.active=dev,web-dev`，或在程序参数加入 `--spring.profiles.active=dev,web-dev`，三种方式任选一种并替换原有设置。不要将 `--spring.profiles.active=...` 放入 VM options。如果原来使用其他 Profile，将 `dev` 替换成原值。首次先在项目根目录执行：
 
@@ -111,7 +126,7 @@ trusted-proxies: ['127.0.0.1']
 .\gradlew.bat webInstall
 ```
 
-之后直接运行后端即可。使用 Gradle 联合启动时执行：
+之后运行 IntelliJ 后端配置即可；Gradle 联合开发使用：
 
 ```powershell
 .\gradlew.bat bootRun "-PspringProfile=dev,web-dev"
@@ -134,6 +149,10 @@ npm run dev
 
 ## 客户端扩展
 
+客户端页显示机器入口的公开 WSS 地址、服务器本机 WS 地址及两者端口。Docker 内网使用后端服务名及 `server.port`。令牌默认遮盖，仅点击眼睛时通过受保护入口读取磁盘值；隐藏或离开页面即清除显示，下方可修改 Token。保存仍与应用分开，未应用的磁盘令牌不代表当前握手策略。
+
+需要独立后端监听时设置 `tea-neko.websocket.port`（默认 `0` 共用 `server.port`），非零端口只绑定 `127.0.0.1`。联合开发启动自动将该端口交给 Vite 的 `/ws/` 代理；单独启动可用 `TEANEKO_WEBSOCKET_PORT` 覆盖。公开 WSS 端口独立于后端及开发前端端口，通过 TLS 代理实际监听，并设置 `tea-neko.websocket.public-origin=wss://主机:端口`；留空继承控制台 HTTPS 来源，见[自定义 WSS 端口](web-console-clients.md#自定义-wss-端口)。这些监听设置修改后需重启。
+
 已有 Spring Bean 实现 IClientManagementAdapter 并标记 @TeaNekoClientManagement("实际clientId")；ClientManagementDirectory 复用 Core AnnotatedBeanRegistry 和 scanner，校验版本、重复键及返回标识。@PluginOwned 沿用原插件启用/代次，不因为扫描到实现就宣称当前账号可操作。
 
 describe 返回中文平台名、状态、实际连接数、说明、观测时间和设置能力，不导出 session、scope 或凭据。账号目录、目标分页、服务端解析与显式目录同步分别由 accounts、targets、resolve、discover 扩展；指令台通过 consoleState 与 consoleLease 明确扩展，默认不支持。平台插件代次在实际写事务与返回时复核，目录发现不能代替授权。来源、固定连接及真实回执见[指令台说明](web-console-commands.md)。
@@ -145,7 +164,7 @@ describe 返回中文平台名、状态、实际连接数、说明、观测时�
 已完成管理认证、配置/文件事务、机器令牌、分层记忆、任务分类、机器指标和平台生命周期的定向回归，并通过前端类型/生产构建、本机浏览器夹具及实际 JAR 核对。完整范围和证据见[补丁验证记录](../plan/old/4.7.1-web-operations-validation.md)，不代替以下部署检查。
 
 - [ ] 正式证书、可信代理头、后端端口保护、浏览器 Cookie 与空闲过期。
-- [ ] 实际机器 WSS 握手、短值/空白/缺省策略、换密钥后旧连接拒绝及多连接行为。
+- [ ] 实际机器 WS/WSS 握手（同机、Docker 内网及 TLS 代理）、短值/空白/缺省策略、换密钥后旧连接拒绝及多连接行为。
 - [ ] 服务账户文件权限、原子替换、环境变量；普通配置授权和 `core.runtime` 保存/应用。
 - [ ] MySQL/JPA 上配置与网页聊天的并发、回执恢复和重启；真实模型视觉、分层记忆与逐段表达。
 - [ ] 实际部署产物版本、CPU/内存口径及页面隐藏后的刷新停止。

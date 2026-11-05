@@ -49,11 +49,12 @@ import static org.mockito.Mockito.mock;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：目录查询复用发现结果，重扫失败保留旧声明且插件启停实时生效。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 class TeaNekoAgentToolTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -62,7 +63,10 @@ class TeaNekoAgentToolTest {
             new AgentActorContext(new AgentScope("onebot", "群"), AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "用户", "消息", "群"),
             AgentActivity.COMMAND, List.of());
 
-    /** 自动能力进入真实 Spring 宿主目录，扫描不提前构造懒业务 Bean。 */
+    /**
+     * 自动能力进入真实 Spring 宿主目录，扫描不提前构造懒业务 Bean。
+     * 2026/11/05：说明目录不因容器新增声明自动重扫，失败重扫保留原目录并实时检查插件。
+     */
     @Test void discoversSpringServiceLazilyWithoutManualFeature() {
         var created = new AtomicInteger();
         try (var executor = Executors.newVirtualThreadPerTaskExecutor(); var context = new AnnotationConfigApplicationContext()) {
@@ -77,6 +81,15 @@ class TeaNekoAgentToolTest {
             var features = context.getBean(TeaNekoAgentToolRegistry.class).combine(List.of());
             assertEquals(3, features.getFirst().tools().select(definition, request, null).size());
             assertEquals(1, created.get());
+            var directory = context.getBean(TeaNekoAgentToolRegistry.class);
+            var plugins = context.getBean(PluginRegistry.class);
+            var original = directory.describe(plugins);
+            context.registerBean("duplicateTools", DemoTools.class);
+            assertEquals(original, directory.describe(plugins));
+            assertThrows(IllegalArgumentException.class, directory::reload);
+            assertEquals(original, directory.describe(plugins));
+            plugins.setEnabled("teaneko.agent", false);
+            assertTrue(directory.describe(plugins).isEmpty());
         }
     }
 
@@ -147,12 +160,15 @@ class TeaNekoAgentToolTest {
         }
     }
 
-    /** 重名注解在注册目录阶段拒绝，避免模型根据不明确工具名调用错误实现。 */
+    /**
+     * 重名注解在注册目录阶段拒绝，避免模型根据不明确工具名调用错误实现。
+     * 2026/11/05：重复声明在单例发现阶段即拒绝，不留到高频查询时检查。
+     */
     @Test void rejectsDuplicateToolsDuringDiscovery() {
         try (var executor = Executors.newVirtualThreadPerTaskExecutor(); var context = new AnnotationConfigApplicationContext()) {
             context.registerBean("first", DemoTools.class); context.registerBean("second", DemoTools.class); context.refresh();
-            var registry = new TeaNekoAgentToolRegistry(context.getBeanFactory(), mapper, executor);
-            assertThrows(IllegalArgumentException.class, () -> registry.combine(List.of()));
+            assertThrows(IllegalArgumentException.class,
+                    () -> new TeaNekoAgentToolRegistry(context.getBeanFactory(), mapper, executor));
         }
     }
 

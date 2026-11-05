@@ -43,11 +43,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：配置目录显式初始化，业务查询复用完整发现缓存。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.2-l
  */
 @Timeout(20)
 class ConfigEditIntegrationTest {
@@ -132,7 +133,10 @@ class ConfigEditIntegrationTest {
         }
     }
 
-    /** 2026/11/04：真实配置事务、通用投影及登记状态使用同一持久化身份。 */
+    /**
+     * 2026/11/04：真实配置事务、通用投影及登记状态使用同一持久化身份。
+     * 2026/11/05：目录发现由初始化执行，投影查询不扫描 Bean。
+     */
     @Test
     void genericJsonFieldsPreserveTypesAliasesAndSecretBoundaries() {
         try (var db = new NamespaceDatabaseFixture()) {
@@ -162,7 +166,9 @@ class ConfigEditIntegrationTest {
             var bean = new ComplexManager();
             when(scanner.getBeansWithAnnotation(ConfigManager.class)).thenReturn(Map.of("complex", new IndependentPair<>(manager, bean)));
             doReturn(ComplexManager.class).when(scanner).getBeanClass(bean);
-            var section = new ChatSettingsDirectory(scanner, db.mapper).entries().get("complex").section();
+            var directory = new ChatSettingsDirectory(scanner, db.mapper);
+            directory.init();
+            var section = directory.entries().get("complex").section();
             var view = section.view(new ChatTargets.Resolved("test", "a", "t", KEY, "测试群", "GROUP", "1", false),
                     new ConfigEdits.Snapshot(true, "test", "{\"oldItems\":[{\"name\":\"茶\",\"weight\":4}],\"secret\":\"不能回显\"}"))
                     .toCompletableFuture().join();

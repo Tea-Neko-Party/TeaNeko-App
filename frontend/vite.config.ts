@@ -23,7 +23,8 @@ export default defineConfig(({ command }) => {
         },
         // 2026/11/04：本机 WSS 在 Vite 终止 TLS，再向后端 HTTP 端口转发握手，保留机器认证头。
         '/ws/': {
-          target: `ws://127.0.0.1:${ports.backend}`,
+          // 2026/11/05：独立 WebSocket 监听不改变普通 API 的代理目标。
+          target: `ws://127.0.0.1:${ports.websocket}`,
           ws: true,
           changeOrigin: false,
           headers: { 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': ports.authority },

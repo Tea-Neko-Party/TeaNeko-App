@@ -27,14 +27,18 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：取消额外本地白名单，覆盖默认目录、身份拒绝和原平台隔离。
  * <br>2026/11/04：验证简短显示名独立于稳定标识及完整说明。
  * <br>2026/11/04：验证实际登记状态、排序及在途目录查询的会话撤权。
+ * <br>2026/11/05：目录显式初始化，查询不发现 Bean，失败重扫保留原目录。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.4-l
+ * @version 4.8.2-l
  */
 class ChatSettingsServiceTest {
-    /** 2026/11/04：配置按真实登记状态排序，查询全程保持管理员、插件和客户端边界。 */
+    /**
+     * 2026/11/04：配置按真实登记状态排序，查询全程保持管理员、插件和客户端边界。
+     * 2026/11/05：初始化与查询分开，重扫失败仍保留原目录且查询不自动重试。
+     */
     @Test
     void discoversManagersWithoutLocalAllowlistButChecksClientAndPlugin() {
         var scanner = mock(IBeanScanner.class);
@@ -46,6 +50,10 @@ class ChatSettingsServiceTest {
         doReturn(GeneralManager.class).when(scanner).getBeanClass(general);
         doReturn(PlatformManager.class).when(scanner).getBeanClass(platform);
         var directory = new ChatSettingsDirectory(scanner, new ObjectMapper());
+        assertThrows(IllegalStateException.class, directory::entries);
+        verifyNoInteractions(scanner);
+        directory.init();
+        clearInvocations(scanner);
         var plugins = mock(PluginRegistry.class);
         when(plugins.isEnabled("test.plugin")).thenReturn(true);
         var clients = mock(ClientManagementDirectory.class);
@@ -101,10 +109,13 @@ class ChatSettingsServiceTest {
         assertThrows(CompletionException.class, () -> waiting.toCompletableFuture().join());
         when(plugins.isEnabled("test.plugin")).thenReturn(false);
         assertEquals(1, service.sections(() -> {}).size());
+        // 2026/11/05：插件和权限实时变化不重新扫描，失败重扫保留两项原声明。
+        verifyNoInteractions(scanner);
         when(scanner.getBeansWithAnnotation(ConfigManager.class)).thenReturn(Map.of(
                 "a", new IndependentPair<>(GeneralManager.class.getAnnotation(ConfigManager.class), general),
                 "b", new IndependentPair<>(GeneralManager.class.getAnnotation(ConfigManager.class), general)));
-        assertThrows(IllegalArgumentException.class, () -> new ChatSettingsDirectory(scanner, new ObjectMapper()).entries());
+        assertThrows(IllegalArgumentException.class, directory::reload);
+        assertEquals(2, directory.entries().size());
     }
 
     /**

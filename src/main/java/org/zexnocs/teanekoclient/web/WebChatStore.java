@@ -29,6 +29,7 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/05：原子删除网页房间、消息及附件，不影响共享记忆或配置。
  * <br>2026/11/05：允许私聊原成员修改网页角色，保持唯一成员和原聊天归属。
+ * <br>2026/11/05：持久回执保留实际失败阶段与脱敏原因，支持后续查询。
  *
  * @author zExNocs
  * @date 2026/11/03
@@ -318,6 +319,23 @@ public final class WebChatStore {
      * @return 已持久阶段
      */
     public CompletionStage<WebChat.Receipt> finish(String room, UUID operation, String status, Runnable guard) {
+        // 2026/11/05：旧调用沿用固定说明，实际入站失败可通过重载保存脱敏诊断。
+        String note = status.equals("DISPATCHED")
+                ? "本条消息的入站通知及已登记处理阶段已结束，请查看对话中的实际回复。"
+                : "消息已保存，但入站或业务处理未完成；请检查 Agent 活动与模型配置。已发生动作不会撤销，不自动重发。";
+        return finish(room, operation, status, note, guard);
+    }
+
+    /**
+     * 2026/11/05：保留实际失败的安全说明，原始异常和聊天正文不进入回执。
+     * @param room 原聊天
+     * @param operation 原编号
+     * @param status 实际处理状态
+     * @param note 宿主生成的脱敏说明，不接受第三方异常原文
+     * @param guard 原授权或仅保存事实的检查
+     * @return 原操作的最终持久回执
+     */
+    public CompletionStage<WebChat.Receipt> finish(String room, UUID operation, String status, String note, Runnable guard) {
         return transaction(guard, state -> {
             state.room(room);
             var journal = journal(room);
@@ -325,10 +343,7 @@ public final class WebChatStore {
             if (!old.receipt().status().equals("PERSISTED")) {
                 return old.receipt();
             }
-            var receipt = new WebChat.Receipt(operation, old.receipt().messageId(), status,
-                    // 2026/11/04：网页等待原业务阶段，失败提示引导检查活动，不能将入站保存冒充回复。
-                    status.equals("DISPATCHED") ? "本条消息的入站通知及已登记处理阶段已结束，请查看对话中的实际回复。"
-                            : "消息已保存，但入站或业务处理未完成；请检查 Agent 活动与模型配置。已发生动作不会撤销，不自动重发。");
+            var receipt = new WebChat.Receipt(operation, old.receipt().messageId(), status, note);
             journal.operations().put(operation, new Operation(old.digest(), old.instance(), receipt, old.at()));
             saveJournal(room, journal);
             return receipt;

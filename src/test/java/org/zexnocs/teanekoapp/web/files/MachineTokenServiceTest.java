@@ -3,12 +3,15 @@ package org.zexnocs.teanekoapp.web.files;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.env.StandardEnvironment;
+import org.springframework.mock.env.MockEnvironment;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
+import org.zexnocs.teanekoapp.web.WebSocketEndpoints;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
+import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
 import org.zexnocs.teanekocore.file_config.FileTypeScanner;
 import org.zexnocs.teanekocore.file_config.api.FileConfig;
@@ -34,10 +37,14 @@ import static org.mockito.Mockito.*;
 /**
  * 使用真实 YAML、类型锁及持久回执验证机器令牌局部保存、并发仲裁和受限应用。
  *
+ * 修改记录：<br>
+ * 2026/11/05：核对公开连接地址和实际监听端口，普通目录继续排除令牌。
+ * <br>2026/11/05：夹具通过专用类型目录装配配置服务。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.1-l
+ * @version 4.8.2-l
  */
 class MachineTokenServiceTest {
     @TempDir
@@ -51,6 +58,10 @@ class MachineTokenServiceTest {
     void savesOnlyChosenTokenAndUsesDurableSecretAwareReceipts() throws Exception {
         var fixture = new Fixture(root);
         var view = fixture.service.read(() -> {}).toCompletableFuture().join();
+        // 2026/11/05：WSS 默认端口与后端端口分开返回，不把后端 HTTP 地址交给机器客户端。
+        assertEquals("wss://console.example/ws/onebot", view.clients().getFirst().address());
+        assertEquals(443, view.clients().getFirst().port());
+        assertEquals(6691, view.clients().getFirst().backendPort());
         assertFalse(fixture.mapper.writeValueAsString(view).contains("original-token"));
         var change = new MachineTokens.Change(UUID.randomUUID(), view.revision(), "SET", "short");
         var saved = fixture.service.save("onebot", change, () -> {}).toCompletableFuture().join();
@@ -98,11 +109,12 @@ class MachineTokenServiceTest {
 
     /**
      * 固定临时文件和同步执行域，不启动平台或模型。
+     * <br>2026/11/05：提供与实际部署一致的连接端口环境。
      *
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.7.1-l
+     * @version 4.8.2-l
      */
     private static final class Fixture {
         final ObjectMapper mapper = new ObjectMapper();
@@ -132,7 +144,8 @@ class MachineTokenServiceTest {
                       other: '${UNSET_MACHINE_TEST:untouched-token}'
                     unknown-setting: preserved
                     """);
-            files = new FileConfigService(parsers, classes, mock(ILogger.class), config);
+            // 2026/11/05：配置服务复用专用类型目录，不直接执行底层发现。
+            files = new FileConfigService(parsers, new FileConfigScanner(classes), mock(ILogger.class), config);
             files.reload();
             var clients = mock(ClientManagementDirectory.class);
             when(clients.list()).thenReturn(List.of(new IClientManagementAdapter.View("onebot", "OneBot", "CONNECTED", 1, "已连接", Instant.now(), true)));
@@ -143,7 +156,10 @@ class MachineTokenServiceTest {
             when(client.getClient()).thenReturn(socket);
             when(scanner.getPair("onebot")).thenReturn(new IndependentPair<>(mock(TeaNekoClient.class), client));
             service = new MachineTokenService(files, clients, scanner,
-                    new FileConfigOperations(mapper, root.resolve("journal")), Runnable::run);
+                    // 2026/11/05：测试连接资料不依赖真实正在监听的应用。
+                    new FileConfigOperations(mapper, root.resolve("journal")),
+                    new WebSocketEndpoints(new MockEnvironment().withProperty("local.server.port", "6691"), 0, ""),
+                    Runnable::run);
         }
     }
 }

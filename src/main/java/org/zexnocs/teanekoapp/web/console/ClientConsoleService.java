@@ -15,7 +15,6 @@ import org.zexnocs.teanekocore.command.interfaces.IHelpSubCommandHandler;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.utils.StableDigest;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -27,11 +26,12 @@ import java.util.concurrent.*;
  * 每个编号只有一个物理工作拥有者，浏览器断开不释放实际执行槽或触发自动重放。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/05：指令台目录只查询已注册方法，不在页面请求中解析 Bean 类型或重新枚举方法。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.2-l
  */
 @Service
 public final class ClientConsoleService {
@@ -41,7 +41,6 @@ public final class ClientConsoleService {
     private final ConsoleOperationStore operations;
     private final ICommandDispatcher dispatcher;
     private final CommandScanner commands;
-    private final IBeanScanner beans;
     private final IFileConfigService files;
     private final org.zexnocs.teanekocore.plugin.PluginAccess plugins;
     private final Executor executor;
@@ -50,24 +49,23 @@ public final class ClientConsoleService {
     private volatile boolean closed;
 
     /**
+     * 2026/11/05：命令元数据复用原 Scanner，移除运行期底层发现依赖。
      * @param clients 原平台管理目录
      * @param operations 原 EasyData 持久回执
      * @param dispatcher 原命令分发器
      * @param commands 原已注册命令目录
-     * @param beans 原 Bean 目标类型扫描器
      * @param files 本地白名单
      * @param plugins 原命令插件归属和代次
      * @param executor 借用原执行域
      */
     public ClientConsoleService(ClientManagementDirectory clients, ConsoleOperationStore operations,
-            ICommandDispatcher dispatcher, CommandScanner commands, IBeanScanner beans, IFileConfigService files,
+            ICommandDispatcher dispatcher, CommandScanner commands, IFileConfigService files,
             org.zexnocs.teanekocore.plugin.PluginAccess plugins,
             @Qualifier("virtualExecutor") Executor executor) {
         this.clients = clients;
         this.operations = operations;
         this.dispatcher = dispatcher;
         this.commands = commands;
-        this.beans = beans;
         this.files = files;
         this.plugins = plugins;
         this.executor = executor;
@@ -91,7 +89,8 @@ public final class ClientConsoleService {
                         if (map == null || !map.getCommandAnnotation().enable()) {
                             continue;
                         }
-                        for (var method : beans.getBeanClass(map.getCommand()).getMethods()) {
+                        // 2026/11/05：别名与默认方法复用扫描缓存，查询不再依赖底层发现工具。
+                        for (var method : map.getRegisteredMethods()) {
                             if (!ManagementCommandPolicy.declared(method) || !plugins.enabled(map.getCommand(), method)) {
                                 continue;
                             }

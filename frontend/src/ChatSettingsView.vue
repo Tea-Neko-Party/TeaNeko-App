@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
-import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
+import {computed, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
 import {
   ElAlert,
   ElButton,
@@ -51,6 +51,8 @@ const sectionOptions = computed(() => sections.value
   .filter(item => (item.group === 'agent') === (configGroup.value === 'agent'))
   .sort((left, right) => Number(right.registered === true) - Number(left.registered === true)))
 const section = ref('agent')
+// 2026/11/05：配置卡片按需展开；切换卡片继续保存各自草稿和原操作编号。
+const cardOpen = ref(true)
 const view = ref<View>()
 const values = ref<Record<string, string>>({})
 const busy = ref(false)
@@ -62,7 +64,8 @@ const assemblyValid = ref(true)
 const lastReceipt = ref<Receipt>()
 // 2026/11/04：未提交内容按真实目标与配置区分别保留，仅保存在当前组件内存。
 interface Draft {view: View; values: Record<string, string>; pending?: Change; receipt?: Receipt}
-const drafts = new Map<string, Draft>()
+// 2026/11/05：卡片草稿提示随独立保存、恢复和放弃实时更新。
+const drafts = reactive(new Map<string, Draft>())
 const lastSections: Record<string, string> = {agent: 'agent'}
 const previousNonNull: Record<string, string> = {}
 const draftKey = () => JSON.stringify([client.value, account.value, selected.value?.ref, section.value])
@@ -181,6 +184,8 @@ function setNull(field: Field, checked: boolean) {
 }
 
 function clearEditor() {
+  // 2026/11/05：切换聊天后默认展开新目标配置，不继承上一个目标的折叠状态。
+  cardOpen.value = true
   assemblyValid.value = true
   // 2026/11/04：切换聊天时清除上一聊天的登记标记，全局目录的状态仍为未知。
   sections.value = catalog.value
@@ -252,10 +257,12 @@ async function chooseTarget(value: Target) {
 }
 
 async function chooseSection(value: string) {
-  if (value === section.value || !await leaveDraft()) return
+  if (busy.value) return
+  if (value === section.value) { cardOpen.value = !cardOpen.value; return }
   await run(async () => {
     stash()
     section.value = value
+    cardOpen.value = true
     lastSections[configGroup.value] = value
     // 2026/11/04：读失败时不能把上一配置表单用于新配置路径。
     view.value = undefined
@@ -272,6 +279,8 @@ async function chooseGroup(value: string) {
   await run(async () => {
     stash()
     configGroup.value = value
+    // 2026/11/05：切换配置分类后展开当前分类的首个配置。
+    cardOpen.value = true
     section.value = sectionOptions.value.find(item => item.id === lastSections[value])?.id ?? sectionOptions.value[0]?.id ?? ''
     view.value = undefined
     values.value = {}
@@ -432,26 +441,23 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       </ElCard>
       <div class="settings-editor">
         <!-- 2026/11/04：读取失败时仍保留配置选择与重读入口，避免卡在上一份表单。 -->
-        <div v-if="selected && sectionOptions.length" class="editor-heading">
-          <!-- 2026/11/04：其他功能已登记项显示绿色前标，未登记及未知项不显示标记。 -->
-          <ElSelect v-if="sectionOptions.length > 1" :model-value="section" :disabled="busy" filterable aria-label="配置类型" @update:model-value="chooseSection">
-            <template v-if="configGroup !== 'agent' && sections.find(item => item.id === section)?.registered === true" #prefix><span class="config-registered-dot" role="img" aria-label="已登记" title="已登记"></span></template>
-            <ElOption v-for="item in sectionOptions" :key="item.id" :value="item.id" :label="item.name">
-              <span class="config-option-label"><span v-if="configGroup !== 'agent' && item.registered === true" class="config-registered-dot" role="img" aria-label="已登记" title="已登记"></span>{{ item.name }}</span>
-            </ElOption>
-          </ElSelect>
-          <RefreshButton v-if="!view" :disabled="busy" @click="run(restoreOrRead)" label="重新读取配置" />
-        </div>
         <ElEmpty v-if="!selected" description="选择一个聊天，查看与修改设置" />
         <!-- 2026/11/04：管理员直接编辑适用配置，空目录只说明当前客户端或插件未提供配置。 -->
         <ElEmpty v-else-if="!sectionOptions.length" description="这个聊天暂无适用的此类配置"><p class="small muted">这里只显示适用于当前客户端且所属插件已启用的聊天配置。</p></ElEmpty>
-        <template v-else-if="view">
+        <!-- 2026/11/05：每个配置独立成卡，操作只使用该卡的版本与字段，不提供跨卡批量保存。 -->
+        <ElCard v-for="item in selected ? sectionOptions : []" :key="item.id" shadow="never" class="config-section-card">
+          <button class="config-section-heading" :aria-expanded="section === item.id && cardOpen" :disabled="busy" @click="chooseSection(item.id)">
+            <span><span v-if="item.registered === true" class="config-registered-dot" role="img" aria-label="已登记"></span><strong>{{ item.name }}</strong><span v-if="drafts.has(JSON.stringify([client, account, selected?.ref, item.id]))" class="small muted"> · 有草稿</span></span>
+            <ConsoleIcon :name="section === item.id && cardOpen ? 'collapse' : 'expand'" />
+          </button>
+          <div v-if="section === item.id && cardOpen" class="config-section-content">
+          <RefreshButton v-if="!view" :disabled="busy" @click="run(restoreOrRead)" label="重新读取配置" />
+          <template v-if="view && selected">
           <!-- 2026/11/04：左侧已标明聊天，右侧只展示配置名称与登记状态。 -->
           <div class="editor-heading"><span class="connection-state">{{ view.registered ? '已登记' : '尚未登记' }}</span>
             <ElButton v-if="configGroup === 'agent'" :disabled="busy || !!pending" @click="emit('inspect', { client, account, target: selected.ref, name: view.targetName })">活动与记忆</ElButton>
             <ElButton v-show="advanced" :disabled="busy || !!pending" @click="emit('console', { client, account, target: selected.ref, name: view.targetName })">指令台</ElButton>
           </div>
-          <div class="section-title"><h3>{{ view.name }}</h3></div>
           <p class="config-description">{{ sections.find(item => item.id === section)?.description }}</p>
           <p class="small muted">{{ view.sharedExplanation }}</p>
           <ElButton v-if="!view.registered" type="primary" :disabled="busy || !!pending" @click="submit('REGISTER')">登记此配置</ElButton>
@@ -479,9 +485,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
           <ElButton v-if="hiddenCount" text @click="showAllFields = true">展开其余 {{ hiddenCount }} 项配置</ElButton>
           <ElButton v-else-if="showAllFields && !advanced && section === 'agent'" text @click="showAllFields = false">仅显示常用配置</ElButton>
           <div class="editor-actions">
-            <ElButton type="primary" :disabled="busy || !dirty || !!pending || !assemblyValid" @click="submit('PATCH')">保存修改</ElButton>
+            <ElButton type="primary" :disabled="busy || !dirty || !!pending || !assemblyValid" @click="submit('PATCH')">应用修改</ElButton>
             <RefreshButton :disabled="busy || !!pending" @click="reload" label="重新读取" />
-            <ElButton v-show="advanced" type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">注销登记</ElButton>
+            <ElButton type="danger" plain :disabled="busy || !!pending" @click="submit('UNREGISTER')">取消登记</ElButton>
             <span v-if="dirty" class="small muted">有未保存的修改{{ hiddenDirtyCount ? `（${hiddenDirtyCount} 项已折叠）` : '' }}</span>
           </div>
           </template>
@@ -493,7 +499,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
             <p>操作者：本地管理员 · {{ date(lastReceipt.at) }}{{ lastReceipt.replayed ? ' · 原结果重放' : '' }}</p>
             <DetailPanel><p class="small">操作编号：{{ lastReceipt.operationId }}</p></DetailPanel>
             <p class="small muted">{{ lastReceipt.action === 'PATCH' ? '修改字段：' + lastReceipt.fields.map(name => view?.fields.find(field => field.name === name)?.label ?? name).join('、') : lastReceipt.action === 'REGISTER' ? '登记完成' : '注销完成' }}</p></ElCard>
-        </template>
+          </template>
+          </div>
+        </ElCard>
       </div>
     </div>
   </div>

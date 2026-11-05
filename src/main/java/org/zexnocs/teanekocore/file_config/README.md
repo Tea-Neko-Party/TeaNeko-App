@@ -4,6 +4,10 @@
 
 4.7.0-l 新增 `withDocument`：只接受扫描注册的配置类型，在原类型锁内借用 `FileConfigDocument`，读取未展开的有界原树；`prepare/commit` 原子保存磁盘，`publish` 单独发布缓存。能力不得保留到回调之外，回调不申请其他类型锁或等待网络。格式解析器须实现 `IFileDocumentParser`；不支持的格式明确拒绝文档编辑。
 
+4.8.2-l 起，`FileConfigScanner` 在单例创建时发现配置类型，提供缓存查询与低频显式重扫；`FileConfigService` 和管理目录复用该结果。`reload()` 只重新加载配置值，不执行类路径扫描；统一重载服务先重扫类型及解析器，再加载配置。新增类型必须已能被当前类加载器发现，新增依赖仍需重启应用容器。
+
+普通业务使用 `get()` 或 `requireCurrent()` 查询配置。模型参数与凭据需要固定同一发布版本时，使用 `withRuntime(type, stamp -> ...)`：只借用原类型锁并读取缓存版本，不创建文档、不读取磁盘或模板，也不要求解析器支持文档编辑。回调只能执行短同步查询，不持锁等待网络或其他线程。`withDocument()` 留给实际原文档管理。
+
 原 `write` 与 `reload` 使用同一类型锁。磁盘已变化时，不允许旧缓存对象覆盖；`write` 仍表示显式保存对象值，可能写出已展开的环境值。文档编辑保留未改原节点与环境模板，但 YAML 注释和排版会规范化。网页的字段白名单、权限和持久回执属于管理应用层，见[文件配置说明](../../../../../../../docs/development/web-console-files.md)。
 
 | 区域 | 作用 |
@@ -13,6 +17,7 @@
 | `parser` | 内置 JSON 和 YAML 解析器。 |
 | `exception` | 配置数据缺失异常。 |
 | `FileConfigService` | 配置加载、写入、缓存和 reload。 |
+| `FileConfigScanner` | 实现 `IScanner`，缓存配置类型声明并支持显式重扫。 |
 | `FileTypeScanner` | 扫描 `@FileTypeParser` 并按 `FileConfigType` 注册解析器。 |
 
 # 二. 配置加载规则
@@ -32,7 +37,7 @@ FileConfigService.TEMPLATE_PATH // templates/config
 加载顺序：
 
 ```markdown
-1. 扫描所有带 @FileConfig 且实现 IFileConfigData 的类。
+1. 从 FileConfigScanner 的已发布缓存读取带 @FileConfig 且实现 IFileConfigData 的类型。
 2. 根据 @FileConfig.path、value 和 FileTypeParser.getSuffix() 构造 config 文件路径。
 3. 如果 config 文件存在，直接读取并反序列化。
 4. 如果 config 文件不存在，尝试从 classpath:templates/config 下复制模板。
@@ -52,8 +57,9 @@ FileConfigService.TEMPLATE_PATH // templates/config
 | `@FileConfig(sensitive = true)` | 加载失败不记录原始异常；普通序列化受只写字段约束，显式本地 YAML 写回保留当前只写字段。 |
 | `IFileConfigService.get(Class<T>)` | 获取最后一次成功加载的配置实例。 |
 | `IFileConfigService.requireCurrent(Class<T>)` | 读取最近一次加载成功的数据，最新加载失败时明确拒绝。 |
+| `IFileConfigService.withRuntime(type, action)` | 同一类型发布锁内查询缓存版本及配置，不进入文档与文件读取。 |
 | `IFileConfigService.write(IFileConfigData)` | 写回配置文件并刷新缓存。 |
-| `IFileConfigService.reload()` | 重新扫描并加载配置。 |
+| `IFileConfigService.reload()` | 重新加载当前容器已注册类型的配置值，发布新的加载代次。 |
 | `@FileTypeParser(FileConfigType.X)` | 标记自定义文件类型解析器。 |
 | `IFileTypeParser.fromFileToData(...)` | 从输入流读取配置对象。 |
 | `IFileTypeParser.fromDataToWrite(...)` | 将配置对象写入文件。 |
@@ -93,7 +99,7 @@ classpath:templates/config/teaneko/bot.json
 | 自定义解析器 | 同一个 `FileConfigType` 只应有一个解析器；重复注册时保留先扫描到的解析器并记录 warn。 |
 | 写入 | `write` 会创建父目录、写文件并更新缓存。 |
 | 占位符与写回 | 加载不自动改写文件；显式 write 写入当前对象，可能已展开环境变量。需要保留占位符时直接编辑原 YAML，不保存已解析对象覆盖模板。 |
-| 初始化顺序 | `FileTypeScanner` 的优先级高于 `FileConfigService`，保证解析器先注册。 |
+| 初始化顺序 | `FileConfigScanner` 与 `FileTypeScanner` 的优先级高于 `FileConfigService`，保证类型和解析器先注册。 |
 
 # 六. 兼容读取与严格读取
 

@@ -94,6 +94,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/05：通过真实扫描发现业务错误映射并验证原 MVC 安全链。
  * <br>2026/11/05：验证项目配置覆盖开发期会话落盘默认值，登录身份不跨实例恢复。
  * <br>2026/11/05：验证活动时间线前置名称查询的授权，不扩大到匿名读取或写操作。
+ * <br>2026/11/05：同机与 Docker 网桥明文 WS 保留机器令牌校验和换钥撤销，网页仍要求 HTTPS。
  *
  * <br>2026/11/05：验证模型检测及房间删除的真实认证与防伪链。
  * <br>2026/11/05：验证文件保存的缺失环境变量经过真实错误映射返回安全、可定位的提示。
@@ -833,7 +834,8 @@ class WebConsoleSecurityTest {
     }
 
     /**
-     * 随机根凭据只在本次实例有效，机器接入不能复用管理员登录且必须加密。
+     * 随机根凭据只在本次实例有效，机器接入使用独立令牌，网页认证必须加密。
+     * 2026/11/05：直接 WS 覆盖同机和 Docker 来源，验证错误令牌拒绝与换钥后持续撤销。
      * @throws Exception 当本机受限文件或请求失败时
      */
     @Test
@@ -858,16 +860,35 @@ class WebConsoleSecurityTest {
             fixture.mvc.perform(fixture.request("/ws/onebot", false)).andExpect(status().isUnauthorized());
             fixture.mvc.perform(fixture.request("/ws/onebot", false).header("Authorization", "Bearer " + TOKEN))
                     .andExpect(status().isUnauthorized());
+            // 2026/11/05：直接 WS 同样拒绝缺省或错误机器令牌，网页认证仍拒绝明文请求。
             fixture.mvc.perform(fixture.request("/ws/onebot", false).secure(false)
-                    .header("Authorization", "Bearer " + machine)).andExpect(status().isUnauthorized());
+                    .header("Authorization", "Bearer " + TOKEN)).andExpect(status().isUnauthorized());
+            fixture.mvc.perform(fixture.request("/ws/onebot", false).secure(false))
+                    .andExpect(status().isUnauthorized());
+            for (String address : List.of("127.0.0.1", "172.20.0.8")) {
+                fixture.mvc.perform(fixture.request("/ws/onebot", false).secure(false)
+                                .header("Authorization", "Bearer " + machine).with(request -> {
+                                    request.setRemoteAddr(address);
+                                    return request;
+                                }))
+                        .andExpect(status().isOk());
+            }
+            fixture.mvc.perform(fixture.request("/api/v1/auth/csrf", false).secure(false))
+                    .andExpect(status().isForbidden());
             fixture.mvc.perform(fixture.request("/ws/onebot", false).header("Authorization", "Bearer " + machine))
                     .andExpect(status().isOk());
             var source = new MockHttpServletRequest("GET", "/ws/onebot");
-            source.setSecure(true);
-            source.addHeader("Authorization", "Bearer " + machine);
+            // 2026/11/05：真实握手守卫也接受 Docker 网桥 WS，原连接在令牌换代后仍会被撤销。
+            source.setSecure(false);
+            source.setRemoteAddr("172.20.0.8");
+            source.addHeader("Authorization", "Bearer 错误机器令牌");
             var attributes = new HashMap<String, Object>();
             var guard = new WebSocketAccessGuard(fixture.credentials);
             var delegate = mock(WebSocketHandler.class);
+            assertFalse(guard.beforeHandshake(new ServletServerHttpRequest(source),
+                    mock(ServerHttpResponse.class), delegate, attributes));
+            source.removeHeader("Authorization");
+            source.addHeader("Authorization", "Bearer " + machine);
             assertTrue(guard.beforeHandshake(new ServletServerHttpRequest(source),
                     mock(ServerHttpResponse.class), delegate, attributes));
             var socket = mock(WebSocketSession.class);
