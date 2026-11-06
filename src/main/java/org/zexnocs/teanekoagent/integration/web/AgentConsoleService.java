@@ -32,14 +32,14 @@ import java.util.concurrent.CompletionStage;
  * 复用原领域管理事务和证据投影，不创建平行数据库或模型执行循环。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/06：支持已授权实例空间管理，不借用真实聊天身份。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class AgentConsoleService {
@@ -177,7 +177,8 @@ public final class AgentConsoleService {
         }
         var base = configuration.base(configuration.settings(scope));
         if (query.action().equals("READ")) {
-            return object(personalities.binding(scope).thenCompose(binding -> {
+            CompletionStage<Optional<PersonalityBinding>> selectedBinding = personalities.binding(scope);
+            return object(selectedBinding.thenCompose(binding -> {
                 context.checkActive();
                 String key = query.key().isBlank() ? binding.map(PersonalityBinding::correctionKey).orElse("") : query.key();
                 CompletionStage<Optional<PersonalityState>> state = key.isEmpty()
@@ -204,7 +205,8 @@ public final class AgentConsoleService {
                 throw new IllegalStateException("基础人格配置已经变化。");
             }
         };
-        return object(personalityManagement.apply(command, base, Instant.now(), guard).thenCompose(result -> {
+        var changed = personalityManagement.apply(command, base, Instant.now(), guard);
+        return object(changed.thenCompose(result -> {
             if (result.status() != PersonalityManagementResult.Status.APPLIED) {
                 return CompletableFuture.completedStage(personalityResult(operation, result, "本次未产生新修改。"));
             }
@@ -256,8 +258,21 @@ public final class AgentConsoleService {
      * @return 实际聊天，不从请求 DTO 读取 scope
      */
     static AgentScope scope(ManagementContext context) {
+        // 2026/11/06：实例管理有自己的来源域，不伪造任何客户端聊天或登记绑定。
+        if (global(context)) {
+            return new AgentScope("management", "instance");
+        }
         var target = ManagementTargets.decode(context.scopeRef());
         return new AgentScope(target.client(), target.scope());
+    }
+
+    /**
+     * 2026/11/06：仅宿主实例资源入口创建 global 上下文，浏览器不能填写该值。
+     * @param context 可信管理上下文
+     * @return 是否为独立实例管理
+     */
+    static boolean global(ManagementContext context) {
+        return context.scopeRef().equals("global");
     }
 
     /**
@@ -265,7 +280,7 @@ public final class AgentConsoleService {
      * @param operation 原操作，重放时保持来源不变
      * @return 独立管理来源 UUID，不注册平台用户或继承聊天用户身份
      */
-    private AgentActorContext actor(ManagementContext context, UUID operation) {
+    static AgentActorContext actor(ManagementContext context, UUID operation) {
         var subject = UUID.nameUUIDFromBytes(("management:" + context.subject()).getBytes(StandardCharsets.UTF_8));
         return new AgentActorContext(scope(context), AgentActorContext.Origin.MANAGEMENT, Optional.of(subject), "",
                 operation.toString(), context.scopeRef());
@@ -290,7 +305,7 @@ public final class AgentConsoleService {
      * @param note 后续协调说明
      * @return 明确事务回执
      */
-    private AgentConsole.ChangeView personalityResult(UUID operation, PersonalityManagementResult result, String note) {
+    static AgentConsole.ChangeView personalityResult(UUID operation, PersonalityManagementResult result, String note) {
         return new AgentConsole.ChangeView(operation, result.status().name(), result.key(), -1, result.stateRevision(), note);
     }
 

@@ -18,13 +18,15 @@ import {
   ElTag
 } from 'element-plus'
 import type {Platform} from './api'
-import {ApiError, request} from './api'
+import {ApiError, request, requestEmpty} from './api'
 import ConsoleIcon from './ConsoleIcon.vue'
 import {useConsolePreferences} from './console-preferences'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
 import AgentWorkspaceView from './AgentWorkspaceView.vue'
 import ChatSettingsView from './ChatSettingsView.vue'
 import AgentChatStatus from './AgentChatStatus.vue'
+import {usePageDraft} from './pages/page-guards'
+import {useActivePolling} from './pages/active-polling'
 
 interface Profile { id: string; uuid: string; name: string }
 interface Member { profile: string; card: string; role: string }
@@ -106,7 +108,12 @@ let generation = 0
 let polling = false
 let pullSequence = 0
 let pollController: AbortController | undefined
-let interval: ReturnType<typeof setInterval> | undefined
+// 2026/11/06：沉浸式标题由页面实例声明，宿主无须识别网页聊天的内部状态。
+defineExpose({headingHidden: roomOpen})
+usePageDraft(() => ({dirty: !!text.value.trim() || !!media.value,
+  pending: !!pending.value || !!pendingAdmin.value || !!pendingUpload.value || receipt.value?.status === 'PERSISTED', busy: busy.value}))
+useActivePolling(() => props.active && roomOpen.value, () => void poll(), 2000)
+watch(() => props.active, active => { if (!active) pollController?.abort() })
 const base = (id = roomId.value) => `chat/rooms/${encodeURIComponent(id)}`
 const imageUrl = (id: string) => `/api/v1/${base()}/media/${encodeURIComponent(id)}`
 const blocked = computed(() => busy.value || !!pending.value || !!pendingAdmin.value || !!pendingUpload.value)
@@ -229,7 +236,7 @@ async function refreshHome() {
 async function deleteRoom(item: Room) {
   if (!await confirm(`删除“${item.name}”及其全部聊天消息、图片？此操作无法复原。共享记忆与聊天配置不会删除。`, '删除聊天')) return
   await run(async () => {
-    await request(`chat/rooms/${encodeURIComponent(item.id)}?revision=${item.revision}`, {method: 'DELETE'})
+    await requestEmpty(`chat/rooms/${encodeURIComponent(item.id)}?revision=${item.revision}`, {method: 'DELETE'})
     if (roomId.value === item.id) {
       pollController?.abort()
       roomOpen.value = false
@@ -319,7 +326,7 @@ async function choose(id: string) {
   notice.value = ''
   settings.value = undefined
   await run(async () => {
-    await request(`${base()}/open`, {method: 'POST'})
+    await requestEmpty(`${base()}/open`, {method: 'POST'})
     await pull(); await context(); await images()
   })
 }
@@ -491,7 +498,7 @@ async function forgetPending() {
 async function removeImage(id: string) {
   if (!await confirm('仅删除当前消息窗口没有引用的网页图片，不影响 Agent 已保存的文字记忆。', '删除图片')) return
   await run(async () => {
-    await request(`${base()}/media/${encodeURIComponent(id)}`, { method: 'DELETE' })
+    await requestEmpty(`${base()}/media/${encodeURIComponent(id)}`, { method: 'DELETE' })
     if (media.value === id) media.value = ''
     await images()
   })
@@ -553,9 +560,8 @@ watch(text, (value, previous) => {
 onMounted(() => {
   void run(refresh)
   window.addEventListener('beforeunload', beforeUnload)
-  interval = setInterval(() => void poll(), 2000)
 })
-onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort(); pollController?.abort(); clearInterval(interval); pending.value = undefined; pendingAdmin.value = undefined; pendingUpload.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => { generation++; commandEpoch++; commandController?.abort(); pollController?.abort(); pending.value = undefined; pendingAdmin.value = undefined; pendingUpload.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
 </script>
 
 <template>

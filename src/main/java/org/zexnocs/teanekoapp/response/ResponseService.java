@@ -25,9 +25,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * 用于接收从 client 的响应信息。
  * 该类不应该由外部直接调用，而应该通过 {@link org.zexnocs.teanekoapp.sender.interfaces.ISenderService} 来注册 future。
  *
+ * <br>2026/11/06：诊断仅记录安全标识、帧长度与异常定位，不复制消息正文。
+ *
  * @author zExNocs
  * @date 2026/02/23
  * @since 4.0.8
+ * @version 4.8.4-l
  */
 @EventListener
 public class ResponseService implements IResponseService {
@@ -97,8 +100,7 @@ public class ResponseService implements IResponseService {
             logger.errorWithReport(ResponseService.class.getSimpleName(), """
                     收到一个未注册的 echo 的响应信息，无法找到对应的 SendData:
                     success: %s
-                    echo: %s
-                    rawData: %s""".formatted(success, echo, rawData));
+                    关联: %s""".formatted(success, org.zexnocs.teanekocore.utils.StableDigest.sha256(String.valueOf(echo))));
             return;
         }
         var key = pair.first();
@@ -121,8 +123,7 @@ public class ResponseService implements IResponseService {
                 logger.errorWithReport(ResponseService.class.getSimpleName(), """
                     解析响应信息失败，无法将 rawData 解析成 %s 类型的对象。
                     success: %s
-                    echo: %s
-                    rawData: %s""".formatted(responseType.getName(), success, echo, rawData), e);
+                    关联: %s""".formatted(responseType.getName(), success, org.zexnocs.teanekocore.utils.StableDigest.sha256(String.valueOf(echo))), e);
             }
         } else {
             // 如果 responseType 为 null，则将空数据传递给 future

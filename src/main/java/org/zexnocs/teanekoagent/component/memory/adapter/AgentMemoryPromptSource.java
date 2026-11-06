@@ -35,13 +35,14 @@ import java.util.function.Supplier;
  * 两次读取共享条数、字符和扫描预算，各自保留读取时刻与覆盖，不冒充同一数据库快照。
  * <br>2026/11/02：共享事实不再要求整句原文匹配，并为跨主体记忆预留读取预算。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 public final class AgentMemoryPromptSource implements IAgentPromptSource {
     private final MemoryAccessService access;
@@ -238,7 +239,7 @@ public final class AgentMemoryPromptSource implements IAgentPromptSource {
         for (int depth = 0; depth < 32 && (failure instanceof CompletionException || failure instanceof ExecutionException); depth++) {
             var cause = failure.getCause(); if (cause == null || cause == failure) { break; } failure = cause;
         }
-        if (failure instanceof AgentPromptException known) { return new AgentPromptException(known.reason()); }
+        if (failure instanceof AgentPromptException known) { return new AgentPromptException(known.reason(), known); }
         if (failure instanceof ExecutionStoppedException known) { return new ExecutionStoppedException(known.reason()); }
         if (failure instanceof AgentMemoryReferenceException known) { return new AgentMemoryReferenceException(known.reason()); }
         if (failure instanceof MemoryFactGenerationException known) { return new AgentPromptException(known.missingNamespace() ? AgentPromptException.Reason.UNAVAILABLE : AgentPromptException.Reason.CHANGED); }
@@ -247,9 +248,9 @@ public final class AgentMemoryPromptSource implements IAgentPromptSource {
                 case DISABLED, READ_DISABLED -> new AgentPromptException(AgentPromptException.Reason.DISABLED);
                 case STOPPED -> new ExecutionStoppedException(ExecutionControl.StopReason.CANCELLED);
                 case TIMED_OUT -> new ExecutionStoppedException(ExecutionControl.StopReason.DEADLINE_EXCEEDED);
-                default -> new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE);
+                default -> new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE, failure);
             };
         }
-        return new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE);
+        return new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE, failure);
     }
 }

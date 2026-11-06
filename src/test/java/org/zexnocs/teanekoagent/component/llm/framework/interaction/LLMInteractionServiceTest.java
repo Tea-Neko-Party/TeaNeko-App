@@ -56,10 +56,13 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
  * <br>2026/11/05：验证末轮保留可信定义、禁用工具及内部调用标记不泄漏到最终答案。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/05：覆盖双竖线正文泄漏、一次协议纠正、原预算及已执行工具不重试。
+ * <br>2026/11/06：验证观察器异常不改变结果或泄漏执行资源。
+ * <br>2026/11/06：验证多次模型往返的单次汇总、真实输入和外层观察归属。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 class LLMInteractionServiceTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -144,6 +147,54 @@ class LLMInteractionServiceTest {
     private void reply(ILLMResult response) {
         replies.getLast().complete(response);
         runtime.runAll();
+    }
+
+    /** 2026/11/06：观察器抛错不改变真实交互结果，子控制仍在结束后释放。 */
+    @Test
+    void observerFailureCannotChangeTheResultOrLeakTimers() {
+        service.installObserver((request, elapsed, result) -> {
+            throw new IllegalStateException("测试观察器不可用");
+        });
+        try (var parent = runtime.parent(settings.limits())) {
+            var pending = service.interact(prompt(), tools((call, context) ->
+                    CompletableFuture.completedStage("结果")), context(parent));
+            runtime.runAll();
+            reply(response("stop", "正常结果"));
+            assertEquals(SUCCESS, pending.toCompletableFuture().join().status());
+        }
+        assertEquals(0, runtime.pendingTimers());
+    }
+
+    /**
+     * 2026/11/06：两次模型调用和工具回填只通知一次；宿主接管时零次，保留实际输入。
+     * @param owned 是否由 Agent 在更外层汇总
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void reportsOneInteractionWithExactAttemptsUnlessOwnedByAgent(boolean owned) {
+        var reports = new ArrayList<LLMInteractionResult>();
+        service.installObserver((request, elapsed, result) -> reports.add(result));
+        try (var parent = runtime.parent(settings.limits())) {
+            var base = context(parent);
+            var trusted = new ToolInvocationContext(base.requestId(), base.bindings(), parent, owned);
+            var pending = service.interact(prompt(), tools((call, context) ->
+                    CompletableFuture.completedStage("工具返回测试文本")), trusted);
+            runtime.runAll();
+            reply(response("tool_calls", "调用工具", call("first")));
+            reply(response("stop", "最终结果"));
+            var result = pending.toCompletableFuture().join();
+            assertEquals(SUCCESS, result.status());
+            assertEquals(owned ? 0 : 1, reports.size());
+            assertEquals(2, result.attempts().size());
+            var first = result.attempts().getFirst().input().orElseThrow();
+            assertEquals(1, first.messages().size());
+            assertTrue(first.declaration().contains("work"));
+            var second = result.attempts().getLast().input().orElseThrow();
+            assertTrue(second.messages().stream().anyMatch(ILLMToolMessage.class::isInstance));
+            assertFalse(new ObjectMapper().writeValueAsString(result).contains("declaration"));
+            assertEquals(owned, trusted.withControl(parent).externallyObserved());
+        }
+        assertEquals(0, runtime.pendingTimers());
     }
 
     /**
@@ -561,7 +612,8 @@ class LLMInteractionServiceTest {
             assertEquals(CANCELLED, result.status());
             verifyNoInteractions(models);
             verify(logger, never()).error(anyString(), anyString());
-            verify(logger).info(eq(LLMInteractionService.class.getName()), contains("原因=CANCELLED"));
+            // 2026/11/06：正常停止由终态观察统一报告，不再附加第二条 INFO。
+            verify(logger, never()).info(anyString(), anyString());
         }
     }
 

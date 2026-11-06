@@ -26,19 +26,39 @@ import static org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespac
  * 每次重试在 DatabaseTask 的新事务中重读行，以唯一键和已有 Version 仲裁创建及配额索引。
  * 不使用 EasyData DTO 缓存或无版本批量更新，提交成功后才公开业务结果。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：提供有界已存空间目录，查询不创建聊天绑定。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore {
     private static final String STORAGE_NAMESPACE = "agent.namespace.v1";
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
+
+    /**
+     * 2026/11/06：只扫描空间元数据目标，不加载全部数据库或创建者列表。
+     * @param after 原页面游标
+     * @param limit 一至五十项
+     * @return 实际空间目录与后继游标
+     */
+    @Override
+    public CompletionStage<org.zexnocs.teanekoagent.database.easydata.StoredPage<MemoryNamespace>> page(String after, int limit) {
+        if (after.length() > 128 || limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("空间目录分页无效。");
+        }
+        return submit("读取记忆空间目录", () -> {
+            var rows = dto("namespace").scan(after, null, limit + 1, EasyDataLock.NONE);
+            var items = rows.stream().limit(limit).map(row -> namespace(row, new MemoryNamespaceId(row.getKey()))).toList();
+            return new org.zexnocs.teanekoagent.database.easydata.StoredPage<>(items,
+                    rows.size() > limit ? rows.get(limit - 1).getKey() : "");
+        });
+    }
 
     /**
      * 保存现有基础设施，不在 Spring 构造期间查询或登记数据。

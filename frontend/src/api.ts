@@ -35,7 +35,14 @@ export class ApiError extends Error {
   }
 }
 
+/** 2026/11/06：JSON 入口不把坏正文或 null 视为成功；空响应须显式声明。 */
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return await exchange(path, init, false) as T
+}
+export async function requestEmpty(path: string, init: RequestInit = {}): Promise<void> {
+  await exchange(path, init, true)
+}
+async function exchange(path: string, init: RequestInit, empty: boolean): Promise<unknown> {
   // 2026/11/03：刷新页面后仍须先取得本会话防伪值，不能假设仅登录时需要。
   if (!csrf && init.method && init.method !== 'GET') await refreshCsrf()
   const headers = new Headers(init.headers)
@@ -46,16 +53,22 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
   if (!response.ok) {
     throw new ApiError(response.status, typeof body?.message === 'string' ? body.message : '请求未完成，请稍后重试。')
   }
-  return body as T
+  if (empty) return undefined
+  if (body === null) throw new ApiError(response.status, '结果未确认：服务未返回有效 JSON，请保留原操作编号。')
+  return body
 }
 
 export async function refreshCsrf(): Promise<void> {
-  csrf = await request<Csrf>('auth/csrf')
+  const next = await request<Csrf>('auth/csrf')
+  if (!next || typeof next.headerName !== 'string' || !next.headerName || typeof next.token !== 'string' || !next.token) {
+    throw new ApiError(200, '安全校验值响应无效，请重新登录。')
+  }
+  csrf = next
 }
 
 export async function login(token: string): Promise<void> {
   await refreshCsrf()
-  await request('auth/login', {
+  await requestEmpty('auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ username: 'admin', token }),
@@ -65,6 +78,6 @@ export async function login(token: string): Promise<void> {
 }
 
 export async function logout(): Promise<void> {
-  await request('auth/logout', { method: 'POST' })
+  await requestEmpty('auth/logout', { method: 'POST' })
   csrf = undefined
 }

@@ -21,22 +21,35 @@ import java.util.UUID;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：提供明确的借用资源 getter，保留旧访问器和原拥有者的关闭责任。
+ * <br>2026/11/06：显式传递汇总归属，不使用线程变量或全局请求缓存。
  * @param requestId 由宿主生成的请求标识
  * @param bindings 宿主固定的不可变业务绑定或本轮工具绑定集合
  * @param control 借用的取消、截止时间和预算控制
+ * @param externallyObserved 宿主将在完整轮次结束时统一报告
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.5-l
  */
 @JsonIgnoreType
-public record ToolInvocationContext(UUID requestId, EntitySnapshot bindings, ExecutionControl control) {
+public record ToolInvocationContext(UUID requestId, EntitySnapshot bindings, ExecutionControl control,
+                                    boolean externallyObserved) {
+    /**
+     * 独立 LLM 调用默认由交互层汇总。
+     * @param requestId 请求编号
+     * @param bindings 可信绑定
+     * @param control 借用控制
+     */
+    public ToolInvocationContext(UUID requestId, EntitySnapshot bindings, ExecutionControl control) {
+        this(requestId, bindings, control, false);
+    }
     /**
      * 校验由宿主提供的请求标识、不可变绑定和借用控制；模型参数不参与上下文构造。
      *
      * @param requestId 由宿主生成的请求标识
      * @param bindings 宿主固定的不可变业务绑定或本轮工具绑定集合
      * @param control 借用的取消、截止时间和预算控制
+     * @param externallyObserved 是否由外层统一报告
      * @throws NullPointerException 当必需的输入或依赖为空时
      */
     public ToolInvocationContext {
@@ -52,7 +65,7 @@ public record ToolInvocationContext(UUID requestId, EntitySnapshot bindings, Exe
      * @return 使用新阶段控制且保留相同请求标识与绑定的上下文
      */
     public ToolInvocationContext withControl(ExecutionControl stageControl) {
-        return new ToolInvocationContext(requestId, bindings, stageControl);
+        return new ToolInvocationContext(requestId, bindings, stageControl, externallyObserved);
     }
 
     /**

@@ -13,13 +13,14 @@ import java.util.Objects;
  * 从 Spring 本地环境按入队读取策略，构造时不解析配置，也不依赖 Agent 模型设置。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class SpringAgentQueueDefaults implements IAgentQueueDefaults {
@@ -42,8 +43,8 @@ public final class SpringAgentQueueDefaults implements IAgentQueueDefaults {
         try {
             return new AgentQueueSettings(environment.getProperty("tea-neko.agent.queue.max-waiting-requests", Integer.class, 5),
                     Duration.ofSeconds(environment.getProperty("tea-neko.agent.queue.timeout-seconds", Long.class, 30L)));
-        } catch (RuntimeException ignored) {
-            throw new IllegalStateException("Agent 排队配置不可用，请检查等待数量和时限。");
+        } catch (RuntimeException failure) {
+            throw new org.zexnocs.teanekocore.logger.DiagnosticException("Agent 排队配置不可用，请检查等待数量和时限。", failure);
         }
     }
 }

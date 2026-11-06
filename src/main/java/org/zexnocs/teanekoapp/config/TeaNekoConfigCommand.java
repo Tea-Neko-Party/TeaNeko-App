@@ -21,13 +21,14 @@ import java.util.concurrent.CompletionStage;
 /**
  * 配置管理指令，提供注册、注销、查询配置的功能
  * <br>4.1.0: 解决了配置 namespaces 固定的问题，将 namespace 与 client 绑定
- *
  * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ *
+ * <br>2026/11/06：移除无意义的业务字段术语，保留配置扩展说明。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.11
- * @version 4.7.6-l
+ * @version 4.8.4-l
  */
 @Description("配置管理指令，提供注册、注销、查询配置的功能。群组中只允许群主使用该指令。")
 // 2026/11/04：显示名与稳定指令前缀分别维护。
@@ -254,7 +255,13 @@ public class TeaNekoConfigCommand {
                     throw new IllegalArgumentException("业务扩展不得覆盖普通配置字段。");
                 }
                 return extension.set(commandData, configField, configValue)
-                        .handle((text, failure) -> failure == null ? text : "业务配置操作未能确认，请核对当前状态；已提交操作不会自动回退。")
+                        .handle((text, failure) -> {
+                            if (failure == null) {
+                                return text;
+                            }
+                            logger.error(getClass().getName(), "配置扩展写入未确认。扩展=" + extension.managerName(), failure);
+                            return "配置操作未能确认，请核对当前状态；已提交操作不会自动回退。";
+                        })
                         .thenCompose(messageSender::sendReplyMessageAsync);
             }
             return iConfigDataService.setRuleConfigFieldAsync(rule, commandData.getScopeId(), configField, configValue)
@@ -295,11 +302,14 @@ public class TeaNekoConfigCommand {
             result = result.thenCompose(values -> {
                 CompletionStage<String> extra;
                 try {
-                    extra = current ? extension.read(command) : CompletableFuture.completedStage(extension.managerName() + " 业务字段：\n"
+                    extra = current ? extension.read(command) : CompletableFuture.completedStage(extension.managerName() + "：\n"
                             + extension.fields().entrySet().stream().map(entry -> entry.getKey() + "：" + entry.getValue()).collect(java.util.stream.Collectors.joining("\n")));
                 } catch (RuntimeException failure) { extra = CompletableFuture.failedStage(failure); }
                 return extra.handle((text, failure) -> {
-                    if (failure != null) { values.add("业务配置读取失败，请核对注册状态与存储。"); }
+                    if (failure != null) {
+                        logger.error(getClass().getName(), "配置扩展读取失败。扩展=" + extension.managerName(), failure);
+                        values.add("配置读取失败，请核对注册状态与存储。");
+                    }
                     else if (!text.isBlank()) { values.add(text); }
                     return values;
                 });

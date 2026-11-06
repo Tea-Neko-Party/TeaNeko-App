@@ -10,13 +10,14 @@ import java.util.*;
  * 文件配置的脱敏表单与明确动作；原文、候选对象和文件路径均不属于传输视图。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：文件视图增加独立用途说明。
+ *
+ * <br>2026/11/06：文件字段携带注解指定编辑器，保留原构造兼容。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.6-l
+ * @version 4.8.4-l
  */
 public final class FileSettings {
     /** 禁止实例化契约命名空间。 */
@@ -141,6 +142,8 @@ public final class FileSettings {
      * 仅包含已开放字段的原始模板值，保护字段不返回原值或展开值。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
+     * <br>2026/11/06：投影值编辑器声明，保留原字段与构造合同。
+     *
      * @param path 实际指针
      * @param label 中文名
      * @param description 说明
@@ -149,13 +152,30 @@ public final class FileSettings {
      * @param configured 是否在文件或模板中声明了非空值
      * @param source 文件、模板或未声明
      * @param value 非敏感原始节点，保护字段为空
+     * @param editor 编辑器标识，只影响显示
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.8.4-l
      */
     public record Field(String path, String label, String description, String kind, boolean secret,
-                        boolean configured, String source, @Nullable JsonNode value) {}
+                        boolean configured, String source, @Nullable JsonNode value, String editor) {
+        /**
+         * 2026/11/06：保留原字段协议，未声明的编辑方式按类型选择。
+         * @param path 指针
+         * @param label 名称
+         * @param description 说明
+         * @param kind 值类型
+         * @param secret 敏感标记
+         * @param configured 配置状态
+         * @param source 来源
+         * @param value 非敏感值
+         */
+        public Field(String path, String label, String description, String kind, boolean secret,
+                boolean configured, String source, @Nullable JsonNode value) {
+            this(path, label, description, kind, secret, configured, source, value, "AUTO");
+        }
+    }
 
 /**
      * 表单区和磁盘/运行状态明确分开。

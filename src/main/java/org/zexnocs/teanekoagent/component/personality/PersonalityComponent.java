@@ -9,12 +9,14 @@ import java.util.Map;
 /**
  * 独立人格及观察式表达学习的参数声明，不依赖记忆组件是否安装。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "personality", name = "人格", description = "提供身份、说话风格、人格补正及独立观察学习。")
+@TeaNekoAgentComponent(id = "personality", order = 30, name = "人格", description = "提供身份、说话风格、人格补正及独立观察学习。")
 @PluginOwned("teaneko.agent")
 public final class PersonalityComponent extends BuiltinAgentComponent {
     private final PersonalityResolveSystem resolver;

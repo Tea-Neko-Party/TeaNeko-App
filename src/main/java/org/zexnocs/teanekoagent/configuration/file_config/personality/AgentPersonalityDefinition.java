@@ -13,12 +13,15 @@ import java.util.List;
  * 保留旧人格文件字段的配置 DTO，使用前由适配器冻结成基础人格，不直接写入组件。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/06：以类型注解声明人格 JSON 编辑器。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Getter @Setter @NoArgsConstructor
+@org.zexnocs.teanekocore.framework.config.ValueEditor("JSON")
 public class AgentPersonalityDefinition {
     private String id = "";
     private String displayName = "";

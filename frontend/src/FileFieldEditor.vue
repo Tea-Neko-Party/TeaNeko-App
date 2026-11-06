@@ -2,8 +2,9 @@
 // 2026/11/05：普通与模型表单共用局部字段编辑；原敏感值只显示配置状态，API 密钥单独命名。
 import {computed, ref, watch} from 'vue'
 import {ElInput, ElOption, ElSelect} from 'element-plus'
+import ValueEditor from './ValueEditor.vue'
 
-export interface FileField {path: string; label: string; description: string; kind: string; secret: boolean; configured: boolean; source: string; value: unknown}
+export interface FileField {path: string; label: string; description: string; kind: string; editor?: string; secret: boolean; configured: boolean; source: string; value: unknown}
 export interface CredentialInput {id: string; name: string; description: string; prefix: string; suffix: string; pattern: string; secret: boolean; placeholder: string}
 const props = defineProps<{field: FileField; draft: {action: string; text: string}; disabled: boolean; advanced: boolean; inputs?: CredentialInput[]; choices?: {value: string; label: string}[]}>()
 const emit = defineEmits<{action: [value: string]; text: [value: string]; error: [value: string]}>()
@@ -20,6 +21,8 @@ const inputText = computed(() => {
     : ''
 })
 const id = computed(() => 'file-' + props.field.path)
+const editorKind = computed(() => props.field.editor && props.field.editor !== 'AUTO' ? props.field.editor
+  : props.field.kind === 'JSON' ? 'JSON' : props.field.kind === 'LONG_TEXT' || props.draft.text.length > 160 ? 'LONG_TEXT' : '')
 
 /** 2026/11/05：按目录规则编码本次密钥或环境变量名，字段草稿是唯一输入状态。 */
 function encode(value: string) {
@@ -49,7 +52,8 @@ watch(() => props.draft.action, action => {
         <ElInput :id="id" :model-value="inputText" :type="mode?.secret ? 'password' : 'text'" :placeholder="mode?.placeholder" :aria-label="field.label" :disabled="disabled" autocomplete="off" @update:model-value="encode" /><p class="small muted">{{ mode?.description }}</p>
       </template>
       <ElSelect v-else-if="choices?.length && !field.secret" :id="id" filterable :model-value="draft.text" :disabled="disabled" :aria-label="field.label" @update:model-value="value => emit('text', String(value))"><ElOption v-for="choice in choices" :key="choice.value" :value="choice.value" :label="choice.label" /></ElSelect>
-      <ElInput v-else-if="!field.secret || draft.action === 'REPLACE_SECRET'" :id="id" :model-value="draft.text" :type="field.kind === 'JSON' ? 'textarea' : field.path.endsWith('/api-key') ? 'password' : 'text'" :rows="3" :disabled="disabled || !['KEEP', 'SET', 'REPLACE_SECRET'].includes(draft.action)" :placeholder="field.secret ? '仅填写本次新值，原值不会回显' : '支持环境占位符'" :aria-label="field.label" autocomplete="off" @update:model-value="value => emit('text', value)" />
+      <ValueEditor v-else-if="!field.secret && editorKind" :kind="editorKind" :model-value="draft.text" :label="field.label" :disabled="disabled || !['KEEP', 'SET'].includes(draft.action)" @update:model-value="value => emit('text', value)" />
+      <ElInput v-else-if="!field.secret || draft.action === 'REPLACE_SECRET'" :id="id" :model-value="draft.text" :type="field.secret ? 'password' : 'text'" :disabled="disabled || !['KEEP', 'SET', 'REPLACE_SECRET'].includes(draft.action)" :placeholder="field.secret ? '仅填写本次新值，原值不会回显' : '支持环境占位符'" :aria-label="field.label" autocomplete="off" @update:model-value="value => emit('text', value)" />
     </div>
   </div>
 </template>

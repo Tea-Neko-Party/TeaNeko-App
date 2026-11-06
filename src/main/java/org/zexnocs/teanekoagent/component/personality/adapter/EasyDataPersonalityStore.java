@@ -28,13 +28,14 @@ import java.util.function.Supplier;
  * <br>2026/11/03：释放到期补正占用的容量，保持备份不可变与管理代次稳定。
  * <br>2026/11/03：按原编号查询同管理主体及目标的持久化回执。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：增加空间分页和独立管理事务，保留版本、回执、备份及撤权回滚。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class EasyDataPersonalityStore implements IPersonalityStore, IPersonalityManagementStore, IMemoryMaintenance {
@@ -65,6 +66,25 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
     private static final String DOMAIN = "agent.personality.v1";
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
+
+    /**
+     * 2026/11/06：沿状态目标的持久键有界分页，不依赖当前聊天绑定。
+     * @param after 原物理游标
+     * @param limit 一至五十项
+     * @return 实际补正空间及备份目录
+     */
+    @Override
+    public CompletionStage<org.zexnocs.teanekoagent.database.easydata.StoredPage<PersonalityState>> page(String after, int limit) {
+        if (after.length() > 128 || limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("人格目录分页无效。");
+        }
+        return submit(() -> {
+            var rows = dto("state").scan(after, null, limit + 1, EasyDataLock.NONE);
+            var items = rows.stream().limit(limit).map(row -> read(row, PersonalityState.class)).toList();
+            return new org.zexnocs.teanekoagent.database.easydata.StoredPage<>(items,
+                    rows.size() > limit ? rows.get(limit - 1).getKey() : "");
+        });
+    }
 
     /**
      * 借用原数据库任务设施，构造期间无 I/O。
@@ -315,6 +335,46 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
     }
 
     /**
+     * 2026/11/06：独立空间管理复用版本、备份与操作账本，不伪造绑定或改变聊天引用。
+     * @param command 固定管理请求
+     * @param baseProvider 仅首次执行解析当前可信基础人格，已提交重放不重新解析
+     * @param now 操作时刻
+     * @param guard 当前授权
+     * @return 事务提交后的原回执
+     */
+    @Override
+    public CompletionStage<PersonalityManagementResult> applyUnbound(PersonalityManagementCommand command,
+            java.util.function.Supplier<@org.jspecify.annotations.Nullable BasePersonality> baseProvider,
+            Instant now, Runnable guard) {
+        if (command.actor().origin() != org.zexnocs.teanekoagent.runtime.AgentActorContext.Origin.MANAGEMENT
+                || command.action() == PersonalityManagementCommand.Action.BIND || command.bindingRevision() != 0) {
+            throw new SecurityException("独立人格管理只接受管理员的空间内容操作，不能修改聊天绑定。");
+        }
+        return submit(() -> {
+            guard.run();
+            var previous = dto("management-operation").find(command.operationId().toString(), EasyDataLock.NONE);
+            if (previous != null) {
+                var result = replay(previous, command);
+                guard.run();
+                return result;
+            }
+            var base = baseProvider.get();
+            if (java.util.Set.of(PersonalityManagementCommand.Action.ADD, PersonalityManagementCommand.Action.EDIT,
+                    PersonalityManagementCommand.Action.LOCK).contains(command.action())
+                    && (base == null || !base.fingerprint().equals(command.baseFingerprint()))) {
+                throw new IllegalArgumentException("独立内容操作需要匹配已确认的基础人格。");
+            }
+            var result = manage(command, base, null, null, now);
+            if (base != null && !base.equals(baseProvider.get())) {
+                throw new IllegalStateException("基础人格配置已变化，请重新读取。");
+            }
+            write(null, "management-operation", command.operationId().toString(), new ManagementReceipt(command, result));
+            guard.run();
+            return result;
+        });
+    }
+
+    /**
      * 固定绑定后仲裁源/目标集合，备份及修改仅在当前事务发布。
      * @param command 原命令
      * @param base 当前基础人格
@@ -323,9 +383,10 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
      * @param now 固定时刻
      * @return 当前动作结果
      */
-    private PersonalityManagementResult manage(PersonalityManagementCommand command, BasePersonality base, PersonalityBinding binding,
-            EasyDataRow bindingRow, Instant now) {
+    private PersonalityManagementResult manage(PersonalityManagementCommand command, @Nullable BasePersonality base, @Nullable PersonalityBinding binding,
+            @Nullable EasyDataRow bindingRow, Instant now) {
         if (command.action() == PersonalityManagementCommand.Action.BIND) {
+            Objects.requireNonNull(binding, "绑定动作需要真实聊天引用。");
             for (var key : java.util.stream.Stream.of(command.key(), binding.correctionKey()).distinct().sorted(Comparator.comparing(this::physical)).toList()) {
                 lock("state", physical(key));
             }
@@ -340,6 +401,7 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
             return managementResult(PersonalityManagementResult.Status.CONFLICT, command.key(), state, binding, null);
         }
         if (command.action() == PersonalityManagementCommand.Action.BIND) {
+            Objects.requireNonNull(binding, "绑定动作需要真实聊天引用。");
             if (state != null && state.backup()) { throw new IllegalArgumentException("备份必须先克隆才能绑定。"); }
             if (binding.correctionKey().equals(command.key())) {
                 if (state == null) { throw new IllegalStateException("当前人格绑定引用的补正空间缺失。"); }
@@ -361,10 +423,10 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
             write(null, "state", physical(key), clone);
             return managementResult(PersonalityManagementResult.Status.APPLIED, key, clone, binding, null);
         }
-        if (state.backup() || !binding.correctionKey().equals(state.key())) { throw new IllegalArgumentException("只能编辑当前绑定的可写补正空间。"); }
+        if (state.backup() || binding != null && !binding.correctionKey().equals(state.key())) { throw new IllegalArgumentException("只能编辑已授权的可写补正空间。"); }
         var items = new ArrayList<>(state.corrections());
         if (command.action() == PersonalityManagementCommand.Action.ADD) {
-            if (!base.mutableFields().contains(command.field()) || items.size() >= 64) { throw new IllegalArgumentException("补正字段不允许修改或集合已满。"); }
+            if (!Objects.requireNonNull(base).mutableFields().contains(command.field()) || items.size() >= 64) { throw new IllegalArgumentException("补正字段不允许修改或集合已满。"); }
             items.add(new PersonalityCorrection(command.operationId(), base.id(), base.version(), Objects.requireNonNull(command.field()),
                     Objects.requireNonNull(command.text()), 1, command.actor(), now, null, false));
         } else {
@@ -372,7 +434,7 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
             if (original == null) { return managementResult(PersonalityManagementResult.Status.NOT_FOUND, state.key(), state, binding, null); }
             if (command.action() == PersonalityManagementCommand.Action.REMOVE) { items.remove(original); }
             else {
-                if (!base.id().equals(original.baseId()) || base.version() != original.baseVersion() || !base.mutableFields().contains(original.field())) {
+                if (!Objects.requireNonNull(base).id().equals(original.baseId()) || base.version() != original.baseVersion() || !base.mutableFields().contains(original.field())) {
                     throw new IllegalArgumentException("该补正不兼容当前基础人格，只能撤销或克隆保存。");
                 }
                 var replacement = new PersonalityCorrection(original.requestId(), original.baseId(), original.baseVersion(), original.field(),
@@ -438,8 +500,8 @@ public final class EasyDataPersonalityStore implements IPersonalityStore, IPerso
      * @return 原提交观察
      */
     private PersonalityManagementResult managementResult(PersonalityManagementResult.Status status, String key, @Nullable PersonalityState state,
-            PersonalityBinding binding, @Nullable String backup) {
-        return new PersonalityManagementResult(status, key, state == null ? -1 : state.revision(), binding.revision(), backup);
+            @Nullable PersonalityBinding binding, @Nullable String backup) {
+        return new PersonalityManagementResult(status, key, state == null ? -1 : state.revision(), binding == null ? 0 : binding.revision(), backup);
     }
 
     /**

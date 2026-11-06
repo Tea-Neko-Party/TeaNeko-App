@@ -14,20 +14,20 @@ import java.util.*;
 
 /**
  * 素材与作业的有界持久数据；来源仅用于审计，不投影为跨群对话资料。
+ *
  * <br>2026/11/03：记录独立的真实机器人展示、区域回避轮次和展示幂等摘要。
  * <br>2026/11/03：管理状态、删除墓碑及重新分析按原版本仲裁。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：目录保留独立删除决定计数，不再内嵌所有已回收墓碑。
- *
  * <br>2026/11/06：分析类型声明字段语义与输出容量，复用统一 JSON 合同。
+ * <br>2026/11/06：作业明确声明恢复责任，只有已结束并释放资源的状态可转为短期观察。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 public final class Stickers {
     /** 不实例化数据命名空间。 */
@@ -188,7 +188,7 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.5-l
      */
     @Data @NoArgsConstructor public static class Job {
         private UUID id=UUID.randomUUID(), lease;
@@ -203,6 +203,16 @@ public final class Stickers {
         private boolean refresh, activateAfterRefresh;
         private long expectedEntryRevision;
         private String hint="";
+
+        /**
+         * 2026/11/06：统一持久恢复边界；结束但尚未释放文件或刷新占用的作业仍须持久保存。
+         * @return 仍会被执行或需要清理资源时为真
+         */
+        @com.fasterxml.jackson.annotation.JsonIgnore
+        public boolean requiresRecovery() {
+            return status == JobStatus.QUEUED || status == JobStatus.RUNNING
+                    || !cleanup && (reserved > 0 || refresh);
+        }
     }
     /**
      * 素材条目和有限人类使用窗口；机器人展示另计，不用于抬高人类热度。

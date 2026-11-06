@@ -9,12 +9,14 @@ import java.util.Map;
 /**
  * 在 ACTIVE 模式下按静默时段、冷却和退避产生自主候选。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "proactive", name = "主动活动", description = "在 ACTIVE 模式下按静默时段、冷却和退避产生自主候选。")
+@TeaNekoAgentComponent(id = "proactive", order = 80, name = "主动活动", description = "在 ACTIVE 模式下按静默时段、冷却和退避产生自主候选。")
 @PluginOwned("teaneko.agent")
 public final class ProactiveComponent extends BuiltinAgentComponent {
     /** 创建本组件独立参数模板，不启动业务或修改存储。 */

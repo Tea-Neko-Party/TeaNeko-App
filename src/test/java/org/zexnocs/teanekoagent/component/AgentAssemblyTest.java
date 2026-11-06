@@ -37,12 +37,13 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：验证工具组件不绑定具体客户端，扩展仅在要求的组件已装配时启用。
- *
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+ * <br>2026/11/06：验证声明缓存、重扫失败、组件排序及真实 Spring 装配。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 class AgentAssemblyTest {
     private static final ObjectMapper JSON = new ObjectMapper();
@@ -157,6 +158,63 @@ class AgentAssemblyTest {
         assertEquals(AgentAssembly.document(original), AgentAssembly.document(registry.mergeSecrets(preview, original)));
         assertThrows(IllegalArgumentException.class, () -> registry.mergeSecrets(preview, null));
         assertNotEquals(safe.revision(), registry.validate(privateAssembly("changed-secret")).revision());
+    }
+
+    /** 2026/11/06：排序、静态描述与参数校验复用同一目录，重扫失败不污染已发布快照。 */
+    @Test
+    void cachesDeclarationsAndKeepsThePreviousSnapshotOnReloadFailure() {
+        var scanner = mock(IBeanScanner.class);
+        var llm = new LLMComponent(new YAMLFileTypeParser());
+        var tool = spy(new ToolComponent());
+        var declarations = Map.<String, org.zexnocs.teanekocore.framework.pair.Pair<TeaNekoAgentComponent, IAgentComponent>>of(
+                "llm", new IndependentPair<>(LLMComponent.class.getAnnotation(TeaNekoAgentComponent.class), llm),
+                "tool", new IndependentPair<>(ToolComponent.class.getAnnotation(TeaNekoAgentComponent.class), tool));
+        when(scanner.getBeansWithAnnotationAndInterface(TeaNekoAgentComponent.class, IAgentComponent.class)).thenReturn(declarations);
+        doReturn(LLMComponent.class).when(scanner).getBeanClass(llm);
+        doReturn(ToolComponent.class).when(scanner).getBeanClass(tool);
+        var plugins = plugins();
+        var registry = new AgentComponentRegistry(scanner, new PluginAccess(plugins));
+        clearInvocations(scanner, tool);
+        String assembly = "{\"version\":1,\"components\":{\"llm\":{},\"tool\":{}}}";
+        for (int i = 0; i < 3; i++) {
+            registry.validate(assembly);
+            assertEquals(List.of("llm", "tool"), registry.describe().stream().map(AgentComponentRegistry.Description::id).toList());
+        }
+        verifyNoInteractions(scanner);
+        verify(tool, never()).fields();
+        verify(tool, never()).defaults();
+        verify(tool, never()).systems();
+        when(scanner.getBeansWithAnnotationAndInterface(TeaNekoAgentComponent.class, IAgentComponent.class))
+                .thenThrow(new IllegalStateException("测试显式重扫失败"));
+        assertThrows(IllegalStateException.class, registry::reload);
+        assertEquals(2, registry.describe().size());
+        var defaults = registry.describe().getFirst().defaults();
+        defaults.put("source", "不能污染共享模板");
+        assertNotEquals("不能污染共享模板", registry.describe().getFirst().defaults().get("source"));
+    }
+
+    /** 真实 Spring 构造、BeanScanner 和内置组件建立目录；目录不需要额外启动顺序补丁。 */
+    @Test
+    void realSpringWiresComponentDiscoveryAndObservation() {
+        try (var context = new org.springframework.context.annotation.AnnotationConfigApplicationContext()) {
+            context.registerBean(org.zexnocs.teanekocore.logger.ILogger.class,
+                    () -> mock(org.zexnocs.teanekocore.logger.ILogger.class));
+            context.registerBean(PluginRegistry.class, AgentAssemblyTest::plugins);
+            context.registerBean(YAMLFileTypeParser.class, () -> new YAMLFileTypeParser());
+            context.registerBean(org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService.class,
+                    () -> mock(org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService.class));
+            context.register(org.zexnocs.teanekocore.utils.scanner.BeanScanner.class, PluginAccess.class,
+                    LLMComponent.class, ToolComponent.class, AgentComponentRegistry.class,
+                    org.zexnocs.teanekoagent.integration.monitor.AgentObservationService.class,
+                    org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline.class);
+            context.refresh();
+            var registry = context.getBean(AgentComponentRegistry.class);
+            assertEquals(List.of("llm", "tool"),
+                    registry.describe().stream().map(AgentComponentRegistry.Description::id).toList());
+            assertEquals(Set.of("llm"), registry.validate(AgentAssembly.MINIMAL).parameters().keySet());
+            assertSame(context.getBean(org.zexnocs.teanekoagent.integration.monitor.AgentObservationService.class),
+                    context.getBean(org.zexnocs.teanekoagent.runtime.monitor.IAgentActivityObserver.class));
+        }
     }
 
     /**

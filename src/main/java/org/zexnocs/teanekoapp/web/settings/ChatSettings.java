@@ -11,10 +11,12 @@ import java.util.Map;
  * <br>2026/11/04：通用字段声明 JSON 值协议及配置分组，保留既有专用字段构造入口。
  * <br>2026/11/04：目标配置目录携带真实登记状态，全局目录以空值表示尚未查询。
  *
+ * <br>2026/11/06：聊天字段携带编辑器声明，兼容原字段构造。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.8.4-l
  */
 public final class ChatSettings {
     /** 禁止实例化视图命名空间。 */
@@ -24,6 +26,8 @@ public final class ChatSettings {
      * 分组字段的当前值、类型默认值及可编辑合同。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：区分完整 JSON 值与旧文本协议，声明允许空值的控件。
+     *
+     * <br>2026/11/06：投影值编辑器声明，保留原字段与构造合同。
      *
      * @param name 稳定字段标识
      * @param label 中文名称
@@ -37,14 +41,36 @@ public final class ChatSettings {
      * @param choices 有限选项值与中文标签
      * @param jsonValue 是否为完整 JSON 值协议
      * @param nullable 是否提供显式空值选项，保存仍执行原字段校验
+     * @param editor 编辑器标识，只影响输入方式
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.1-l
+     * @version 4.8.4-l
      */
     public record Field(String name, String label, String group, String kind, String description,
                         String value, String defaultValue, String source, boolean editable,
-                        Map<String, String> choices, boolean jsonValue, boolean nullable) {
+                        Map<String, String> choices, boolean jsonValue, boolean nullable, String editor) {
+        /**
+         * 2026/11/06：保留既有适配器构造入口，未声明编辑器时使用原种类。
+         * @param name 字段
+         * @param label 名称
+         * @param group 分组
+         * @param kind 类型
+         * @param description 说明
+         * @param value 当前值
+         * @param defaultValue 默认值
+         * @param source 来源
+         * @param editable 可编辑性
+         * @param choices 选项
+         * @param jsonValue JSON 协议
+         * @param nullable 空值支持
+         */
+        public Field(String name, String label, String group, String kind, String description,
+                String value, String defaultValue, String source, boolean editable,
+                Map<String, String> choices, boolean jsonValue, boolean nullable) {
+            this(name, label, group, kind, description, value, defaultValue, source, editable,
+                    choices, jsonValue, nullable, "AUTO");
+        }
         /**
          * 2026/11/04：保留专用适配器的既有文本字段协议。
          * @param name 字段标识

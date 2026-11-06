@@ -20,19 +20,19 @@ import java.util.function.Supplier;
 /**
  * 宿主管理候选、指纹缓存、实际人类统计和容量仲裁；文件 I/O 不进入目录事务。
  * 每个实例只有一个持久后台租约，迟到结果不能越过原代次激活。
+ *
  * <br>2026/11/03：采集决策、管理墓碑、后台刷新及真实提交观察共用原事务，分析和字节回收推进公开版本。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：已回收文件的删除决定与分析缓存独立计量。
  * <br>2026/11/05：下载后按指纹复核独立删除记录，禁止重复采集恢复人工拒绝。
+ * <br>2026/11/06：维护清理与存储分流使用同一作业恢复条件。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 public final class StickerLibrary {
     private final StickerExtensionRegistry registry;
@@ -443,9 +443,10 @@ public final class StickerLibrary {
      */
     private static void prune(Stickers.State state,Instant now){
         state.getReceipts().values().removeIf(t->t.plus(Duration.ofHours(48)).isBefore(now));
-        var completed=state.getJobs().values().stream().filter(j->!pending(j)&&!needsCleanup(j)).sorted(Comparator.comparing(Stickers.Job::getNextAttempt).reversed()).toList();
+        // 2026/11/06：回收和存储分流使用同一恢复合同，未释放的资源不能误归档。
+        var completed=state.getJobs().values().stream().filter(j->!j.requiresRecovery()).sorted(Comparator.comparing(Stickers.Job::getNextAttempt).reversed()).toList();
         var retained=completed.stream().limit(128).map(Stickers.Job::getId).collect(java.util.stream.Collectors.toSet());
-        state.getJobs().values().removeIf(j->!pending(j)&&!needsCleanup(j)&&(!retained.contains(j.getId())||j.getNextAttempt().plus(Duration.ofHours(24)).isBefore(now)));
+        state.getJobs().values().removeIf(j->!j.requiresRecovery()&&(!retained.contains(j.getId())||j.getNextAttempt().plus(Duration.ofHours(24)).isBefore(now)));
         // 2026/11/03：仅回收自动缓存，不自动遗忘人工删除和停用决定。
         state.getEntries().values().removeIf(e->e.getState()==Stickers.EntryStatus.CACHED&&e.getBlob()==null&&e.getCachedUntil()!=null&&e.getCachedUntil().isBefore(now)&&state.getJobs().values().stream().noneMatch(j->pending(j)&&j.getBlob()!=null&&j.getBlob().hash().equals(e.getHash())));
         if(cacheSize(state)>=2048){

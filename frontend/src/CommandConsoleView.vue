@@ -6,9 +6,12 @@ import {useConsolePreferences} from './console-preferences'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElTag} from 'element-plus'
 import {ApiError, request} from './api'
+import {checkConsoleReceipt} from './management-receipts'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
+import {usePageDraft} from './pages/page-guards'
+import {useActivePolling} from './pages/active-polling'
 
 const {advanced} = useConsolePreferences()
 
@@ -24,9 +27,11 @@ const text = ref('')
 const busy = ref(false)
 const error = ref('')
 let generation = 0
-let interval: ReturnType<typeof setInterval> | undefined
 const ongoing = computed(() => !!receipt.value && ['ACCEPTED', 'RUNNING'].includes(receipt.value.status))
 const locked = computed(() => busy.value || !!original.value || ongoing.value)
+// 2026/11/06：离开仅停止查回执，不重发或释放原请求；重新进入继续查询。
+usePageDraft(() => ({dirty: !!text.value.trim(), pending: !!original.value || ongoing.value, busy: busy.value}))
+useActivePolling(() => props.active && ongoing.value, () => { if (!busy.value) void query() }, 2000)
 const states: Record<string, string> = { UNSUPPORTED: '尚未支持指令台', DISCONNECTED: '未连接', IDENTITY_PENDING: '等待账号确认', CONFLICT: '连接不唯一', ACCOUNT_MISMATCH: '账号不匹配', PLATFORM_RESTRICTED: '平台当前限用', READY: '可请求执行' }
 const outcomes: Record<string, string> = { ACCEPTED: '已受理，尚未确认启动', RUNNING: '原处理链执行中', COMPLETED: '原处理链已结束', REJECTED: '请求被拒绝或未执行完成', INDETERMINATE: '结果未确认，禁止自动重放' }
 const endpoint = () => `clients/${encodeURIComponent(props.target.client)}/accounts/${encodeURIComponent(props.target.account)}/targets/${encodeURIComponent(props.target.target)}/console`
@@ -63,6 +68,7 @@ async function load() {
 
 function receive(result: Receipt, current: number) {
   if (current !== generation) return
+  checkConsoleReceipt(result, original.value?.operationId ?? receipt.value?.operationId)
   receipt.value = result
   original.value = undefined
   text.value = ''
@@ -115,18 +121,15 @@ watch(() => props.target, () => {
 onMounted(() => {
   void run(load)
   window.addEventListener('beforeunload', beforeUnload)
-  interval = setInterval(() => {
-    if (props.active && !document.hidden && !busy.value && ongoing.value) void query()
-  }, 2000)
 })
-onBeforeUnmount(() => { generation++; clearInterval(interval); original.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => { generation++; original.value = undefined; window.removeEventListener('beforeunload', beforeUnload) })
 </script>
 
 <template>
   <!-- 2026/11/04：收起常驻长说明，实际发送标记与操作回执保持可见。 -->
   <div class="command-console">
     <!-- 2026/11/05：与聊天和 Agent 工作区统一返回图标，不改变进行中操作的禁用约束。 -->
-    <div class="section-title"><h2>{{ target.name }}</h2><button class="icon-button" :disabled="busy" aria-label="返回聊天列表" title="返回聊天列表" @click="emit('selectTarget')"><ConsoleIcon name="back" /></button></div>
+    <div class="workspace-heading"><button class="icon-button" :disabled="busy" aria-label="返回聊天列表" title="返回聊天列表" @click="emit('selectTarget')"><ConsoleIcon name="back" /></button><h2>{{ target.name }}</h2></div>
     <DetailPanel title="指令台说明"><p>以网页管理员身份执行 TeaNeko 命令，继续检查原命令权限和平台连接。标注“会向真实聊天发送”的命令会产生外部消息。</p></DetailPanel>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElCard v-if="catalog" shadow="never" class="runtime-card"><div class="editor-heading"><h3>当前目标 · {{ catalog.targetName }}</h3><ElTag :type="catalog.state.state === 'READY' ? 'success' : 'warning'">{{ states[catalog.state.state] ?? catalog.state.state }}</ElTag></div><p>{{ catalog.state.explanation }}</p><p class="small muted">目录时刻：{{ new Date(catalog.observedAt).toLocaleString('zh-CN') }}；新受理需使用五分钟内的目录。下方最多显示 100 个明确声明的管理方法，最终仍按当前权限和作用域校验。</p><RefreshButton :disabled="locked" @click="run(load)" label="刷新目录与连接" /></ElCard>
@@ -136,7 +139,7 @@ onBeforeUnmount(() => { generation++; clearInterval(interval); original.value = 
     <ElCard shadow="never" class="runtime-card"><label for="console-command-input">命令正文</label><ElInput id="console-command-input" v-model="text" type="textarea" :rows="4" maxlength="4096" :disabled="locked" placeholder="例如 /console 或 /console say 大家好；这里不执行操作系统命令或任意平台 JSON" aria-label="指令台命令正文" autocomplete="off" /><div class="editor-actions"><ElButton type="primary" :disabled="locked || catalog?.state.state !== 'READY' || !catalog.commands.length || !text.trim()" @click="submit">提交指令</ElButton></div></ElCard>
     <ElCard v-if="original" shadow="never" class="pending-operation"><h3>原请求受理结果待确认</h3><p class="small revision">操作编号：{{ original.operationId }}</p><p class="small muted">连接中断不等于未执行。原请求只保留在当前页面内存；先查询原编号，不能更换编号猜测重发。</p><ElButton :disabled="busy" @click="query">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><RefreshButton :disabled="busy" @click="discard" label="放弃原请求并刷新" /></ElCard>
     <!-- 2026/11/05：简洁模式保留真正的指令输出，只隐藏回执诊断。 -->
-    <div v-if="!advanced && receipt?.output.length"><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre></div>
+    <template v-if="!advanced && receipt"><p role="status">{{ outcomes[receipt.status] ?? receipt.status }}<span v-if="receipt.note"> · {{ receipt.note }}</span></p><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre></template>
     <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>{{ outcomes[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>原分发状态：{{ receipt.commandStatus || '尚未确认' }} · {{ new Date(receipt.at).toLocaleString('zh-CN') }}</p><p v-if="ongoing" class="small muted">页面可见时每两秒查询原状态，不会重新提交命令。</p><pre v-for="(line, index) in receipt.output" :key="index" class="log-message">{{ line }}</pre><p v-if="receipt.confirmedMessages.length" class="small revision">平台已确认消息：{{ receipt.confirmedMessages.join('、') }}</p><p v-else class="small muted">当前没有已记录的平台消息确认；这不表示此前必然没有产生外部动作。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
   </div>
 </template>

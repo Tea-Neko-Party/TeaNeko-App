@@ -25,16 +25,15 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * 复用 Core 事件总线，决策与只读通知均有在途上限，后台插件参与须明确选择。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：无参与插件的精简宿主无需插件目录。
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 @Component
 public final class StickerEvents implements IStickerLifecycle {
@@ -72,8 +71,8 @@ public final class StickerEvents implements IStickerLifecycle {
     /** @param notice 已提交快照，拥塞或监听失败不改变业务结果 */
     @Override public void committed(Notice notice){
         var bus=events.getIfAvailable();if(bus==null){return;}if(pending.incrementAndGet()>64){pending.decrementAndGet();return;}
-        try{bus.pushEventWithFuture(new StickerCommittedEvent(notice,selected())).asStage().whenComplete((result,failure)->{pending.decrementAndGet();if(failure!=null||result==null||!result.isSuccess()){warn();}});}
-        catch(RuntimeException failure){pending.decrementAndGet();warn();}
+        try{bus.pushEventWithFuture(new StickerCommittedEvent(notice,selected())).asStage().whenComplete((result,failure)->{pending.decrementAndGet();if(failure!=null||result==null||!result.isSuccess()){warn(notice, failure);}});}
+        catch(RuntimeException failure){pending.decrementAndGet();warn(notice, failure);}
     }
     /** @return 当前明确参与且已经启用的插件 */
     private Set<String> selected(){
@@ -84,6 +83,18 @@ public final class StickerEvents implements IStickerLifecycle {
         var registry=plugins.getIfAvailable();if(registry==null){throw new IllegalStateException("素材事件插件缺少原目录。");}
         return names.stream().filter(registry::isEnabled).collect(java.util.stream.Collectors.toUnmodifiableSet());
     }
-    /** 观察失败按分钟合并，不输出原资料或链接。 */
-    private void warn(){long now=System.currentTimeMillis(),previous=warning.get();if(now-previous>60000&&warning.compareAndSet(previous,now)){logger.error(StickerEvents.class.getName(),"素材提交通知未被全部观察；业务已提交，请按管理资源查询当前状态。");}}
+    /**
+     * 2026/11/06：提交后的通知失败关联原操作，保留安全根因但不重放业务。
+     * @param notice 已提交通知
+     * @param failure 监听器异常；未返回成功状态时为空
+     */
+    private void warn(Notice notice, @org.jspecify.annotations.Nullable Throwable failure) {
+        long now = System.currentTimeMillis();
+        long previous = warning.get();
+        if (now - previous > 60000 && warning.compareAndSet(previous, now)) {
+            logger.error(StickerEvents.class.getName(), "素材提交通知未被全部观察；业务已提交，不自动重放。操作="
+                    + notice.operationId() + "，" + (failure == null ? "监听器未返回成功结果。"
+                    : org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure)));
+        }
+    }
 }

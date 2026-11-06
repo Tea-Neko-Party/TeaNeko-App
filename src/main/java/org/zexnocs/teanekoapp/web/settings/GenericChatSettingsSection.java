@@ -18,13 +18,14 @@ import java.util.concurrent.CompletionStage;
  * 已注册配置声明的纯元数据投影，不作为插件 Bean，不持有数据库或业务执行能力。
  * 插件专用适配器仍通过原注解目录发现，并优先于同一管理器的通用投影。
  *
- * 修改记录：<br>
- * 2026/11/04：优先显示配置声明中的简短中文名称，说明继续独立提供。
+ * <br>2026/11/04：优先显示配置声明中的简短中文名称，说明继续独立提供。
+ *
+ * <br>2026/11/06：将配置字段编辑器注解投影到聊天表单。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.4-l
+ * @version 4.8.4-l
  */
 final class GenericChatSettingsSection implements IChatSettingsSection {
     private final ConfigManager manager;
@@ -92,7 +93,8 @@ final class GenericChatSettingsSection implements IChatSettingsSection {
                 fields.add(new ChatSettings.Field(field.name(), label(field.description(), field.name()), "配置项", kind,
                         field.description(), json(current.get(field.jsonName())), json(defaults.get(field.jsonName())),
                         source, field.editable(), choices, true, !type.isPrimitive()
-                        && (field.nullable() || !defaults.hasNonNull(field.jsonName()) || !current.hasNonNull(field.jsonName()))));
+                        && (field.nullable() || !defaults.hasNonNull(field.jsonName()) || !current.hasNonNull(field.jsonName())),
+                        field.editor()));
             }
             return CompletableFuture.completedStage(new ChatSettings.View(manager.value(), name(), target.name(),
                     snapshot.registered(), snapshot.revision(), target.shared()

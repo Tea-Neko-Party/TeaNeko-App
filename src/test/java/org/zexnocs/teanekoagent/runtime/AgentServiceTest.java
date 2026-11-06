@@ -4,6 +4,7 @@ package org.zexnocs.teanekoagent.runtime;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -33,12 +34,20 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekoagent.configuration.AgentExecutionConfig;
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
+import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
 import org.zexnocs.teanekoagent.runtime.access.*;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationKey;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationStamp;
+import org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
@@ -55,29 +64,26 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
 
 /**
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
- * <br>2026/11/02：验证管线失败记录可关联的安全诊断，日志失败仍不改变终态。
  *
+ * <br>2026/11/02：验证管线失败记录可关联的安全诊断，日志失败仍不改变终态。
  * <br>2026/11/02：验证 client 工具白名单经过环绕后仍控制可见和实际执行。
  * <br>2026/11/03：复用冷轮次用例验证实际活动节点，不把模型结果当作平台发送。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：验证跨轮次完整输出额度与显式共享预算拒绝。
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：验证上下文配置错误的根因诊断及秘密脱敏。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：验证上下文首个失败原因在结果与日志中保留。
+ * <br>2026/11/06：验证真实 Agent 管线只输出一条汇总，内部 LLM 不重复输出。
+ * <br>2026/11/06：覆盖前置拒绝、取消和失败的唯一终态通知，观察故障不改变结果或资源释放。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.5-l
  */
+@Timeout(10)
 class AgentServiceTest {
     /** 2026/11/04：无人格的记忆与表达组件按真实阶段执行，原历史端口不能被重复调用。 */
     @Test
@@ -165,19 +171,20 @@ class AgentServiceTest {
         }
     }
 
-    /** 验证冷句柄准备不读取配置，启动前取消会释放资源并阻止迟到启动。 */
+    /** 2026/11/06：冷轮次取消只汇总一次，不读取业务配置；迟到启动不能重复通知。 */
     @Test void coldExecutionCanBeCancelledBeforeAnyRuntimeWork() {
-        var execution = service.prepare(agent(), request(AgentActivity.SERVICE));
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(AgentActivity.SERVICE);
+        var execution = service.prepare(agent(), request);
         verifyNoInteractions(scopes, readiness, tools, models);
         assertTrue(execution.cancel()); assertEquals(CANCELLED, execution.result().toCompletableFuture().join().status());
         execution.start(); runtime.runAll(); verifyNoInteractions(scopes, readiness, tools, models);
+        assertSummary(request, CANCELLED, 0);
     }
 
-    /** 验证重复启动只执行一次，句柄能识别模型阶段的多级控制链。 */
+    /** 2026/11/06：重复启动只执行一次；真实 Agent 管线汇总一次，并抑制内部 LLM 汇总。 */
     @Test void coldExecutionStartsOnceAndRecognizesActualModelControl() {
-        // 2026/11/03：观察原管线而不增加第二套运行夹具。
-        var timeline = new org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline();
-        service.installTimeline(timeline);
+        var timeline = installObservation(service, new AgentObservationFileConfig());
         var request = request(AgentActivity.SERVICE);
         var execution = service.prepare(agent(), request);
         execution.start(); execution.start(); runtime.runAll(); assertEquals(1, prompts.size());
@@ -188,13 +195,215 @@ class AgentServiceTest {
         assertTrue(nodes.stream().anyMatch(node -> node.stage().equals("agent.prompt") && node.state().equals("STARTED")));
         assertEquals("SUCCESS", nodes.getLast().state());
         assertTrue(nodes.stream().noneMatch(node -> node.state().equals("SENT")));
+        verify(logger, times(1)).info(eq("Agent 请求汇总"), contains("模型调用=1"));
+        verify(logger, never()).info(eq("LLM 请求汇总"), anyString());
     }
 
-    /** 验证服务关闭也回收尚未 start 的冷轮次，不遗留实例关闭监听。 */
+    /** 2026/11/06：服务关闭回收冷轮次并发布一次取消终态，不遗留实例关闭监听。 */
     @Test void serviceCloseCompletesColdExecution() {
-        var execution = service.prepare(agent(), request(AgentActivity.SERVICE)); service.close();
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(AgentActivity.SERVICE);
+        var execution = service.prepare(agent(), request); service.close();
         assertEquals(CANCELLED, execution.result().toCompletableFuture().join().status());
         execution.start(); runtime.runAll(); verifyNoInteractions(scopes, readiness, tools, models);
+        assertSummary(request, CANCELLED, 0);
+    }
+
+    /**
+     * 2026/11/06：不支持的活动在准备阶段拒绝，不启动模型或配置查询，仍报告唯一终态。
+     * @param activity 不属于独立轮次的活动
+     */
+    @ParameterizedTest
+    @EnumSource(value = AgentActivity.class, names = {"COLLECT", "TOOL"})
+    void unsupportedActivityStillReportsTerminalResult(AgentActivity activity) {
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(activity);
+        var execution = service.prepare(agent(), request);
+        assertEquals(INVALID_INPUT, execution.result().toCompletableFuture().join().status());
+        execution.start();
+        execution.start();
+        assertFalse(execution.cancel());
+        runtime.runAll();
+        verifyNoInteractions(scopes, readiness, tools, models);
+        assertSummary(request, INVALID_INPUT, 0);
+    }
+
+    /** 2026/11/06：服务已关闭后接受到的合法请求保留明确取消结果和一条汇总。 */
+    @Test
+    void closedServiceReportsTerminalResultWithoutBusinessWork() {
+        installObservation(service, new AgentObservationFileConfig());
+        service.close();
+        var request = request(AgentActivity.SERVICE);
+        assertEquals(CANCELLED, service.run(agent(), request).toCompletableFuture().join().status());
+        runtime.runAll();
+        verifyNoInteractions(scopes, readiness, tools, models);
+        assertSummary(request, CANCELLED, 0);
+    }
+
+    /** 2026/11/06：无记忆端口却提供引用的配置错误不创建轮次，仍保留本次请求关联。 */
+    @Test
+    void unavailableMemoryPortReportsConfigurationRejection() {
+        installObservation(service, new AgentObservationFileConfig());
+        var original = request(AgentActivity.SERVICE);
+        var request = original.withMemoryReference(new MemoryNamespaceReference(original.actor().scope(),
+                MemoryNamespaceId.SHARED, 0, 0));
+        assertEquals(CONFIGURATION_ERROR, service.run(agent(), request).toCompletableFuture().join().status());
+        verifyNoInteractions(scopes, readiness, tools, models);
+        assertSummary(request, CONFIGURATION_ERROR, 0);
+    }
+
+    /**
+     * 2026/11/06：邮箱固定请求缺失会话或引用时发布配置拒绝，不尝试查询补全缺失信息。
+     * @param missingConversation 是否缺会话，否则缺记忆引用
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void incompleteReferencedRequestReportsConfigurationRejection(boolean missingConversation) {
+        var references = mock(IAgentMemoryReferences.class);
+        try (var referenced = new AgentService(gate, interactions, tools, new ObjectMapper(), runtime,
+                runtime.scheduler, runtime.clock, logger, references)) {
+            installObservation(referenced, new AgentObservationFileConfig());
+            var handle = agent();
+            var original = request(AgentActivity.SERVICE);
+            var scope = original.actor().scope();
+            var request = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), original.messages(),
+                    missingConversation ? null : new AgentConversationStamp(new AgentConversationKey(handle.id(), scope), UUID.randomUUID()),
+                    missingConversation ? new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0) : null);
+            var execution = referenced.prepareReferenced(handle, request, null);
+            assertEquals(CONFIGURATION_ERROR, execution.start().toCompletableFuture().join().status());
+            execution.start();
+            runtime.runAll();
+            verifyNoInteractions(scopes, readiness, tools, models, references);
+            assertSummary(request, CONFIGURATION_ERROR, 0);
+        }
+    }
+
+    /** 2026/11/06：已停止父控制无法派生子轮次，仍报告取消；观察不得分配新的业务预算。 */
+    @Test
+    void stoppedParentReportsRejectionWithoutStartingChild() {
+        installObservation(service, new AgentObservationFileConfig());
+        try (var parent = runtime.parent(LLMCallLimits.defaults())) {
+            parent.cancel();
+            var request = request(AgentActivity.SERVICE);
+            assertEquals(CANCELLED, service.run(agent(), request, parent).toCompletableFuture().join().status());
+            runtime.runAll();
+            verifyNoInteractions(scopes, readiness, tools, models);
+            assertSummary(request, CANCELLED, 0);
+        }
+    }
+
+    /** 2026/11/06：运行取消和迟到模型结果不重复通知，也不反向关闭借用资源。 */
+    @Test
+    void runningCancellationReportsOnlyOnceAfterLateModelCompletion() {
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(AgentActivity.SERVICE);
+        var execution = service.prepare(agent(), request);
+        execution.start();
+        runtime.runAll();
+        assertEquals(1, replies.size());
+        assertTrue(execution.cancel());
+        assertEquals(CANCELLED, execution.result().toCompletableFuture().join().status());
+        reply(response());
+        execution.start();
+        assertSummary(request, CANCELLED, 1);
+    }
+
+    /**
+     * 2026/11/06：正文汇总开关同时控制提前返回与正常完成，内部模型不另发 INFO。
+     * @param early 是否提前拒绝
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void disabledObservationSuppressesBothTerminalPaths(boolean early) {
+        var settings = new AgentObservationFileConfig();
+        settings.setAgentInfo(false);
+        installObservation(service, settings);
+        var result = service.run(agent(), request(early ? AgentActivity.COLLECT : AgentActivity.SERVICE));
+        runtime.runAll();
+        if (!early) {
+            reply(response());
+        }
+        assertEquals(early ? INVALID_INPUT : SUCCESS, result.toCompletableFuture().join().status());
+        verify(logger, never()).info(eq("Agent 请求汇总"), anyString());
+        verify(logger, never()).info(eq("LLM 请求汇总"), anyString());
+    }
+
+    /**
+     * 2026/11/06：宿主观察器和日志端口同时抛错，结果与计时器回收仍正确，且不会重试汇总。
+     * @param early 是否提前拒绝
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void observationFailuresDoNotChangeBusinessResultOrRelease(boolean early) {
+        var observed = new AtomicInteger();
+        installObservation(service, new AgentObservationFileConfig());
+        service.observe(report -> {
+            observed.incrementAndGet();
+            throw new IllegalStateException("宿主观察器故障");
+        });
+        doThrow(new IllegalStateException("日志端口故障")).when(logger).info(eq("Agent 请求汇总"), anyString());
+        var request = request(early ? AgentActivity.COLLECT : AgentActivity.SERVICE);
+        var result = service.run(agent(), request);
+        runtime.runAll();
+        if (!early) {
+            reply(response());
+        }
+        assertEquals(early ? INVALID_INPUT : SUCCESS, result.toCompletableFuture().join().status());
+        assertEquals(1, observed.get());
+        assertEquals(0, runtime.pendingTimers());
+        verify(logger, times(1)).info(eq("Agent 请求汇总"), contains(request.requestId().toString()));
+    }
+
+    /** 2026/11/06：请求编号不提供跨执行去重，两个合法的独立调用各有一次汇总。 */
+    @Test
+    void repeatedRequestIdDoesNotSuppressDistinctExecutions() {
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(AgentActivity.COLLECT);
+        var handle = agent();
+        service.run(handle, request).toCompletableFuture().join();
+        service.run(handle, request).toCompletableFuture().join();
+        verify(logger, times(2)).info(eq("Agent 请求汇总"), contains(request.requestId().toString()));
+        verifyNoInteractions(scopes, readiness, tools, models);
+    }
+
+    /** 2026/11/06：空参数尚未形成有效执行，保持调用契约异常，不伪造请求汇总。 */
+    @Test
+    void invalidInvocationDoesNotInventTerminalRequest() {
+        installObservation(service, new AgentObservationFileConfig());
+        assertThrows(NullPointerException.class, () -> service.run(agent(), null));
+        verify(logger, never()).info(eq("Agent 请求汇总"), anyString());
+    }
+
+    /**
+     * 2026/11/06：复用真实观察器与原管线，文件配置由现有查询服务替身提供。
+     * @param target 当前待观察服务
+     * @param settings 本次可控观测配置
+     * @return 可查询真实终态的时间线
+     */
+    private AgentActivityTimeline installObservation(AgentService target, AgentObservationFileConfig settings) {
+        var files = mock(IFileConfigService.class);
+        when(files.requireCurrent(AgentObservationFileConfig.class)).thenReturn(settings);
+        var observation = new AgentObservationService(files, logger);
+        var timeline = new AgentActivityTimeline();
+        timeline.installObservation(observation);
+        interactions.installObserver(observation);
+        target.installTimeline(timeline);
+        return timeline;
+    }
+
+    /**
+     * 2026/11/06：检查真实日志次数与业务结果对应，并确认内部 LLM 不重复汇总。
+     * @param request 原有效请求
+     * @param status 实际终态
+     * @param modelCalls 实际模型调用次数
+     */
+    private void assertSummary(AgentRunRequest request, AgentRunResult.Status status, int modelCalls) {
+        var message = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(logger, times(1)).info(eq("Agent 请求汇总"), message.capture());
+        assertTrue(message.getValue().contains("请求=" + request.requestId()));
+        assertTrue(message.getValue().contains("状态=" + status));
+        assertTrue(message.getValue().contains("模型调用=" + modelCalls));
+        verify(logger, never()).info(eq("LLM 请求汇总"), anyString());
     }
     private final InteractionRuntime runtime = new InteractionRuntime();
     private final AgentRegistry registry = new AgentRegistry();
@@ -723,13 +932,16 @@ class AgentServiceTest {
         verifyNoInteractions(scopes, readiness, tools, models);
     }
 
-    /** 验证模型异步失败保留实际尝试而不导出原始异常正文。 */
+    /** 2026/11/06：模型异步失败保留实际尝试且只汇总一次，不导出原始异常正文。 */
     @Test void modelFailureRetainsAttemptWithoutExposingException() {
-        var result = service.run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture(); runtime.runAll();
+        installObservation(service, new AgentObservationFileConfig());
+        var request = request(AgentActivity.SERVICE);
+        var result = service.run(agent(), request).toCompletableFuture(); runtime.runAll();
         replies.getFirst().completeExceptionally(new IllegalStateException("供应商敏感诊断")); runtime.runAll();
         var ended = result.join(); assertEquals(FAILED, ended.status());
         assertEquals(1, ended.interaction().orElseThrow().modelAttempts());
         assertFalse(ended.toString().contains("供应商敏感诊断")); assertTrue(ended.answer().isEmpty());
+        assertSummary(request, FAILED, 1);
     }
 
     /** 验证计时器拒绝登记时也能结束请求，不能遗留半初始化控制。 */

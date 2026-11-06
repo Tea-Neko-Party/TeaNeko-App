@@ -1,6 +1,6 @@
 # Web 控制台部署与开发
 
-当前开发版本：4.8.2-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，模型与聊天补丁见[实施记录](../plan/old/4.8.2-web-model-chat.md)。
+当前开发版本：4.8.4-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，模型与聊天补丁见[实施记录](../plan/old/4.8.2-web-model-chat.md)。
 
 ## 界面与模式
 
@@ -18,6 +18,21 @@
 
 概览中的客户端详情卡片独立展开，同一行其他卡片不随之拉高。Agent 工作区通过返回图标切换聊天。聊天配置使用可展开卡片，每张卡片独立登记、应用修改或取消登记；切换卡片保留各自草稿与原操作编号。网页聊天的“聊天设置”和“活动与记忆”直接携带当前会话，切换目标仍须处理已有草稿或待确认操作。
 
+JSON 和长文本字段可打开独立编辑弹窗，支持查找、撤销和确认/取消；JSON 还提供格式化及错误定位。确认只更新表单草稿，原有保存、应用和版本检查不变。编辑器声明与扩展见[管理扩展指南](plugins/management.md#值编辑器)。
+
+页面首次进入时加载，切换侧栏保留当前草稿和原操作编号，并停止隐藏页轮询。主动退出前检查全部已打开页面；注销失败仍可返回原页处理。新增页面的声明和生命周期见[页面扩展指南](web-console-pages.md)。
+
+## 4.8.4-l 升级配置
+
+新安装的模板已包含独立空间与观测入口。旧的 `config/web/security.yml` 不自动改写；需要这些功能时，在原列表追加以下标识，重载后重新登录：
+
+| 配置列表 | 追加内容 |
+| --- | --- |
+| `file-sections` | `agent.observability` |
+| `management-resources` | `teaneko.agent:library`、`teaneko.agent:memory-space`、`teaneko.agent:personality-space`、`teaneko.agent:profile-space`、`teaneko.agent:layers-space` |
+
+指令台沿用 `console-prefixes`：未声明时默认 `['/console']`，显式 `[]` 仍禁用。不要把旧列表整个替换为示例；保留本机已经开放的其他资源。
+
 ## 构建与入口
 
 概览机器状态卡片显示系统/程序 CPU、物理内存、JVM 堆用量和程序所在磁盘容量。页面可见时每 5 秒更新，切换页面、隐藏或退出时停止请求。首次 CPU 建立基准，无法提供的值显示暂不可用；详细口径见[机器指标](web-console-runtime.md#机器指标)。
@@ -28,7 +43,7 @@
 .\gradlew.bat bootJar
 ```
 
-processResources 依赖 webBuild，后者按锁文件 npm ci、类型检查和生产构建；静态资源进入 JAR 的 static/console。只改前端时可运行 `.\gradlew.bat webBuild`。前端没有独立应用版本来源，页面从后端读取 version.properties 对应版本。
+processResources 依赖 webBuild，后者按锁文件 npm ci、类型检查和生产构建；静态资源进入 JAR 的 static/console。资源处理会同步控制台生成目录，移除旧哈希分包，不清理其他应用资源。只改前端时可运行 `.\gradlew.bat webBuild`。前端没有独立应用版本来源，页面从后端读取 version.properties 对应版本。
 
 4.7.1-l 起，Gradle 同时通过 `generateVersionInfo` 生成运行版本资源；JAR 优先读取清单，普通类路径读取生成资源。IntelliJ 使用 Gradle 构建即可；若使用 IDE 直接编译，先执行 `.\gradlew.bat generateVersionInfo` 并同步 Gradle。界面显示实际构建版本，修改源码的版本文件后需重新构建；`app.version` 或 `-Dversion` 不再覆盖它。实际部署版本切换仍未提供。
 

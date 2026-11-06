@@ -16,7 +16,7 @@ machine-tokens: {}
 # 只开放声明管理来源的注册方法；旧配置需本机明确补充后重载。
 console-prefixes: ['/console']
 # 2026/11/03：只公开这些已注册文件表单，不开放认证根配置或任意路径。
-file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'onebot.main', 'web.chat']
+file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'agent.observability', 'onebot.main', 'web.chat']
 # 2026/11/03：只向当前管理员开放列出的类型化管理资源。
 management-resources:
   - 'teaneko.agent:activity'
@@ -25,5 +25,11 @@ management-resources:
   - 'teaneko.agent:personality'
   - 'teaneko.agent:layers'
   - 'teaneko.agent:schedules'
+  # 2026/11/06：实例目录和独立空间管理，不修改任何聊天绑定。
+  - 'teaneko.agent:library'
+  - 'teaneko.agent:memory-space'
+  - 'teaneko.agent:personality-space'
+  - 'teaneko.agent:profile-space'
+  - 'teaneko.agent:layers-space'
   - 'teaneko.core:runtime'
   - 'teaneko.core:logs'

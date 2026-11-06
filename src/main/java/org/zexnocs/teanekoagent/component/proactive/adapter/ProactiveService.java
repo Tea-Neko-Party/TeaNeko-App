@@ -47,21 +47,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>2026/11/03：自主发言也经持久发送回执，不把生成成功当作平台确认。
  * <br>2026/11/03：自主文本沿用原控制并加入同目标顺序。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04���������Լ̳�ģ�������ȣ�����������ʱ�޲��Ƴ����� token ��
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：区分容量忙与跳过，未安装记忆时使用独立持久活动身份。
  * <br>2026/11/06：主动决策启用原生 JSON，使用统一 Schema 与解码并保留原交付管道。
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 @Service
 public final class ProactiveService implements AutoCloseable {
@@ -222,7 +219,7 @@ public final class ProactiveService implements AutoCloseable {
                                                     if (context == null) { return CompletableFuture.completedStage(Delivery.SENT); }
                                                     return history.append(context, new HistoryMessage(id.toString(), actor, HistoryMessage.Role.ASSISTANT, text,
                                                             clock.instant(), true, false), control).exceptionally(failure -> {
-                                                        logger.error("Agent 自主发言", "自主发言已交付，但历史记录未完成，不重发。"); return false;
+                                                        logger.error("Agent 自主发言", "自主发言已交付，但历史记录未完成，不重发。请求=" + id, failure); return false;
                                                     }).thenApply(added -> Delivery.SENT);
                                                 });
                                     });
@@ -241,7 +238,7 @@ public final class ProactiveService implements AutoCloseable {
             return control.guard(work).handle((outcome, failure) -> {
                         if (failure != null) {
                             logger.warn("Agent 自主发言", "候选未完成。原因="
-                                    + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).description());
+                                    + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
                         }
                         return delivered.get() ? Delivery.SENT : failure != null ? Delivery.FAILED : outcome;
                     })

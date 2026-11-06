@@ -39,24 +39,24 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMIn
 /**
  * 以独立请求状态编排有限模型/工具往返，复用阶段执行、共享预算和固定工具绑定。
  * 不创建线程池，不处理 Agent 人格、记忆、平台发送或业务历史提交。
+ *
  * <br>2026/11/02：在失败转为状态前记录请求关联、阶段及脱敏异常结构。
  * <br>2026/11/02：完整工具批次回填之后追加显式视觉参考，供下一次真实模型请求使用。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：执行控制的正常终止记录为状态日志，不再误报模型交互故障。
  * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
  * <br>2026/11/05：配置解析和输入预检失败同样保留安全诊断，避免宿主预算错误被误认为图片拒绝。
  * <br>2026/11/05：拒绝作为正文泄漏的内部工具调用标记，保留代码示例，不从正文执行工具。
  * <br>2026/11/05：工具尚未执行且原预算允许时，仅纠正一次内部标记泄漏，不沉积错误正文。
+ * <br>2026/11/06：接入安全交互节点观察器，观测故障不改变执行与资源终态。
+ * <br>2026/11/06：交互只在终态通知一次观察器，由 Agent 汇总时不重复报告。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  * @see LLMInteractionExecution
  */
 public final class LLMInteractionService implements ILLMInteractionService {
@@ -73,6 +73,22 @@ public final class LLMInteractionService implements ILLMInteractionService {
     private final ILLMTokenEstimator tokenEstimator;
     // 2026/11/02：独立使用方可不安装日志，宿主装配时提供诊断端口。
     private final @Nullable ILogger logger;
+    private ILLMInteractionObserver observer = (request, elapsed, result) -> {};
+
+    /**
+     * 2026/11/06：装配终态观察器，只在独立调用结束时通知一次。
+     * @param observer 宿主日志或指标端口
+     */
+    public void installObserver(ILLMInteractionObserver observer) {
+        var selected = Objects.requireNonNull(observer);
+        this.observer = (request, elapsed, result) -> {
+            try {
+                selected.finished(request, elapsed, result);
+            } catch (RuntimeException ignored) {
+                // 2026/11/06：观测端不可用不能中断模型、工具或执行控制的释放。
+            }
+        };
+    }
 
     /**
      * 注入可替换端口与借用执行资源，构造期间不读取本地交互配置。
@@ -130,10 +146,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
         if (logger == null) { return; }
         // 2026/11/05：只将明确的生命周期终止降为状态，HTTP、协议及配置失败仍保留错误诊断。
         try {
-            if (unwrap(failure) instanceof ExecutionStoppedException stopped) {
-                logger.info(LLMInteractionService.class.getName(), "LLM 交互已停止。请求=" + requestId
-                        + "，阶段=" + phase + "，原因=" + stopped.reason());
-            } else {
+            // 2026/11/06：正常停止已包含在终态汇总，不再单独输出 INFO。
+            if (!(unwrap(failure) instanceof ExecutionStoppedException)) {
                 logger.error(LLMInteractionService.class.getName(), "LLM 交互失败。请求=" + requestId
                         + "，阶段=" + phase + "，" + FailureDiagnostic.from(failure));
             }
@@ -170,6 +184,27 @@ public final class LLMInteractionService implements ILLMInteractionService {
      */
     @Override
     public CompletionStage<LLMInteractionResult> interact(ILLMPrompt prompt, LLMToolSet tools,
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+        // 2026/11/06：统一前置拒绝、正常、取消及异常终态；异步切线程不影响汇总归属。
+        long started = System.nanoTime();
+        return execute(prompt, tools, context, settings, guard).thenApply(result -> {
+            if (context != null && !context.externallyObserved()) {
+                observer.finished(context.requestId(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), result);
+            }
+            return result;
+        });
+    }
+
+    /**
+     * 执行有限往返，前置失败与正常结果走同一个外层观察出口。
+     * @param prompt 初始输入
+     * @param tools 固定工具
+     * @param context 借用控制及可信身份
+     * @param settings 交互配置
+     * @param guard 动态准入
+     * @return 明确终态
+     */
+    private CompletionStage<LLMInteractionResult> execute(ILLMPrompt prompt, LLMToolSet tools,
             ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
         final LLMInteractionSettings selected;
         try {
@@ -297,11 +332,12 @@ public final class LLMInteractionService implements ILLMInteractionService {
      *
      * <br>2026/11/05：贯通初始化与交互终止的安全失败原因。
      * <br>2026/11/05：一次性纠正提示与错误正文不进入正常续轮和提交历史。
+     * <br>2026/11/06：在模型与工具的实际异步边界记录安全节点。
      *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.5.0-l
-     * @version 4.8.3-l
+     * @version 4.8.4-l
      */
     private static final class Run {
         private final LLMInteractionExecution execution;

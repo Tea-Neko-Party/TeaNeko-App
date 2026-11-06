@@ -22,21 +22,23 @@ import java.util.concurrent.ExecutionException;
  * <br>2026/11/03：文件版本冲突使用相同安全映射，不返回文件或秘密原值。
  * <br>2026/11/03：指令台继续使用固定脱敏错误，不向浏览器返回平台协议或异常链。
  * <br>2026/11/03：网页聊天、媒体与成员接口同样使用原脱敏错误边界。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：机器令牌专用接口沿用安全错误映射，不回显原文或秘密。
  * <br>2026/11/04：已关闭资料、过期绑定及暂不可用状态使用明确的安全响应。
  * <br>2026/11/04：指令说明及模型样板接口复用同一脱敏错误边界。
  * <br>2026/11/04：通过端点标记和异常映射声明解耦上层控制器及业务异常。
  *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 // 2026/11/04：控制器主动选择安全错误合同，App 不再引用上层控制器类型。
 @RestControllerAdvice(annotations = WebManagedEndpoint.class)
 public final class ChatSettingsErrors {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ChatSettingsErrors.class);
     private final AnnotatedBeanRegistry<Class<? extends Throwable>, IWebFailureMapper> mappings;
 
     /**
@@ -60,6 +62,8 @@ public final class ChatSettingsErrors {
                 && root.getCause() != null; i++) {
             root = root.getCause();
         }
+        // 2026/11/06：浏览器保持固定文案；后台保留真实错误边界，不记录请求参数。
+        LOG.warn("Web 管理请求失败：{}", org.zexnocs.teanekocore.logger.FailureDiagnostic.from(root));
         // 2026/11/04：最近的已声明异常类型优先，不依赖扫描顺序或中央业务分支。
         for (Class<?> type = root.getClass(); type != null && type != Object.class; type = type.getSuperclass()) {
             var mapping = mappings.entries().get(type.asSubclass(Throwable.class));

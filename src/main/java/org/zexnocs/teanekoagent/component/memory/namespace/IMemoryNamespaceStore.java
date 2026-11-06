@@ -11,15 +11,25 @@ import java.util.concurrent.CompletionStage;
  * 记忆空间元数据的事务端口；调用者是可信业务服务，聊天权限由其上层边界检查。
  * 创建记录和个人配额索引必须在同一事务提交，不允许无保护的整列表覆盖。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：提供有界空间目录合同。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 public interface IMemoryNamespaceStore {
+    /**
+     * 2026/11/06：可信管理端按持久键分页列出实际已登记空间，不创建默认空间。
+     * @param after 上页游标，首次为空
+     * @param limit 一至五十项
+     * @return 空间目录页
+     */
+    default CompletionStage<org.zexnocs.teanekoagent.database.easydata.StoredPage<MemoryNamespace>> page(String after, int limit) {
+        throw new UnsupportedOperationException("当前记忆存储未实现空间目录。");
+    }
     /**
      * 从持久状态读取元数据，不自动登记默认值。
      * @param id 稳定空间标识

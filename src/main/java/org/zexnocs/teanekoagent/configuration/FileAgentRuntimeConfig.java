@@ -18,13 +18,14 @@ import java.util.Objects;
  * 适配本地主配置和 LLM 交互默认设置，读取故障只影响 Agent 就绪状态。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class FileAgentRuntimeConfig implements IAgentRuntimeConfigPort {
@@ -54,8 +55,8 @@ public final class FileAgentRuntimeConfig implements IAgentRuntimeConfigPort {
             if (enabled) { Objects.requireNonNull(files.requireCurrent(LLMModelFileConfig.class)); }
             return new AgentRuntimeConfig(enabled, enabled
                     ? Objects.requireNonNull(defaults.resolve()) : LLMInteractionSettings.defaults());
-        } catch (RuntimeException ignored) {
-            throw new LLMConfigurationException("Agent 本地配置不可用，请修复并重载主配置或 LLM 交互设置。");
+        } catch (RuntimeException failure) {
+            throw new LLMConfigurationException("Agent 本地配置不可用，请修复并重载主配置或 LLM 交互设置。", failure);
         }
     }
 }

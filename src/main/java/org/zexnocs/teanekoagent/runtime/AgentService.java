@@ -32,27 +32,24 @@ import java.util.function.Function;
 /**
  * 独立轮次的异步入口及资源拥有者，复用预编译管线与既有 LLM 交互服务。
  * 同实例可执行不同轮次；默认会话服务在本端口外组合队列与窗口，本类只拥有独立轮次。
+ *
  * <br>2026/11/02：支持启动前安装插件管线，运行轮次仍复用原拥有和关闭路径。
  * <br>2026/11/02：为未知失败增加请求关联、模型尝试次数及脱敏异常结构。
- *
  * <br>2026/11/03：安装一次表达编译，并在重放时检查原内容扩展。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/03：记录冷轮次、真实开始及结束的脱敏节点，观测不拥有业务资源。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：上下文失败转换为配置错误后仍记录安全异常类型与代码位置。
- *
  * <br>2026/11/04：按当前聊天装配固定轮次，保留原资源关闭和运行守卫。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：失败日志直接说明安全原因并关联原请求。
+ * <br>2026/11/06：终态观察传递本轮临时结果，统一汇总内部模型链。
+ * <br>2026/11/06：提前拒绝与正常轮次统一在完成阶段发布终态，避免漏报和重复通知。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.5-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -372,17 +369,19 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
 
     /**
      * 登记可取消的独立轮次，显式启动前不读取配置或执行模型。
+     * 2026/11/06：在入口记录单调起点，提前拒绝与运行完成使用相同的终态观察。
      * @param handle 目标实例
      * @param request 固定宿主请求
      * @return 尚未执行业务的句柄
      * @throws NullPointerException 当实例或请求为空时
      */
     @Override public AgentRunExecution prepare(AgentHandle handle, AgentRunRequest request) {
-        return prepareInternal(handle, request, null);
+        return prepareInternal(handle, request, null, System.nanoTime());
     }
 
     /**
      * 登记共享宿主预算的冷轮次，不新建父总额度。
+     * 2026/11/06：沿用本次入口的单调起点，父控制已停止时也发布明确结果。
      * @param handle 目标实例
      * @param request 固定宿主请求
      * @param parent 借用的父执行控制
@@ -390,7 +389,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @throws NullPointerException 当实例、请求或父控制为空时
      */
     @Override public AgentRunExecution prepare(AgentHandle handle, AgentRunRequest request, ExecutionControl parent) {
-        return prepareInternal(handle, request, Objects.requireNonNull(parent, "派生轮次的父控制不能为空。"));
+        return prepareInternal(handle, request, Objects.requireNonNull(parent, "派生轮次的父控制不能为空。"), System.nanoTime());
     }
 
     /**
@@ -405,32 +404,37 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     @Override public AgentRunExecution prepareReferenced(AgentHandle handle, AgentRunRequest request, @Nullable ExecutionControl parent) {
         if (references == null) { throw new UnsupportedOperationException("当前独立轮次未装配持久化记忆引用保护。"); }
         Objects.requireNonNull(handle, "Agent 实例不能为空。"); Objects.requireNonNull(request, "固定引用请求不能为空。");
+        // 2026/11/06：前置配置拒绝也拥有原请求的终态；单调时间不受业务时钟回拨影响。
+        long observedAt = System.nanoTime();
         if (request.conversation() == null || request.memoryReference() == null) {
-            return completed(new AgentRunResult(handle.id(), request.requestId(), AgentRunResult.Status.CONFIGURATION_ERROR,
+            return completed(request, observedAt, new AgentRunResult(handle.id(), request.requestId(), AgentRunResult.Status.CONFIGURATION_ERROR,
                     null, null, Map.of()));
         }
-        return prepareInternal(handle, request, parent);
+        return prepareInternal(handle, request, parent, observedAt);
     }
 
     /**
      * 登记当前拥有关系和完成观察器，业务准备由返回句柄显式启动。
+     * 2026/11/06：前置拒绝及正常完成都绑定唯一的结果通知，保留原关闭责任。
      * @param handle 目标实例
      * @param request 已固定请求
      * @param parent 可选借用父控制
+     * @param observedAt 本次执行入口的单调计时起点
      * @return 已登记取消和完成观察的冷执行句柄；跨实例绑定和当前不支持的持久化会话组合在分配控制前拒绝
      * @throws NullPointerException 当实例或请求为空时
      */
-    private AgentRunExecution prepareInternal(AgentHandle handle, AgentRunRequest request, @Nullable ExecutionControl parent) {
+    private AgentRunExecution prepareInternal(AgentHandle handle, AgentRunRequest request,
+                                              @Nullable ExecutionControl parent, long observedAt) {
         Objects.requireNonNull(handle, "Agent 实例不能为空。");
         Objects.requireNonNull(request, "Agent 请求不能为空。");
         if (request.activity() == AgentActivity.COLLECT || request.activity() == AgentActivity.TOOL
                 || request.conversation() != null && !request.conversation().key().agentId().equals(handle.id())) {
-            return completed(new AgentRunResult(handle.id(), request.requestId(),
+            return completed(request, observedAt, new AgentRunResult(handle.id(), request.requestId(),
                     AgentRunResult.Status.INVALID_INPUT, null, null, Map.of()));
         }
         // 2026/11/04：可变装配的记忆要求在准入后判断，纯 LLM 会话允许没有空间引用。
         if (references == null && request.memoryReference() != null) {
-            return completed(new AgentRunResult(handle.id(), request.requestId(),
+            return completed(request, observedAt, new AgentRunResult(handle.id(), request.requestId(),
                     AgentRunResult.Status.CONFIGURATION_ERROR, null, null, Map.of()));
         }
         final AgentTurn turn; final java.time.Instant acceptedAt;
@@ -438,7 +442,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             acceptedAt = clock.instant();
             turn = new AgentTurn(handle, request, parent == null ? ExecutionControl.create() : parent.child(), parent == null, acceptedAt);
         } catch (RuntimeException failure) {
-            return completed(new AgentRunResult(handle.id(), request.requestId(),
+            return completed(request, observedAt, new AgentRunResult(handle.id(), request.requestId(),
                     AgentTurn.failureStatus(failure), null, null,
                     parent == null ? Map.of() : parent.budget().snapshot()));
         }
@@ -453,7 +457,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
             turn.lifetime.cancel();
             var result = turn.result(null);
             turn.close();
-            return completed(result);
+            return completed(request, observedAt, result);
         }
         turn.own(handle.onClose(turn.lifetime::cancel));
         // 2026/11/03：登记不表示业务已启动，冷轮次在显式 start 后才进入执行。
@@ -470,23 +474,14 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                     || result.status() == AgentRunResult.Status.CONFIGURATION_ERROR && contextFailure != null) {
                 reportFailure(turn, result, contextFailure == null ? failure : contextFailure);
             }
-            try { observer.accept(AgentTurnReport.from(request, result, java.time.Duration.between(acceptedAt, clock.instant()).toMillis())); }
-            catch (RuntimeException ignoredReportFailure) { /* 监控不能改写业务结果。 */ }
-            // 2026/11/03：模型终态与平台实际发送由不同节点报告。
-            if (timeline != null) {
-                try {
-                    timeline.finish(AgentTurnReport.from(request, result,
-                            java.time.Duration.between(acceptedAt, clock.instant()).toMillis()));
-                } catch (RuntimeException ignoredTimelineFailure) {
-                    // 2026/11/03：观测计数溢出等故障也不能改写业务终态。
-                }
-            }
+            // 2026/11/06：报告改由统一完成阶段发布；错误诊断仍在原业务结果确定处记录。
             return result;
-        })).thenCompose(Function.identity()).whenComplete((ignored, failure) -> {
+        })).thenCompose(Function.identity());
+        var observed = observeCompletion(request, observedAt, completion).whenComplete((ignored, failure) -> {
             turns.remove(turn.entity.snapshot().id(), turn);
             turn.close();
         }).toCompletableFuture().minimalCompletionStage();
-        return new AgentRunExecution(completion, () -> launch(turn, work), turn.lifetime::cancel, turn::contains);
+        return new AgentRunExecution(observed, () -> launch(turn, work), turn.lifetime::cancel, turn::contains);
     }
 
     /**
@@ -525,11 +520,49 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
 
     /**
      * 为准备前拒绝提供已结束句柄，不创建运行资源。
+     * @param request 有效原请求，不伪造身份或编号
+     * @param observedAt 单调计时起点
      * @param result 明确终止结果
      * @return 启动和取消均无业务动作的句柄
      */
-    private static AgentRunExecution completed(AgentRunResult result) {
-        return new AgentRunExecution(CompletableFuture.completedStage(result), () -> {}, () -> false, ignored -> false);
+    private AgentRunExecution completed(AgentRunRequest request, long observedAt, AgentRunResult result) {
+        return new AgentRunExecution(observeCompletion(request, observedAt, CompletableFuture.completedStage(result)),
+                () -> {}, () -> false, ignored -> false);
+    }
+
+    /**
+     * 2026/11/06：每个执行句柄只在唯一完成信号上通知一次，不按请求编号维护全局去重状态。
+     * 提前结束、冷轮次取消与正常执行复用此处；观察失败不改变结果和原关闭责任。
+     * @param request 已校验的原请求
+     * @param observedAt 单调计时起点
+     * @param completion 本次唯一的结果阶段
+     * @return 观察完成后的原业务结果
+     */
+    private CompletionStage<AgentRunResult> observeCompletion(AgentRunRequest request, long observedAt,
+                                                              CompletionStage<AgentRunResult> completion) {
+        return completion.thenApply(result -> {
+            final AgentTurnReport report;
+            try {
+                report = AgentTurnReport.from(request, result,
+                        TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - observedAt));
+            } catch (RuntimeException invalidReport) {
+                // 计数溢出等观测构造故障不能改变已形成的业务终态。
+                return result;
+            }
+            try {
+                observer.accept(report);
+            } catch (RuntimeException ignoredReportFailure) {
+                // 单个宿主观察失败不阻断时间线或其他关闭回调。
+            }
+            if (timeline != null) {
+                try {
+                    timeline.finish(report, result);
+                } catch (RuntimeException ignoredTimelineFailure) {
+                    // 日志及时间线故障不传播到业务结果，也不重试发布。
+                }
+            }
+            return result;
+        });
     }
 
     /**

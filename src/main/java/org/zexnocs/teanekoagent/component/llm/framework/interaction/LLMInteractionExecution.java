@@ -35,20 +35,18 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCa
  * 此类型不自动循环、不提交业务历史，模型响应与工具调用的关联由上层编排验证。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04��ÿ������Ԥ��ģ�������ı��������������ȣ����Զ�����������ޡ�
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：工具历史续轮保留本轮工具定义，以 none 禁止调用，避免供应商退化为正文调用标记。
  * <br>2026/11/05：协议纠正复用原调用权限、共享预算和截止时间，不增加工具执行次数。
+ * <br>2026/11/06：实际模型调用前固定临时输入，供请求结束后的统一汇总使用。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  * @see LLMCallLimits
  */
 public final class LLMInteractionExecution implements AutoCloseable {
@@ -169,6 +167,8 @@ public final class LLMInteractionExecution implements AutoCloseable {
             var options = LLMProtocolSnapshots.options(prompt.getOptions());
             var optionsPolicy = Objects.requireNonNull(prompt.getOptionsPolicy(), "模型参数解析策略不能为空。");
             var held = new AtomicReference<LLMTokenBudget.Held>();
+            // 2026/11/06：输入只随本次尝试保存，不使用跨请求缓存或持久化。
+            var observedInput = new AtomicReference<LLMRequestSnapshot>();
             var attempt = new AtomicInteger();
             toolRoundAvailable = false;
             CompletionStage<ILLMResult> pendingStage = phase(settings.modelTimeout(), stage -> {
@@ -217,7 +217,13 @@ public final class LLMInteractionExecution implements AutoCloseable {
                             effective.setTools(allowed || hasToolHistory(messages) ? tools.definitions() : List.of());
                             effective.setToolChoice(allowed ? effective.findToolChoice().orElse("auto") : "none");
                             var callPolicy = tokenBudget.enabled() ? LLMOptionsPolicy.RESOLVED : optionsPolicy;
-                            var pending = Objects.requireNonNull(models.call(new LLMPrompt(messages, effective, callPolicy),
+                            var actualPrompt = new LLMPrompt(messages, effective, callPolicy);
+                            try {
+                                observedInput.set(LLMRequestSnapshot.from(actualPrompt));
+                            } catch (RuntimeException ignoredObservation) {
+                                // 2026/11/06：观察失败不能阻止实际请求；汇总明确标为输入未取得。
+                            }
+                            var pending = Objects.requireNonNull(models.call(actualPrompt,
                                     ExecutionPolicy.controlled(settings.modelTimeout(), stage)), "模型端口返回的任务不能为空。");
                             return pending.asStage().thenApply(result -> stage.whileActive(() -> {
                                 if (result == null) { throw new InvalidModelResponseException(); }
@@ -226,7 +232,8 @@ public final class LLMInteractionExecution implements AutoCloseable {
                             }));
                         }, executor);
             });
-            return pendingStage.handle((result, failure) -> completeModel(attempt.get(), held.get(), result, failure));
+            return pendingStage.handle((result, failure) ->
+                    completeModel(attempt.get(), held.get(), result, failure, observedInput.get()));
         });
     }
 
@@ -245,11 +252,13 @@ public final class LLMInteractionExecution implements AutoCloseable {
      * @param held 可选 token 预留
      * @param result 阶段成功响应
      * @param failure 阶段失败原因
+     * @param input 实际提交输入的临时观察
      * @return 已冻结单次响应
      * @throws BudgetExceededException 当实际结算超出任一级总额时
      * @throws CompletionException 当阶段失败或响应非法时
      */
-    private ILLMResult completeModel(int attempt, LLMTokenBudget.Held held, ILLMResult result, Throwable failure) {
+    private ILLMResult completeModel(int attempt, LLMTokenBudget.Held held, ILLMResult result, Throwable failure,
+                                    @org.jspecify.annotations.Nullable LLMRequestSnapshot input) {
         ILLMResult snapshot = null;
         if (result != null) {
             try { snapshot = LLMProtocolSnapshots.result(result); }
@@ -257,7 +266,8 @@ public final class LLMInteractionExecution implements AutoCloseable {
         }
         var usage = tokenBudget.settle(held, snapshot);
         if (attempt > 0) {
-            modelAttempts.put(attempt, new LLMInteractionResult.ModelAttempt(attempt, Optional.ofNullable(snapshot), usage));
+            modelAttempts.put(attempt, new LLMInteractionResult.ModelAttempt(attempt, Optional.ofNullable(snapshot),
+                    usage, Optional.ofNullable(input)));
         }
         if (failure != null) { throw new CompletionException(unwrap(failure)); }
         if (usage.map(LLMTokenUsage::exceeded).orElse(false)) {

@@ -15,16 +15,17 @@ import java.util.function.UnaryOperator;
 
 /**
  * 任务独立域的事务存储；创建原规格同时充当持久化幂等回执。
+ *
  * <br>2026/11/03：管理取消的版本检查、当前授权与持久回执在原事务提交。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：活动到期索引与任务状态同事务维护，启动恢复补建历史索引。
+ * <br>2026/11/06：短期管理回执迁入可清理表，持久任务版本保留取消和防重语义。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 public final class EasyDataScheduleStore {
     /**
@@ -41,12 +42,36 @@ public final class EasyDataScheduleStore {
             guard.run();
             String subject = org.zexnocs.teanekocore.utils.StableDigest.sha256(actor);
             String target = scope.clientId() + ":" + scope.scopeId();
-            var dto = data.get("management").atomic();
+            // 2026/11/06：一天内的管理回执进入可清理表；任务版本继续仲裁取消，清理不复活任务。
+            var dto = data.cleanable().get("management").atomic();
             var row = dto.find("operations", EasyDataLock.WRITE);
             var journal = row == null ? new java.util.LinkedHashMap<UUID, ScheduleManagement.Operation>()
                     : new java.util.LinkedHashMap<>(mapper.readValue(row.getValue(), ScheduleManagement.Journal.class).operations());
+            var legacy = data.get("management").atomic();
+            var previousJournal = legacy.find("operations", EasyDataLock.WRITE);
+            if (previousJournal != null) {
+                mapper.readValue(previousJournal.getValue(), ScheduleManagement.Journal.class).operations()
+                        .forEach((id, operation) -> {
+                            var existing = journal.putIfAbsent(id, operation);
+                            if (existing != null && !existing.equals(operation)) {
+                                throw new IllegalStateException("计划管理回执迁移遇到不一致记录。");
+                            }
+                        });
+                // 2026/11/06：旧记录和新记录同事务提交；查询重放也必须完成迁移。
+                if (row == null) {
+                    row = dto.create("operations", mapper.writeValueAsString(new ScheduleManagement.Journal(journal)));
+                } else {
+                    row.setValue(mapper.writeValueAsString(new ScheduleManagement.Journal(journal)));
+                }
+                dto.save(row);
+                legacy.delete(previousJournal);
+            }
             var now = java.time.Instant.now();
-            journal.values().removeIf(operation -> operation.receipt().at().plusSeconds(86400).isBefore(now));
+            if (journal.values().removeIf(operation -> operation.receipt().at().plusSeconds(86400).isBefore(now))
+                    && row != null) {
+                row.setValue(mapper.writeValueAsString(new ScheduleManagement.Journal(journal)));
+                dto.save(row);
+            }
             var previous = journal.get(query.operationId());
             if (previous != null) {
                 var original = previous.request();

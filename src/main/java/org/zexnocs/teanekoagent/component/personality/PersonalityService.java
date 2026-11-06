@@ -22,16 +22,15 @@ import java.util.function.Supplier;
  * 组合人格选择、独立补正和持久化引用；不生成用户画像、不调用模型或自动提升学习文本。
  * <br>2026/11/03：自动学习只接收原用户来源，独立管理来源经专用管理事务处理。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：未安装人格时不初始化存储或接受学习候选。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
+ * <br>2026/11/06：保留人格存储边界的安全根因定位。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 public final class PersonalityService implements IAgentPersonalitySource, IPersonalityLearningTarget {
     private final IPersonalityConfiguration configuration;
@@ -193,7 +192,7 @@ public final class PersonalityService implements IAgentPersonalitySource, IPerso
             var cause = failure.getCause(); if (cause == null || cause == failure) { break; } failure = cause;
         }
         if (failure instanceof ExecutionStoppedException known) { return new ExecutionStoppedException(known.reason()); }
-        if (failure instanceof AgentPromptException known) { return new AgentPromptException(known.reason()); }
-        return new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE);
+        if (failure instanceof AgentPromptException known) { return new AgentPromptException(known.reason(), known); }
+        return new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE, failure);
     }
 }

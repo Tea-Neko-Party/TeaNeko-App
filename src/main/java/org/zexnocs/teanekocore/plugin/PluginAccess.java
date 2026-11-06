@@ -9,10 +9,12 @@ import java.lang.reflect.Method;
  * 将既有扫描式命令、事件和任务阶段接入插件归属，不改变未声明归属的旧扩展。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/06：提供按缓存插件标识读取当前启用状态的入口。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.4-l
  */
 @Component
 public final class PluginAccess {
@@ -49,6 +51,16 @@ public final class PluginAccess {
      * @param token 可选调用令牌
      */
     public void check(PluginRegistry.Token token) { if (token != null) { registry.check(token); } }
+    /**
+     * 2026/11/06：业务目录缓存声明者后，仅复核插件的当前资格，不重新发现注解。
+     * @param owner 初始化时解析的插件标识
+     * @return 插件当前已启用
+     */
+    public boolean enabledOwner(String owner) {
+        registry.requireRegistered(owner);
+        return registry.isEnabled(owner);
+    }
+
     /**
      * 判断监听器是否应该参与当前分发。
      * @param target 目标 Bean

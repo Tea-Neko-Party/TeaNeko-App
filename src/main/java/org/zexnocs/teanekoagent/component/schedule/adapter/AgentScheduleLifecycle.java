@@ -16,13 +16,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * 在原扫描器及数据库就绪后恢复一次任务；启动失败关闭调度并保留明确不可用状态。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class AgentScheduleLifecycle {
@@ -49,8 +50,8 @@ public final class AgentScheduleLifecycle {
         try {
             schedules.start(timers).toCompletableFuture().join(); ready.complete(null);
         } catch (RuntimeException failure) {
-            schedules.close(); ready.completeExceptionally(new IllegalStateException("提醒任务恢复失败，调度已关闭。"));
-            logger.error("Agent 计划任务", "提醒任务恢复失败，调度已关闭；任务记录保留，请检查数据库与定时器后重启。");
+            schedules.close(); ready.completeExceptionally(new org.zexnocs.teanekocore.logger.DiagnosticException("提醒任务恢复失败，调度已关闭。", failure));
+            logger.error("Agent 计划任务", "提醒任务恢复失败，调度已关闭；任务记录保留，请检查数据库与定时器后重启。", failure);
         }
     }
 

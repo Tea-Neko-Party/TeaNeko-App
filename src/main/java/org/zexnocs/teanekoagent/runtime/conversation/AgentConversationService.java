@@ -44,19 +44,18 @@ import java.util.concurrent.atomic.AtomicReference;
  * 空闲会话按 TTL 和容量惰性淘汰；切换代次不移除仍占运行槽的旧邮箱。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：出队固定装配，按需准备空间、人格、摘要与学习，并复核重放策略。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：邮箱交付及重放保留安全诊断而不保存异常对象。
  * <br>2026/11/05：会话准备和策略加载失败保留首个安全原因，避免只返回通用配置错误。
  * <br>2026/11/05：资料重放拒绝及复核异常保留安全原因，避免发送端只得到通用失效错误。
  *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
     private final IAgentTurnService turns;
@@ -329,7 +328,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     break;
                 }
             }
-        } catch (RuntimeException failure) { report(); rejection = AgentRunResult.Status.FAILED; }
+        } catch (RuntimeException failure) { report(failure); rejection = AgentRunResult.Status.FAILED; }
         drainRetired();
         return rejection != null ? immediate(handle, request, rejection, parent)
                 : replay(handle, request, Objects.requireNonNull(source), Objects.requireNonNull(stamp), parent);
@@ -636,7 +635,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     break;
                 }
             }
-        } catch (RuntimeException failure) { rejection = AgentRunResult.Status.FAILED; report(); }
+        } catch (RuntimeException failure) { rejection = AgentRunResult.Status.FAILED; report(failure); }
         drainRetired();
         if (created != null) {
             var owner = created;
@@ -928,7 +927,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             }, delay, TimeUnit.NANOSECONDS), "排队计时器未返回任务句柄。");
             entry.timer.set(timer);
             if (!beforeStart(entry.phase)) { cancelTimer(entry); }
-        } catch (RuntimeException failure) { report(); stop(entry, AgentRunResult.Status.FAILED, true); }
+        } catch (RuntimeException failure) { report(failure); stop(entry, AgentRunResult.Status.FAILED, true); }
     }
 
     /**
@@ -941,7 +940,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         if (entry.phase == Phase.FINISHED) { mailbox.ready.remove(entry); return; }
         if (mailbox.work.getAndIncrement() == 0) {
             try { executor.execute(() -> drain(mailbox)); }
-            catch (RuntimeException failure) { report(); failDispatch(mailbox); }
+            catch (RuntimeException failure) { report(failure); failDispatch(mailbox); }
         }
     }
 
@@ -989,7 +988,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         } catch (ExecutionStoppedException stopped) {
             stop(entry, stopStatus(stopped.reason()), false);
         } catch (RuntimeException failure) {
-            report();
+            report(failure);
             if (entry.phase == Phase.RUNNING) { stop(entry, AgentRunResult.Status.FAILED, false); }
             else { finished(entry, null, failure); }
         }
@@ -1122,7 +1121,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                         box.entity.commit(box.entity.snapshot().revision(), patch.build());
                     }
                     window = selected.window(); entry.summary = selected.summary();
-                } catch (RuntimeException ignored) { report(); entry.summary = null; }
+                } catch (RuntimeException failure) { report(failure); entry.summary = null; }
             }
             try { entry.options = Objects.requireNonNull(policy.resolve(entry.handle, entry.request), "窗口策略不能为空。"); }
             catch (RuntimeException failure) {
@@ -1157,7 +1156,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         } catch (ExecutionStoppedException stopped) {
             stop(entry, stopStatus(stopped.reason()), false);
         } catch (RuntimeException failure) {
-            report();
+            report(failure);
             if (memory != null) { stop(entry, AgentMemoryBoundary.status(failure), false); }
             else if (entry.phase == Phase.RUNNING) { stop(entry, AgentRunResult.Status.FAILED, false); }
             else { finished(entry, null, failure); }
@@ -1207,7 +1206,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         if (running != null) {
             if (entry.cancellationRequested.compareAndSet(false, true)) {
                 if (memory != null) { entry.lifetime.cancel(); }
-                try { running.cancel(); } catch (RuntimeException cancellationFailure) { report(); }
+                try { running.cancel(); } catch (RuntimeException cancellationFailure) { report(cancellationFailure); }
             }
         } else { deliver(entry, result(entry, null, null), next); }
     }
@@ -1282,12 +1281,12 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         }
         drainRetired();
         if (summaries != null && entry.assembly.has("memory") && accepted.status() == AgentRunResult.Status.SUCCESS && summaryCandidate != null) {
-            try { summaries.offer(entry.handle, accepted, summaryCandidate, entry.summary); } catch (RuntimeException ignored) { report(); }
+            try { summaries.offer(entry.handle, accepted, summaryCandidate, entry.summary); } catch (RuntimeException observationFailure) { report(observationFailure); }
         }
         var learningStamp = accepted.conversation();
         if (learning != null && entry.assembly.has("personality") && accepted.status() == AgentRunResult.Status.SUCCESS && learningStamp != null) {
             try { learning.offer(entry.handle, entry.request, accepted, () -> replayStatus(entry.handle, learningStamp) == null); }
-            catch (RuntimeException ignored) { report(); }
+            catch (RuntimeException observationFailure) { report(observationFailure); }
         }
         deliver(entry, accepted, next);
     }
@@ -1299,7 +1298,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private Instant activityTime(Entry entry) {
         try { return clock.instant(); }
-        catch (RuntimeException ignored) { report(); return entry.acceptedAt; }
+        catch (RuntimeException failure) { report(failure); return entry.acceptedAt; }
     }
 
     /**
@@ -1420,7 +1419,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private void cancelTimer(Entry entry) {
         var timer = entry.timer.getAndSet(null);
-        if (timer != null) { try { timer.cancel(false); } catch (RuntimeException ignored) { report(); } }
+        if (timer != null) { try { timer.cancel(false); } catch (RuntimeException observationFailure) { report(observationFailure); } }
     }
 
     /**
@@ -1480,9 +1479,12 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         return failure instanceof ExecutionStoppedException stopped ? stopStatus(stopped.reason()) : AgentRunResult.Status.FAILED;
     }
 
-    /** 固定诊断不携带请求或异常值，日志故障也不能阻止结果完成。 */
-    private void report() {
-        try { logger.error(AgentConversationService.class.getName(), "Agent 邮箱配置或调度失败，请检查本地策略和执行资源。"); }
+    /**
+     * 2026/11/06：调度与配置失败保留安全根因，诊断故障不阻止邮箱推进。
+     * @param failure 实际失败，日志格式化不输出来源消息
+     */
+    private void report(Throwable failure) {
+        try { logger.error(AgentConversationService.class.getName(), "Agent 邮箱配置或调度失败，请检查本地策略和执行资源。", failure); }
         catch (RuntimeException ignored) { /* 诊断不参与执行准入。 */ }
     }
 

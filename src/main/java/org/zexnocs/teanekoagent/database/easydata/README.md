@@ -1,21 +1,44 @@
 # Agent 专用 EasyData
 
-Agent 的作用域配置、空间、事实、人格、命令账本及历史统一保存到 `tea_neko_agent_data`。`TeaNekoAgentEasyDataObject` 继承 Core 的 ID 和 `@Version`，唯一键为 `(namespace, target, o_key)`，近期查询索引为 `(namespace, target, id)`，维护分页索引为 `(namespace, id)`。仓库仅供 Core EasyData 基础设施使用，业务 Store 不操作仓库或 JPA 实体。
+4.8.5-l 起，长期业务状态保存在 `tea_neko_agent_data`；可丢弃的复查数据保存在 `cleanable_data`。两表沿用 Core 的 ID、`@Version` 和唯一键 `(namespace, target, o_key)`，通过同一 EasyData 事务提交。业务 Store 不直接操作仓库或 JPA 实体。
 
-| namespace | 数据 |
+| namespace | 持久数据及保留原因 |
 | --- | --- |
-| config | `/cfg` 的 agent 配置，target=agent |
-| agent.namespace.v1 | 空间注册、创建者索引、scope 绑定与操作回执 |
-| agent.fact.v1 | 按业务空间及 generation 隔离的事实、去重索引、操作回执 |
-| agent.personality.v1 | 人格引用、补正、不可变备份 |
-| agent.command.v1 | 原生命令工具的执行占用与终态 |
-| agent.history.v1 | 按完整有效引用和人格隔离的消息、可排序到期索引 |
-| agent.memory.layers.v1 | 与历史同事务采集的短期消息、持久分区目录、压缩租约/水位及中期片段 |
-| agent.memory.long.v1 | 自动及明确保存的长期事实/偏好/经历、画像及话题/正文索引、整理水位、附加信息、本人维护回执和旧证据抑制 |
-| agent.delivery.v1 | 按完整 scope/引用分区的逐段平台发送占用、确认与未知状态；跟随历史保留期有界回收 |
-| agent.personality.observations.v1 | 按 scope/人格身份隔离的真实表达样本、模式和渐进采用时间；与长期水位及人格补正同事务提交 |
-| agent.memory.lifecycle.v1 | 空间及分区的无正文定位标记，原目录回收后仍能判定旧代次数据归属 |
-| agent.sticker.v1 | 按部署 catalog-id 组织的共享素材、候选作业、下载/分析额度、来源去重、有限人类统计及待删元数据；不随记忆清空 |
+| `config` | `/cfg` 的 Agent 装配和参数，target=`agent` |
+| `agent.chat-directory.v1` | 已知聊天及名称；迁移、重启后仍可选择旧聊天 |
+| `agent.namespace.v1` | 空间、创建者索引、绑定、代次、管理回执；维持授权与清空/克隆的原操作结果 |
+| `agent.fact.v1` | 事实、来源去重及维护回执；避免重复录入和旧事实复活 |
+| `agent.personality.v1` | 人格、补正、备份及原管理回执；支持还原、重试核验及绑定仲裁 |
+| `agent.command.v1` | 命令占用、身份摘要和终态；不存命令正文，未知副作用不能自动重试 |
+| `agent.history.v1` | 会话上下文及到期索引；按原保留期清理，仍是有效业务输入 |
+| `agent.memory.layers.v1` | 短中期消息、分区、租约和整理水位；清理必须遵守保留期与代次 |
+| `agent.memory.long.v1` | 长期结论、画像、证据及索引、整理水位、遗忘标记和原维护回执 |
+| `agent.delivery.v1` | `claims:receipts:*` 仅保存内容/身份摘要及发送状态；临时回执丢失后仍禁止重复发送 |
+| `agent.personality.observations.v1` | 表达样本、模式及采用时间；样本到期清理，采用标记避免旧证据再次续期 |
+| `agent.memory.lifecycle.v1` | 无正文的代次/分区定位标记，保留迟到任务的归属判断 |
+| `agent.sticker.v1` | 素材目录、删除决定、配额和防重；仅需执行或释放资源的作业留在主目录 |
+| `agent.schedule.v1` | 计划规格、状态、版本及到期索引；终态阻止重启补跑和旧请求复活任务 |
+
+记忆、人格管理回执仍承担持久业务合同：按原主体和完整参数核验重放，返回原提交结果，关联克隆、备份或遗忘决定。这些不是诊断日志，不能仅因带有 `operation` 名称而清理。
+
+## 可清理数据
+
+通过 `data.cleanable()` 获取同 namespace 的临时表视图，继续使用 `get(target).atomic()` 与原事务。不能把执行权、租约、业务水位或唯一防重证据写入临时表。
+
+| namespace / target | 内容与清理行为 |
+| --- | --- |
+| 各维护域 / `maintenance:<实体名>` | 可重建的分页游标；删除后从首页继续维护，不改变业务整理水位 |
+| `agent.delivery.v1` / `receipts:*` | 逐段回执正文与观察时间；随原历史保留期、空间退役逐页回收 |
+| `agent.schedule.v1` / `management` | 最多 256 条、一天内的管理回执；清理后查询显示不存在，任务版本继续拒绝旧操作 |
+| `agent.sticker.v1` / `catalog:*` 的 `observations` | 已结束且完成资源清理的作业、短期管理回执；沿用一天窗口及数量上限 |
+
+清理临时表只让复查信息缺失，不重新取得执行权。仍有文件、额度或刷新占用需要释放的表情包作业不能提前迁出。请求上下文不写这两张表；网页活动时间线仅保留有界内存窗口。
+
+## 迁移与事务
+
+首次访问旧记录时，在同一事务中先写新记录，再删除旧内容；任一步失败全部回滚。发送回执和维护游标也由有界维护页逐步迁移；图库和计划管理回执在对应事务触发迁移，不在启动时全表重写。
+
+升级前停止旧进程并备份数据库；不混跑新旧版本。迁移后回退到旧程序需要恢复迁移前的一致备份，旧程序无法读取分流后的防重及观察结构。此次开发未修改真实数据库。
 
 普通配置沿用 `TeaNekoAgentEasyData.of(namespace).get(target)` 的缓存读取和 `getTaskConfig(...).set(...).pushAsync()`。构造 Store 时注入根入口，通过 `inNamespace(namespace)` 捕获同一个 EasyData 服务，便于隔离测试及宿主装配。
 
@@ -27,10 +50,11 @@ recentNamespace(before, limit) 只读分页当前固定 namespace 的所有 targ
 
 ```sql
 CREATE INDEX idx_agent_easy_maintenance ON tea_neko_agent_data (namespace, id);
+CREATE INDEX idx_cleanable_easy_maintenance ON cleanable_data (namespace, id);
 ```
 
 部署前检查是否已存在同名/等价索引，再按原变更流程执行。dev/prod 的 ddl-auto=update 仍由原 Hibernate 配置处理；实际索引、隔离与 EXPLAIN 结果需实机验收。
 
 历史正文与到期索引同事务提交。到期索引采用固定宽度的秒和纳秒排序键，每批最多处理一百项；历史单次至多扫描二百行，过期或过滤不命中的行仍推进游标。空间 clear 先推进 generation，旧代次在 DEBUG 管理入口分批回收。
 
-Agent 尚未上线，本次直接使用新表，不读取、迁移或清理原 `general_data`、`llm_related` 与旧历史表。旧生产模块及其专属测试已移除，旧数据库表不自动删除。默认部署按现有 JPA 建表配置创建新表；关闭自动 DDL 的环境须依据该实体预先建表。离线测试不替代真实 MySQL 的 DDL、事务代理、隔离与索引性能验收。
+这里的分流只涉及当前 Agent 数据域，不自动删除或搬迁 `general_data`、`llm_related` 等旧表。关闭自动 DDL 的环境须预先准备实体对应的表与索引；真实 MySQL 的事务隔离与索引性能仍需部署环境验收。

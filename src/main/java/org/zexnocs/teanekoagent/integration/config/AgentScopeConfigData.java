@@ -17,21 +17,18 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * <br>2026/11/03：登记独立素材采集开关，不绑定记忆学习。
  * <br>2026/11/03：分别控制共享图库回复和客户端原生表情。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：新增聊天模型路由，空值继承文件默认。
- *
  * <br>2026/11/04：新登记只安装 LLM，旧记录保持原行为，业务参数从独立组件读取。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：新增默认开启的失败原因回复配置。
+ *
+ * <br>2026/11/06：以字段注解声明人格与表达长文本编辑器。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.4-l
  */
 @Getter @Setter
 public class AgentScopeConfigData implements IConfigData {
@@ -138,8 +135,10 @@ public class AgentScopeConfigData implements IConfigData {
     @Description("是否使用当前作用域的自定义人格描述。")
     private boolean customPersonalityEnabled = false;
     @Description("自定义人格描述，不改变运行权限；最多 4096 字符。")
+    @org.zexnocs.teanekocore.framework.config.ValueEditor("LONG_TEXT")
     private String customPersonality = "";
     @Description("自定义说话风格；最多 4096 字符。")
+    @org.zexnocs.teanekocore.framework.config.ValueEditor("LONG_TEXT")
     private String customSpeakingStyle = "";
     @Description("是否应用已接受的人格补正，独立于用户画像和记忆。")
     private boolean personalityCorrectionsEnabled = true;

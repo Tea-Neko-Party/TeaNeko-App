@@ -33,10 +33,12 @@ import java.util.concurrent.*;
  * <br>2026/11/03：按原连接绑定自身账号和连接代次，旧缓存不参与平台联系人查询许可。
  * <br>2026/11/03：指令台发送锁定原唯一连接，实际写入前重新校验，不回退广播。
  *
+ * <br>2026/11/06：诊断仅记录安全标识、帧长度与异常定位，不复制消息正文。
+ *
  * @author zExNocs
  * @date 2026/02/28
  * @since 4.0.12
- * @version 4.7.0-l
+ * @version 4.8.4-l
  */
 @Component
 public class OnebotClient extends AbstractWebsocketClient implements IClient, SmartLifecycle, DisposableBean {
@@ -170,7 +172,7 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
     @Override
     protected void handleTextMessage(@NonNull WebSocketSession session, TextMessage message) {
         String payload = message.getPayload();
-        logger.debug(TAG, "收到会话 %s 的消息: %s".formatted(session.getId(), payload));
+        logger.debug(TAG, "收到会话 %s 的文本帧，字符数=%d".formatted(session.getId(), payload.length()));
 
         // 异步处理接收到的消息，防止阻塞 WebSocket 的 IO 接收线程
         // 2026/11/03：原帧中的自身账号必须固定在此连接，换号不能复用旧查询。
@@ -237,7 +239,7 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
         }
 
         // 如果都不匹配，报错并返回 null
-        logger.errorWithReport(this.getClass().getSimpleName(), "未知的信息类型: " + information);
+        logger.errorWithReport(this.getClass().getSimpleName(), "未知的信息类型；字符数=" + information.length());
         return null;
     }
 
@@ -250,7 +252,7 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
     public void send(String message) {
         if (stopping) { return; }
         if (sessions.isEmpty()) {
-            logger.warn(TAG, "没有可用客户端发送信息: " + message);
+            logger.warn(TAG, "没有可用连接发送消息；未记录消息正文。");
             return;
         }
 
@@ -282,7 +284,7 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
     @Override
     public void afterConnectionClosed(@NonNull WebSocketSession session, @NonNull CloseStatus status) {
         removeSession(session);
-        logger.info(TAG, "客户端断开连接: %s, 原因: %s。剩余数量: %d".formatted(session.getId(), status, sessions.size()));
+        logger.info(TAG, "客户端断开连接: %s, 原因: %s。剩余数量: %d".formatted(session.getId(), status.getCode(), sessions.size()));
     }
 
     /**

@@ -15,13 +15,14 @@ import java.util.Objects;
 /**
  * 懒读本地默认值并应用已登记 scope 的窗口覆盖，不创建配置或承担读取之外的业务。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class ConfigDataAgentConversationPolicy implements IAgentConversationPolicy {
@@ -66,6 +67,6 @@ public final class ConfigDataAgentConversationPolicy implements IAgentConversati
                 if (data.getInputMaxBytes() >= 1) { input = data.getInputMaxBytes(); }
             }
             return new AgentConversationOptions(messages, input, local.maxCompletedRequests(), local.maxReplayBytes());
-        } catch (RuntimeException ignored) { throw new IllegalStateException("Agent 历史窗口或重放配置不可用。"); }
+        } catch (RuntimeException failure) { throw new org.zexnocs.teanekocore.logger.DiagnosticException("Agent 历史窗口或重放配置不可用。", failure); }
     }
 }

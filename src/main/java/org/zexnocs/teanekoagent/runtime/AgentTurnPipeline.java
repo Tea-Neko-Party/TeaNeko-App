@@ -38,26 +38,24 @@ import java.util.function.Function;
 /**
  * 预编译准入、临时输入、交互和交付步骤；业务检查及投影校验统一切入借用执行器。
  * 只通过专用轮次查找函数访问资源拥有者，不把服务或可执行绑定写入组件。
+ *
  * <br>2026/11/02：在准入之后及交互之后运行受控插件 System，等待决策与异步环绕。
  * <br>2026/11/02：统一按可信 client 过滤工具并在实际执行时重新校验。
  * <br>2026/11/02：携带工具图像的交互强制使用历史投影，避免伪装成用户新消息。
- *
  * <br>2026/11/03：在持久历史之前编译完整表达计划，避免控制符进入会话。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/03：在实际步骤调用和异步返回处记录有界脱敏节点。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按组件执行人格、记忆和表达系统，保留模型与交付守卫。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：客户端和插件过滤后复核技能依赖，不触发未装配工具。
  * <br>2026/11/05：工具整体禁用时仍验证已提供资料的依赖，避免残留不可执行的查询提示。
+ * <br>2026/11/06：显式传递汇总归属，保持模型调用和工具执行的原控制边界。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;
@@ -350,7 +348,9 @@ final class AgentTurnPipeline {
         }
         turn.guard(gate, false);
         var prompt = new LLMPrompt(input.messages(), runtime.modelOptions().toOptions(), LLMOptionsPolicy.RESOLVED);
-        var trusted = new ToolInvocationContext(request.requestId(), context.snapshot(), context.control());
+        // 2026/11/06：明确日志归属，Agent 负责汇总时禁止 LLM 重复输出。
+        var trusted = new ToolInvocationContext(request.requestId(), context.snapshot(), context.control(),
+                timeline != null && timeline.observesRuns());
         turn.enteringInteraction();
         try {
             return Objects.requireNonNull(interactions.interact(prompt, toolSet, trusted, runtime.interaction(),

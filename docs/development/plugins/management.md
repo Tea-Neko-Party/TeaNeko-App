@@ -67,6 +67,26 @@ Agent Store 仍经 TeaNekoAgentEasyData；普通字段复用 ConfigData 校验�
 
 原解析器实现 `IFileDocumentParser` 后才支持受限原树操作。插件不能从请求取得文件路径或 Java 类型，不导出候选对象、原文及隐藏字段；实际保存、版本检查、私有账本和权限复核统一由宿主执行。完整回执与文件系统边界见[文件配置说明](../web-console-files.md)。
 
+## 值编辑器
+
+Core 的 `@ValueEditor` 可标记配置类型、字段、访问器或 record 参数，例如：
+
+```java
+@ValueEditor("LONG_TEXT")
+@Description("自定义人格说明")
+private String customPersonality;
+```
+
+内置标识为 `JSON`、`LONG_TEXT`；字段声明优先于值类型声明，未声明时按原字段种类选择。元数据通过 `ConfigSchema` 投影到文件和聊天表单。注解不替代类型绑定、字段校验、敏感字段限制或保存授权。
+
+前端共用 `ValueEditor.vue`，通过 `value-editors.ts` 的 `registerValueEditor` 注册标识、校验、格式化和按需加载扩展；重复标识明确报错。新增种类只需注册一次，并由配置注解选择，不复制弹窗。未知标识不能确认提交。组件装配字段可直接声明相同 `kind`。
+
+## 独立 Agent 目录
+
+实现 Spring Bean `AgentLibrarySource`，以唯一 `id()` 提供有界的 `StoredPage<Item>`。目录只列已存空间/主体，不创建数据、不授予写权限；游标须保留代次，空页可以继续。具体操作仍声明为 `ManagementResource`，经过宿主白名单、实时授权和原领域事务。
+
+人格空间的基础配置从 `IPersonalityConfiguration.catalog()` 取得，不借伪聊天 cfg。首次写操作在原事务校验可信基础指纹；已提交的原样重试先核对完整回执，不受随后基础定义变化影响。
+
 ## 定时展示与分类
 
 在任务方法或所属类型添加 `@TimerDisplay`，声明稳定 category、中文 categoryName、name、description、visible 和 controllable。方法声明优先于类型声明；同一分类键必须使用同一名称，冲突明确报错。`visible = false` 只隐藏管理观测，不取消任务；`controllable = false` 同时关闭网页动作和服务端 Core 门禁写入。
@@ -114,4 +134,4 @@ v4.7.7-l 将文件条目的唯一配置路由 `id` 与实际协议 `adapter` 分
 
 Timer 定义、持久计划和单次 TaskRun 分开展示。底层命令调用任务可能先结束，外层业务 Stage 尚未结束，页面应跟踪业务 runId 的真实阶段。取消请求不等于已撤销副作用，INDETERMINATE 不显示为安全可重试。
 
-插件表单和页面优先使用受限 schema、表格与动作描述；复杂界面将来再制定页面扩展协议。浏览器中的记忆、日志及插件文本按非可信内容渲染，运行状态使用只读观测快照，审计使用独立可靠记录。
+插件表单优先使用受限 schema、表格与动作描述。4.8.4-l 的独立控制台页面通过[构建期页面声明](../web-console-pages.md)接入，导航、标题和生命周期共用一份合同；不支持加载远端插件脚本。浏览器中的记忆、日志及插件文本按非可信内容渲染，运行状态使用只读观测快照，审计使用独立可靠记录。

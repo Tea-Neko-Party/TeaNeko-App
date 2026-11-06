@@ -19,13 +19,14 @@ import java.util.concurrent.CompletionStage;
  * 记录平台已观察的聊天与成员公开资料，显示名称不参与身份映射或权限判定。
  * 客户端和真实 scope 隔离群名片；空名称不覆盖已知名称，迟到消息不回退新资料。
  *
- * 修改记录：<br>
- * 2026/11/04：提供所有客户端共享的持久资料入口，供目录和业务服务读取。
+ * <br>2026/11/04：提供所有客户端共享的持久资料入口，供目录和业务服务读取。
+ *
+ * <br>2026/11/06：索引已知用户昵称，供跨客户端画像目录复用。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.7-l
- * @version 4.7.7-l
+ * @version 4.8.4-l
  */
 @Service
 public final class ChatIdentityService {
@@ -70,6 +71,16 @@ public final class ChatIdentityService {
     }
 
     /**
+     * 2026/11/06：读取最近观察的用户公开资料，不将群名片当作跨群身份。
+     * @param client 原客户端
+     * @param user 原主体
+     * @return 已有公开昵称，旧数据尚未观察时为空
+     */
+    public Optional<Identity> user(String client, UUID user) {
+        return Optional.ofNullable(dto(client).get("user:" + user, Identity.class));
+    }
+
+    /**
      * 在同一 DTO 事务中保留聊天名和具体成员，只有真实入站可以调用。
      * @param message 原可信入站消息，不读取消息正文
      * @return 资料实际提交完成信号
@@ -86,7 +97,7 @@ public final class ChatIdentityService {
         task.addTransactionTask(() -> {
             var transaction = dto.atomic();
             for (String key : java.util.List.of("scope:" + StableDigest.sha256(value.scope()),
-                    "member:" + StableDigest.sha256(value.scope(), value.user().toString()))) {
+                    "member:" + StableDigest.sha256(value.scope(), value.user().toString()), "user:" + value.user())) {
                 var row = transaction.find(key, EasyDataLock.WRITE);
                 var old = row == null ? null : mapper.readValue(row.getValue(), Identity.class);
                 if (old != null && old.observedAt().isAfter(value.observedAt())) {

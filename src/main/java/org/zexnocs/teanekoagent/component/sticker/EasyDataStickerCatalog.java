@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Map;
+import java.util.UUID;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 
@@ -19,11 +22,12 @@ import java.util.function.Function;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：已回收删除条目逐行存储，按指纹与公开标识索引，旧目录迁移与原操作共同提交。
+ * <br>2026/11/06：分流终态作业与短期管理回执，待执行和待清理状态继续持久保存。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 @Component
 @TeaNekoStickerCatalog("easydata")
@@ -65,11 +69,46 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
             var dto = data.get("catalog:" + settings.catalogId()).atomic();
             var row = dto.find("state", EasyDataLock.WRITE);
             var state = row == null ? new Stickers.State() : mapper.readValue(row.getValue(), Stickers.State.class);
+            // 2026/11/06：根锁同时保护两表，已结束作业和短期管理回执仅留在可清理表。
+            var observations = data.cleanable().get("catalog:" + settings.catalogId()).atomic();
+            var observedRow = observations.find("observations", EasyDataLock.WRITE);
+            if (observedRow != null) {
+                var observed = mapper.readValue(observedRow.getValue(), Observations.class);
+                observed.operations().forEach((id, operation) -> {
+                    var previous = state.getOperations().putIfAbsent(id, operation);
+                    if (previous != null && !previous.equals(operation)) {
+                        throw new IllegalStateException("图库管理回执在迁移时发生冲突。");
+                    }
+                });
+                observed.completedJobs().forEach((id, job) -> {
+                    if (job.requiresRecovery() || state.getJobs().containsKey(id)) {
+                        throw new IllegalStateException("图库短期记录不能包含待恢复或重复的作业。");
+                    }
+                    state.getJobs().put(id, job);
+                });
+            }
             var transaction = new Transaction(settings, state);
             transaction.archive();
             var result = Objects.requireNonNull(action.apply(transaction));
             transaction.archive();
-            var json = mapper.writeValueAsString(state);
+            var completed = new LinkedHashMap<UUID, Stickers.Job>();
+            state.getJobs().forEach((id, job) -> {
+                if (!job.requiresRecovery()) {
+                    completed.put(id, job);
+                }
+            });
+            var observedJson = mapper.writeValueAsString(new Observations(state.getOperations(), completed));
+            if (state.getOperations().isEmpty() && completed.isEmpty()) {
+                if (observedRow != null) {
+                    observations.delete(observedRow);
+                }
+            } else if (observedRow == null) {
+                observations.save(observations.create("observations", observedJson));
+            } else if (!observedRow.getValue().equals(observedJson)) {
+                observedRow.setValue(observedJson);
+                observations.save(observedRow);
+            }
+            var json = durableJson(state);
             if (json.length() > MAX_CHARACTERS) {
                 throw new IllegalStateException("表情包活动目录超过持久容量上限；删除记录已使用独立行存储。");
             }
@@ -84,11 +123,43 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
     }
 
     /**
+     * 序列化持久部分，业务回调仍看到统一目录；旧主行中的短期内容随本次提交迁出。
+     * @param state 原业务视图
+     * @return 仅含长期状态和恢复数据的 JSON
+     */
+    private String durableJson(Stickers.State state) {
+        var json = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(state);
+        json.remove("operations");
+        if (json.get("jobs") instanceof tools.jackson.databind.node.ObjectNode jobs) {
+            state.getJobs().forEach((id, job) -> {
+                if (!job.requiresRecovery()) {
+                    jobs.remove(id.toString());
+                }
+            });
+        }
+        return mapper.writeValueAsString(json);
+    }
+
+    /**
+     * 一天内供用户复查的观察，不承担执行权；清理后版本检查仍可阻止旧管理请求重放。
+     * <br>2026/11/06：资源尚未释放的作业不得进入此类型。
+     * @param operations 管理回执
+     * @param completedJobs 已结束且已完成清理的作业
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.5-l
+     * @version 4.8.5-l
+     */
+    private record Observations(Map<UUID, StickerManagement.Operation> operations,
+                                Map<UUID, Stickers.Job> completedJobs) {}
+
+    /**
      * 根锁下的删除索引访问，不另开事务；完整条目分行保留原描述和恢复版本。
+     * <br>2026/11/06：目录容量按持久部分计量，不包含可清理观察。
      * @author zExNocs
      * @date 2026/11/05
      * @since 4.8.3-l
-     * @version 4.8.3-l
+     * @version 4.8.5-l
      */
     private final class Transaction implements StickerCatalogTransaction {
         private final Stickers.State state;
@@ -161,8 +232,8 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
         /** @return 独立删除行的持久计数，不加载完整历史 */
         @Override public long deletedCount() { return state.getDeletedDecisions(); }
 
-        /** @return 本次根状态的实际 JSON 字符数 */
-        @Override public long catalogCharacters() { return mapper.writeValueAsString(state).length(); }
+        /** 2026/11/06：容量只计算持久主目录，不计已分流的短期观察。 @return 持久 JSON 字符数 */
+        @Override public long catalogCharacters() { return durableJson(state).length(); }
 
         /** @return 原主目录字符上限，独立删除行不计入此项 */
         @Override public long catalogCharacterLimit() { return MAX_CHARACTERS; }

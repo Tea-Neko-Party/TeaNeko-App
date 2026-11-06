@@ -28,13 +28,16 @@ import java.util.concurrent.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/05：指令台目录只查询已注册方法，不在页面请求中解析 Bean 类型或重新枚举方法。
  *
+ * <br>2026/11/06：补齐执行与回执持久化诊断，明确命令拒绝原因。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.8.4-l
  */
 @Service
 public final class ClientConsoleService {
+    private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ClientConsoleService.class);
     private static final String ACTOR = "web.local-admin";
     private final UUID instance = UUID.randomUUID();
     private final ClientManagementDirectory clients;
@@ -239,6 +242,12 @@ public final class ClientConsoleService {
             }
             var output = source == null ? List.<String>of() : source.output();
             var messages = source == null ? List.<String>of() : source.confirmed();
+            // 2026/11/06：异常记录原操作编号和安全原因，未知结果不自动重放。
+            if (failure != null) {
+                LOG.warn("指令台执行未确认。操作={}，阶段={}，{}", work.request.operationId(),
+                        work.invoked ? "原命令执行" : "前置检查",
+                        org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
+            }
             boolean complete = failure == null && result != null && Set.of(CommandResult.Status.COMPLETED,
                     CommandResult.Status.HELP).contains(result.status());
             String status = complete ? "COMPLETED" : failure == null || !work.invoked ? "REJECTED" : "INDETERMINATE";
@@ -247,8 +256,38 @@ public final class ClientConsoleService {
             return operations.finish(ACTOR, work.boundary, work.request.operationId(), status, code, output, messages,
                     complete ? "原处理链已结束；只有已确认消息列表证明平台返回了相应消息号。"
                             : !work.invoked ? "前置检查拒绝，原命令尚未启动。请检查连接、账号、平台状态和本机白名单。"
-                            : "处理未确认或被拒绝；已经开始的外部动作不表示已撤销，不会自动重放。", () -> {});
-        }).thenCompose(stage -> stage).whenComplete((receipt, failure) -> release(work));
+                            : failure == null && result != null ? rejection(result.status())
+                            : "处理结果未确认；" + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(
+                                    failure == null ? new IllegalStateException("命令返回值为空。") : failure).description()
+                                    + " 已开始的外部动作不会自动重放。", () -> {});
+        }).thenCompose(stage -> stage).whenComplete((receipt, failure) -> {
+            try {
+                if (failure != null) {
+                    LOG.error("指令台终态保存失败。操作={}，{}；保留原编号查询，不自动重放。",
+                            work.request.operationId(), org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
+                }
+            } finally {
+                release(work);
+            }
+        });
+    }
+
+    /**
+     * 2026/11/06：将命令分发拒绝码映射为可操作原因，不输出命令正文。
+     * @param status 原分发终态
+     * @return 固定原因
+     */
+    private static String rejection(CommandResult.Status status) {
+        return switch (status) {
+            case NOT_MATCHED, METHOD_NOT_FOUND -> "指令或子指令不存在，请按当前目录填写。";
+            case DISABLED -> "该指令当前未启用。";
+            case CANCELLED -> "指令已取消或执行资格已撤销。";
+            case INVALID_ARGUMENTS -> "参数数量或格式错误，请查看指令参数说明。";
+            case DATA_TYPE_MISMATCH -> "该指令未适配管理来源，不能在指令台运行。";
+            case OUT_OF_SCOPE -> "该指令不适用于当前聊天类型或客户端。";
+            case PERMISSION_DENIED -> "管理来源没有执行该指令的权限。";
+            case HELP, COMPLETED -> "原命令处理链已结束。";
+        };
     }
 
     /**

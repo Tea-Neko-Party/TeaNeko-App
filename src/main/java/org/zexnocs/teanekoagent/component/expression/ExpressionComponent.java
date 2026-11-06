@@ -10,12 +10,14 @@ import java.util.Set;
 /**
  * 使用分段协议、发送节奏和客户端原生表情。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "expression", name = "拟人表达", description = "使用分段协议、发送节奏和客户端原生表情。")
+@TeaNekoAgentComponent(id = "expression", order = 40, name = "拟人表达", description = "使用分段协议、发送节奏和客户端原生表情。")
 @PluginOwned("teaneko.agent")
 public final class ExpressionComponent extends BuiltinAgentComponent {
     private final ExpressionCompileSystem compiler;

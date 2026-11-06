@@ -7,15 +7,15 @@ import org.zexnocs.teanekoagent.runtime.AgentScope;
 /**
  * 隔离人格业务与文件/作用域配置实现，不负责模型或记忆查询。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：区分未安装人格和既有默认人格配置。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：提供不读取聊天配置的本地基础人格目录。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 public interface IPersonalityConfiguration {
     /**
@@ -24,6 +24,13 @@ public interface IPersonalityConfiguration {
      */
     default boolean installed(AgentScope scope) {
         return true;
+    }
+    /**
+     * 2026/11/06：实例管理只读可信文件定义，不需要伪造聊天或初始化绑定。
+     * @return 当前可选的基础人格
+     */
+    default java.util.List<BasePersonality> catalog() {
+        throw new UnsupportedOperationException("当前人格配置未提供实例管理目录。");
     }
     /**
      * 读取实际登记的当前策略。

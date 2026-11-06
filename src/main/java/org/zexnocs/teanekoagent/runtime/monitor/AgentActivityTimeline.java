@@ -4,6 +4,8 @@ package org.zexnocs.teanekoagent.runtime.monitor;
 
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 
 import java.time.Instant;
@@ -14,13 +16,14 @@ import java.util.*;
  * 观测不参与业务成功判定，进程重启和窗口截断通过明确字段报告。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：通过运行域接口输出安全观察节点，日志调用移出时间线锁。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.5-l
  */
 @Service
 public final class AgentActivityTimeline {
@@ -28,6 +31,21 @@ public final class AgentActivityTimeline {
     private final Instant startedAt = Instant.now();
     private final Deque<Entry> entries = new ArrayDeque<>();
     private long sequence;
+    private @org.jspecify.annotations.Nullable IAgentActivityObserver observation;
+
+    /**
+     * 2026/11/06：Spring 装配安全观测；独立时间线测试不需要文件配置。
+     * @param observation 可配置 INFO 观察器
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public void installObservation(IAgentActivityObserver observation) {
+        this.observation = observation;
+    }
+
+    /** @return 是否已经装配轮次汇总端口，供 LLM 确定唯一报告者 */
+    public boolean observesRuns() {
+        return observation != null;
+    }
 
     /**
      * @param request 原请求，只提取可信定位
@@ -42,10 +60,22 @@ public final class AgentActivityTimeline {
      * @param report 已完成的脱敏模型报告
      */
     public void finish(AgentTurnReport report) {
+        finish(report, null);
+    }
+
+    /**
+     * 2026/11/06：时间线仍仅保存计数；正文只传给终态观察器，不缓存在全局窗口。
+     * @param report 本轮真实计数
+     * @param result 本轮临时结果
+     */
+    public void finish(AgentTurnReport report, @Nullable AgentRunResult result) {
         append(report.requestId(), report.scope(), report.activity().name(), "agent.turn", report.status().name(),
                 Map.of("elapsedMillis", report.elapsedMillis(), "modelCalls", (long) report.modelCalls(),
                         "toolCalls", (long) report.toolCalls(), "reportedTokens", report.reportedTokens(),
                         "estimatedTokens", report.estimatedTokens(), "unknownUsageAttempts", (long) report.unknownUsageAttempts()));
+        if (observation != null) {
+            observation.finished(report, result);
+        }
     }
 
     /**
@@ -66,12 +96,16 @@ public final class AgentActivityTimeline {
      * @param state 实际状态
      * @param metrics 已脱敏计数
      */
-    private synchronized void append(UUID request, AgentScope scope, String activity, String stage,
+    private void append(UUID request, AgentScope scope, String activity, String stage,
                                       String state, Map<String, Long> metrics) {
-        if (entries.size() >= 4096) {
-            entries.removeFirst();
+        // 2026/11/06：只在锁内维护窗口，慢日志不阻塞其他聊天的目录读取。
+        synchronized (this) {
+            if (entries.size() >= 4096) {
+                entries.removeFirst();
+            }
+            entries.addLast(new Entry(++sequence, request, scope, activity, stage, state, Instant.now(), metrics));
         }
-        entries.addLast(new Entry(++sequence, request, scope, activity, stage, state, Instant.now(), metrics));
+        // 2026/11/06：阶段仍供 Web 查询；控制台只在 finish 中输出一次汇总。
     }
 
     /**

@@ -26,15 +26,16 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：消息回执区分持久化、事件通知与已登记业务完成事实。
- *
  * <br>2026/11/05：原子删除网页房间、消息及附件，不影响共享记忆或配置。
  * <br>2026/11/05：允许私聊原成员修改网页角色，保持唯一成员和原聊天归属。
  * <br>2026/11/05：持久回执保留实际失败阶段与脱敏原因，支持后续查询。
  *
+ * <br>2026/11/06：网页管理消息使用原房间事务，发送前核对授权及版本。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.8.4-l
  */
 @Service
 public final class WebChatStore {
@@ -394,6 +395,31 @@ public final class WebChatStore {
             var journal = journal(room.id());
             var message = append(room.id(), journal, WebChat.bot(), "TeaNeko", "MEMBER", true, source.getMessageId(), parts);
             saveJournal(room.id(), journal);
+            return message;
+        });
+    }
+
+    /**
+     * 2026/11/06：指令台使用明确管理能力发送，不伪造网页成员的原生消息。
+     * @param id 原房间标识
+     * @param revision 捕获的房间版本
+     * @param text 明确要发送的文本
+     * @param guard 当前管理授权
+     * @return 原事务实际保存的机器人消息
+     */
+    public CompletionStage<WebChat.Message> sendManaged(String id, long revision, String text, Runnable guard) {
+        if (text.isBlank() || text.length() > 4096) {
+            throw new IllegalArgumentException("指令台消息需要一至四千零九十六字符。");
+        }
+        return transaction(guard, state -> {
+            var room = state.room(id);
+            if (room.revision() != revision) {
+                throw new IllegalStateException("网页房间已变化，请重新读取指令台目录。");
+            }
+            var journal = journal(id);
+            var message = append(id, journal, WebChat.bot(), "TeaNeko", "MEMBER", true, "",
+                    List.of(new WebChat.Part("text", text)));
+            saveJournal(id, journal);
             return message;
         });
     }

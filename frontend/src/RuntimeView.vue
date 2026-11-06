@@ -18,6 +18,8 @@ import {
 } from 'element-plus'
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
+import {usePageDraft} from './pages/page-guards'
+import {useActivePolling} from './pages/active-polling'
 
 const {advanced} = useConsolePreferences()
 
@@ -54,7 +56,10 @@ const applied = ref({ ...filters })
 const detailedFiltersActive = computed(() => [applied.value.namespace, applied.value.requestId, applied.value.scope, applied.value.plugin, applied.value.from, applied.value.through].some(Boolean))
 const stateNames: Record<string, string> = { ACTIVE: '等待触发', PAUSED: '网页已暂停', SOURCE_PAUSED: '来源已暂停', REMOVED: '已移除', UNKNOWN: '状态未知', QUEUED: '排队中', RUNNING: '同步执行中', WAITING_RESULT: '等待外部结果', SUCCESS: '原任务成功', FAILED: '原任务失败' }
 const date = (value?: string) => value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未确认'
-let interval: ReturnType<typeof setInterval> | undefined
+// 2026/11/06：页签隐藏时停止计时，保留日志筛选、原操作和已读窗口。
+usePageDraft(() => ({pending: !!pending.value, busy: busy.value}))
+useActivePolling(() => props.active && auto.value && !pending.value,
+  () => { if (!busy.value) void run(refresh) }, 5000)
 
 async function call<T>(resource: string, body: object): Promise<T> {
   return request<T>(`management/teaneko.core:${resource}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -157,11 +162,8 @@ function beforeUnload(event: BeforeUnloadEvent) {
 onMounted(() => {
   void run(refresh)
   window.addEventListener('beforeunload', beforeUnload)
-  interval = setInterval(() => {
-    if (props.active && auto.value && !document.hidden && !busy.value && !pending.value) void run(refresh)
-  }, 5000)
 })
-onBeforeUnmount(() => { clearInterval(interval); window.removeEventListener('beforeunload', beforeUnload) })
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 </script>
 
 <template>

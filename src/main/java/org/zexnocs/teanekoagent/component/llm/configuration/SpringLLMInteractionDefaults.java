@@ -18,14 +18,15 @@ import java.util.Objects;
  * 从 Spring 本地配置懒读取交互次数和秒级时限，不依赖 Agent 配置或可导出 Prompt。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：交互默认设置归入组件的 configuration 目录。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class SpringLLMInteractionDefaults implements ILLMInteractionDefaults {
@@ -54,8 +55,8 @@ public final class SpringLLMInteractionDefaults implements ILLMInteractionDefaul
                     Duration.ofSeconds(number("model-timeout-seconds", 60)),
                     Duration.ofSeconds(number("tool-timeout-seconds", 15)),
                     Duration.ofSeconds(number("turn-timeout-seconds", 120)));
-        } catch (RuntimeException ignored) {
-            throw new LLMConfigurationException("LLM 交互配置不可用，请检查本地次数和时限设置。");
+        } catch (RuntimeException failure) {
+            throw new LLMConfigurationException("LLM 交互配置不可用，请检查本地次数和时限设置。", failure);
         }
     }
 

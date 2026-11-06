@@ -11,6 +11,8 @@ import java.util.*;
  * <br>2026/11/05：提供共享的 HTTP、网络及业务安全原因，未知错误保留代码位置。
  * <br>2026/11/05：继承业务异常携带的安全诊断，不将已有 HTTP 状态和原始位置丢失为未知异常。
  *
+ * <br>2026/11/06：补充网络、数据解析及数据库分类，保留安全错误码。
+ *
  * @param types 有界原因链中的异常类型，按外层到内层排列
  * @param location 最深可观察异常的代码位置
  * @param httpStatus 原因链中可直接取得的 HTTP 状态码，非 HTTP 失败为空
@@ -18,7 +20,7 @@ import java.util.*;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 public record FailureDiagnostic(List<String> types, String location, @Nullable Integer httpStatus,
                                 @Nullable String reason) {
@@ -66,6 +68,14 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
             deepest = current;
             if (current instanceof WebClientResponseException response) {
                 status = response.getStatusCode().value();
+            }
+            // 2026/11/06：按真实基类识别数据库子类；不记录 SQL、连接串或驱动消息。
+            if (current instanceof java.sql.SQLException sql) {
+                var code = sql.getSQLState();
+                reason = "数据库操作失败；SQLState=" + (code != null && code.matches("[A-Za-z0-9]{5}") ? code : "未取得")
+                        + "，数据库错误码=" + sql.getErrorCode() + "。";
+            } else if (current instanceof org.springframework.dao.DataAccessException) {
+                reason = "数据库访问失败，请检查连接、约束和事务冲突。";
             }
             if (current instanceof IFailureReason known) {
                 reason = known.failureReason();
@@ -132,18 +142,43 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
             };
         }
         if (types.stream().anyMatch(type -> type.endsWith("UnknownHostException"))) {
-            return "模型服务域名解析失败，请检查服务地址与 DNS。";
+            return "远端服务域名解析失败，请检查服务地址与 DNS。";
         }
         if (types.stream().anyMatch(type -> type.endsWith("TimeoutException"))) {
-            return "模型连接或响应超时。";
+            return "远端连接或响应超时。";
         }
         if (types.stream().anyMatch(type -> type.endsWith("SSLHandshakeException") || type.endsWith("SSLException"))) {
-            return "模型 HTTPS 握手失败，请检查证书和协议。";
+            return "HTTPS 握手失败，请检查证书和协议。";
         }
         if (types.stream().anyMatch(type -> type.endsWith("ConnectException") || type.endsWith("WebClientRequestException"))) {
-            return "无法连接模型服务，请检查地址、端口、网络和代理。";
+            return "无法连接远端服务，请检查地址、端口、网络和代理。";
         }
-        // 2026/11/05：业务原因由 IFailureReason 主动声明，Core 不按上层类型名称反向分派。
+        // 2026/11/06：基础故障按标准异常类型归类；不读取可能含原文的异常消息。
+        if (types.stream().anyMatch(type -> type.startsWith("tools.jackson.") || type.startsWith("com.fasterxml.jackson."))) {
+            return "结构化数据解析或字段类型不匹配；位置：" + location;
+        }
+        if (types.stream().anyMatch(type -> type.endsWith("SQLException") || type.endsWith("DataAccessException"))) {
+            return "数据库操作失败，请检查连接、表结构、约束或事务冲突；位置：" + location;
+        }
+        if (types.stream().anyMatch(type -> type.endsWith("AccessDeniedException"))) {
+            return "文件或资源访问被拒绝，请检查权限；位置：" + location;
+        }
+        if (types.stream().anyMatch(type -> type.endsWith("NoSuchFileException") || type.endsWith("FileNotFoundException"))) {
+            return "所需文件不存在；位置：" + location;
+        }
+        if (types.contains(SecurityException.class.getName())) {
+            return "权限、来源或执行资格校验未通过；位置：" + location;
+        }
+        if (types.contains(IllegalArgumentException.class.getName())) {
+            return "参数值或数据结构不符合要求；位置：" + location;
+        }
+        if (types.contains(IllegalStateException.class.getName())) {
+            return "运行状态不满足操作条件；位置：" + location;
+        }
+        if (types.contains(NullPointerException.class.getName())) {
+            return "程序缺少必需数据或依赖；位置：" + location;
+        }
+        // 业务原因由 IFailureReason 主动声明，Core 不按上层类型名称反向分派。
         return "未识别异常；位置：" + location;
     }
 

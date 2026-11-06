@@ -6,6 +6,7 @@ import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElS
 import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
+import {usePageDraft} from './pages/page-guards'
 
 // 2026/11/05：公开连接地址与后端代理端口分开显示，普通目录不包含令牌。
 interface Client {client: string; name: string; disk: string; active: string; address: string; port: number; backendPort: number}
@@ -29,6 +30,8 @@ const names: Record<string, string> = {DENIED: '未配置，拒绝连接', OPEN:
 const statusNames: Record<string, string> = {PREPARED: '保存结果待确认', SAVED: '原保存已确认', APPLYING: '应用结果待确认', APPLIED: '原应用已确认', APPLY_FAILED: '原应用未确认', NOT_SAVED: '原文件未保存', INDETERMINATE: '原结果无法确认'}
 const unapplied = computed(() => view.value && (!view.value.runtime.current || view.value.runtime.revision !== view.value.revision))
 const locked = computed(() => busy.value || !!pending.value)
+// 2026/11/06：令牌编辑和未确认写入同样阻止无提示释放会话状态。
+usePageDraft(() => ({dirty: !!editing.value, pending: !!pending.value, busy: busy.value}))
 
 // 2026/11/04：跨重新登录仅保留非秘密操作编号，令牌与原请求从不写入浏览器存储。
 function storedOperation(): string {

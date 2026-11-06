@@ -54,21 +54,49 @@ import static org.zexnocs.teanekoagent.component.memory.namespace.StickerCollect
 
 /**
  * 复用真实 DTO 与文件夹具，仅检查全局管理、删除保护及刷新与人工写入的仲裁。
- * <br>2026/11/05：客户端目录按实际初始化流程建立，管理请求只查缓存。
+ *
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：客户端目录按实际初始化流程建立，管理请求只查缓存。
+ * <br>2026/11/06：验证旧管理回执迁移和清理后素材版本仍阻止重复修改。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.2-l
+ * @version 4.8.5-l
  */
 @Timeout(30)
 class StickerManagementIntegrationTest {
     @TempDir Path directory;
+    /**
+     * 2026/11/06：旧管理回执迁入临时表；清理后仍由素材版本阻止重复修改。
+     * @throws Exception 当测试图片生成失败时
+     */
+    @Test
+    void migratedManagementReceiptsCanBeClearedWithoutReapplyingChanges() throws Exception {
+        try (var f = new Fixture(directory)) {
+            f.authorize();
+            var id = f.h.collect(source("群甲", png(33))).getStickerId();
+            var pin = f.request(id, StickerManagement.Action.PIN);
+            var result = f.change(pin);
+            var namespace = "agent.sticker.v1";
+            var target = "catalog:" + f.h.file.snapshot().catalogId();
+            // 将已提交的统一视图放回旧主行，验证真实旧版本格式，而非只验证新写入。
+            var legacy = f.h.db.mapper.writeValueAsString(f.h.state());
+            f.h.db.clearTemporary();
+            f.h.db.seedFactRow(namespace, target, "state", legacy);
+            assertTrue(f.change(pin).replayed());
+            assertFalse(f.h.db.mapper.readTree(f.h.db.storedValue(namespace, target, "state")).has("operations"));
+            assertTrue(f.h.db.temporaryValue(namespace, target, "observations").contains(pin.operationId().toString()));
+            int notices = f.observer.notices.size();
+            f.h.db.clearTemporary();
+            assertThrows(CompletionException.class, () -> f.change(pin));
+            assertEquals(result.revision(), f.entry(id).getRevision());
+            assertTrue(f.entry(id).isPinned());
+            assertEquals(notices, f.observer.notices.size());
+        }
+    }
     /**
      * 测试监听器仍由真实 Core scanner、插件校验与事件分发器调用。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。

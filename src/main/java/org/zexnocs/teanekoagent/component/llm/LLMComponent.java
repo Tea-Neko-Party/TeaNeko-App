@@ -21,12 +21,14 @@ import java.util.Map;
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "llm", name = "大语言模型", description = "必要组件；选择系统模型或仅当前聊天保存的私有模型。")
+@TeaNekoAgentComponent(id = "llm", order = 0, name = "大语言模型", description = "必要组件；选择系统模型或仅当前聊天保存的私有模型。")
 @PluginOwned("teaneko.agent")
 public final class LLMComponent extends DeclaredAgentComponent {
     private final org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser parser;

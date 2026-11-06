@@ -12,6 +12,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationEx
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
@@ -43,28 +44,23 @@ import static org.mockito.Mockito.*;
 /**
  * 使用真实 YAML、文件锁、原子移动和私有账本验证关键保存与恢复路径，不启动机器人。
  *
- * 修改记录：<br>
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：自动类型投影与明确的热更新适配器共享真实文件事务。
- *
  * <br>2026/11/04：模型文件与表单夹具提供必需的上下文及输出容量声明。
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：验证原文件类型说明及字段注解通过秘密保护投影。
- *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
- *
  * <br>2026/11/05：适配模型专属 configuration 包，保留原凭据和文件边界验证。
- *
  * <br>2026/11/05：验证保存版本检测、失败脱敏、凭据释放与运行配置隔离。
  * <br>2026/11/05：验证环境变量缺失的安全说明、原文件保留以及环境模板与小数的联合保存。
  * <br>2026/11/05：配置管理复用专用类型目录，模型换代校验只使用运行缓存查询。
  *
+ * <br>2026/11/06：验证观测模板、表单保存与实际热应用事务。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.8.4-l
  */
 class FileSettingsIntegrationTest {
     /**
@@ -99,6 +95,31 @@ class FileSettingsIntegrationTest {
         assertEquals("APPLIED", result(service.apply("core.runtime",
                 new FileSettings.Application(UUID.randomUUID(), current.revision()), () -> {})).status());
         assertEquals(1500, fixture.files.get(org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class).getMaxRuns());
+    }
+
+    /** 观测设置使用实际模板、表单和文件发布事务，保存后只有明确应用才改变运行开关。 */
+    @Test
+    void observationSettingsApplyThroughTheRealFileContract() throws Exception {
+        var fixture = new Fixture(root);
+        var security = fixture.files.get(WebSecurityFileConfig.class);
+        security.setFileSections(List.of("agent.observability"));
+        var adapter = new AgentFileSettings.Observability(fixture.files);
+        var declarations = new LinkedHashMap<>(fixture.scanner.getBeansWithAnnotationAndInterface(
+                TeaNekoFileSettings.class, IFileSettingsAdapter.class));
+        declarations.put("observation", new IndependentPair<>(
+                AgentFileSettings.Observability.class.getAnnotation(TeaNekoFileSettings.class), adapter));
+        when(fixture.scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class))
+                .thenReturn(declarations);
+        doReturn(AgentFileSettings.Observability.class).when(fixture.scanner).getBeanClass(adapter);
+        fixture.directory.reload();
+        var view = result(fixture.service.read("agent.observability", () -> {}));
+        assertEquals("NEXT_USE", view.application());
+        var saved = result(fixture.service.save("agent.observability", new FileSettings.Change(UUID.randomUUID(),
+                view.revision(), List.of(new FileSettings.Edit("/llm-info", "SET", mapper.valueToTree(false)))), () -> {}));
+        assertTrue(fixture.files.requireCurrent(AgentObservationFileConfig.class).isLlmInfo());
+        assertEquals("APPLIED", result(fixture.service.apply("agent.observability",
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> {})).status());
+        assertFalse(fixture.files.requireCurrent(AgentObservationFileConfig.class).isLlmInfo());
     }
 
     @TempDir Path root;
@@ -414,6 +435,7 @@ class FileSettingsIntegrationTest {
             when(classes.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class)).thenReturn(Map.of(
                     Value.class, Value.class.getAnnotation(FileConfig.class), WebSecurityFileConfig.class, WebSecurityFileConfig.class.getAnnotation(FileConfig.class),
                     LLMModelFileConfig.class, LLMModelFileConfig.class.getAnnotation(FileConfig.class),
+                    AgentObservationFileConfig.class, AgentObservationFileConfig.class.getAnnotation(FileConfig.class),
                     org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class,
                     org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class.getAnnotation(FileConfig.class)));
             var config = directory.resolve("config");

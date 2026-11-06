@@ -11,6 +11,7 @@ import type {ModelCatalog} from './ModelTemplateEditor.vue'
 import ModelTemplateEditor from './ModelTemplateEditor.vue'
 import ModelNamePicker from './ModelNamePicker.vue'
 import ModelIcon from './ModelIcon.vue'
+import {usePageDraft} from './pages/page-guards'
 
 interface Stamp { revision: string; generation: number; current: boolean }
 interface Collection { path: string; label: string; maximum: number }
@@ -126,6 +127,8 @@ async function appendModel(value: Record<string, unknown>, makeDefault: boolean)
 const appendPath = ref('')
 const appendText = ref('{}')
 const dirty = computed(() => !!structure.value || Object.values(drafts).some(item => item.action !== 'KEEP'))
+// 2026/11/06：保留页切换不丢草稿，退出会话前纳入宿主统一检查。
+usePageDraft(() => ({dirty: dirty.value, pending: !!pending.value, busy: busy.value || !!probing.value}))
 const locked = computed(() => busy.value || !!pending.value)
 const statusNames: Record<string, string> = { PREPARED: '尚待确认', SAVED: '已保存，尚未应用', APPLIED: '本进程应用已确认', APPLY_FAILED: '应用未确认', RESTART_REQUIRED: '需要重启', INDETERMINATE: '保存结果无法确认', NOT_SAVED: '原文件未替换' }
 // 2026/11/05：摘要沿用字段名称区分密钥与其他敏感值，不再使用“秘密”动作名称。

@@ -22,25 +22,25 @@ import java.util.Optional;
  * 可安全交付的交互快照，不持有执行控制、执行器或凭据。
  * transcript 包含诊断所需的中间链；只有成功结果允许通过专用入口提交为正常历史。
  *
+ * <br>2026/11/02：保留结构化工具图像，供实际视觉消息与历史投影交叉验证。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：交互结果保留可公开的失败诊断，兼容已有构造。
+ * <br>2026/11/06：模型尝试附带不进入 JSON 的临时输入观察，保留已有构造入口。
  *
  * @param status 明确终止原因
- * <br>2026/11/02：保留结构化工具图像，供实际视觉消息与历史投影交叉验证。
  * @param transcript 初始消息及已观察的模型/工具/视觉参考消息，失败时可能是不完整诊断链
  * @param finalCandidate 终止时的模型消息，工具请求不会伪装成最终答案
  * @param attempts 每次实际模型尝试的响应和 usage，失败尝试可无响应
  * @param tools 已观察完成的工具结果，不推断未完成动作是否产生副作用
  * @param budgetUsage 本次交互实际消耗的局部额度，不是供应商计费统计
  * @param rejectedBudget 导致交互终止的预算维度，非预算终止时为空
- * <br>2026/11/05：交互结果保留可公开的失败诊断，兼容已有构造。
  *
  * @param failure 可选的安全失败诊断
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.8.5-l
  */
 public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
                                     Optional<ILLMAssistantMessage> finalCandidate, List<ModelAttempt> attempts,
@@ -154,20 +154,24 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
+     * <br>2026/11/06：临时保留实际输入供请求汇总，禁止通过结果 JSON 导出。
      * @param number 本次交互中从一开始的尝试序号
      * @param response 供应商响应，传输失败或无法安全冻结时为空
      * @param tokenUsage 记账依据，既无报告又未启用预留时为空，表示未知
+     * @param input 实际调用边界的临时输入；旧构造和未提交尝试为空
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.5-l
      */
-    public record ModelAttempt(int number, Optional<ILLMResult> response, Optional<LLMTokenUsage> tokenUsage) {
+    public record ModelAttempt(int number, Optional<ILLMResult> response, Optional<LLMTokenUsage> tokenUsage,
+                               @com.fasterxml.jackson.annotation.JsonIgnore Optional<LLMRequestSnapshot> input) {
         /**
          * 固定一次响应，拒绝不合法的尝试序号。
          * @param number 从一开始的实际尝试序号
          * @param response 可选的供应商结果
          * @param tokenUsage 可选的 token 记账依据
+         * @param input 可选实际输入，不进入持久记录
          * @throws IllegalArgumentException 当序号非正时
          * @throws NullPointerException 当可选响应容器为空时
          */
@@ -177,6 +181,17 @@ public record LLMInteractionResult(Status status, List<ILLMMessage> transcript,
             }
             response = response.map(LLMProtocolSnapshots::result);
             Objects.requireNonNull(tokenUsage, "token 记账容器不能为空。");
+            Objects.requireNonNull(input, "模型输入观察容器不能为空。");
+        }
+
+        /**
+         * 2026/11/06：兼容不采集输入的调用方，不从响应推测实际提示。
+         * @param number 尝试编号
+         * @param response 实际响应
+         * @param tokenUsage 用量来源
+         */
+        public ModelAttempt(int number, Optional<ILLMResult> response, Optional<LLMTokenUsage> tokenUsage) {
+            this(number, response, tokenUsage, Optional.empty());
         }
 
         /**

@@ -22,18 +22,17 @@ import java.util.Objects;
 
 /**
  * 从现有文件与真实作用域登记读取人格，缺失/损坏配置不会静默选择其他角色。
- * 2026/11/03：抽出基础人格候选校验，网页预检复用同一规则。
- *
+ * <br>2026/11/03：抽出基础人格候选校验，网页预检复用同一规则。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：读取当前聊天人格组件的安装状态。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：从已应用本地配置发布基础人格目录，不依赖伪聊天配置。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public final class ConfiguredPersonalities implements IPersonalityConfiguration {
@@ -81,6 +80,16 @@ public final class ConfiguredPersonalities implements IPersonalityConfiguration 
         var file = Objects.requireNonNull(files.get(AgentPersonalityFileConfig.class), "人格文件未加载。");
         // 2026/11/03：预检候选与实际读取共享同一冻结逻辑。
         return fromFile(file, settings);
+    }
+
+    /** @return 已应用本地文件的基础人格目录，不读取任何聊天配置。 */
+    @Override
+    public List<BasePersonality> catalog() {
+        var file = files.requireCurrent(AgentPersonalityFileConfig.class);
+        var ids = file.getCharacters().isEmpty() ? List.of(file.getDefaultAgentId())
+                : file.getCharacters().stream().map(AgentPersonalityDefinition::getId).toList();
+        return ids.stream().map(id -> fromFile(file,
+                new PersonalitySettings(id, false, "", "", true, false))).toList();
     }
 
     /**

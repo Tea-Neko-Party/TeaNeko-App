@@ -47,20 +47,18 @@ import java.util.stream.Collectors;
  * 从已提交的真实互动生成一条表达候选，独立于画像、摘要及前台回答。
  * 同会话只运行一个、全局最多两个；容量不足不排队，所有来源由宿主固定。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04���˸��ѡ�����̳�ģ�������ȣ�������ʽ��Ԥ��ܾ���
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
  * <br>2026/11/05：支持无记忆的人格独立采样，使用会话与人格代次拒绝迟到候选。
  * <br>2026/11/06：使用统一结构化生成，并报告安全解析原因，保留原用量和提交守卫。
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 public final class PersonalityLearningService implements IAgentPersonalityLearning, AutoCloseable {
     private final AgentAccessGate gate;
@@ -251,7 +249,7 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     private static void reportFailure(Throwable failure) {
         var diagnostic = org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure);
         org.slf4j.LoggerFactory.getLogger(PersonalityLearningService.class)
-                .warn("人格学习未完成。原因={}", diagnostic.description());
+                .warn("人格学习未完成。原因={}", diagnostic);
     }
 
     /**

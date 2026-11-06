@@ -31,15 +31,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * 历史组合根，默认构造无 I/O；清理使用既有调度器并限制同时一个批次。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：将原历史清理任务纳入记忆分类，只读展示。
- *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Configuration(proxyBeanMethods = false)
 public class ConversationHistoryConfig {
@@ -113,9 +113,12 @@ public class ConversationHistoryConfig {
             if (!running.compareAndSet(false, true)) { return; }
             try {
                 store.prune(Instant.now()).whenComplete((count, failure) -> {
-                    running.set(false); if (failure != null) { logger.warn("Agent 历史", "历史过期清理失败，将在后续批次重试。"); }
+                    running.set(false); if (failure != null) { logger.warn("Agent 历史", "历史过期清理事务失败，将在后续批次重试。", failure); }
                 });
-            } catch (RuntimeException ignored) { running.set(false); logger.warn("Agent 历史", "历史过期清理无法启动。"); }
+            } catch (RuntimeException failure) {
+                running.set(false);
+                logger.warn("Agent 历史", "历史过期清理无法启动。", failure);
+            }
         }
     }
 }

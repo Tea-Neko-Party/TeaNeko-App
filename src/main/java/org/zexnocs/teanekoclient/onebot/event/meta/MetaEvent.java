@@ -13,9 +13,12 @@ import java.util.regex.Pattern;
  * post 事件的 meta 二级事件类。
  * <p>所有下级 meta 事件都必须有 {@code String, OnebotEventShareComponent } 的构造器。
  *
+ * <br>2026/11/06：诊断仅记录安全标识、帧长度与异常定位，不复制消息正文。
+ *
  * @author zExNocs
  * @date 2026/03/01
  * @since 4.0.11
+ * @version 4.8.4-l
  */
 @Event(MetaEvent.KEY)
 public class MetaEvent extends AbstractEvent<String> {
@@ -29,13 +32,22 @@ public class MetaEvent extends AbstractEvent<String> {
     /// 共享数据类
     private final OnebotEventShareComponent eventShareComponent;
 
+    /**
+     * 借用宿主提供的事件服务。
+     * @param information 原协议帧，不进入诊断日志
+     * @param eventShareComponent 原共享服务
+     */
     public MetaEvent(String information, OnebotEventShareComponent eventShareComponent) {
         super(information);
         this.eventShareComponent = eventShareComponent;
     }
 
+    /**
+     * 2026/11/06：只报告事件类型、长度及安全根因。
+     * @return 下一级事件；未知或构造失败时为空
+     */
     @Override
-    public IEvent<?> _getNextEvent() {
+    public @org.jspecify.annotations.Nullable IEvent<?> _getNextEvent() {
         var information = getData();
         Matcher matcher = eventTypePattern.matcher(information);
         if (matcher.find()) {
@@ -44,8 +56,7 @@ public class MetaEvent extends AbstractEvent<String> {
             var eventClazz = eventShareComponent.eventScanner.getEventType(parserKey);
             if (eventClazz == null) {
                 eventShareComponent.logger.warn(MetaEvent.class.getName(),
-                        "未找到 meta_event_type 对应的事件: %s\n信息: %s"
-                                .formatted(eventType, information));
+                        "未找到 meta_event_type 对应的事件；帧字符数=" + information.length());
                 return null;
             }
             // 尝试构造事件
@@ -54,13 +65,13 @@ public class MetaEvent extends AbstractEvent<String> {
                         .newInstance(information, eventShareComponent);
             } catch (Exception e) {
                 eventShareComponent.logger.errorWithReport(MetaEvent.class.getName(),
-                        "构造事件失败，该事件类的构造函数不接受 String, OnebotEventShareComponent 类型的参数: %s\n信息: %s"
-                                .formatted(eventClazz.getName(), information), e);
+                        "创建已注册事件失败；类型=%s；帧字符数=%d"
+                                .formatted(eventClazz.getName(), information.length()), e);
                 return null;
             }
         } else {
             // 一般不会出现这种情况
-            eventShareComponent.logger.errorWithReport(MetaEvent.class.getName(), "未找到 meta_event_type 字段：" + information);
+            eventShareComponent.logger.errorWithReport(MetaEvent.class.getName(), "未找到 meta_event_type 字段：" + "帧字符数=" + information.length());
             return null;
         }
     }

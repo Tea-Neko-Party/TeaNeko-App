@@ -20,10 +20,12 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.4-l
  */
 @EventListener
 public final class OnebotChatObserver {
@@ -84,11 +86,13 @@ public final class OnebotChatObserver {
                     platform, message.getScopeId(), name, "MESSAGE");
             store.remember(List.of(value), () -> {}).whenComplete((ignored, failure) -> {
                 if (failure != null) {
-                    logger.warn(getClass().getName(), "聊天目录元数据尚未保存，将在下一观察窗口继续。");
+                    logger.warn(getClass().getName(), "聊天目录元数据尚未保存，将在下一观察窗口继续。"
+                            + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
                 }
             });
-        } catch (RuntimeException ignored) {
-            // 目录观测不阻断原消息处理，也不把原话或令牌写入诊断。
+        } catch (RuntimeException failure) {
+            // 2026/11/06：观测不阻断入站，失败仍保留安全定位。
+            logger.warn(getClass().getName(), "聊天目录观测未完成。" + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure));
         }
     }
 }

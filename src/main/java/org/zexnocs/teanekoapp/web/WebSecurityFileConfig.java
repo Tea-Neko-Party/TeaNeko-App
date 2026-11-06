@@ -22,17 +22,18 @@ import java.util.Map;
  * <br>2026/11/03：显式开放实例运行、日志与聊天计划管理资源。
  * <br>2026/11/03：指令台前缀须在本机显式允许，变更撤销旧会话能力。
  * <br>2026/11/03：网页聊天容量作为独立非秘密文件区，认证根配置保持本地管理。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：机器令牌允许短值及空白放行，管理员凭据继续独立校验。
  * <br>2026/11/04：统一空白机器令牌快照，并提供仅替换机器策略的比较入口。
  * <br>2026/11/04：配置分组须由本地显式授权，并参与会话代次及受限应用比较。
  * <br>2026/11/04：聊天配置改为管理员直接访问，旧配置区与分组字段只保留读取兼容。
  *
+ * <br>2026/11/06：声明独立空间管理与观测文件白名单，保留显式禁用。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.3-l
+ * @version 4.8.4-l
  */
 @Getter
 @Setter
@@ -58,16 +59,17 @@ public class WebSecurityFileConfig implements IFileConfigData {
     // 2026/11/03：认证根配置不进入文件编辑白名单，文件类型仍由本地适配器固定。
     @NonNull
     private List<String> fileSections = List.of("agent.main", "agent.models", "agent.personality", "agent.expression",
-            "agent.stickers", "agent.media", "onebot.main", "web.chat");
+            "agent.stickers", "agent.media", "agent.observability", "onebot.main", "web.chat");
     // 2026/11/03：管理资源同样需要本地白名单，不能因为注册插件就自动向公网开放。
     @NonNull
     private List<String> managementResources = List.of("teaneko.agent:activity", "teaneko.agent:memory",
             "teaneko.agent:profiles", "teaneko.agent:personality", "teaneko.agent:layers",
-            "teaneko.agent:schedules", "teaneko.core:runtime", "teaneko.core:logs");
+            "teaneko.agent:schedules", "teaneko.agent:library", "teaneko.agent:memory-space",
+            "teaneko.agent:personality-space", "teaneko.agent:profile-space", "teaneko.agent:layers-space", "teaneko.core:runtime", "teaneko.core:logs");
     private int idleMinutes = 30;
-    // 2026/11/03：旧安全文件不会因代码升级自动开放新指令执行能力。
     @NonNull
-    private List<String> consolePrefixes = List.of();
+    // 2026/11/06：缺省仅开放显式管理来源的内置命令；明确空列表仍关闭全部指令。
+    private List<String> consolePrefixes = List.of("/console");
     private int absoluteHours = 8;
 
     /**

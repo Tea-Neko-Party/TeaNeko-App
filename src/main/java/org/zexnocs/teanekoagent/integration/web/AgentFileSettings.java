@@ -31,22 +31,19 @@ import java.util.Objects;
  * Agent 各文件按模块贡献显式表单及原语义校验，不反射开放任意字段。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04��ģ�ͱ����ṩ������������������������á�
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：模型文件编辑声明增加协议字段，允许唯一配置路由复用协议。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
  * <br>2026/11/05：模型连接地址及路径按普通字段显示，密钥继续隐藏。
+ * <br>2026/11/06：新增观测日志专用热应用表单。
+ * <br>2026/11/06：观测表单补充上下文、推理和汇总长度配置。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.8.5-l
  */
 public final class AgentFileSettings {
     /** 禁止实例化贡献命名空间。 */
@@ -132,6 +129,43 @@ public final class AgentFileSettings {
                 throw new IllegalStateException("模块文件缓存已被其他发布替换。");
             }
             return "模块新快照已确认，后续按需读取生效；在途操作保留原快照。";
+        }
+    }
+
+    /**
+     * Agent 安全观测开关使用明确的按需热应用合同。
+     * <br>2026/11/06：新快照从下一个观察节点起生效，不重放已有日志。
+     * <br>2026/11/06：增加汇总内容选择及有界字数设置。
+     *
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.4-l
+     * @version 4.8.5-l
+     */
+    @Component
+    @PluginOwned("teaneko.agent")
+    @TeaNekoFileSettings("agent.observability")
+    public static final class Observability extends Base {
+        /** @param files 原文件配置入口 */
+        public Observability(IFileConfigService files) {
+            super(files, org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig.class,
+                    "Agent 观测日志", List.of(field("/llm-info", "独立 LLM 汇总", "BOOLEAN"),
+                            field("/agent-info", "Agent 请求汇总", "BOOLEAN"),
+                            field("/include-context", "记录上下文与响应", "BOOLEAN"),
+                            field("/include-reasoning", "记录供应商推理", "BOOLEAN"),
+                            field("/max-content-characters", "汇总正文字数上限", "NUMBER")));
+        }
+
+        /** @param candidate 已解析候选 */
+        @Override
+        public void validate(IFileConfigData candidate) {
+            if (!(candidate instanceof org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig settings)) {
+                throw new IllegalArgumentException("Agent 观测配置类型不匹配。");
+            }
+            // 2026/11/06：防止日志内容配置造成无界内存占用。
+            if (settings.getMaxContentCharacters() < 1024 || settings.getMaxContentCharacters() > 2_000_000) {
+                throw new IllegalArgumentException("汇总正文字数上限必须为 1024–2000000。");
+            }
         }
     }
 

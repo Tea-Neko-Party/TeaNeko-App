@@ -25,10 +25,12 @@ import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
  * 复用原事件、参数、作用域和权限链，返回等待反馈及业务完成的分发结果。
  * <br>2026/11/03：管理来源在原方法声明处默认拒绝，不转换成原生消息。
  *
+ * <br>2026/11/06：诊断仅记录安全标识、帧长度与异常定位，不复制消息正文。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.8.4-l
  */
 @Service
 @RequiredArgsConstructor
@@ -198,7 +200,7 @@ public class CommandDispatcher implements ICommandDispatcher {
         var event = new CommandExecuteEvent(commandExecutor, data, map,
                 sub == null ? null : sub.value()[0], method, args);
         logger.info(getClass().getName(), "提交指令 %s，方法 %s，发送者 %s，权限 %s"
-                .formatted(data.getBody(), method.getName(), data.getSenderId(), data.getPermission()));
+                .formatted(map.getCommand().getClass().getSimpleName(), method.getName(), data.getSenderId(), data.getPermission()));
         return TaskStages.successful(iEventService.pushEventWithFuture(event), "命令执行事件")
                 .thenCompose(ignored -> {
                     if (event.getCompletion() != null) {

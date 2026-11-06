@@ -20,18 +20,29 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/03：明确保存与后台整理共用长期记录及索引。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/03：提供独立管理主体的纠正、遗忘与原回执查询，不借用记忆主体身份。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：提供安全失败分类、持久暂停状态及版本化管理恢复合同。
+ *
+ * <br>2026/11/06：提供有界画像主体目录合同。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 public interface ILongTermMemoryStore {
+    /**
+     * 2026/11/06：有界发现当前代次中仍有效的画像主体，不扫描其他空间。
+     * @param reference 固定空间引用
+     * @param after 原记录游标
+     * @param limit 一至五十条记录的读取预算
+     * @return 本页去重主体及后继记录游标
+     */
+    default CompletionStage<org.zexnocs.teanekoagent.database.easydata.StoredPage<UUID>> subjects(
+            MemoryNamespaceReference reference, String after, int limit) {
+        throw new UnsupportedOperationException("当前长期存储未实现画像主体目录。");
+    }
     /**
      * 2026/11/03：显式管理入口保留独立来源和事务内权限。
      * @param reference 固定空间代次

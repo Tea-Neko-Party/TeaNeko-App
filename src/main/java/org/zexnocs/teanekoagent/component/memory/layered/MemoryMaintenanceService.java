@@ -18,17 +18,16 @@ import java.util.function.BooleanSupplier;
 /**
  * 在原业务域串行维护各记忆端口，不调用模型，不关闭借用执行器，不重叠启动新批次。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：声明定时任务分类及网页控制边界。
- *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -59,7 +58,7 @@ public final class MemoryMaintenanceService implements AutoCloseable {
     @Scheduled(fixedDelayString = "${tea-neko.agent.memory.maintenance.interval-ms:10000}", initialDelayString = "${tea-neko.agent.memory.maintenance.interval-ms:10000}")
     public void tick() {
         drain().whenComplete((ignored, failure) -> {
-            if (failure != null) { logger.warn("Agent 记忆维护", "记忆维护未完成，将从已提交的进度继续。"); }
+            if (failure != null) { logger.warn("Agent 记忆维护", "记忆维护调度未完成，将从已提交的进度继续。", failure); }
         });
     }
     /**
@@ -85,7 +84,13 @@ public final class MemoryMaintenanceService implements AutoCloseable {
         try { work = Objects.requireNonNull(stores.get(index).maintain(clock.instant()), "记忆维护端口不能返回空阶段。"); }
         catch (RuntimeException failure) { work = CompletableFuture.failedStage(failure); }
         return work.handleAsync((count, failure) -> {
-            if (failure != null || count == null || count < 0) { logger.warn("Agent 记忆维护", "一个数据域维护失败，未提交的游标不推进，后续调度重试。"); return 0; }
+            // 2026/11/06：保留具体端口与安全原因，不用零计数掩盖无效返回。
+            if (failure != null || count == null || count < 0) {
+                logger.warn("Agent 记忆维护", "数据域维护失败，游标不推进。端口="
+                        + stores.get(index).getClass().getName(),
+                        failure != null ? failure : new IllegalStateException("维护计数必须为非负整数。"));
+                return 0;
+            }
             return count;
         }, executor).thenComposeAsync(count -> visit(index + 1, changed + count), executor);
     }

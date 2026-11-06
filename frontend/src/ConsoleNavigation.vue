@@ -1,17 +1,18 @@
 <script setup lang="ts">
+import {computed} from 'vue'
 import ConsoleIcon from './ConsoleIcon.vue'
+import {consolePages} from './pages/page-registry'
+import type {ConsolePageKey} from './pages/page-registry'
+import type {PageEnvironment} from './pages/page-contracts'
 
-// 2026/11/04：模型与指令目录独立导航，普通本地配置不重复显示模型。
-export type ConsolePage = 'overview' | 'platforms' | 'settings' | 'agent' | 'files' | 'models' | 'commands' | 'components' | 'tools' | 'runtime' | 'console' | 'chat' | 'session'
-
-defineProps<{page: ConsolePage; collapsed?: boolean; settingsAvailable: boolean; version?: string}>()
-const emit = defineEmits<{select: [page: ConsolePage]}>()
-const groups: {name: string; pages: {id: ConsolePage; label: string}[]}[] = [
-  {name: '日常', pages: [{id: 'overview', label: '运行概览'}, {id: 'platforms', label: '客户端'}, {id: 'chat', label: '网页聊天'}]},
-  {name: '管理', pages: [{id: 'settings', label: '聊天配置'}, {id: 'agent', label: 'Agent 工作区'}, {id: 'models', label: '模型配置'}, {id: 'files', label: '本地配置'}, {id: 'runtime', label: '任务与日志'}, {id: 'console', label: '指令台'}]},
-  // 2026/11/04：API 目录按使用职责提供二级入口。
-  {name: 'API 文档', pages: [{id: 'commands', label: '指令一览'}, {id: 'components', label: '组件与系统'}, {id: 'tools', label: '工具目录'}]},
-]
+// 2026/11/06：导航仅投影页面声明，标题、分组和可见条件不再维护第二份。
+const props = defineProps<{page: ConsolePageKey; collapsed?: boolean; environment: PageEnvironment; disabled?: boolean; version?: string}>()
+const emit = defineEmits<{select: [page: ConsolePageKey]}>()
+const visible = computed(() => consolePages.filter(page => !page.visible || page.visible(props.environment)))
+const groups = computed(() => [...new Set(visible.value.map(page => page.group))]
+  .filter(group => group !== 'footer')
+  .map(name => ({name, pages: visible.value.filter(page => page.group === name)})))
+const footer = computed(() => visible.value.filter(page => page.group === 'footer'))
 </script>
 
 <template>
@@ -20,18 +21,19 @@ const groups: {name: string; pages: {id: ConsolePage; label: string}[]}[] = [
     <nav aria-label="控制台导航">
       <div v-for="group in groups" :key="group.name" class="nav-group">
         <p v-if="!collapsed" class="nav-group-title">{{ group.name }}</p>
-        <template v-for="item in group.pages" :key="item.id">
-          <button v-if="item.id !== 'settings' || settingsAvailable" :class="{active: page === item.id}"
-            :aria-current="page === item.id ? 'page' : undefined" :aria-label="item.label"
-            :title="collapsed ? item.label : undefined" @click="emit('select', item.id)">
-            <ConsoleIcon :name="item.id" /><span v-if="!collapsed">{{ item.label }}</span>
+        <template v-for="item in group.pages" :key="item.key">
+          <button :class="{active: page === item.key}" :disabled="disabled"
+            :aria-current="page === item.key ? 'page' : undefined" :aria-label="item.title"
+            :title="collapsed ? item.title : undefined" @click="emit('select', item.key)">
+            <ConsoleIcon :name="item.icon" /><span v-if="!collapsed">{{ item.title }}</span>
           </button>
         </template>
       </div>
     </nav>
     <div class="sidebar-footer">
-      <button :class="{active: page === 'session'}" aria-label="当前会话" :title="collapsed ? '当前会话' : undefined" @click="emit('select', 'session')">
-        <ConsoleIcon name="session" /><span v-if="!collapsed">当前会话</span>
+      <button v-for="item in footer" :key="item.key" :class="{active: page === item.key}" :disabled="disabled"
+        :aria-current="page === item.key ? 'page' : undefined" :aria-label="item.title" :title="collapsed ? item.title : undefined" @click="emit('select', item.key)">
+        <ConsoleIcon :name="item.icon" /><span v-if="!collapsed">{{ item.title }}</span>
       </button>
       <span v-if="!collapsed" class="sidebar-version"><i class="live-dot"></i>{{ version || '读取版本中' }}</span>
     </div>

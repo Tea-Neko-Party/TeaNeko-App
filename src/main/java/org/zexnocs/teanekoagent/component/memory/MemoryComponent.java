@@ -10,12 +10,14 @@ import java.util.Set;
 /**
  * 组合会话窗口、持久历史、分层记忆与画像；各项权限仍由实际记忆服务复核。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "memory", name = "记忆", description = "保留对话上下文，按参数采集历史、召回和整理记忆。")
+@TeaNekoAgentComponent(id = "memory", order = 20, name = "记忆", description = "保留对话上下文，按参数采集历史、召回和整理记忆。")
 @PluginOwned("teaneko.agent")
 public final class MemoryComponent extends BuiltinAgentComponent {
     private final MemoryInputSystem input;

@@ -27,19 +27,18 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * 自动摘要组合根，配置在业务域懒读取，不拥有 Core 执行器或默认创建会话。
+ *
  * <br>2026/11/02：默认分层摘要启用时停用旧内存生成，避免重复消耗同一段聊天。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04��ȡ��ժҪĬ���� token ��ֻ��ȡ��ʽԤ�㡣
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：后台摘要的附加进度降为 DEBUG，交互结束时统一汇总。
  *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.5-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentSummaryConfig {
@@ -79,7 +78,8 @@ public class AgentSummaryConfig {
                     environment.getProperty("tea-neko.agent.summary.max-total-tokens", Long.class),
                     Duration.ofSeconds(environment.getProperty("tea-neko.agent.summary.timeout-seconds", Long.class, 45L)),
                     Duration.ofSeconds(environment.getProperty("tea-neko.agent.summary.cooldown-seconds", Long.class, 60L)));
-        }, mapper, executor, scheduler, Clock.systemUTC(), usage -> logger.info("Agent 摘要", "后台摘要结束，状态=" + usage.status()
+        // 2026/11/06：保留采用结果供 DEBUG 查询，INFO 由模型交互统一汇总。
+        }, mapper, executor, scheduler, Clock.systemUTC(), usage -> logger.debug("Agent 摘要", "后台摘要结束，状态=" + usage.status()
                 + "，已形成摘要=" + usage.accepted() + "，独立预算用量=" + usage.budgetUsage()));
     }
 }

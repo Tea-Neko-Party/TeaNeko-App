@@ -6,6 +6,7 @@ import type {CredentialInput} from './FileFieldEditor.vue'
 import ModelNamePicker from './ModelNamePicker.vue'
 import ModelIcon from './ModelIcon.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
+import {usePageDraft} from './pages/page-guards'
 
 export interface ModelRoute {id: string; name: string; description: string; defaults: Record<string, unknown>; models: string[]; contextWindows?: Record<string, number>; icon?: string}
 export interface ModelCatalog {routes: ModelRoute[]; inputs: CredentialInput[]}
@@ -21,6 +22,8 @@ const inputId = ref('manual')
 const secret = ref('')
 const makeDefault = ref(false)
 const error = ref('')
+// 2026/11/06：新增模型弹窗尚未提交的参数随页面草稿一并保护。
+usePageDraft(() => ({dirty: open.value}))
 const route = computed(() => props.catalog.routes.find(item => item.id === routeId.value))
 const input = computed(() => props.catalog.inputs.find(item => item.id === inputId.value) ?? props.catalog.inputs[0])
 const available = computed(() => props.catalog.routes)

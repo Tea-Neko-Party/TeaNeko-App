@@ -19,14 +19,16 @@ import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
 import AgentAssemblyEditor from './AgentAssemblyEditor.vue'
+import ValueEditor from './ValueEditor.vue'
 import {useConsolePreferences} from './console-preferences'
 import type {AgentTarget} from './AgentWorkspaceView.vue'
+import {usePageDraft} from './pages/page-guards'
 
 interface Account { ref: string; name: string; platformId: string; observedAt: string }
 interface Target { ref: string; kind: string; name: string; platformId: string; source: string; shared: boolean; observedAt: string }
 interface Page { items: Target[]; next: string; importMore: boolean }
 interface Section { id: string; name: string; group: string; description: string; registered?: boolean | null }
-interface Field { name: string; label: string; group: string; kind: string; description: string; value: string; defaultValue: string; source: string; editable: boolean; choices: Record<string, string>; jsonValue?: boolean; nullable?: boolean }
+interface Field { name: string; label: string; group: string; kind: string; editor?: string; description: string; value: string; defaultValue: string; source: string; editable: boolean; choices: Record<string, string>; jsonValue?: boolean; nullable?: boolean }
 interface Receipt { operationId: string; revision: string; registered: boolean; action: string; fields: string[]; at: string; replayed: boolean }
 interface View { section: string; name: string; targetName: string; registered: boolean; revision: string; sharedExplanation: string; fields: Field[] }
 interface Change { operationId: string; expectedRevision: string; action: string; fields: Record<string, string> }
@@ -111,7 +113,13 @@ async function openTarget(target: AgentTarget) {
     if (section.value) await restoreOrRead()
   })
 }
-defineExpose({openTarget})
+// 2026/11/06：跨页客户端导航等待初始化，仍经过原编辑器的切换保护。
+async function openClient(value: string) {
+  await initialized
+  await chooseClient(value)
+}
+defineExpose({openTarget, openClient})
+usePageDraft(() => ({busy: busy.value, dirty: dirty.value || !!drafts.size, pending: !!pending.value}))
 
 async function run(action: () => Promise<void>) {
   if (busy.value) return
@@ -475,6 +483,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                 :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null'">
                 <ElOption v-for="(label, value) in field.choices" :key="value" :value="value" :label="label" />
               </ElSelect>
+              <ValueEditor v-else-if="['JSON', 'LONG_TEXT'].includes(field.kind) || field.editor && field.editor !== 'AUTO'" :kind="field.editor && field.editor !== 'AUTO' ? field.editor : field.kind" :label="field.label" :model-value="displayValue(field)" :maxlength="8192" :disabled="busy || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null' && field.kind !== 'JSON'" @update:model-value="value => updateValue(field, value)" />
               <ElInput v-else :id="'field-' + field.name" :model-value="displayValue(field)" @update:model-value="value => updateValue(field, value)"
                 :type="['JSON', 'LONG_TEXT'].includes(field.kind) ? 'textarea' : field.kind === 'NUMBER' ? 'number' : 'text'" :rows="3"
                 :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null' && field.kind !== 'JSON'" :maxlength="8192" />

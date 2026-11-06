@@ -9,12 +9,14 @@ import java.util.Map;
 /**
  * 将允许加载的技能作为独立组件参数，不把技能说明当作额外工具授权。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "skill", name = "技能", description = "按需加载显式选择的本地技能说明。", requires = "tool")
+@TeaNekoAgentComponent(id = "skill", order = 60, name = "技能", description = "按需加载显式选择的本地技能说明。", requires = "tool")
 @PluginOwned("teaneko.agent")
 public final class SkillComponent extends BuiltinAgentComponent {
     /** 创建空技能选择，安装本身不会执行任何技能。 */

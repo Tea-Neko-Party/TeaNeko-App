@@ -32,15 +32,15 @@ import java.util.stream.Collectors;
  * 在业务域组合历史授权、时间保留与存储，并在默认轮次前等待可信明确保存。
  * <br>2026/11/03：默认轮次前先等待用户明确原文保存，关闭历史采集不关闭明确保存。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 public final class ConversationHistoryService implements IConversationHistory, IAgentHistoryRecorder {
     private final IHistoryStore store;
@@ -190,13 +190,13 @@ public final class ConversationHistoryService implements IConversationHistory, I
                         while (failure instanceof CompletionException && failure.getCause() != null) { failure = failure.getCause(); }
                         RuntimeException safe = switch (failure) {
                             case ExecutionStoppedException stopped -> new ExecutionStoppedException(stopped.reason());
-                            case AgentPromptException known -> new AgentPromptException(known.reason());
+                            case AgentPromptException known -> new AgentPromptException(known.reason(), known);
                             case AgentMemoryReferenceException known -> new AgentMemoryReferenceException(known.reason());
-                            default -> new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE);
+                            default -> new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE, failure);
                         };
                         return CompletableFuture.failedStage(safe);
                     });
-        } catch (RuntimeException ignored) { return CompletableFuture.failedStage(new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE)); }
+        } catch (RuntimeException failure) { return CompletableFuture.failedStage(new AgentPromptException(AgentPromptException.Reason.UNAVAILABLE, failure)); }
     }
     /**
      * 启用、采集和查询分开，不控制长期记忆或人格学习。

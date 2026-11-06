@@ -5,6 +5,7 @@ import org.zexnocs.teanekoapp.config.TeaNekoConfigNamespaces;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekoapp.web.client.TeaNekoClientManagement;
+import org.zexnocs.teanekoapp.web.console.ClientConsole;
 
 import java.time.Instant;
 import java.util.Comparator;
@@ -20,10 +21,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：网页聊天声明通用配置适用范围，不开放其他平台专用配置。
  * <br>2026/11/04：网页目录刷新只重读本地持久档案，不调用外部联系人发现。
  *
+ * <br>2026/11/06：为网页持久房间提供管理指令台的版本化发送租约。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.8.4-l
  */
 @Component
 @TeaNekoClientManagement(WebTeaNekoClient.ID)
@@ -107,6 +110,30 @@ public final class WebManagementAdapter implements IClientManagementAdapter {
         return store.room(target, () -> {}).thenApply(room -> new ChatTargets.Resolved(WebTeaNekoClient.ID, account,
                 room.id(), room.scope(), room.name(), room.kind(),
                 room.kind().equals("GROUP") ? room.id() : room.members().getFirst().profile(), false));
+    }
+
+    /**
+     * 2026/11/06：网页指令台按持久房间就绪，不把浏览器在线当成发送前提。
+     * @param target 已解析的网页目标
+     * @return 当前房间版本及明确能力状态
+     */
+    @Override
+    public CompletionStage<ClientConsole.State> consoleState(ChatTargets.Resolved target) {
+        return store.room(target.ref(), () -> {}).thenApply(room -> new ClientConsole.State(
+                "READY", room.id() + ":" + room.revision(), "消息保存到该网页房间，不要求浏览器保持在线。"));
+    }
+
+    /**
+     * 2026/11/06：捕获原房间版本，发送时在事务内重新校验，不借用用户权限。
+     * @param target 已解析目标
+     * @param guard 管理会话与插件守卫
+     * @return 限定本房间和版本的管理发送能力
+     */
+    @Override
+    public CompletionStage<ClientConsole.Lease> consoleLease(ChatTargets.Resolved target, Runnable guard) {
+        return store.room(target.ref(), guard).thenApply(room -> new ClientConsole.Lease(
+                WebTeaNekoClient.class, target, room.id() + ":" + room.revision(), guard,
+                text -> store.sendManaged(room.id(), room.revision(), text, guard).thenApply(WebChat.Message::id)));
     }
 
     /**

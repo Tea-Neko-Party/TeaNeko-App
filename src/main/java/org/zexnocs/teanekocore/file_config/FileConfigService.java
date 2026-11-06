@@ -46,10 +46,12 @@ import java.util.function.Supplier;
  * <br>2026/11/05：配置类型在服务创建时扫描一次，文档访问与重载复用固定目录，避免模型校验反复扫描类路径。
  * <br>2026/11/05：类型发现交给可重扫的专用目录，运行版本查询只访问缓存和原类型锁。
  *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.0
- * @version 4.8.2-l
+ * @version 4.8.4-l
  */
 @Service
 public class FileConfigService implements IFileConfigService {
@@ -352,7 +354,7 @@ public class FileConfigService implements IFileConfigService {
                 } catch (Exception e) {
                     markUnavailable(clazz);
                     if (annotation.sensitive()) {
-                        iLogger.error(getClass().getSimpleName(), "敏感配置加载失败: " + file + "，请检查文件格式和字段类型；不记录可能含凭据的解析异常。");
+                        iLogger.error(getClass().getSimpleName(), "敏感配置加载失败: " + file + "，" + org.zexnocs.teanekocore.logger.FailureDiagnostic.from(e));
                     } else {
                         iLogger.error(getClass().getSimpleName(), "加载配置失败: " + file, e);
                     }

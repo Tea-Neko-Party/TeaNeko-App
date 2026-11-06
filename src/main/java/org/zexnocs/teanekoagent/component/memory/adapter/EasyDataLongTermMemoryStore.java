@@ -41,22 +41,50 @@ import java.util.function.Supplier;
  * <br>2026/11/03：明确保存接入同一长期领域，保留原文和完整附加信息。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/03：独立管理员与本人维护复用同一版本、索引、墓碑和回执事务。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：长期事务入口和提交前复核资格，非空单字查询执行有界字面匹配。
  * <br>2026/11/05：复用候选关系预检，逐项区分事务内来源失效并持久限制重复无效生成。
  * <br>2026/11/06：证据、片段及租约期限包含实际排队耗时，避免使用入队时的过期快照。
  * <br>2026/11/06：仅为旧作业缺失的管理版本补零，不放宽其他字段反序列化校验。
  * <br>2026/11/06：持久化格式失败报告安全的类型与字段，不泄露 JSON 或反序列化异常正文。
+ * <br>2026/11/06：分页发现已存画像主体，沿用空间代次与原索引。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, IMemoryMaintenance {
+    /**
+     * 2026/11/06：只从权威长期记录分页读取主体，排除已遗忘或失效记录。
+     * @param reference 当前固定代次
+     * @param after 上页记录键
+     * @param limit 有界记录数
+     * @return 实际主体及未扫描部分的游标
+     */
+    @Override
+    public CompletionStage<org.zexnocs.teanekoagent.database.easydata.StoredPage<UUID>> subjects(
+            MemoryNamespaceReference reference, String after, int limit) {
+        if (after.length() > 64 || limit < 1 || limit > 50) {
+            throw new IllegalArgumentException("画像目录分页无效。");
+        }
+        return data.transaction("读取长期画像主体", () -> {
+            requireGeneration(reference);
+            String space = space(reference);
+            var rows = dto("entries:" + space).scan(after, null, limit + 1, EasyDataLock.NONE);
+            var subjects = new LinkedHashSet<UUID>();
+            for (var row : rows.stream().limit(limit).toList()) {
+                var value = read(row, LongMemories.Entry.class);
+                if (value.subjectId() != null && (value.status() == LongMemories.Status.ACTIVE
+                        || value.status() == LongMemories.Status.CONFLICT) && liveExplicit(space, value.id())) {
+                    subjects.add(value.subjectId());
+                }
+            }
+            return new org.zexnocs.teanekoagent.database.easydata.StoredPage<>(List.copyOf(subjects),
+                    rows.size() > limit ? rows.get(limit - 1).getKey() : "");
+        });
+    }
     private final TeaNekoAgentEasyData data;
     private final TeaNekoAgentEasyData layers;
     private final EasyDataMemoryNamespaceStore namespaces;

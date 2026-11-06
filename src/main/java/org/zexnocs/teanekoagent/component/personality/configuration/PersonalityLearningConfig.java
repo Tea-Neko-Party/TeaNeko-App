@@ -22,21 +22,20 @@ import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * 默认后台人格学习组合根，配置按尝试懒读取，不建立额外线程池。
+ *
  * <br>2026/11/03：观察式人格已装配时停止旧逐轮模型分析，关闭观察后保留回退入口。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04��ȡ���˸�ѧϰĬ���� token ��ֻ��ȡ��ʽԤ�㡣
- *
  * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：按聊天实际历史与压缩通路选择独立人格采样。
  * <br>2026/11/06：装配统一类型化 JSON 生成服务。
+ * <br>2026/11/06：后台学习的附加进度降为 DEBUG，避免重复输出请求 INFO。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.5-l
  */
 @Configuration(proxyBeanMethods = false)
 public class PersonalityLearningConfig {
@@ -72,7 +71,8 @@ public class PersonalityLearningConfig {
                 environment.getProperty("tea-neko.agent.personality-learning.max-total-tokens", Long.class),
                 environment.getProperty("tea-neko.agent.personality-learning.max-input-bytes", Long.class, 131072L),
                 Duration.ofDays(environment.getProperty("tea-neko.agent.personality-learning.retention-days", Long.class, 30L))),
-                mapper, executor, scheduler, Clock.systemUTC(), report -> logger.info("Agent 人格学习", "后台候选结束，状态=" + report.outcome()
+                // 2026/11/06：模型调用由统一观察器汇总；采用状态仅留在 DEBUG，避免重复 INFO。
+                mapper, executor, scheduler, Clock.systemUTC(), report -> logger.debug("Agent 人格学习", "后台候选结束，状态=" + report.outcome()
                         + "，模型状态=" + report.modelStatus() + "，独立预算用量=" + report.budgetUsage()), result -> {
                     var reference = result.memoryReference();
                     var observation = observations.getIfAvailable();

@@ -19,11 +19,14 @@ import java.util.Set;
  * 元数据不持有配置实例，数据库配置与本地文件投影共用该契约。
  *
  * <br>2026/11/04：按真实 JSON 指针解析嵌套和泛型属性说明。
+ * <br>2026/11/06：通过字段或值类型注解提供编辑器元数据。
+ *
+ * <br>2026/11/06：合并字段与值类型编辑器声明，修正集合根字段定位。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.7.6-l
+ * @version 4.8.4-l
  */
 public final class ConfigSchema {
     private final List<Property> properties;
@@ -51,6 +54,10 @@ public final class ConfigSchema {
                 .map(value -> {
                     var field = value.getField();
                     var description = field.getAnnotation(Description.class);
+                    var editor = field.getAnnotation(ValueEditor.class);
+                    if (editor == null) {
+                        editor = value.getPrimaryType().getRawClass().getAnnotation(ValueEditor.class);
+                    }
                     var declared = value.getPrimaryMember().getAnnotation(JsonProperty.class);
                     boolean secret = declared != null && declared.access() == JsonProperty.Access.WRITE_ONLY
                             || sensitive(mapper, value.getPrimaryType(), new HashSet<>());
@@ -59,7 +66,8 @@ public final class ConfigSchema {
                     return new Property(field.getName(), value.getName(), value.getPrimaryType(),
                             description == null ? "尚未提供说明" : description.value(), editable, secret,
                             value.findAliases().stream().map(PropertyName::getSimpleName).toList(),
-                            field.getAnnotated().getAnnotatedType().isAnnotationPresent(org.jspecify.annotations.Nullable.class));
+                            field.getAnnotated().getAnnotatedType().isAnnotationPresent(org.jspecify.annotations.Nullable.class),
+                            editor == null ? "AUTO" : editor.value());
                 }).toList();
         if (properties.stream().map(Property::name).distinct().count() != properties.size()) {
             throw new IllegalArgumentException("配置存在重复字段映射。");
@@ -88,7 +96,7 @@ public final class ConfigSchema {
                 return java.util.Optional.empty();
             }
             JavaType next = property.type();
-            if (next.isCollectionLikeType() || next.isArrayType()) {
+            if ((next.isCollectionLikeType() || next.isArrayType()) && index < segments.length - 1) {
                 if (++index >= segments.length || !segments[index].matches("[0-9]+")) {
                     return java.util.Optional.empty();
                 }
@@ -173,6 +181,8 @@ public final class ConfigSchema {
     /**
      * 只供受信配置服务使用的元数据，不作为普通响应序列化。
      *
+     * <br>2026/11/06：投影值编辑器声明，保留原字段与构造合同。
+     *
      * @param name Java 字段标识
      * @param jsonName 实际序列化键
      * @param type 已解析父类泛型的字段类型
@@ -181,12 +191,13 @@ public final class ConfigSchema {
      * @param secret 是否含敏感内容
      * @param aliases 反序列化兼容别名
      * @param nullable 是否显式声明允许空值，默认空值另由配置类型确认
+     * @param editor 编辑器标识，AUTO 表示使用原字段种类
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.7.1-l
+     * @version 4.8.4-l
      */
     @JsonIgnoreType
     public record Property(String name, String jsonName, JavaType type, String description,
-                           boolean editable, boolean secret, List<String> aliases, boolean nullable) {}
+                           boolean editable, boolean secret, List<String> aliases, boolean nullable, String editor) {}
 }

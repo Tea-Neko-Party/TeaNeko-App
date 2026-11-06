@@ -14,13 +14,14 @@ import java.util.Set;
  * 按声明的 JSON 指针投影和局部修改原树，不返回未知节点或把脱敏占位符写回。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：显式开放字段复用原解析器注解说明，保持秘密保护。
+ *
+ * <br>2026/11/06：向文件表单投影统一编辑器元数据。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.6-l
+ * @version 4.8.4-l
  */
 final class FileSettingsPolicy {
     /** 禁止实例化字段策略工具。 */
@@ -74,7 +75,10 @@ final class FileSettingsPolicy {
                         .orElse(rule.description());
                 fields.add(new FileSettings.Field(path, rule.label(), explanation, rule.kind(), rule.secret(),
                         configured, node.isMissingNode() ? "未声明，使用类型默认值" : exists ? "文件原值或环境模板" : "未保存模板",
-                        rule.secret() || node.isMissingNode() ? null : node.deepCopy()));
+                        rule.secret() || node.isMissingNode() ? null : node.deepCopy(),
+                        rule.secret() || schema == null ? "AUTO" : schema.findPointer(path)
+                                .map(org.zexnocs.teanekocore.framework.config.ConfigSchema.Property::editor)
+                                .orElse("AUTO")));
             }
         }
         return List.copyOf(fields);

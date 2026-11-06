@@ -15,20 +15,18 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 /**
  * 只在请求边界读取当前 model.yml 凭据与连接配置，环境占位符由 Core YAML 解析器处理。
  * <br>2026/11/03：核对原参数代次后原子取得凭据，热应用后拒绝旧参数拼接新连接。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按所选路由隔离凭据，获取连接前核对协议及配置代次。
- *
  * <br>2026/11/04：按来源解析私有与系统凭据，禁止协议或配置代次混用。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：模型凭据装配归入组件的 configuration 目录。
+ *
+ * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
 @Service
 public class FileLLMCredentialResolver implements ICredentialResolver {
@@ -141,9 +139,9 @@ public class FileLLMCredentialResolver implements ICredentialResolver {
             var entry = files.requireCurrent(LLMModelFileConfig.class).findModelConfig(LLMModelId.of(provider))
                     .orElseThrow(() -> new LLMConfigurationException("model.yml 缺少所选供应商条目。"));
             return new LLMProviderAccess(entry.getApiKey(), entry.getBaseUrl(), entry.getApiPath());
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException failure) {
             // 只报告固定原因，配置、解析和连接校验的原始异常都不能作为 cause 传播。
-            throw new LLMConfigurationException("LLM 凭据或连接配置不可用，请检查 model.yml 及引用的环境变量。");
+            throw new LLMConfigurationException("LLM 凭据或连接配置不可用，请检查 model.yml 及引用的环境变量。", failure);
         }
     }
 }

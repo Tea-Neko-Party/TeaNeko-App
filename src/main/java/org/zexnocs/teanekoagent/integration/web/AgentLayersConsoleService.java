@@ -26,14 +26,15 @@ import java.util.concurrent.CompletionStage;
  * 从原持久化端口查看短中长期记忆，管理维护保留原索引与墓碑，不借记忆主体冒充用户。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：接入持久整理状态与原管理权限下的暂停恢复，不调用模型。
+ *
+ * <br>2026/11/06：全局空间只查共享长期资料，不展示虚构的聊天分区和整理状态。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.3-l
+ * @version 4.8.4-l
  */
 @Service
 public final class AgentLayersConsoleService {
@@ -78,7 +79,9 @@ public final class AgentLayersConsoleService {
             return longTerm.managementOperation(reference, actor(context, query), query.operationId(), context::checkActive)
                     .thenApply(item -> changed(query, item));
         }
-        return bindings.readReference(scope).thenCompose(bound -> {
+        CompletionStage<Optional<MemoryNamespaceReference>> selected = AgentConsoleService.global(context)
+                ? CompletableFuture.completedStage(Optional.empty()) : bindings.readReference(scope);
+        return selected.thenCompose(bound -> {
             var id = query.namespace().isBlank() ? bound.map(MemoryNamespaceReference::namespaceId)
                     .orElse(MemoryNamespaceId.SHARED) : new MemoryNamespaceId(query.namespace());
             return namespaces.find(id).thenCompose(found -> {
@@ -107,6 +110,14 @@ public final class AgentLayersConsoleService {
                     return longTerm.manage(reference, actor(context, query), Objects.requireNonNull(query.id()),
                             query.revision(), query.text(), Objects.requireNonNull(query.operationId()), Instant.now(),
                             context::checkActive).thenApply(item -> changed(query, item));
+                }
+                // 2026/11/06：实例空间不对应任何聊天分区，不能显示虚构的空整理作业。
+                if (AgentConsoleService.global(context)) {
+                    return longTerm.query(reference, query.subjectId(), query.topic(), 20).thenApply(learned -> {
+                        context.checkActive();
+                        return new AgentLayersConsole.View(id.value(), namespace.generation(), List.of(),
+                                List.of(), 0, learned, null);
+                    });
                 }
                 long days = Objects.requireNonNull(environment.getProperty(
                         "tea-neko.agent.memory.layered.retention-days", Long.class, 90L));

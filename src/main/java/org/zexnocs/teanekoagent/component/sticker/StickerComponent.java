@@ -10,12 +10,14 @@ import java.util.Set;
 /**
  * 采集和使用实例共享图库；保留原下载、容量和视觉识别限制。
  *
+ * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.8.4-l
  */
-@TeaNekoAgentComponent(id = "sticker", name = "表情包", description = "采集和使用实例共享图库；保留原下载、容量和视觉识别限制。", requires = {"expression", "tool"})
+@TeaNekoAgentComponent(id = "sticker", order = 50, name = "表情包", description = "采集和使用实例共享图库；保留原下载、容量和视觉识别限制。", requires = {"expression", "tool"})
 @PluginOwned("teaneko.agent")
 public final class StickerComponent extends BuiltinAgentComponent {
     /** 创建本组件独立参数模板，不启动业务或修改存储。 */

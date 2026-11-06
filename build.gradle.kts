@@ -1,9 +1,25 @@
 import com.sun.management.OperatingSystemMXBean
+import org.gradle.api.file.FileSystemOperations
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 import org.springframework.boot.gradle.tasks.run.BootRun
 import se.bjurr.gitchangelog.plugin.gradle.GitChangelogTask
 import java.lang.management.ManagementFactory
 import java.time.LocalDate
+import javax.inject.Inject
+
+/**
+ * 提供构建资源同步所需的文件服务。
+ * <br>2026/11/06：通过注入避免在任务执行期访问 Project。
+ *
+ * @author zExNocs
+ * @date 2026/11/06
+ * @since 4.8.4-l
+ * @version 4.8.4-l
+ */
+abstract class ConsoleResourceServices {
+    @get:Inject
+    abstract val files: FileSystemOperations
+}
 
 // ========= 插件 =========
 plugins {
@@ -124,9 +140,27 @@ sourceSets.named("main") {
 }
 
 tasks.named<ProcessResources>("processResources") {
+    val resourceFiles = objects.newInstance<ConsoleResourceServices>().files
+    val consoleSource = layout.buildDirectory.dir("generated/web/console")
     dependsOn(webBuild, generateVersionInfo)
     from(layout.buildDirectory.dir("generated/web")) {
         into("static")
+    }
+    // 2026/11/06：带哈希的分包改名后，普通复制会留下旧文件；只同步控制台生成目录。
+    doLast {
+        val source = consoleSource.get().asFile.canonicalFile
+        val resourceRoot = destinationDir.canonicalFile
+        val consoleRoot = resourceRoot.resolve("static/console").canonicalFile
+        require(source.isDirectory && source.resolve("index.html").isFile) {
+            "控制台构建产物不完整，拒绝同步运行资源。"
+        }
+        require(consoleRoot.toPath().startsWith(resourceRoot.toPath()) && consoleRoot != resourceRoot) {
+            "控制台同步目录必须位于本任务的资源输出目录内。"
+        }
+        resourceFiles.sync {
+            from(source)
+            into(consoleRoot)
+        }
     }
 }
 

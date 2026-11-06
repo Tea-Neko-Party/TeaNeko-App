@@ -5,6 +5,7 @@ import {ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElOption, ElSelect,
 import {ApiError, request} from './api'
 import ModelNamePicker from './ModelNamePicker.vue'
 import ModelIcon from './ModelIcon.vue'
+import ValueEditor from './ValueEditor.vue'
 import type {ModelCatalog} from './ModelTemplateEditor.vue'
 import {useConsolePreferences} from './console-preferences'
 
@@ -157,7 +158,7 @@ function open(id: string) {
               <label>输入上下文占比<ElInputNumber :model-value="Number(privateModel['context-input-ratio'] ?? 0.8)" :min="0.01" :max="1" :step="0.05" :disabled="disabled" @change="value => modelField('context-input-ratio', value)" /></label>
               <div v-if="keepSecret" class="assembly-card-heading"><span>API key 已保存</span><ElButton :disabled="disabled" @click="modelField('api-key', '')">替换密钥</ElButton></div>
               <template v-else><label>从环境变量读取<ElSwitch :model-value="environment" :disabled="disabled" @change="value => modelField('api-key', value ? '${}' : '')" /></label><label>{{ environment ? '环境变量名' : 'API key' }}<ElInput :model-value="secretText" :type="environment ? 'text' : 'password'" :disabled="disabled" autocomplete="off" @update:model-value="value => modelField('api-key', environment ? '${' + value + '}' : value)" /></label></template>
-              <template v-if="advanced"><label>扩展 metadata（JSON）<ElInput type="textarea" :rows="4" :model-value="editingJSON.metadata ?? JSON.stringify(privateModel.metadata ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField('metadata', value, true)" /></label><label>温度<ElInputNumber :model-value="Number(privateModel.temperature ?? 1)" :disabled="disabled" :step="0.1" @change="value => modelField('temperature', value)" /></label><label>思考模式<ElSwitch :model-value="privateModel.thinking === true" :disabled="disabled" @change="value => modelField('thinking', value)" /></label></template>
+              <template v-if="advanced"><label>扩展 metadata（JSON）<ValueEditor kind="JSON" label="扩展 metadata" :model-value="editingJSON.metadata ?? JSON.stringify(privateModel.metadata ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField('metadata', value, true)" /></label><label>温度<ElInputNumber :model-value="Number(privateModel.temperature ?? 1)" :disabled="disabled" :step="0.1" @change="value => modelField('temperature', value)" /></label><label>思考模式<ElSwitch :model-value="privateModel.thinking === true" :disabled="disabled" @change="value => modelField('thinking', value)" /></label></template>
             </template>
           </template>
         </template>
@@ -165,7 +166,8 @@ function open(id: string) {
           <div v-for="field in current.fields" :key="field.name" class="assembly-parameter"><label>{{ field.label }}</label><p class="config-description">{{ field.description }}</p>
             <ElSwitch v-if="field.kind === 'BOOLEAN'" :model-value="Boolean(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
             <ElInputNumber v-else-if="field.kind === 'NUMBER'" :model-value="Number(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
-            <ElInput v-else-if="field.kind === 'JSON'" type="textarea" :rows="4" :model-value="editingJSON[field.name] ?? JSON.stringify(parameters[field.name] ?? current.defaults[field.name] ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField(field.name, value)" />
+            <ValueEditor v-else-if="field.kind === 'JSON'" kind="JSON" :label="field.label" :model-value="editingJSON[field.name] ?? JSON.stringify(parameters[field.name] ?? current.defaults[field.name] ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField(field.name, value)" />
+            <ValueEditor v-else-if="field.kind === 'LONG_TEXT'" :label="field.label" :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />
             <template v-else-if="field.kind === 'SECRET' && typeof parameters[field.name] === 'object'"><span class="small">已保存，不回显</span><ElButton :disabled="disabled" @click="parameter(field.name, '')">替换</ElButton></template>
             <ElInput v-else :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :type="field.kind === 'LONG_TEXT' ? 'textarea' : field.kind === 'SECRET' ? 'password' : 'text'" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />
           </div>
