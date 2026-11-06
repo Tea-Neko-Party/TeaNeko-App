@@ -18,11 +18,12 @@ import java.util.UUID;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：展示后台整理状态并提供版本化暂停恢复。
+ * <br>2026/11/06：提供共享事件查询选项，保留原调用的长期记忆语义。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class AgentLayersConsole {
     /** 禁止实例化契约容器。 */
@@ -44,13 +45,30 @@ public final class AgentLayersConsole {
      * @param revision 原内容版本
      * @param operationId 原操作编号
      * @param text 可选修正正文
+     * @param eventsOnly 仅查询无个人主体的共享事件
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     public record Query(String action, String namespace, long generation, @Nullable UUID subjectId, String topic,
-            @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text) {
+            @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text, boolean eventsOnly) {
+        /**
+         * 2026/11/06：保留原调用的全部长期条目语义，新的网页事件页显式选择过滤。
+         * @param action 动作
+         * @param namespace 空间
+         * @param generation 代次
+         * @param subjectId 主体
+         * @param topic 话题
+         * @param id 条目
+         * @param revision 版本
+         * @param operationId 操作
+         * @param text 新正文
+         */
+        public Query(String action, String namespace, long generation, @Nullable UUID subjectId, String topic,
+                @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text) {
+            this(action, namespace, generation, subjectId, topic, id, revision, operationId, text, false);
+        }
         /**
          * @param action 明确动作
          * @param namespace 空间
@@ -61,12 +79,14 @@ public final class AgentLayersConsole {
          * @param revision 原版本
          * @param operationId 原操作
          * @param text 新正文
+         * @param eventsOnly 仅共享事件
          * @throws IllegalArgumentException 当动作或参数范围无效时
          */
         public Query {
             // 2026/11/05：恢复只接受已读取的作业版本，不混用长期条目版本。
             if (!Set.of("READ", "EDIT", "FORGET", "OPERATION", "REPLAY", "REPLAY_OPERATION").contains(action) || namespace == null
                     || namespace.length() > 128 || generation < -1 || topic == null || topic.length() > 1024
+                    || eventsOnly && (subjectId != null || !action.equals("READ"))
                     || text != null && (text.isBlank() || text.length() > 512)
                     || !action.equals("READ") && (operationId == null || namespace.isBlank() || generation < 0)
                     || action.equals("EDIT") && (id == null || text == null || revision < 0)

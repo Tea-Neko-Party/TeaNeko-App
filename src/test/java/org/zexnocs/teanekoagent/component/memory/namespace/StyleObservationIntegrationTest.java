@@ -18,6 +18,7 @@ import org.zexnocs.teanekoagent.component.personality.adapter.StyleObservationTo
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
@@ -44,13 +45,95 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/05：验证空观察前缀可推进、后续有效样本可学习及排队后的真实撤权。
  * <br>2026/11/06：核对混合批次中错误风格的原因、序号及事实和风格整体回滚。
+ * <br>2026/11/06：合并同字段同场景的近义模式和真实证据，保留原采用水位。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Timeout(25)
 class StyleObservationIntegrationTest {
+    /** 2026/11/06：近义风格复用原记录并累加独立证据，否定与不同场景仍隔离。 */
+    @Test
+    void mergesSemanticStyleVariantsWithNewEvidence() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            h.medium();
+            var first = h.claim();
+            var target = Objects.requireNonNull(h.observer.prepare(first, control).toCompletableFuture().join());
+            var original = h.candidate(first);
+            var greeting = new StyleObservations.Candidate(original.field(), "用户常用单个词重复打招呼",
+                    StyleObservations.Context.CASUAL, original.quotes(), original.segments());
+            assertTrue(h.longs.commit(first, new StyleObservations.Analysis(List.of(), List.of(greeting)), target,
+                    now.plusSeconds(1001), h.observer.guard(first, target, control)).toCompletableFuture().join());
+            h.medium();
+            var second = h.claim();
+            var next = Objects.requireNonNull(h.observer.prepare(second, control).toCompletableFuture().join());
+            assertEquals(1, next.known().size());
+            var fresh = h.candidate(second);
+            var variant = new StyleObservations.Candidate(fresh.field(), "用户经常重复使用单词问候",
+                    StyleObservations.Context.CASUAL, fresh.quotes(), fresh.segments());
+            assertTrue(h.longs.commit(second, new StyleObservations.Analysis(List.of(), List.of(variant)), next,
+                    now.plusSeconds(1001), h.observer.guard(second, next, control)).toCompletableFuture().join());
+            var patterns = h.styles.inspect(scope, next.basis(), now.plusSeconds(1002)).toCompletableFuture().join();
+            assertEquals(1, patterns.size());
+            assertEquals(4, patterns.getFirst().messages());
+            assertEquals(greeting.pattern(), patterns.getFirst().pattern());
+            assertTrue(patterns.getFirst().adopted());
+            assertFalse(StylePatternSimilarity.equivalent(greeting.pattern(), "用户不使用单词重复问候"));
+            assertFalse(StylePatternSimilarity.equivalent(greeting.pattern(), "用户仅在技术问题中使用单词重复问候"));
+            h.medium();
+            var third = h.claim();
+            var latest = Objects.requireNonNull(h.observer.prepare(third, control).toCompletableFuture().join());
+            assertEquals(1, latest.known().size());
+        }
+    }
+    /** 2026/11/06：按键命中窗口外的已采用模式时，保留原证据和采用时间，不重新学习同一模式。 */
+    @Test
+    void preservesExactPatternOutsideSimilarityWindow() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            for (int i = 0; i < 2; i++) {
+                h.medium();
+                var batch = h.claim();
+                var target = Objects.requireNonNull(h.observer.prepare(batch, control).toCompletableFuture().join());
+                assertTrue(h.longs.commit(batch, new StyleObservations.Analysis(List.of(), List.of(h.candidate(batch))),
+                        target, now.plusSeconds(1001), h.observer.guard(batch, target, control))
+                        .toCompletableFuture().join());
+            }
+            var data = h.db.data.inNamespace("agent.personality.observations.v1");
+            var original = data.transaction("将真实已采用记录移出最近比较窗口", () -> {
+                var row = data.get("maintenance").atomic().recentNamespace(Long.MAX_VALUE, 100).stream()
+                        .filter(value -> value.getTarget().startsWith("patterns:")).findFirst().orElseThrow();
+                var dto = data.get(row.getTarget()).atomic();
+                for (int i = 0; i < 64; i++) {
+                    String id = "其他字段模式-" + i;
+                    var filler = h.db.mapper.createObjectNode()
+                            .put("id", id).put("field", "其他字段").put("text", "其他模式")
+                            .put("context", "TECHNICAL");
+                    filler.set("samples", h.db.mapper.createArrayNode());
+                    dto.save(dto.create(id, h.db.mapper.writeValueAsString(filler)));
+                }
+                assertTrue(dto.recent(Long.MAX_VALUE, 64).stream().noneMatch(value -> value.getKey().equals(row.getKey())));
+                return row;
+            }).toCompletableFuture().join();
+            var before = h.db.mapper.readTree(original.getValue());
+            assertEquals(4, before.get("samples").size());
+            assertFalse(before.get("adoptedAt").isNull());
+            h.medium();
+            var batch = h.claim();
+            var target = Objects.requireNonNull(h.observer.prepare(batch, control).toCompletableFuture().join());
+            assertTrue(h.longs.commit(batch, new StyleObservations.Analysis(List.of(), List.of(h.candidate(batch))),
+                    target, now.plusSeconds(1002), h.observer.guard(batch, target, control))
+                    .toCompletableFuture().join());
+            var after = data.transaction("读取按键合并后的模式", () -> h.db.mapper.readTree(Objects.requireNonNull(
+                    data.get(original.getTarget()).atomic().find(original.getKey(), EasyDataLock.NONE)).getValue()))
+                    .toCompletableFuture().join();
+            assertEquals(6, after.get("samples").size());
+            assertEquals(before.get("adoptedAt"), after.get("adoptedAt"));
+            assertEquals(before.get("adoptedUntil"), after.get("adoptedUntil"));
+        }
+    }
+
     private final Instant now = Instant.parse("2026-11-03T00:00:00Z");
     private final AgentScope scope = new AgentScope("test", "群甲");
     private final MemoryNamespaceReference reference = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);

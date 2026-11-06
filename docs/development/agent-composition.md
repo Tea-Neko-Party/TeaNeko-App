@@ -1,6 +1,6 @@
 # Agent 组件装配
 
-适用版本：v4.8.0-l。
+适用版本：v4.8.6-l。
 
 ## 默认行为与使用
 
@@ -27,6 +27,13 @@
 | `sticker` | 表情采集与共享图库回复 | `expression`、`tool` |
 | `schedule` | 自然语言提醒与定时任务 | `tool` |
 | `proactive` | ACTIVE 模式下的主动候选、静默和冷却 | 无 |
+| `shared-memory` | 同空间同用户的群聊回忆，标明来源 | `memory` |
+| `private-contact` | 回应本轮用户的私聊邀请 | `memory`、`tool` |
+| `affinity` | 亲近程度及受限互动评估 | `memory`、`tool` |
+| `mood` | 短期心情及自然恢复 | `memory`、`tool` |
+| `care` | 有次数上限的主动关怀 | `proactive`、`affinity` |
+
+新增组件必须显式选择；卡片展示中文依赖。空间绑定、默认参数和私聊边界见[共享回忆与社交组件](agent-social-memory.md)。
 
 安装组件不绕过本地功能开关、客户端范围、权限、预算或插件启停。人格可单独安装；自动观察仍需真实对话证据，通常与记忆配合。未安装人格的记忆使用独立的无人格分区，不自动创建人格记录。
 

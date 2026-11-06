@@ -53,10 +53,12 @@ import java.util.function.Supplier;
  * <br>2026/11/05：长期事实与风格提交分别在真实事务内复核生命周期及学习资格。
  * <br>2026/11/05：合法空观察批次不再因缺少目标被误判撤权，保留提交前动态开关复核。
  * <br>2026/11/06：目录与租约领取失败分别退避，坏分区不阻塞其他分区，不误报模型失败。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -280,7 +282,7 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
             }
             var next = scanBackoff.failed(key, clock.instant());
             reportReadFailure(phase, key, control.id(), failure, next);
-            return new ScanRead<T>(true, null);
+            return new ScanRead<>(true, null);
         }, executor);
     }
 
@@ -378,7 +380,8 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
         var generation = control.guard(prepared).thenComposeAsync(basis -> {
             phase.set("长期模型生成");
             // 2026/11/03：事实关闭且没有当前人格样本时直接完成空筛选，避免浪费模型请求。
-            if (basis == null && !Boolean.TRUE.equals(learning.apply(batch.stream().reference().scope()))) {
+            if (batch.evidence().isEmpty()
+                    || basis == null && !Boolean.TRUE.equals(learning.apply(batch.stream().reference().scope()))) {
                 return CompletableFuture.completedStage(new Generated(null, new StyleObservations.Analysis(List.of(), List.of())));
             }
             control.checkActive(); return generator.analyze(batch, basis, control).thenApply(values -> new Generated(basis, values));
@@ -490,21 +493,23 @@ public final class LayeredMemoryProcessor implements AutoCloseable {
         boolean storageFailure = false;
         ExecutionControl.StopReason stopped = null;
         Throwable currentFailure = failure;
+        label:
         for (int depth = 0; currentFailure != null && depth < 16; depth++) {
-            if (currentFailure instanceof MemoryStorageException) {
-                storageFailure = true;
-                break;
-            }
-            if (currentFailure instanceof MemoryEvidenceException value) {
-                evidence = value;
-                break;
-            }
-            if (currentFailure instanceof MemoryProcessingException value) {
-                classified = value;
-                break;
-            }
-            if (currentFailure instanceof org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException value) {
-                stopped = value.reason();
+            switch (currentFailure) {
+                case MemoryStorageException _:
+                    storageFailure = true;
+                    break label;
+                case MemoryEvidenceException value:
+                    evidence = value;
+                    break label;
+                case MemoryProcessingException value:
+                    classified = value;
+                    break label;
+                case org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException value:
+                    stopped = value.reason();
+                    break;
+                default:
+                    break;
             }
             currentFailure = currentFailure.getCause();
         }

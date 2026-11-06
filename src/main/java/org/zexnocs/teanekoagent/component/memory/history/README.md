@@ -26,7 +26,7 @@ tea-neko.agent.history.cleanup-interval-ms=60000
 
 保留期按发生时间计算，允许一至三百六十五天，懒读取非法值会拒绝该次写入。没有原始发生时间的轮次记录明确标记 estimatedTime=true，使用处理时间。时间统一为 Instant，精度对齐 MySQL 微秒；正文最多 65536 个 Java 字符，超过时标记 truncated，不省略来源。
 
-普通历史分区包含完整 client/scope、namespace、绑定 revision、generation 和实际人格身份。共享长期记忆不共享其他群或私聊原文。切换空间、clear 或换人格后不自动读回旧分区；内存 TTL、随机实例/epoch 或进程重启不改变持久化边界，因此重启后仍能查询有效历史，但不会恢复旧内存窗口或重跑未完成工具。
+普通历史分区包含完整 client/scope、namespace、绑定 revision、generation 和实际人格身份。默认历史接口不共享其他聊天原文；可选 `shared-memory` 组件通过独立端口召回同空间同用户的群聊资料，保留来源并复核绑定，私聊原文不向其他聊天公开。详见[共享回忆](../../../../../../../../../docs/development/agent-social-memory.md)。切换空间、clear 或换人格后不自动读回旧分区；内存 TTL、随机实例/epoch 或进程重启不改变持久化边界，因此重启后仍能查询有效历史，但不会恢复旧内存窗口或重跑未完成工具。
 
 ## 查询工具
 

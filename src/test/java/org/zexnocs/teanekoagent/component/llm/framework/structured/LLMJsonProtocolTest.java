@@ -35,6 +35,7 @@ import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -44,10 +45,12 @@ import static org.mockito.Mockito.*;
 /**
  * 验证统一 JSON 合同实际写入供应商字段，能力不足时有告警且不发送不支持参数。
  * <br>2026/11/06：覆盖参数复制、路由覆盖及对象模式与 Schema 模式的区别。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 class LLMJsonProtocolTest {
     private final ObjectMapper mapper = new ObjectMapper();
@@ -103,9 +106,26 @@ class LLMJsonProtocolTest {
         service.call("route", "本次模型", prepared.prompt());
         var captured = ArgumentCaptor.forClass(ILLMPrompt.class);
         verify(model).call(captured.capture());
-        assertEquals("本次模型", captured.getValue().getOptions().getModel());
+        assertEquals("本次模型", Objects.requireNonNull(captured.getValue().getOptions()).getModel());
         assertEquals(LLMResponseFormat.JSON, captured.getValue().getOptions().getResponseFormat());
         assertEquals(prepared.definition().schema(), captured.getValue().getOptions().findResponseSchema().orElseThrow());
+        // 2026/11/06：原生 Schema 只在协议中携带一次，系统消息不再重复完整结构。
+        var nativeMessages = mapper.writeValueAsString(captured.getValue().getMessages());
+        assertFalse(nativeMessages.contains("最多600字"));
+        assertTrue(nativeMessages.contains("response_format"));
+        var nativeJson = new LLMJsonService(LLMJsonTestSupport.schemas(MemoryLayers.Digest.class),
+                mock(ILLMInteractionService.class), mapper, new LLMJsonDiagnostics(false, "未启用"), service);
+        var nativeRequest = nativeJson.prepare(MemoryLayers.Digest.class,
+                new LLMPrompt(source.getMessages(), LLMModelOptions.builder()
+                        .provider("route").model("Schema 模式").maxTokens(2048).build()));
+        assertFalse(mapper.writeValueAsString(nativeRequest.prompt().getMessages()).contains("最多600字"));
+        assertTrue(Objects.requireNonNull(nativeRequest.prompt().getOptions()).findResponseSchema().isPresent());
+        when(model.getJsonOutputSupport(any())).thenReturn(LLMJsonSupport.OBJECT);
+        var objectPrompt = service.prepareRequest(new LLMPrompt(prepared.prompt().getMessages(),
+                LLMModelOptions.builder().provider("route").model("对象模式").maxTokens(2048)
+                        .responseFormat(LLMResponseFormat.JSON).responseSchema(prepared.definition().schema()).build()));
+        assertTrue(mapper.writeValueAsString(objectPrompt.getMessages()).contains("最多600字"));
+        assertTrue(Objects.requireNonNull(objectPrompt.getOptions()).findResponseSchema().isEmpty());
 
         when(model.getJsonOutputSupport(any())).thenReturn(LLMJsonSupport.NONE);
         var logger = assertInstanceOf(Logger.class, LoggerFactory.getLogger(LLMJsonSupport.class));

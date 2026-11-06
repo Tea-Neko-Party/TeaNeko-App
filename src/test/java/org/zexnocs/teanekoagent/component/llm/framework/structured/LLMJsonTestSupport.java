@@ -18,10 +18,12 @@ import static org.mockito.Mockito.when;
 /**
  * 业务回归共用真实结构化服务，只替换类型发现与模型传输。
  * <br>2026/11/06：不通过模拟目标对象跳过描述、提示和严格绑定。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class LLMJsonTestSupport {
     /** 不实例化测试工具。 */
@@ -35,7 +37,10 @@ public final class LLMJsonTestSupport {
     public static LLMJsonService create(ILLMInteractionService interactions, ObjectMapper mapper) {
         return new LLMJsonService(schemas(Stickers.Analysis.class, MemoryLayers.Digest.class, StyleObservations.Analysis.class,
                 PersonalityLearningOutput.class, ProactiveOutput.class, LegacyReplyOutput.class), interactions, mapper,
-                new LLMJsonDiagnostics(false, "未启用的测试诊断"));
+                new LLMJsonDiagnostics(false, "未启用的测试诊断"),
+                // 2026/11/06：离线端口显式保留输入，供应商能力准备由协议集成测试覆盖。
+                mock(org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService.class,
+                        org.mockito.Mockito.CALLS_REAL_METHODS));
     }
 
     /**

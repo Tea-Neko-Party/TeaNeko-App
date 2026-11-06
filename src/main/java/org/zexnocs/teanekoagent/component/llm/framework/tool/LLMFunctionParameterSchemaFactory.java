@@ -9,6 +9,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMFunc
 import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.*;
 import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.description.Ignore;
+import org.zexnocs.teanekocore.framework.description.JsonConstraint;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.*;
@@ -27,11 +28,12 @@ import java.util.*;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/06：结构化输出复用类型描述，支持显式 JSON 字段名并拒绝重复声明。
+ * <br>2026/11/06：初始化时编译声明的长度、数量和枚举约束，运行时复用完整合同。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class LLMFunctionParameterSchemaFactory {
     /**
@@ -69,7 +71,8 @@ public final class LLMFunctionParameterSchemaFactory {
      * @return 参数 Schema
      */
     public static ILLMFunctionParameter fromParameter(Parameter parameter) {
-        return fromType(parameter.getParameterizedType(), getDescription(parameter));
+        // 2026/11/06：方法参数与输出字段共用可执行约束声明。
+        return constrain(fromType(parameter.getParameterizedType(), getDescription(parameter)), parameter);
     }
 
     /**
@@ -238,7 +241,8 @@ public final class LLMFunctionParameterSchemaFactory {
             // 2026/11/06：声明和实际 JSON 绑定采用同一显式字段名，冲突不静默覆盖。
             var declared = field.getAnnotation(JsonProperty.class);
             var name = declared == null || declared.value().isEmpty() ? field.getName() : declared.value();
-            if (properties.putIfAbsent(name, fromType(field.getGenericType(), getDescription(field), visiting)) != null) {
+            // 2026/11/06：只在描述构建期间读取约束，字段关系仍由领域事务复核。
+            if (properties.putIfAbsent(name, constrain(fromType(field.getGenericType(), getDescription(field), visiting), field)) != null) {
                 throw new IllegalArgumentException("JSON 描述字段重复：" + clazz.getName() + "." + name);
             }
             if (isRequired(field)) {
@@ -349,5 +353,18 @@ public final class LLMFunctionParameterSchemaFactory {
     private static @Nullable String getDescription(AnnotatedElement element) {
         var description = element.getAnnotation(Description.class);
         return description == null ? null : description.value();
+    }
+
+    /**
+     * 2026/11/06：将显式约束附加到已有类型结构；不从 description 猜测容量或枚举。
+     * @param source 类型描述
+     * @param element 初始化时已发现的字段或参数
+     * @return 收紧后的描述，无注解时返回原描述
+     */
+    private static ILLMFunctionParameter constrain(ILLMFunctionParameter source, AnnotatedElement element) {
+        var annotation = element.getAnnotation(JsonConstraint.class);
+        return annotation == null ? source : new ConstrainedLLMFunctionParameter(source,
+                new LLMParameterLimits(annotation.minLength(), annotation.maxLength(), annotation.minItems(), annotation.maxItems()),
+                List.of(annotation.enumValues()));
     }
 }

@@ -6,10 +6,7 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.layered.IMemoryMaintenance;
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
 import org.zexnocs.teanekoagent.component.memory.layered.MemoryLayers;
-import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoagent.component.personality.IStyleObservationStore;
-import org.zexnocs.teanekoagent.component.personality.PersonalityCorrection;
-import org.zexnocs.teanekoagent.component.personality.StyleObservations;
+import org.zexnocs.teanekoagent.component.personality.*;
 import org.zexnocs.teanekoagent.database.easydata.EasyDataMaintenancePage;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
@@ -31,11 +28,12 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：合并同字段同场景的近义模式和真实证据，保留原采用水位。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public final class EasyDataStyleObservationStore implements IStyleObservationStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
@@ -84,8 +82,17 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
                 if (message.personality().equals(basis.identity()) && message.expiresAt().isAfter(now)
                         && message.message().occurredAt().plus(retention()).isAfter(now) && message.message().equals(evidence.message())) { ids.add(evidence.id()); }
             }
-            var known = data.get(group(batch.stream().reference().scope(), basis)).atomic().recent(Long.MAX_VALUE, 16).stream().map(row -> mapper.readValue(row.getValue(), Pattern.class))
+            var patterns = data.get(group(batch.stream().reference().scope(), basis)).atomic().recent(Long.MAX_VALUE, 64).stream().map(row -> mapper.readValue(row.getValue(), Pattern.class))
                     .filter(item -> item.samples().stream().anyMatch(sample -> sample.at().plus(retention()).isAfter(now)))
+                    .toList();
+            // 2026/11/06：先合并近义摘要再交给模型，避免 known 本身诱导重复模式。
+            var representatives = new ArrayList<Pattern>();
+            for (var pattern : patterns) {
+                if (representatives.stream().noneMatch(value -> similar(value, pattern.field(), pattern.context(), pattern.text()))) {
+                    representatives.add(pattern);
+                }
+            }
+            var known = representatives.stream().limit(16)
                     .map(item -> item.field() + " | " + item.context() + " | " + item.text()).toList();
             return new StyleObservations.Target(basis, fields, ids, known);
         });
@@ -105,14 +112,35 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
         var clock = data.get("adoption").atomic(); var clockRow = clock.find(group, EasyDataLock.WRITE);
         var last = clockRow == null ? Instant.EPOCH : Instant.parse(clockRow.getValue()); boolean adopted = false;
         for (var candidate : candidates) {
-            String id = StableDigest.sha256(candidate.field(), candidate.context().name(), candidate.pattern());
+            // 2026/11/06：已有近义记录优先复用，原文不同只合并新证据，不反复创建模式。
+            var matches = new ArrayList<>(dto.recent(Long.MAX_VALUE, 64).stream().map(value -> mapper.readValue(value.getValue(), Pattern.class))
+                    .filter(value -> similar(value, candidate.field(), candidate.context(), candidate.pattern()))
+                    .sorted(Comparator.comparing(Pattern::id)).toList());
+            String id = matches.isEmpty()
+                    ? StableDigest.sha256(candidate.field(), candidate.context().name(), StylePatternSimilarity.key(candidate.pattern()))
+                    : matches.getFirst().id();
+            // 旧版本按原文生成的退休标记仍有效，不因规范键升级而绕开采用水位。
+            if (matches.isEmpty()) {
+                var legacyId = StableDigest.sha256(candidate.field(), candidate.context().name(), candidate.pattern());
+                if (data.get("retired-" + group).atomic().find(legacyId, EasyDataLock.READ) != null) {
+                    id = legacyId;
+                }
+            }
             var row = dto.find(id, EasyDataLock.WRITE); var previous = row == null ? null : mapper.readValue(row.getValue(), Pattern.class);
+            // 2026/11/06：按键命中的旧记录可能已离开比较窗口，仍须保留其证据和采用水位。
+            if (previous != null && matches.stream().noneMatch(value -> value.id().equals(previous.id()))) {
+                matches.add(previous);
+            }
             // 2026/11/03：空观察可物理回收，采用水位单独保存，重新发现旧模式也不能用旧证据续期。
             var marker = data.get("retired-" + group).atomic().find(id, EasyDataLock.READ);
             var adoption = marker == null ? null : mapper.readValue(marker.getValue(), Adoption.class);
             var samples = new LinkedHashMap<String, Sample>();
-            if (previous != null) {
-                for (var sample : previous.samples()) { if (sample.at().plus(retention()).isAfter(now)) { samples.put(sample.key(), sample); } }
+            for (var match : matches) {
+                for (var sample : match.samples()) {
+                    if (sample.at().plus(retention()).isAfter(now)) {
+                        samples.putIfAbsent(sample.key(), sample);
+                    }
+                }
             }
             for (var quote : candidate.quotes()) {
                 var evidence = batch.evidence().stream().filter(value -> value.id().equals(quote.evidenceId())).findFirst().orElseThrow();
@@ -124,8 +152,8 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
                 samples.putIfAbsent(key, new Sample(key, original.source(), segment.id(), quote.text(), original.occurredAt()));
             }
             var support = samples.values().stream().sorted(Comparator.comparing(Sample::at).reversed()).limit(12).toList();
-            Instant adoptedAt = previous == null ? null : previous.adoptedAt();
-            Instant adoptedUntil = previous == null ? null : previous.adoptedUntil();
+            Instant adoptedAt = matches.stream().map(Pattern::adoptedAt).filter(Objects::nonNull).max(Instant::compareTo).orElse(null);
+            Instant adoptedUntil = matches.stream().map(Pattern::adoptedUntil).filter(Objects::nonNull).max(Instant::compareTo).orElse(null);
             if (previous == null && adoption != null) { adoptedAt = adoption.at(); adoptedUntil = adoption.until(); }
             Instant priorAdoption = adoptedAt;
             var fresh = support.stream().filter(sample -> priorAdoption == null || sample.at().isAfter(priorAdoption)).toList();
@@ -143,10 +171,44 @@ public final class EasyDataStyleObservationStore implements IStyleObservationSto
                     clock.save(clockRow);
                 }
             }
-            var json = mapper.writeValueAsString(new Pattern(id, candidate.field(), candidate.pattern(), candidate.context(), support, adoptedAt, adoptedUntil));
+            var text = previous == null ? candidate.pattern() : previous.text();
+            var json = mapper.writeValueAsString(new Pattern(id, candidate.field(), text, candidate.context(), support, adoptedAt, adoptedUntil));
             if (row == null) { row = dto.create(id, json); } else { row.setValue(json); } dto.save(row);
+            for (var duplicate : matches) {
+                if (duplicate.id().equals(id)) {
+                    continue;
+                }
+                var duplicateRow = dto.find(duplicate.id(), EasyDataLock.WRITE);
+                if (duplicateRow != null) {
+                    // 保留旧标识采用水位；别名重新出现也不能靠旧样本自动续期。
+                    if (duplicate.adoptedAt() != null) {
+                        var markers = data.get("retired-" + group).atomic();
+                        var retired = markers.find(duplicate.id(), EasyDataLock.WRITE);
+                        var markerJson = mapper.writeValueAsString(new Adoption(duplicate.adoptedAt(), duplicate.adoptedUntil()));
+                        if (retired == null) {
+                            retired = markers.create(duplicate.id(), markerJson);
+                        } else {
+                            retired.setValue(markerJson);
+                        }
+                        markers.save(retired);
+                    }
+                    dto.delete(duplicateRow);
+                }
+            }
         }
         guard.run();
+    }
+
+    /**
+     * 同字段、同场景才比较语义，不能跨群体用途合并。
+     * @param known 已有模式
+     * @param field 新字段
+     * @param context 新场景
+     * @param text 新描述
+     * @return 是否能复用该模式
+     */
+    private static boolean similar(Pattern known, String field, StyleObservations.Context context, String text) {
+        return known.field().equals(field) && known.context() == context && StylePatternSimilarity.equivalent(known.text(), text);
     }
     /**
      * 观察按 scope 与人格管理身份隔离，不按共享 namespace 混合群体表达。

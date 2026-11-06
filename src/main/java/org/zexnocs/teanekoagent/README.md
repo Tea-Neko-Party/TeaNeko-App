@@ -18,6 +18,7 @@ v4.6.2-l 交付拟人分段、发送节奏、共享表情包采集/选图/管理
 | 数据库入口 | [专用 EasyData](database/easydata/README.md) |
 | 空间、本人事实和画像 | [空间](component/memory/namespace/README.md)、[事实](component/memory/fact/README.md)、[画像](component/memory/profile/README.md) |
 | 人格与补正 | [人格说明](component/personality/README.md) |
+| 跨聊天回忆、私聊、好感度、心情及主动关怀 | [社交组件](../../../../../../docs/development/agent-social-memory.md) |
 | 历史与后台摘要 | [历史](component/memory/history/README.md)、[摘要](component/memory/summary/README.md) |
 | Skill、显式协作与扩展 | [Skill](component/skill/README.md)、[协作](runtime/workflow/README.md)、[扩展](component/tool/extension/README.md) |
 | 提醒与自然语言任务 | [任务说明](component/schedule/README.md) |

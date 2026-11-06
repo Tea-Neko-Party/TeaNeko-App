@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces;
 
+import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.LLMParameterLimits;
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import java.util.List;
@@ -14,9 +16,16 @@ import java.util.Map;
  * @author zExNocs
  * @date 2026/03/27
  * @since 4.4.0
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public interface ILLMFunctionParameter {
+    /**
+     * 2026/11/06：未声明约束的既有扩展保持原合同，已声明约束同时用于协议和本地校验。
+     * @return 固定容量限制
+     */
+    default LLMParameterLimits getLimits() {
+        return LLMParameterLimits.NONE;
+    }
     /**
      * 获取参数在 JSON Schema 中的基础类型。
      * <br>常见取值包括 {@code object}、{@code array}、{@code string}、{@code number}、{@code integer} 与 {@code boolean}。

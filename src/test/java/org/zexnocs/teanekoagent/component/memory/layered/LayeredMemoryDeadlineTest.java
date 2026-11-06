@@ -31,11 +31,12 @@ import static org.mockito.Mockito.*;
 /**
  * 使用受控时钟验证中长期整理的阶段计时、超时退避及在途占用，不连接数据库或模型。
  * <br>2026/11/06：沿用携带失败原因的退避接口，核对超时后的持久阶段仍被等待。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
  *
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Timeout(5)
 class LayeredMemoryDeadlineTest {
@@ -94,13 +95,14 @@ class LayeredMemoryDeadlineTest {
         }
     }
 
-    /**
+/**
      * 借用模拟时钟与调度器，只显式触发截止检查，不创建等待线程。
+     * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
      *
      * @author zExNocs
      * @date 2026/11/05
      * @since 4.8.3-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     private static final class Harness implements AutoCloseable {
         final Instant start = Instant.parse("2026-11-05T07:00:00Z");
@@ -132,7 +134,9 @@ class LayeredMemoryDeadlineTest {
                     List.of(new MemoryLayers.Message(1, message, "人格", start.plusSeconds(3600))));
             var segment = new MemoryLayers.Segment(UUID.randomUUID(), stream, 1, 1, "指纹",
                     new MemoryLayers.Digest("摘要", "待整理片段"), start, start, start);
-            longBatch = new LongMemories.Batch(stream, UUID.randomUUID(), List.of(segment), List.of(), "指纹");
+            // 2026/11/06：真实模型阶段需要有效证据，空证据现在直接完成筛选。
+            longBatch = new LongMemories.Batch(stream, UUID.randomUUID(), List.of(segment),
+                    List.of(new LongMemories.Evidence("证据", 1, message)), "指纹");
             Clock clock = mock();
             when(clock.instant()).thenAnswer(call -> now.get());
             ScheduledExecutorService scheduler = mock();

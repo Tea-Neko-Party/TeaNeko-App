@@ -131,6 +131,7 @@ function open(id: string) {
       <article v-for="item in catalog.components" :key="item.id" class="assembly-card" :class="{'is-installed': !!assembly.components[item.id]}">
         <div class="assembly-card-heading"><strong>{{ item.name }}</strong><ElSwitch :model-value="!!assembly.components[item.id]" :disabled="disabled || item.id === 'llm'" :aria-label="'安装' + item.name" @change="value => toggle(item.id, !!value)" /></div>
         <p class="small muted">{{ item.description }}</p>
+        <p class="component-dependencies small"><span class="muted">依赖</span> {{ item.requires.map(id => catalog?.components.find(entry => entry.id === id)?.name ?? id).join('、') || '无' }}</p>
         <!-- 2026/11/05：安装状态由开关表达，仅保留必要标识；参数入口统一靠卡片底部右侧。 -->
         <div class="assembly-card-actions">
           <ElTag v-if="item.id === 'llm'" size="small">必要组件</ElTag>

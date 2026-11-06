@@ -38,12 +38,38 @@ import static org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocati
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：明确工具控制仅借用，并保留公开工具目录的只读异常验证。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 class LLMToolSetTest {
+    /** 2026/11/06：冻结定义保留容量约束，超限工具参数不会执行实际副作用。 */
+    @Test
+    void frozenToolRetainsExecutableStringLimits() {
+        var limited = new ConstrainedLLMFunctionParameter(new LLMStringFunctionParameter("受限文本"),
+                new LLMParameterLimits(1, 4, -1, -1), List.of());
+        var definition = LLMTool.builder().name("limited").description("离线容量验证")
+                .parameters(AbstractLLMFunctionParameter.object("参数", Map.of("text", limited), List.of("text"))).build();
+        var executed = new AtomicInteger();
+        var binding = new LLMToolBinding(definition, (call, context) -> {
+            executed.incrementAndGet();
+            return CompletableFuture.completedStage("完成");
+        });
+        var schema = mapper.valueToTree(LLMFunctionParameterJsonMapper.toJsonSchema(binding.definition().getParameters()));
+        assertEquals(4, schema.path("properties").path("text").path("maxLength").intValue());
+        try (var control = ExecutionControl.create()) {
+            var tools = new LLMToolSet(mapper, List.of(binding));
+            assertEquals(INVALID_ARGUMENTS, tools.execute(call("limited", "{\"text\":\"超过四字上限\"}"),
+                    context(control)).toCompletableFuture().join().status());
+            assertEquals(0, executed.get());
+            assertEquals(SUCCESS, tools.execute(call("limited", "{\"text\":\"好\"}"),
+                    context(control)).toCompletableFuture().join().status());
+            assertEquals(1, executed.get());
+        }
+    }
     /**
      * 2026/11/05：通过通用列表契约验证工具目录只读，不把有意失败的修改当作正常用法。
      * 2026/11/05：明确工具控制仅借用，并保留公开工具目录的只读异常验证。

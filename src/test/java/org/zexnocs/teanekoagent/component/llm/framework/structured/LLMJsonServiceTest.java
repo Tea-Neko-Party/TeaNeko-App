@@ -32,6 +32,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -45,12 +46,42 @@ import static org.mockito.Mockito.*;
 /**
  * 结构化输出合同、异步返回和安全诊断的离线回归。
  * <br>2026/11/06：覆盖缓存发布、实际提示、严格绑定、撤销及受限原文归档。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 class LLMJsonServiceTest {
+    /** 2026/11/06：标准约束进入协议且在 Java 解码前执行，不能仅靠自然语言说明。 */
+    @Test
+    void enforcesDeclaredLengthsCountsAndStringEnums() {
+        var schemas = LLMJsonTestSupport.schemas(LegacyReplyOutput.class,
+                org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis.class);
+        var legacy = schemas.require(LegacyReplyOutput.class);
+        var tree = mapper.valueToTree(legacy.schema().schema()).path("properties").path("messages");
+        assertEquals(32, tree.path("maxItems").intValue());
+        assertEquals(2000, tree.path("items").path("properties").path("text").path("maxLength").intValue());
+        assertEquals(3, tree.path("items").path("properties").path("mode").path("enum").size());
+        var codec = new LLMJsonCodec(mapper);
+        for (var text : List.of(
+                mapper.writeValueAsString(Map.of("teaneko_reply", 1, "messages",
+                        java.util.Collections.nCopies(33, Map.of("mode", "plain", "text", "测试")))),
+                mapper.writeValueAsString(Map.of("teaneko_reply", 1, "messages",
+                        List.of(Map.of("mode", "plain", "text", "字".repeat(2001))))),
+                mapper.writeValueAsString(Map.of("teaneko_reply", 1, "messages",
+                        List.of(Map.of("mode", "private-value", "text", "测试")))))) {
+            var failure = assertThrows(LLMJsonException.class,
+                    () -> codec.read(LegacyReplyOutput.class, legacy, text, UUID.randomUUID()));
+            assertEquals(LLMJsonException.Code.JSON_SHAPE, failure.code());
+            assertFalse(failure.getMessage().contains("private-value"));
+        }
+        var analysis = mapper.valueToTree(schemas.require(
+                org.zexnocs.teanekoagent.component.personality.StyleObservations.Analysis.class).schema().schema());
+        assertEquals(4, analysis.path("properties").path("memories").path("maxItems").intValue());
+        assertEquals(2, analysis.path("properties").path("styles").path("maxItems").intValue());
+    }
     @TempDir Path directory;
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -129,7 +160,7 @@ class LLMJsonServiceTest {
         var input = new LLMPrompt(LLMUserMessage.builder().contents(new LLMContentListBuilder().addText("摘要资料").build()).build(), original);
         var prepared = service.prepare(MemoryLayers.Digest.class, input);
         assertEquals(LLMResponseFormat.TEXT, original.getResponseFormat());
-        assertEquals(LLMResponseFormat.JSON, prepared.prompt().getOptions().getResponseFormat());
+        assertEquals(LLMResponseFormat.JSON, Objects.requireNonNull(prepared.prompt().getOptions()).getResponseFormat());
         assertEquals(2048, prepared.prompt().getOptions().getMaxTokens());
         assertTrue(mapper.writeValueAsString(prepared.prompt().getMessages()).contains("最多600字"));
         var pending = new CompletableFuture<LLMInteractionResult>();

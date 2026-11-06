@@ -8,6 +8,7 @@ import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonType;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.framework.description.JsonConstraint;
 
 import java.time.Instant;
 import java.util.*;
@@ -23,11 +24,12 @@ import java.util.*;
  * <br>2026/11/05：目录保留独立删除决定计数，不再内嵌所有已回收墓碑。
  * <br>2026/11/06：分析类型声明字段语义与输出容量，复用统一 JSON 合同。
  * <br>2026/11/06：作业明确声明恢复责任，只有已结束并释放资源的状态可转为短期观察。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 public final class Stickers {
     /** 不实例化数据命名空间。 */
@@ -46,7 +48,7 @@ public final class Stickers {
      * @version 4.8.0-l
      */
     public enum Kind { STICKER, ILLUSTRATION, PHOTO, SCREENSHOT, OTHER, UNKNOWN }
-    /**
+/**
      * 单次模型判定；宿主仍独立校验类型、类别和阈值。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
      *
@@ -55,6 +57,8 @@ public final class Stickers {
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
+     * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+     *
      * @param kind 视觉类型
      * @param confidence 类型置信度
      * @param worthKeeping 收藏建议
@@ -67,7 +71,7 @@ public final class Stickers {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     // 2026/11/06：字段说明共用于模型提示、原生 Schema 和严格绑定。
     @LLMJsonType(maxCharacters = 4096)
@@ -76,12 +80,12 @@ public final class Stickers {
             @Description("视觉类型；有明确聊天反应用途才是 STICKER，无法确定为 UNKNOWN。") Kind kind,
             @Description("类型置信度，0 至 1。") double confidence,
             @Description("是否建议收藏；最终准入由宿主决定。") boolean worthKeeping,
-            @Description("非空客观画面描述，最多160字；不推测作者身份。") String visualDescription,
-            @Description("聊天用途与反讽歧义，最多80字。") String usageDescription,
-            @Description("从宿主提供的类别ID中选择，最多32字；非表情包可为空字符串。") String primaryCategory,
-            @Description("最多4个非空标签，每个最多24字。") List<String> secondaryTags,
+            @Description("非空客观画面描述，最多160字；不推测作者身份。") @JsonConstraint(minLength = 1, maxLength = 160) String visualDescription,
+            @Description("聊天用途与反讽歧义，最多80字。") @JsonConstraint(maxLength = 80) String usageDescription,
+            @Description("从宿主提供的类别ID中选择，最多32字；非表情包可为空字符串。") @JsonConstraint(maxLength = 32) String primaryCategory,
+            @Description("最多4个非空标签，每个最多24字。") @JsonConstraint(maxItems = 4) List<String> secondaryTags,
             @Description("表达清晰、易读与通用程度的综合分数，0 至 1。") double quality,
-            @Description("简短判定依据，最多160字。") String reasons){
+            @Description("简短判定依据，最多160字。") @JsonConstraint(maxLength = 160) String reasons){
         /**
          * 校验所有模型字段，额外字段由严格解析器拒绝。
          * @param kind 类型

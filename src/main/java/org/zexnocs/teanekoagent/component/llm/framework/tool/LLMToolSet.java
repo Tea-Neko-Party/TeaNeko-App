@@ -28,10 +28,12 @@ import static org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocati
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public final class LLMToolSet {
     public static final int DEFAULT_RESULT_CHARACTER_LIMIT = 8000;
@@ -202,9 +204,10 @@ public final class LLMToolSet {
                 }
                 yield valid && missing.isEmpty();
             }
-            case "array" -> value instanceof List<?> list && (schema.getItems() == null
+            // 2026/11/06：调用前落实已声明的容量边界，不截断后执行工具。
+            case "array" -> value instanceof List<?> list && schema.getLimits().acceptsItems(list.size()) && (schema.getItems() == null
                     || list.stream().allMatch(item -> validValue(item, schema.getItems(), depth + 1)));
-            case "string" -> value instanceof String string && (schema.getEnumValues().isEmpty()
+            case "string" -> value instanceof String string && schema.getLimits().accepts(string) && (schema.getEnumValues().isEmpty()
                     || schema.getEnumValues().contains(string));
             case "boolean" -> value instanceof Boolean;
             case "number" -> value instanceof Number;

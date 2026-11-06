@@ -29,11 +29,12 @@ import static org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespac
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：提供有界已存空间目录，查询不创建聊天绑定。
+ * <br>2026/11/06：提供事务内代次锁入口，供独立关系状态沿用权威换代仲裁。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.4-l
+ * @version 4.8.6-l
  */
 @Service
 public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore {
@@ -217,6 +218,23 @@ public final class EasyDataMemoryNamespaceStore implements IMemoryNamespaceStore
      * @return 原版本 DTO 或空
      */
     @Nullable EasyDataRow lockNamespace(MemoryNamespaceId id, EasyDataLock lock) { return dto("namespace").find(id.value(), lock); }
+
+    /**
+     * 2026/11/06：组件存储在既有事务中复用空间代次锁，避免清空空间与状态提交交错。
+     * @param reference 固定空间引用
+     * @param action 同一事务中的组件操作
+     * @param <T> 操作结果类型
+     * @return 当前代次内的操作结果
+     * @throws IllegalStateException 空间不存在或代次已变化时
+     */
+    public <T> T inGeneration(org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference reference,
+                              Supplier<T> action) {
+        var row = lockNamespace(reference.namespaceId(), EasyDataLock.READ);
+        if (row == null || namespace(row, reference.namespaceId()).generation() != reference.generation()) {
+            throw new IllegalStateException("组件状态所属记忆空间不存在或已经换代。");
+        }
+        return action.get();
+    }
 
     /**
      * 定位个人配额索引；缺失时首次插入仍由数据库唯一键仲裁。

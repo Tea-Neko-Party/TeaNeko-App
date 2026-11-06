@@ -5,6 +5,7 @@ package org.zexnocs.teanekoagent.component.memory.layered;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.framework.description.JsonConstraint;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.time.Instant;
@@ -19,10 +20,12 @@ import java.util.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：长期候选与引用字段加入统一结构说明。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class LongMemories {
     /** 禁止实例化领域契约容器。 */
@@ -78,24 +81,26 @@ public final class LongMemories {
      * @version 4.8.0-l
      */
     public record Evidence(String id, long sequence, HistoryMessage message) { }
-    /**
+/**
      * 模型提出的原话引用，必须在事务中与对应原消息逐字核对。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
+     * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+     *
      * @param evidenceId 宿主提供的证据标识
      * @param text 原始消息中的连续片段
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     // 2026/11/06：引用字段加入统一输出描述，证据仍由原事务校验。
     public record Quote(
-            @Description("本批真实证据ID，必须来自输入 evidenceMap。") String evidenceId,
-            @Description("该证据中的逐字连续原话，不拼接、不改标点；非空且最多512字。") String text) {
+            @Description("本批真实证据ID，必须来自输入 evidenceMap。") @JsonConstraint(minLength = 1) String evidenceId,
+            @Description("该证据中的逐字连续原话，不拼接、不改标点；非空且最多512字。") @JsonConstraint(minLength = 1, maxLength = 512) String text) {
         /**
          * 限制引用容量，空引用不能证明事实。
          * @param evidenceId 证据标识
@@ -108,13 +113,15 @@ public final class LongMemories {
             }
         }
     }
-    /**
+/**
      * 结构化长期候选；重要时间保留原话表达，不由模型补造精确时间点。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
+     * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+     *
      * @param kind 事实、偏好或事件
      * @param subjectId 事实主体，事件可为空
      * @param attribute 语义属性
@@ -126,18 +133,18 @@ public final class LongMemories {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     // 2026/11/06：统一描述完整候选，包括可空主体及真实证据关系。
     public record Candidate(
             @Description("FACT 为事实，PREFERENCE 为偏好，EPISODE 为共同经历。") Kind kind,
             @Description("事实或偏好的真实作者 UUID；EPISODE 为 null，不猜测或创造身份。") @Nullable UUID subjectId,
-            @Description("简短稳定语义属性，如 preference.drink；非空且最多64字。") String attribute,
-            @Description("有证据的非空事实或经历摘要，最多512字。") String text,
+            @Description("简短稳定语义属性，如 preference.drink；非空且最多64字。") @JsonConstraint(minLength = 1, maxLength = 64) String attribute,
+            @Description("有证据的非空事实或经历摘要，最多512字。") @JsonConstraint(minLength = 1, maxLength = 512) String text,
             @Description("共存用 ADD，原话明确改变单值属性才用 REPLACE，不确定用 CONFLICT；EPISODE 必须 ADD。") Mode mode,
-            @Description("最多4条逐字引用；事实和偏好至少1条。") List<Quote> quotes,
-            @Description("1至4个本批真实片段 UUID，每条引用须落在这些片段内。") List<UUID> segments,
-            @Description("默认空字符串；重要时间仅复制原话表达，不补造，最多128字。") String timeHint) {
+            @Description("最多4条逐字引用；事实和偏好至少1条。") @JsonConstraint(maxItems = 4) List<Quote> quotes,
+            @Description("1至4个本批真实片段 UUID，每条引用须落在这些片段内。") @JsonConstraint(minItems = 1, maxItems = 4) List<UUID> segments,
+            @Description("默认空字符串；重要时间仅复制原话表达，不补造，最多128字。") @JsonConstraint(maxLength = 128) String timeHint) {
         /**
          * 固定有界候选，不接受模型自报权限或未定位的事实主体。
          * @param kind 记忆类型
@@ -312,5 +319,9 @@ public final class LongMemories {
      * @param evidence 原证据 JSON
      * @return 稳定输入指纹
      */
-    public static String fingerprint(String segments, String evidence) { return StableDigest.sha256("long-memory-v1", segments, evidence); }
+    public static String fingerprint(String segments, String evidence) {
+        // 2026/11/06：协议升级不复用旧输入失败计数；相同版本及证据保留固定幂等键。
+        return StableDigest.sha256(LongMemoryLearningPolicy.PROMPT_VERSION, LongMemoryLearningPolicy.SCHEMA_VERSION,
+                segments, evidence);
+    }
 }

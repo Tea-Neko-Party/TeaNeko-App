@@ -36,10 +36,12 @@ import java.util.Map;
  *
  * <br>2026/11/05：模型目录完整校验后原子发布，重扫失败保留原快照。
  * <br>2026/11/06：按适配器 JSON 能力发送请求，路由覆盖不重置输出格式。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
@@ -305,10 +307,26 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         LLMInputValidator.validate(prompt.getMessages(), model.getCapabilities(options.getModel()));
         // 2026/11/04：直调与工具循环均检查完整输入，额度不足不改变 max-tokens。
         options.findContextWindow().ifPresent(context -> {
-            var input = contextEstimator.estimate(new LLMPrompt(prompt.getMessages(), options, LLMOptionsPolicy.RESOLVED));
+            // 2026/11/06：容量预检使用实际协议结构，避免重复计算 Schema 提示。
+            var input = contextEstimator.estimate(new LLMPrompt(
+                    model.getJsonOutputSupport(options.getModel()).messages(prompt.getMessages(), options),
+                    checked, LLMOptionsPolicy.RESOLVED));
             context.requireFits(input.inputTokens(), options.getMaxTokens());
         });
         return options;
+    }
+
+    /**
+     * 2026/11/06：预算、输入快照和实际调用共用已适配消息及原生输出选项。
+     * @param prompt 原宿主输入
+     * @return 固定的协议输入
+     */
+    @Override
+    public ILLMPrompt prepareRequest(ILLMPrompt prompt) {
+        var options = resolveOptions(prompt);
+        var support = getModel(options.getProvider()).getJsonOutputSupport(options.getModel());
+        return new LLMPrompt(support.messages(prompt.getMessages(), options),
+                support.adapt(options, false), LLMOptionsPolicy.RESOLVED);
     }
 
     /**
@@ -344,7 +362,17 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         // 2026/11/06：实际请求仅发送声明支持的原生格式；不支持 JSON 时明确告警。
         var nativeOptions = options.findResponseFormat().orElse(LLMResponseFormat.TEXT) == LLMResponseFormat.JSON
                 ? model.getJsonOutputSupport(options.getModel()).adapt(options, true) : options;
-        var effective = new LLMPrompt(prompt.getMessages(), nativeOptions, LLMOptionsPolicy.RESOLVED);
+        var support = model.getJsonOutputSupport(options.getModel());
+        // 2026/11/06：提前适配后的不支持模式仍在真实调用边界告警一次。
+        if (support == org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonSupport.NONE
+                && options.getResponseFormat() != LLMResponseFormat.JSON
+                && prompt.getMessages().stream().anyMatch(
+                        org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction.class::isInstance)) {
+            var requested = LLMModelOptions.copyOf(options);
+            requested.setResponseFormat(LLMResponseFormat.JSON);
+            support.adapt(requested, true);
+        }
+        var effective = new LLMPrompt(support.messages(prompt.getMessages(), options), nativeOptions, LLMOptionsPolicy.RESOLVED);
         // 2026/11/02：等待供应商实际完成后再复核，不把禁用解释为已经撤销远端请求。
         var token = pluginToken(model);
         var result = execution == null ? model.call(effective) : model.call(effective, execution);

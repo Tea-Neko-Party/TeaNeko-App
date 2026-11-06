@@ -50,11 +50,12 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/06：异步任务中的断言及其他致命失败也完成观察阶段，避免测试无期限等待。
  * <br>2026/11/06：两表共用事务夹具，验证跨表迁移回滚与临时清理。
+ * <br>2026/11/06：事务夹具补齐可清理表的目标内近期分页，验证共享索引原事务行为。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 final class NamespaceDatabaseFixture implements AutoCloseable {
     final TeaNekoAgentEasyDataRepository repository = mock(TeaNekoAgentEasyDataRepository.class);
@@ -170,6 +171,17 @@ final class NamespaceDatabaseFixture implements AutoCloseable {
                 .thenAnswer(call -> temporaryPage(call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4)));
         when(temporaryRepository.scanDataForWrite(anyString(), anyString(), anyString(), org.mockito.ArgumentMatchers.nullable(String.class), any()))
                 .thenAnswer(call -> temporaryPage(call.getArgument(0), call.getArgument(1), call.getArgument(2), call.getArgument(3), call.getArgument(4)));
+        // 2026/11/06：可重建参与者索引沿用真实 DTO 的目标内最近记录查询。
+        when(temporaryRepository.findByNamespaceAndTargetAndIdLessThanOrderByIdDesc(anyString(), anyString(),
+                org.mockito.ArgumentMatchers.anyLong(), any())).thenAnswer(call -> {
+                    String domain = call.getArgument(0), target = call.getArgument(1);
+                    long before = call.getArgument(2);
+                    Pageable page = call.getArgument(3);
+                    return transaction.get().rows.values().stream().filter(row -> row instanceof CleanableEasyDataObject
+                                    && row.getNamespace().equals(domain) && row.getTarget().equals(target) && row.getId() < before)
+                            .sorted(Comparator.comparingLong(BaseEasyDataObject::getId).reversed()).limit(page.getPageSize())
+                            .map(row -> (CleanableEasyDataObject) row).toList();
+                });
         when(temporaryRepository.findByNamespaceAndIdLessThanOrderByIdDesc(anyString(), org.mockito.ArgumentMatchers.anyLong(), any()))
                 .thenAnswer(call -> {
                     String domain = call.getArgument(0);

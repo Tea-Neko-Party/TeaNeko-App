@@ -4,6 +4,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonType;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.framework.description.JsonConstraint;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.time.Instant;
@@ -20,10 +21,12 @@ import java.util.UUID;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：摘要类型加入统一 JSON 输出声明及字段描述。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class MemoryLayers {
     /** 禁止实例化只提供数据契约的类型。 */
@@ -129,25 +132,27 @@ public final class MemoryLayers {
             }
         }
     }
-    /**
+/**
      * 模型只生成有界内容，来源、时间和水位由宿主确定。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/06：类型字段接入统一 JSON 结构描述。
+     * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+     *
      * @param brief 简短摘要
      * @param details 完整片段摘要，保留决定、纠正、重要日期及待办
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.3-l
+     * @version 4.8.6-l
      */
     // 2026/11/06：模型结构说明由类型生成，持久数据字段不变。
     @LLMJsonType(maxCharacters = 8000)
     public record Digest(
-            @Description("非空简短摘要，尽量200字内，最多600字。") String brief,
-            @Description("非空完整摘要，保留决定、纠正、重要日期和待办；尽量1200字内，最多4000字。") String details) {
+            @Description("非空简短摘要，尽量200字内，最多600字。") @JsonConstraint(minLength = 1, maxLength = 600) String brief,
+            @Description("非空完整摘要，保留决定、纠正、重要日期和待办；尽量1200字内，最多4000字。") @JsonConstraint(minLength = 1, maxLength = 4000) String details) {
         /**
          * 拒绝空摘要和超过既定容量的生成结果。
          * @param brief 简短摘要

@@ -11,6 +11,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMMod
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMUsage;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
 
 import java.lang.reflect.Array;
@@ -26,11 +27,12 @@ import java.util.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public final class LLMProtocolSnapshots {
     /** 禁止实例化无状态快照工具。 */
@@ -54,8 +56,8 @@ public final class LLMProtocolSnapshots {
      * @return 不含其他实例透明状态的不可变消息
      */
     public static List<ILLMMessage> independentMessages(List<ILLMMessage> source) {
-        return messages(source).stream().map(value -> (ILLMMessage) switch (value.getRole()) {
-            case SYSTEM -> new SystemMessage(value.getName(), value.getContents(), Map.of());
+        return messages(source).stream().map(value -> switch (value.getRole()) {
+            case SYSTEM -> value instanceof LLMJsonInstruction ? value : new SystemMessage(value.getName(), value.getContents(), Map.of());
             case USER -> new UserMessage(value.getName(), value.getContents(), Map.of());
             case ASSISTANT -> new AssistantMessage(value.getName(), value.getContents(), Map.of(), ((ILLMAssistantMessage) value).getToolCalls());
             case TOOL -> new ToolMessage(value.getName(), value.getContents(), Map.of(), ((ILLMToolMessage) value).getToolCallId());
@@ -71,6 +73,10 @@ public final class LLMProtocolSnapshots {
      */
     public static ILLMMessage message(ILLMMessage source) {
         Objects.requireNonNull(source, "消息不能为空。");
+        // 2026/11/06：结构指令本身不可变，保留类型供协议适配及日志去重使用。
+        if (source instanceof LLMJsonInstruction) {
+            return source;
+        }
         var contents = new ArrayList<ILLMContent>();
         if (source.getContents() != null) {
             for (var content : source.getContents()) {

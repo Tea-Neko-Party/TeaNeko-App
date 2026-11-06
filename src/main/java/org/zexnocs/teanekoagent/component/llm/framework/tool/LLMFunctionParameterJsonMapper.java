@@ -18,7 +18,7 @@ import java.util.Map;
  * @author zExNocs
  * @date 2026/06/10
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public final class LLMFunctionParameterJsonMapper {
@@ -36,6 +36,8 @@ public final class LLMFunctionParameterJsonMapper {
             return schema;
         }
         putIfNotBlank(schema, "type", parameter.getType());
+        // 2026/11/06：工具参数映射保留可执行容量限制，不仅输出 description。
+        schema.putAll(parameter.getLimits().schema());
         putIfNotBlank(schema, "description", parameter.getDescription());
         if (parameter.getProperties() != null && !parameter.getProperties().isEmpty()) {
             var properties = new LinkedHashMap<String, Object>();

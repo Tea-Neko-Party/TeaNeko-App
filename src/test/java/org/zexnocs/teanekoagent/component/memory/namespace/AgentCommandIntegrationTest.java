@@ -42,6 +42,8 @@ import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.component.personality.PersonalityService;
 import org.zexnocs.teanekoagent.component.personality.adapter.ConfiguredPersonalities;
 import org.zexnocs.teanekoagent.component.personality.adapter.EasyDataPersonalityStore;
+import org.zexnocs.teanekoagent.component.proactive.IProactiveContextSource;
+import org.zexnocs.teanekoagent.component.proactive.ProactiveContexts;
 import org.zexnocs.teanekoagent.component.proactive.adapter.ProactiveCoordinator;
 import org.zexnocs.teanekoagent.component.proactive.adapter.ProactiveService;
 import org.zexnocs.teanekoagent.component.proactive.adapter.ProactiveTargets;
@@ -151,11 +153,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：验证自动失败原因与开关、撤权边界。
  * <br>2026/11/05：验证网页私聊的最小装配经过真实事件总线完成自动和命令回复。
  * <br>2026/11/06：自主发言使用真实 JSON 合同并保持原发送管道。
+ * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Timeout(30)
 class AgentCommandIntegrationTest {
@@ -271,11 +274,12 @@ class AgentCommandIntegrationTest {
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
      *
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.6-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
@@ -434,6 +438,8 @@ class AgentCommandIntegrationTest {
                     gate, registry, references, personalities, configs, new AgentScopeConfigManager());
             tools = new AgentCommandToolSource(bridge, configs, new AgentScopeConfigManager(), db.mapper);
             var models = mock(ILLMModelService.class);
+            // 2026/11/06：简单离线端口沿用接口的原样准备合同，不让 Mockito 空值截断结构化主动请求。
+            when(models.prepareRequest(any(ILLMPrompt.class))).thenCallRealMethod();
             when(models.resolveOptions(any())).thenAnswer(call -> call.<ILLMPrompt>getArgument(0).getOptions());
             when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
                 ILLMPrompt prompt = call.getArgument(0); prompts.add(prompt);
@@ -1087,9 +1093,19 @@ class AgentCommandIntegrationTest {
             active(h); var source = incoming(h, "alice", "接话候选", false); var targets = proactiveTargets(h, source); var monitor = monitor(h);
             h.turns.observe(report -> { throw new IllegalStateException("坏观察器不能影响业务终态。"); });
             try (var proactive = proactive(h, targets, monitor, h.turns)) {
+                // 2026/11/06：模型后撤权仍未开始平台发送，扩展释放候选并保留自身冷却，不永久占用。
+                var contexts = mock(ProactiveContexts.class);
+                var session = mock(IProactiveContextSource.Session.class);
+                when(session.context()).thenReturn("");
+                when(session.verify(any())).thenReturn(CompletableFuture.completedStage(null));
+                when(session.finish(any())).thenReturn(CompletableFuture.completedStage(null));
+                when(contexts.prepare(any(), any(), any(), any(), any())).thenReturn(
+                        CompletableFuture.completedStage(new ProactiveContexts.Selection(true, List.of(session))));
+                proactive.setContexts(contexts);
                 var target = targets.from(source); h.automaticAnswer.set("{\"speak\":true,\"text\":\"旧候选\"}");
                 h.onModel.set(() -> h.config.setProactiveInterjectionEnabled(false));
                 assertEquals(AgentRuntimeMonitor.Delivery.FAILED, proactive.candidate(target, AgentTriggerGate.Kind.INTERJECTION, source.getMessageId(), "接话候选").toCompletableFuture().join());
+                verify(session).finish(AgentRuntimeMonitor.Delivery.ABSTAINED);
                 h.config.setProactiveInterjectionEnabled(true); h.onModel.set(() -> { });
                 assertEquals(AgentRuntimeMonitor.Delivery.SKIPPED, proactive.candidate(target, AgentTriggerGate.Kind.INTERJECTION, "新的发生", "再次候选").toCompletableFuture().join());
                 assertEquals(1, h.prompts.size()); assertTrue(h.client.getSentMessages().isEmpty());

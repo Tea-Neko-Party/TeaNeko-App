@@ -67,9 +67,10 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
     <div class="api-directory-caption"><p class="small muted">{{ mode === 'components' ? '按需装配组件，点击查看参数与执行系统。' : '选择客户端查看适用工具，通用工具始终包含在结果中。' }}</p><span class="small muted">{{ mode === 'components' ? visibleComponents.length : visibleTools.length }} 项</span></div>
     <div v-if="mode === 'components'" class="api-docs-grid">
       <article v-for="item in visibleComponents" :key="item.id" class="api-docs-card">
-        <button class="api-docs-summary" @click="showDetail(item.id)" :aria-label="'查看组件 ' + item.name">
+        <button class="api-docs-summary component-summary" @click="showDetail(item.id)" :aria-label="'查看组件 ' + item.name">
           <header><div><h3>{{ item.name }}</h3><code>{{ item.id }}</code></div><ElTag size="small">{{ item.id === 'llm' ? '必要' : '组件' }}</ElTag></header>
           <p class="api-docs-brief">{{ item.description }}</p>
+          <p class="component-dependencies small"><span class="muted">依赖</span> {{ item.requires.map(id => components.find(entry => entry.id === id)?.name ?? id).join('、') || '无' }}</p>
           <footer><span>{{ item.systems.length }} 个系统 · {{ item.fields.length }} 个参数</span><span class="api-docs-link">查看详情 →</span></footer>
         </button>
       </article>
@@ -88,7 +89,7 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
       <article v-if="mode === 'components' && componentDetail" class="api-docs-detail">
         <div class="api-detail-meta"><code>{{ componentDetail.id }}</code><ElTag size="small">协议 {{ componentDetail.version }}</ElTag></div>
         <p class="api-detail-description">{{ componentDetail.description }}</p>
-        <p v-if="componentDetail.requires.length" class="small muted">依赖：{{ componentDetail.requires.join('、') }}</p>
+        <p v-if="componentDetail.requires.length" class="small muted">依赖：{{ componentDetail.requires.map(id => components.find(entry => entry.id === id)?.name ?? id).join('、') }}</p>
         <section v-if="componentDetail.systems.length"><h3>执行系统 <small>{{ componentDetail.systems.length }}</small></h3>
           <div v-for="system in componentDetail.systems" :key="system.id" class="api-docs-field">
             <div class="api-detail-meta"><code>{{ system.id }}</code><ElTag size="small">{{ phases[system.phase] ?? system.phase }}</ElTag></div>

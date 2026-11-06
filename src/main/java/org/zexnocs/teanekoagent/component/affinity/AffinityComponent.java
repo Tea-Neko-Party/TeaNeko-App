@@ -1,0 +1,59 @@
+package org.zexnocs.teanekoagent.component.affinity;
+
+import org.zexnocs.teanekoagent.component.TeaNekoAgentComponent;
+import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.component.social.SocialAccess;
+import org.zexnocs.teanekoagent.component.social.SocialComponent;
+import org.zexnocs.teanekoagent.component.social.SocialState;
+import org.zexnocs.teanekoagent.component.social.SocialStateService;
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import tools.jackson.databind.JsonNode;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 独立、可序列化的亲近程度配置；状态按空间及真实用户共享。
+ * <br>2026/11/06：通过本轮模型工具评估有效互动，限制单次变化与评估频率。
+ * @author zExNocs
+ * @date 2026/11/06
+ * @since 4.8.6-l
+ * @version 4.8.6-l
+ */
+@TeaNekoAgentComponent(id = "affinity", order = 45, name = "好感度", description = "积累与你互动的亲近程度，影响称呼、关心与表达。", requires = {"memory", "tool"})
+@PluginOwned("teaneko.agent")
+public final class AffinityComponent extends SocialComponent {
+    /**
+     * @param states 事务状态
+     * @param access 当前配置
+     * @param references 空间复核
+     */
+    public AffinityComponent(SocialStateService states, SocialAccess access, IAgentMemoryReferences references) {
+        super("affinity", Map.of("enabled", true, "initial", 30, "positiveStep", 2, "negativeStep", 3, "cooldownMinutes", 60), List.of(
+                new Field("enabled", "启用好感度", "不改变基础人格与操作权限。", "BOOLEAN"),
+                new Field("initial", "初始亲近度", "0–100；只影响尚未建立关系的用户。", "NUMBER"),
+                new Field("positiveStep", "善意变化上限", "1–5；重复问候不加分。", "NUMBER"),
+                new Field("negativeStep", "受伤变化上限", "1–5；不因未回复自动扣分。", "NUMBER"),
+                new Field("cooldownMinutes", "评估冷却分钟", "15–1440；同一消息只评估一次。", "NUMBER")), states, access, references);
+    }
+    /**
+     * @param value 组件参数
+     * @throws IllegalArgumentException 数值范围不合理时
+     */
+    @Override public void validate(JsonNode value) {
+        super.validate(value);
+        range(value, "initial", 30, 0, 100);
+        range(value, "positiveStep", 2, 1, 5);
+        range(value, "negativeStep", 3, 1, 5);
+        range(value, "cooldownMinutes", 60, 15, 1440);
+    }
+    /**
+     * @param state 当前关系
+     * @param settings 当前参数
+     * @return 可读的亲近程度
+     */
+    @Override protected String describe(SocialState state, JsonNode settings) {
+        String closeness = state.affinity() < 20 ? "谨慎疏远" : state.affinity() < 45 ? "初识友好" : state.affinity() < 70 ? "熟悉亲近" : "非常亲近";
+        return "当前亲近程度：" + closeness + "（" + state.affinity() + "/100）。根据原人格自然表现，不向用户机械报告分数。";
+    }
+}

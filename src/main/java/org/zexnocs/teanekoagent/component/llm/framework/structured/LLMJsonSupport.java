@@ -1,17 +1,21 @@
 package org.zexnocs.teanekoagent.component.llm.framework.structured;
 
 import org.slf4j.LoggerFactory;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
+
+import java.util.List;
 
 /**
  * 适配器声明的原生 JSON 能力，与本地严格解码分离，不根据路由名猜测能力。
  * <br>2026/11/06：不支持时保留提示并明确警告，不发送供应商不支持的格式字段。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public enum LLMJsonSupport {
     /** 无原生约束，只能依靠结构提示和本地校验。 */
@@ -20,6 +24,20 @@ public enum LLMJsonSupport {
     OBJECT,
     /** 可发送严格 JSON Schema。 */
     SCHEMA;
+
+    /**
+     * 2026/11/06：仅在协议确实携带结构时压缩宿主指令，业务 system 消息原样保留。
+     * @param source 原消息
+     * @param options 尚未丢失 JSON 意图的选项
+     * @return 适配后的消息，不修改来源
+     */
+    public List<ILLMMessage> messages(List<ILLMMessage> source, LLMModelOptions options) {
+        boolean nativeSchema = this == SCHEMA && options.getResponseFormat() == LLMResponseFormat.JSON
+                && options.findResponseSchema().isPresent();
+        return source.stream().map(message -> message instanceof LLMJsonInstruction instruction
+                ? new LLMJsonInstruction(instruction.guidance(), instruction.schema(), nativeSchema)
+                : message).toList();
+    }
 
     /**
      * 为实际协议准备独立选项；预检不告警，真正请求只在降级时告警。

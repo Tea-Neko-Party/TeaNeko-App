@@ -18,11 +18,12 @@ import java.util.UUID;
 /**
  * 共享严格解码器，语法、字段结构与领域构造分别校验，禁止裁剪后伪造合法候选。
  * <br>2026/11/06：保留安全行列、字段及原输出结构，正文值不进入普通日志。
+ * <br>2026/11/06：本地验证标准字符串和数组边界，供应商支持不足时仍不放宽合同。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public final class LLMJsonCodec {
     private final ObjectMapper mapper;
@@ -105,6 +106,18 @@ public final class LLMJsonCodec {
             default -> false;
         };
         if (!matches) { return path + "：要求 " + type + "，实际=" + (node == null ? "空输出" : node.getNodeType()); }
+        // 2026/11/06：先校验容量，拒绝超限输出而非裁剪后写入。
+        if ("string".equals(type)) {
+            var value = node.stringValue();
+            int length = value.codePointCount(0, value.length());
+            if (schema.has("minLength") && length < schema.path("minLength").intValue()
+                    || schema.has("maxLength") && length > schema.path("maxLength").intValue()) {
+                return path + "：字符串长度不符合 Schema 约束，实际=" + length;
+            }
+        } else if ("array".equals(type) && (schema.has("minItems") && node.size() < schema.path("minItems").intValue()
+                || schema.has("maxItems") && node.size() > schema.path("maxItems").intValue())) {
+            return path + "：数组数量不符合 Schema 约束，实际=" + node.size();
+        }
         if ("object".equals(type)) {
             var properties = schema.path("properties");
             for (var name : properties.propertyNames()) {

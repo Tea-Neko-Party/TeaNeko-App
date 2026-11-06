@@ -30,11 +30,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/05：接入持久整理状态与原管理权限下的暂停恢复，不调用模型。
  *
  * <br>2026/11/06：全局空间只查共享长期资料，不展示虚构的聊天分区和整理状态。
+ * <br>2026/11/06：工作区共享事件与用户画像分别查询，不重复展示个人结论。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.8.6-l
  */
 @Service
 public final class AgentLayersConsoleService {
@@ -113,7 +114,7 @@ public final class AgentLayersConsoleService {
                 }
                 // 2026/11/06：实例空间不对应任何聊天分区，不能显示虚构的空整理作业。
                 if (AgentConsoleService.global(context)) {
-                    return longTerm.query(reference, query.subjectId(), query.topic(), 20).thenApply(learned -> {
+                    return longTerm(reference, query).thenApply(learned -> {
                         context.checkActive();
                         return new AgentLayersConsole.View(id.value(), namespace.generation(), List.of(),
                                 List.of(), 0, learned, null);
@@ -125,7 +126,7 @@ public final class AgentLayersConsoleService {
                     throw new IllegalStateException("中期记忆保留天数无效。");
                 }
                 return layers.read(reference, Instant.now(), Duration.ofDays(days)).thenCombine(
-                        longTerm.query(reference, query.subjectId(), query.topic(), 20), (view, learned) -> {
+                        longTerm(reference, query), (view, learned) -> {
                             context.checkActive();
                             var recent = view.recent().stream().map(value -> new AgentLayersConsole.Recent(
                                     value.sequence(), value.message().role().name(), clipped(value.message().text()),
@@ -142,6 +143,17 @@ public final class AgentLayersConsoleService {
                         });
             });
         });
+    }
+
+    /**
+     * 2026/11/06：共享事件页和用户画像沿用同一权威存储，仅选择不同查询范围。
+     * @param reference 固定空间
+     * @param query 原管理查询
+     * @return 截断前已完成领域筛选的长期条目
+     */
+    private CompletionStage<LongMemories.Result> longTerm(MemoryNamespaceReference reference, AgentLayersConsole.Query query) {
+        return query.eventsOnly() ? longTerm.events(reference, query.topic(), 20)
+                : longTerm.query(reference, query.subjectId(), query.topic(), 20);
     }
 
     /**

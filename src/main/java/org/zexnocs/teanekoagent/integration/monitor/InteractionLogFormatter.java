@@ -3,9 +3,8 @@ package org.zexnocs.teanekoagent.integration.monitor;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMToolMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -16,11 +15,12 @@ import java.util.Map;
  * 统一请求摘要与有界正文格式，不序列化任意供应商 metadata 或运行对象。
  * <br>2026/11/06：上下文、响应和公开推理字段集中输出；敏感值先脱敏，再转义、截断。
  * <br>2026/11/06：所有内容入口共用有界结构化脱敏，修复嵌套 JSON 和内联授权头遗漏。
+ * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.5-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 final class InteractionLogFormatter {
     private static final JsonMapper JSON = new JsonMapper();
@@ -49,7 +49,15 @@ final class InteractionLogFormatter {
         long reported = 0;
         long estimated = 0;
         int unknown = 0;
+        var models = new java.util.LinkedHashSet<String>();
+        var metricRedactor = new ObservationContentRedactor();
         for (var attempt : result.attempts()) {
+            attempt.response().ifPresent(response -> {
+                if (response.getModel() != null && !response.getModel().isBlank()) {
+                    var model = metricRedactor.redact(response.getModel()).replace('\n', ' ').replace('\r', ' ');
+                    models.add(model.substring(0, Math.min(model.length(), 128)));
+                }
+            });
             var usage = attempt.tokenUsage().orElse(null);
             if (usage == null) {
                 var supplied = attempt.usage().orElse(null);
@@ -66,89 +74,117 @@ final class InteractionLogFormatter {
             }
         }
         return "，模型调用=" + result.attempts().size() + "，工具调用=" + result.tools().size()
+                + "，响应模型=" + (models.isEmpty() ? "未取得" : String.join(" / ", models))
                 + "，已报告总token=" + reported + "，估算token=" + estimated + "，用量未知次数=" + unknown
                 + (result.failure() == null ? "" : "，" + result.failure());
     }
 
     /**
-     * 输出每个实际尝试的输入、响应及供应商提供的推理；不开启内容时不遍历消息。
+     * 2026/11/06：按稳定分组输出一次输入及最终回复，诊断项独立选择并按原文去重。
      * @param result 原交互
      * @param settings 正文选择与上限
-     * @return 单条日志附加正文，超过限制明确标记
+     * @return 一条日志事件的附加正文
      */
     static String details(LLMInteractionResult result, AgentObservationFileConfig settings) {
-        if (!settings.isIncludeContext() && !settings.isIncludeReasoning()) {
-            return "";
-        }
         var out = new InteractionLogFormatter(settings);
-        for (var attempt : result.attempts()) {
-            if (out.truncated) {
-                break;
+        if (settings.isIncludeContext()) {
+            if (settings.isIncludeUser()) {
+                result.attempts().stream().flatMap(attempt -> attempt.input().stream()).findFirst().flatMap(input -> input.messages().reversed().stream()
+                        .filter(message -> message.getRole()
+                                == org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole.USER)
+                        .findFirst()).ifPresent(message -> out.message("本轮用户输入", message));
             }
-            out.add("模型尝试", Integer.toString(attempt.number()));
-            if (settings.isIncludeContext()) {
-                if (attempt.input().isEmpty()) {
-                    out.add("输入", "未取得实际输入观察");
-                } else {
-                    var input = attempt.input().orElseThrow();
-                    out.add("协议声明", input.declaration());
-                    for (var message : input.messages()) {
-                        if (out.truncated) {
-                            break;
-                        }
-                        out.message("输入", message);
+            if (settings.isIncludeFinalOutput()) {
+                result.finalCandidate().ifPresent(message -> out.message("最终回复", message));
+            }
+            var systems = new java.util.LinkedHashSet<String>();
+            var declarations = new java.util.LinkedHashSet<String>();
+            for (var attempt : result.attempts()) {
+                attempt.input().ifPresent(input -> {
+                    if (settings.isIncludeSchema()) {
+                        out.protocol(input.declaration(), declarations);
                     }
-                }
-            }
-            var response = attempt.response().orElse(null);
-            if (response == null) {
-                out.add("响应", "未取得");
-            } else {
-                out.add("响应模型", response.getModel());
-                response.getChoices().forEach(choice -> {
-                    out.add("结束原因", choice.getFinishReason());
-                    if (choice.getMessage() != null) {
-                        out.message("响应", choice.getMessage());
+                    for (var message : input.messages()) {
+                        if (message instanceof LLMJsonInstruction (
+                                String guidance, String schema, boolean nativeSchema
+                        )) {
+                            // 2026/11/06：JSON 行为要求属于 system，字段结构由独立 Schema 开关控制。
+                            if (settings.isIncludeSystem() && systems.add(guidance)) {
+                                out.add("系统输入", guidance);
+                            }
+                            if (settings.isIncludeSchema() && !nativeSchema
+                                    && declarations.add(schema)) {
+                                out.add("结构说明", schema);
+                            }
+                        } else if (settings.isIncludeSystem() && message.getRole()
+                                == org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole.SYSTEM) {
+                            var text = content(message);
+                            if (systems.add(text)) {
+                                out.message("系统输入", message);
+                            }
+                        }
                     }
                 });
             }
+            if (settings.isIncludeTools()) {
+                result.tools().forEach(tool -> {
+                    out.add("工具调用", "名称：" + tool.call().getName() + "；编号：" + tool.call().getId() + "；状态：" + tool.status());
+                    out.add("  参数", tool.call().getArguments());
+                    out.add("  结果", tool.output());
+                });
+            }
         }
-        if (settings.isIncludeContext() && !out.truncated) {
-            result.tools().forEach(tool -> {
-                out.add("工具结果", tool.call().getId() + "/" + tool.call().getName() + ":" + tool.status());
-                out.add("工具输出", tool.output());
-            });
+        if (settings.isIncludeReasoning()) {
+            for (var attempt : result.attempts()) {
+                attempt.response().ifPresent(response -> {
+                    out.add("第 " + attempt.number() + " 次模型推理", "模型：" + response.getModel());
+                    response.getChoices().stream().filter(choice -> choice.getMessage() != null)
+                            .forEach(choice -> out.reasoning(choice.getMessage().getProviderMetadata()));
+                });
+            }
         }
-        return out.body + (out.truncated ? "；[正文已截断，上限=" + out.maximum + " 字符]" : "");
+        return out.body + (out.truncated ? "\n  [正文已截断，上限=" + out.maximum + " 字符]" : "");
     }
 
     /**
-     * 只投影受支持内容；图像及其他二进制不进入日志。
-     * @param kind 输入或响应
-     * @param message 实际统一消息
+     * 只输出指定消息的正文，历史助手及工具回填不通过本入口遍历。
+     * @param label 稳定分组名
+     * @param message 选中的消息
      */
-    private void message(String kind, ILLMMessage message) {
-        if (truncated) {
-            return;
+    private void message(String label, ILLMMessage message) {
+        // 2026/11/06：各内容段独立脱敏，不能先拼接占位符破坏 JSON 的安全解析边界。
+        int index = 0;
+        for (var content : message.getContents()) {
+            add(label + (index++ == 0 ? "" : "（续）"),
+                    content.getContentPart() instanceof TextLLMContentPart text
+                            ? text.getText() : "[非文本内容已隐藏]");
         }
-        if (settings.isIncludeContext()) {
-            add(kind + "角色", message.getRole().name());
-            add("名称", message.getName());
-            if (message instanceof ILLMToolMessage tool) {
-                add("工具回填ID", tool.getToolCallId());
-            }
-            message.getContents().forEach(content -> add("内容",
-                    content.getContentPart() instanceof TextLLMContentPart text ? text.getText() : "[非文本内容已隐藏]"));
-            if (message instanceof ILLMAssistantMessage assistant) {
-                assistant.getToolCalls().forEach(call -> {
-                    add("工具调用", call.getId() + "/" + call.getName());
-                    add("工具参数", call.getArguments());
-                });
-            }
+    }
+
+    /**
+     * 将多段文本合为一个可读字段，图像及其他二进制仅显示占位。
+     * @param message 当前消息
+     * @return 不含运行对象的原始文本
+     */
+    private static String content(ILLMMessage message) {
+        return message.getContents().stream().map(content -> content.getContentPart() instanceof TextLLMContentPart text
+                ? text.getText() : "[非文本内容已隐藏]").collect(java.util.stream.Collectors.joining("\n"));
+    }
+
+    /**
+     * 2026/11/06：结构按内容单独去重，toolChoice 的续轮变化不能让整份工具 Schema 重印。
+     * @param declaration 宿主序列化的协议声明
+     * @param seen 本请求内已输出的固定结构
+     */
+    private void protocol(String declaration, java.util.Set<String> seen) {
+        var root = JSON.readTree(declaration);
+        var schema = root.path("responseSchema");
+        if (!schema.isMissingNode() && seen.add(schema.toString())) {
+            add("输出结构", schema.toString());
         }
-        if (!truncated && settings.isIncludeReasoning() && message instanceof ILLMAssistantMessage) {
-            // 2026/11/06：各推理片段独立处理，避免拼接后破坏原本完整的 JSON 边界。
-            reasoning(message.getProviderMetadata());
+        var tools = root.path("tools");
+        if (!tools.isMissingNode() && !tools.isEmpty() && seen.add("tools:" + tools)) {
+            add("协议声明", tools.toString());
         }
     }
 
@@ -186,7 +222,7 @@ final class InteractionLogFormatter {
     }
 
     /**
-     * 清除敏感字段和链接后转义换行，保证一条请求只有一个 INFO 事件及一行文本。
+     * 2026/11/06：先脱敏再按文字分组缩进，换行仅属于同一日志事件且不能伪装日志前缀。
      * @param label 固定字段名
      * @param value 实际字段值
      */
@@ -196,7 +232,7 @@ final class InteractionLogFormatter {
         }
         // 2026/11/06：包含 JSON 编码字符串的工具结果、参数、输入和推理使用同一脱敏入口。
         var safe = redactor.redact(value);
-        var chunk = "；" + label + "=" + JSON.writeValueAsString(safe);
+        var chunk = "\n  【" + label + "】\n    " + safe.replace("\r", "").replace("\n", "\n    ");
         int remaining = maximum - body.length();
         if (chunk.length() > remaining) {
             body.append(chunk, 0, remaining);

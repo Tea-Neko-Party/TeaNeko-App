@@ -1,12 +1,12 @@
 package org.zexnocs.teanekoagent.integration.monitor;
 
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionObserver;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
-import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.runtime.monitor.IAgentActivityObserver;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -16,11 +16,12 @@ import java.util.UUID;
 /**
  * 每条请求结束后输出一份可配置汇总，不持有跨请求正文缓存。
  * <br>2026/11/06：按已应用文件快照查询开关，不在请求中扫描配置目录。
+ * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.4-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 @Service
 public final class AgentObservationService implements ILLMInteractionObserver, IAgentActivityObserver {
@@ -44,8 +45,8 @@ public final class AgentObservationService implements ILLMInteractionObserver, I
     public void finished(UUID request, long elapsedMillis, LLMInteractionResult result) {
         safely(() -> {
             var settings = settings();
-            if (settings != null && settings.isLlmInfo()) {
-                logger.info("LLM 请求汇总", "请求=" + request + "，状态=" + result.status() + "，耗时毫秒=" + elapsedMillis
+            if (settings != null && settings.isLlmInfo() && settings.getVisibility() != AgentObservationFileConfig.Visibility.NONE) {
+                emit(settings, "LLM 请求汇总", "请求=" + request + "，状态=" + result.status() + "，耗时毫秒=" + elapsedMillis
                         + InteractionLogFormatter.metrics(result) + InteractionLogFormatter.details(result, settings));
             }
         });
@@ -77,18 +78,32 @@ public final class AgentObservationService implements ILLMInteractionObserver, I
     public void finished(AgentTurnReport report, @Nullable AgentRunResult result) {
         safely(() -> {
             var settings = settings();
-            if (settings != null && settings.isAgentInfo()) {
+            if (settings != null && settings.isAgentInfo() && settings.getVisibility() != AgentObservationFileConfig.Visibility.NONE) {
                 var interaction = result == null ? null : result.interaction().orElse(null);
                 var metrics = interaction == null ? "，模型调用=0，工具调用=0"
                         : InteractionLogFormatter.metrics(interaction);
                 var failure = result != null && result.failure() != null
                         && (interaction == null || !result.failure().equals(interaction.failure()))
                         ? "，" + result.failure() : "";
-                logger.info("Agent 请求汇总", "请求=" + report.requestId() + "，活动=" + report.activity()
+                emit(settings, "Agent 请求汇总", "请求=" + report.requestId() + "，活动=" + report.activity()
                         + "，状态=" + report.status() + "，耗时毫秒=" + report.elapsedMillis() + metrics + failure
                         + (interaction == null ? "" : InteractionLogFormatter.details(interaction, settings)));
             }
         });
+    }
+
+    /**
+     * 2026/11/06：一次请求只产生一个选定级别事件，不将长正文编码为 JSON 日志。
+     * @param settings 本次配置
+     * @param title 固定事件名称
+     * @param body 人类可读正文
+     */
+    private void emit(AgentObservationFileConfig settings, String title, String body) {
+        switch (settings.getVisibility()) {
+            case INFO -> logger.info(title, body);
+            case DEBUG -> logger.debug(title, body);
+            case NONE -> { }
+        }
     }
     /**
      * 观测故障不改变业务终态，不能用另一个日志重试产生递归失败。

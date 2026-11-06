@@ -6,10 +6,16 @@ import {useConsolePreferences} from './console-preferences'
 import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElButton, ElCard, ElEmpty, ElInput, ElMessageBox, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import {ApiError, request} from './api'
-import {confirmedReceipt, type ManagementReceipt as Receipt, type PendingManagement as Pending} from './management-receipts'
+import {
+  confirmedReceipt,
+  type ManagementReceipt as Receipt,
+  type PendingManagement as Pending
+} from './management-receipts'
 import DetailPanel from './DetailPanel.vue'
 import ConsoleIcon from './ConsoleIcon.vue'
 import AgentLibraryPicker from './AgentLibraryPicker.vue'
+import type {LibraryItem} from './agent-library'
+import MemoryNamespaceSelect from './MemoryNamespaceSelect.vue'
 import ValueEditor from './ValueEditor.vue'
 import {usePageDraft} from './pages/page-guards'
 import {useActivePolling} from './pages/active-polling'
@@ -57,7 +63,7 @@ async function refreshName() {
   const result = await request<{name: string}>(`clients/${encodeURIComponent(selected.client)}/accounts/${encodeURIComponent(selected.account)}/targets/${encodeURIComponent(selected.target)}`)
   if (props.target?.client === selected.client && props.target?.account === selected.account && props.target?.target === selected.target) targetName.value = result.name
 }
-const panel = ref(props.library?.kind ?? 'activity')
+const panel = ref(props.library?.kind === 'memory' ? 'profile' : props.library?.kind ?? 'activity')
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -67,6 +73,7 @@ const timeline = ref<Timeline>()
 const memory = ref<Memory>()
 const namespace = ref(props.library?.kind === 'memory' ? props.library.key : '')
 const subject = ref('')
+const selectedUser = ref<LibraryItem>()
 const profile = ref<Profile>()
 const layers = ref<Layers>()
 const profileLearned = ref<LongResult>()
@@ -102,8 +109,8 @@ const endpoint = () => {
   return `clients/${encodeURIComponent(props.target.client)}/accounts/${encodeURIComponent(props.target.account)}/targets/${encodeURIComponent(props.target.target)}/management/`
 }
 const tabs = computed(() => props.library?.kind === 'personality' ? [{id: 'personality', name: '人格与补正'}]
-  : props.library?.kind === 'memory' ? [{id: 'layers', name: '长期记忆'}, {id: 'memory', name: '记忆证据'}, {id: 'profile', name: '用户画像'}]
-  : [{id: 'activity', name: '活动时间线'}, {id: 'layers', name: '短中长期记忆'}, {id: 'memory', name: '记忆证据'}, {id: 'profile', name: '用户画像'}, {id: 'personality', name: '人格与补正'}, {id: 'schedules', name: '持久计划'}])
+  : props.library?.kind === 'memory' ? [{id: 'profile', name: '用户画像'}, {id: 'layers', name: '共享事件'}, {id: 'memory', name: '空间维护'}]
+  : [{id: 'activity', name: '活动时间线'}, {id: 'layers', name: '聊天记忆'}, {id: 'profile', name: '用户画像'}, {id: 'memory', name: '空间维护'}, {id: 'personality', name: '人格与补正'}, {id: 'schedules', name: '持久计划'}])
 // 2026/11/06：包含嵌套工作区的草稿；未激活页面不安装活动轮询。
 usePageDraft(() => ({dirty: dirty.value, pending: !!pending.value, busy: busy.value}))
 useActivePolling(() => props.active && auto.value && panel.value === 'activity' && !pending.value && !dirty.value,
@@ -169,7 +176,28 @@ async function loadProfile() {
 }
 
 async function loadLayers() {
-  layers.value = await call<Layers>('layers', { action: 'READ', namespace: namespace.value.trim(), generation: -1, revision: -1, subjectId: subject.value.trim() || null, topic: topic.value.trim() })
+  layers.value = await call<Layers>('layers', { action: 'READ', namespace: namespace.value.trim(), generation: -1, revision: -1, subjectId: null, topic: topic.value.trim(), eventsOnly: true })
+}
+
+// 2026/11/06：画像列表和详情互斥，切换空间后清除原主体，不能混入另一代次的数据。
+async function selectNamespace(value: string) {
+  if (!await canLeave()) return
+  namespace.value = value
+  subject.value = ''; selectedUser.value = undefined; profile.value = undefined; profileLearned.value = undefined
+  await run(loadPanel)
+}
+async function selectUser(item: LibraryItem) {
+  if (!memory.value || !await canLeave()) return
+  selectedUser.value = item
+  subject.value = item.id
+  namespace.value = memory.value.namespace
+  profile.value = undefined; profileLearned.value = undefined
+  await run(loadProfile)
+}
+async function returnToUsers() {
+  if (!await canLeave()) return
+  subject.value = ''; selectedUser.value = undefined; profile.value = undefined; profileLearned.value = undefined
+  await run(() => loadMemory())
 }
 
 async function loadPersonality() {
@@ -309,6 +337,7 @@ async function inspectSubject(item: Evidence, source: { namespace: string }) {
   if (busy.value) return
   if (!await canLeave()) return
   subject.value = item.subjectId
+  selectedUser.value = undefined
   namespace.value = source.namespace
   panel.value = 'profile'
   await run(loadProfile)
@@ -323,6 +352,7 @@ watch(() => JSON.stringify([props.target?.client, props.target?.account, props.t
   targetName.value = props.target?.name ?? props.library?.name ?? ''
   events.value = []; timeline.value = undefined; memory.value = undefined; profile.value = undefined; personality.value = undefined; layers.value = undefined; profileLearned.value = undefined
   namespace.value = ''; personalityKey.value = ''; receipt.value = undefined; notice.value = ''; error.value = ''
+  subject.value = ''; selectedUser.value = undefined
   schedules.value = undefined
   void run(loadPanel)
 })
@@ -382,15 +412,13 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       </ElCard>
     </template>
     <template v-else-if="panel === 'layers'">
-      <ElAlert title="短期消息和中期摘要按当前聊天的实际引用读取；长期记忆按 namespace 共享。查询不会调用模型或触发学习。" type="info" :closable="false" />
+      <p class="small muted">{{ library ? '这里记录空间内没有个人主体的共享事件。个人事实与偏好在“用户画像”中管理。' : '近期对话与摘要属于当前聊天；共享事件属于记忆空间，个人事实与偏好在“用户画像”中管理。' }}</p>
       <div class="agent-toolbar">
-      <label>记忆空间<ElInput v-model="namespace" placeholder="留空使用当前绑定" :disabled="busy || !!pending" />
-      </label>
-      <label>长期主体 UUID（可选）<ElInput v-model="subject" placeholder="留空查询近期长期条目" :disabled="busy || !!pending" />
+      <label>记忆空间<MemoryNamespaceSelect :model-value="namespace" :disabled="busy || !!pending || !!library" :allow-current="!library" @expired="emit('expired')" @update:model-value="selectNamespace" />
       </label>
       <label>长期话题（可选）<ElInput v-model="topic" placeholder="按原字面索引查询" :disabled="busy || !!pending" maxlength="1024" />
       </label>
-      <ElButton :disabled="busy || !!pending" @click="run(loadLayers)">读取三层记忆</ElButton>
+      <RefreshButton :disabled="busy || !!pending" @click="run(loadLayers)" label="刷新记忆" />
       </div>
       <template v-if="layers">
       <p class="small muted">空间 {{ layers.namespace }} · 代次 {{ layers.generation }} · 压缩覆盖序号 {{ layers.compressedThrough }}</p>
@@ -417,7 +445,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <p class="evidence-text">{{ item.details }}</p>
       <p class="small muted">来源区间 {{ date(item.from) }} 至 {{ date(item.through) }}</p>
       </ElCard>
-        </template><h3>长期 · 自动整理与明确保存</h3>
+        </template><h3>共享事件</h3>
       <p class="small muted">检查 {{ layers.longTerm.scanned }} 个候选，最多返回二十项；{{ layers.longTerm.limited ? '本次结果受限，不能代表全部记忆' : '当前索引窗口内无输出限制' }}。</p>
       <ElEmpty v-if="!layers.longTerm.items.length" description="本次没有返回长期条目" />
       <ElCard v-for="item in layers.longTerm.items" :key="item.id" shadow="never" class="evidence-card">
@@ -430,24 +458,27 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       </template>
     </template>
     <template v-else-if="panel === 'memory' || panel === 'profile'">
-      <ElAlert title="记忆按 namespace 共享，来源聊天不构成隔离。画像来自当前有效事实与偏好，修正证据会影响所有共享入口。" type="warning" :closable="false" show-icon />
-      <div class="agent-toolbar">
-      <label>记忆空间<ElInput v-model="namespace" placeholder="留空使用当前绑定或默认共享空间" :disabled="busy || !!pending" maxlength="128" />
+      <div v-if="panel !== 'profile' || !subject" class="agent-toolbar">
+      <label>记忆空间<MemoryNamespaceSelect :model-value="namespace" :disabled="busy || !!pending || !!library" :allow-current="!library" @expired="emit('expired')" @update:model-value="selectNamespace" />
       </label>
-      <label v-if="panel === 'profile' && advanced">主体 UUID<ElInput v-model="subject" placeholder="输入真实 TeaNeko UUID" :disabled="busy || !!pending" />
-      </label>
-      <ElButton :disabled="busy || !!pending || panel === 'profile' && !subject.trim()" @click="run(panel === 'memory' ? () => loadMemory() : loadProfile)">读取{{ panel === 'memory' ? '记忆' : '画像' }}</ElButton>
+      <RefreshButton v-if="panel === 'memory'" :disabled="busy || !!pending" @click="run(() => loadMemory())" label="刷新空间信息" />
       </div>
-      <AgentLibraryPicker v-if="panel === 'profile' && memory?.exists" kind="profiles" :namespace="memory.namespace" :generation="memory.generation" :disabled="busy || !!pending" @expired="emit('expired')" @select="item => { subject = item.id; namespace = memory!.namespace; run(loadProfile) }" />
-      <p v-if="panel === 'profile' && subject" class="small muted">当前主体：{{ subject }}</p>
+      <AgentLibraryPicker v-if="panel === 'profile' && !subject && memory?.exists" kind="profiles" :namespace="memory.namespace" :generation="memory.generation" :disabled="busy || !!pending" @expired="emit('expired')" @select="selectUser" />
+      <ElEmpty v-if="panel === 'profile' && !busy && memory && !memory.exists" description="这个记忆空间尚未建立" />
+      <div v-if="panel === 'profile' && subject" class="profile-detail-heading">
+        <button class="icon-button" aria-label="返回用户列表" title="返回用户列表" :disabled="busy || !!pending" @click="returnToUsers"><ConsoleIcon name="back" /></button>
+        <div><h3>{{ selectedUser?.name || subject }}</h3><p v-for="mapping in selectedUser?.mappings ?? []" :key="mapping.client + mapping.platformId" class="small muted">{{ mapping.client }} · {{ mapping.nickname }}（{{ mapping.platformId }}）</p><p v-if="advanced" class="small muted">{{ subject }}</p></div>
+        <RefreshButton :disabled="busy || !!pending" @click="run(loadProfile)" label="刷新此人画像" />
+      </div>
       <template v-if="panel === 'memory' && memory">
-      <p class="small muted">这里展示原事实证据集合；自动长期整理和当前明确保存条目见“短中长期记忆”。</p>
+      <p class="small muted">空间操作影响所有共享此空间的聊天。下方“独立事实”用于专门事实接口存入的资料；自动学习和当前明确保存归入用户画像或共享事件，不会重复存到这里。</p>
       <div class="agent-toolbar">
       <span class="small">空间 {{ memory.namespace }} · 代次 {{ memory.generation }} · 版本 {{ memory.revision }}</span>
       <ElButton :disabled="!memory.exists || busy || !!pending" @click="changeMemory('CLONE')">克隆证据事实</ElButton>
       <ElButton type="danger" plain :disabled="!memory.exists || busy || !!pending" @click="changeMemory('CLEAR')">清空共享空间</ElButton>
       </div>
-      <ElEmpty v-if="!memory.records.length" :description="memory.exists ? '这一页没有事实证据' : '空间尚未登记；查询没有创建数据'" />
+      <h3>独立事实</h3>
+      <ElEmpty v-if="!memory.records.length" :description="memory.exists ? '尚无独立事实，不影响自动记忆和用户画像' : '空间尚未登记；查询没有创建数据'" />
         <ElCard v-for="item in memory.records" :key="item.id" shadow="never" class="evidence-card">
       <div class="card-heading">
       <strong>{{ item.kind === 'PREFERENCE' ? '偏好' : '事实' }} · {{ item.locked ? '已锁定' : '未锁定' }}</strong>
@@ -471,9 +502,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <p v-if="memory.records.length >= 200" class="small muted">页面已达到二百条显示上限，可重新读取或使用原管理导出入口。</p>
       </template>
       <template v-if="panel === 'profile' && profile">
-      <ElAlert :title="profile.complete ? '本次预算范围内证据已完整检查。' : '本次证据有扫描或输出限制，不能把未显示的信息解释为不存在。'" :type="profile.complete ? 'info' : 'warning'" :closable="false" />
-      <p class="small muted">空间 {{ profile.namespace }} · 代次 {{ profile.generation }} · 扫描 {{ profile.scanned }} 条 · 命中 {{ profile.matched }} 条</p>
-      <ElEmpty v-if="!profile.records.length" description="原事实集合本次未返回画像证据" />
+      <ElAlert v-if="!profile.complete" title="部分资料受查询范围限制，未显示不代表不存在。" type="warning" :closable="false" />
+      <h3 v-if="profile.records.length">补充事实</h3>
+      <p v-if="advanced" class="small muted">空间 {{ profile.namespace }} · 代次 {{ profile.generation }} · 扫描 {{ profile.scanned }} 条 · 命中 {{ profile.matched }} 条</p>
       <ElCard v-for="item in profile.records" :key="item.id" shadow="never" class="evidence-card">
       <strong>{{ item.kind === 'PREFERENCE' ? '偏好' : '事实' }} · {{ item.locked ? '已锁定' : '未锁定' }}</strong>
       <p class="evidence-text">{{ item.text }}</p>
@@ -532,8 +563,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       </template>
     </template>
     <template v-if="panel === 'profile' && profile && profileLearned">
-      <h3>自动长期画像证据</h3>
-      <p class="small muted">检查 {{ profileLearned.scanned }} 个长期候选；{{ profileLearned.limited ? '本次输出受限' : '当前索引窗口内无输出限制' }}，不代表全量历史。</p>
+      <h3>事实与偏好</h3>
+      <p v-if="profileLearned.limited || advanced" class="small muted">检查 {{ profileLearned.scanned }} 个候选；{{ profileLearned.limited ? '本次输出受限' : '当前索引窗口内无输出限制' }}。</p>
       <ElEmpty v-if="!profileLearned.items.length" description="本次没有返回自动长期画像条目" />
       <ElCard v-for="item in profileLearned.items" :key="item.id" shadow="never" class="evidence-card">
       <strong>{{ item.kind === 'PREFERENCE' ? '偏好' : '事实' }} · {{ item.status === 'CONFLICT' ? '存在分歧' : '有效记录' }}</strong>

@@ -7,11 +7,10 @@ import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteract
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
@@ -26,11 +25,12 @@ import java.util.function.Consumer;
 /**
  * 按已登记 Java 类型进行一次结构化生成，复用原交互预算和动态守卫。
  * <br>2026/11/06：统一结构提示、原生 JSON 选项和严格解码，不隐含重试或提交业务状态。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Service
 public final class LLMJsonService {
@@ -39,20 +39,23 @@ public final class LLMJsonService {
     private final ObjectMapper mapper;
     private final LLMJsonCodec codec;
     private final LLMJsonDiagnostics diagnostics;
+    private final ILLMModelService models;
 
     /**
      * @param schemas 初始化完成的类型目录
      * @param interactions 借用的交互服务
      * @param mapper 应用转换器
      * @param diagnostics 受限本机诊断
+     * @param models 原模型服务，用于固定实际结构协议而不发起请求
      */
     public LLMJsonService(LLMJsonSchemas schemas, ILLMInteractionService interactions, ObjectMapper mapper,
-            LLMJsonDiagnostics diagnostics) {
+            LLMJsonDiagnostics diagnostics, ILLMModelService models) {
         this.schemas = schemas;
         this.interactions = interactions;
         this.mapper = mapper;
         this.codec = new LLMJsonCodec(mapper);
         this.diagnostics = diagnostics;
+        this.models = models;
     }
 
     /**
@@ -87,7 +90,10 @@ public final class LLMJsonService {
         var messages = new ArrayList<ILLMMessage>();
         messages.add(instruction(definition));
         messages.addAll(source.getMessages());
-        return new Request<>(type, definition, new LLMPrompt(List.copyOf(messages), options, source.getOptionsPolicy()));
+        // 2026/11/06：业务的前置字节预算也使用实际协议，不能再次计算已移除的全文 Schema。
+        var actual = models.prepareRequest(new LLMPrompt(List.copyOf(messages), options, source.getOptionsPolicy()));
+        return new Request<>(type, definition,
+                new LLMPrompt(actual.getMessages(), actual.getOptions(), actual.getOptionsPolicy()));
     }
 
     /**
@@ -102,12 +108,13 @@ public final class LLMJsonService {
      * @param definition 固定声明
      * @return 仅输出一个 JSON 对象的系统约束
      */
-    public LLMSystemMessage instruction(LLMJsonSchemas.Definition definition) {
-        return LLMSystemMessage.builder().contents(new LLMContentListBuilder().addText(
+    public LLMJsonInstruction instruction(LLMJsonSchemas.Definition definition) {
+        // 2026/11/06：保留类型化结构来源，实际适配时避免原生 Schema 与全文提示重复。
+        return new LLMJsonInstruction(
                 "只输出一个完整 JSON 对象，遵循以下 JSON Schema。每个字段都必须出现；可空字段显式写 null。"
                 + "不使用 Markdown 代码围栏、解释、前后缀或额外字段。输出最多 " + definition.maxCharacters()
-                + " 字符。字段描述和业务约束同样必须遵守。JSON Schema："
-                + mapper.writeValueAsString(definition.schema().schema())).build()).build();
+                + " 字符。字段描述和业务约束同样必须遵守。",
+                mapper.writeValueAsString(definition.schema().schema()), false);
     }
 
     /**

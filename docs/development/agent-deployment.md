@@ -7,7 +7,7 @@
 1. 准备 MySQL 与 Java 25。按实际环境配置 Spring datasource、账号及连接地址；默认驱动为 MySQL Connector/J，不把 JDBC URL 类型与其他数据库混用。
 2. 首次安装执行 `./gradlew copyTemplatesToConfig`，根据模板创建本地 config。已有部署先备份配置，核对复制任务的覆盖范围，不用模板覆盖真实凭据。
 3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、max-tokens、真实 context-window-tokens、api-key、连接与 metadata；context-input-ratio 默认 0.8，可使用 `${环境变量:默认值}`。已有模型条目须补充容量声明，缺失时选定模型拒绝就绪。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
-4. 核对活动 Profile。当前 application 默认通过 springProfile 取 dev；生产启动须显式选择 prod 或实际部署 Profile，配置数据库及网络边界。启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
+4. 核对活动 Profile。当前 application 与 `./gradlew bootRun` 默认使用 prod；本机开发显式选择 `dev,web-dev`。按实际部署配置数据库及网络边界，启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
 5. 执行 `./gradlew bootJar`，以 `java -jar build/libs/TeaNeko-App-<实际版本>.jar --spring.profiles.active=prod` 启动。普通 plain.jar 不是可执行部署包。Spring 及客户端启动日志不得泄漏凭据。
 6. 在真实作用域执行 `/cfg reg agent`，再用 `/agent status` 检查登记；默认最低被动模式。先验证 `/agent chat 你好`，再按[平台说明](../../src/main/java/org/zexnocs/teanekoagent/integration/message/README.md)启用自动图文或 ACTIVE 候选。命令工具保持默认关闭，确需启用时由 OWNER 操作。
 
@@ -15,7 +15,7 @@
 
 JDK 25 默认允许未授权的原生访问并发出警告。Netty 的 `System.loadLibrary` 警告本身不表示 Agent 请求失败，须结合实际异常判断。项目的 `bootRun` 已添加 `--enable-native-access=ALL-UNNAMED`，新构建的可执行 JAR 通过 Manifest 声明同一权限；直接在 IntelliJ 运行主类时，在运行配置的 **VM options** 中添加该参数，不放入程序参数或 Gradle 守护进程参数。详见 [JDK 原生访问说明](https://docs.oracle.com/en/java/javase/25/core/restricted-methods.html)。
 
-Agent 轮次失败日志包含请求标识、活动和模型尝试次数；同一请求的 LLM 日志记录失败阶段、异常类型链、代码位置和可取得的 HTTP 状态码。优先按请求标识关联两层日志，再区分模型 HTTP 错误、工具错误与本地管线异常；不输出原异常消息、请求头、凭据、对话或响应正文。没有 HTTP 状态码也可能是请求发出前失败、连接失败或解析失败，不能据此假定供应商已拒绝请求。
+Agent 轮次失败报告包含请求标识、活动、模型尝试次数、异常类型链、代码位置和可取得的 HTTP 状态码；先按请求标识定位，再区分模型 HTTP 错误、工具错误与本地管线异常。普通错误不直接输出原异常消息或请求头。请求汇总另按[观测配置](web-console-agent.md#info-观测)选择级别和正文，一条链只汇总一次，凭据始终脱敏。没有 HTTP 状态码也可能是请求发出前失败、连接失败或解析失败，不能据此假定供应商已拒绝请求。
 
 DeepSeek 的 `reasoning_effort` 位于请求顶层，不能放进 `thinking`；只配置强度时不发送缺少 `type` 的 `thinking` 对象。升级后重新构建并重启，再验证 `/agent chat 你好` 和 `@机器人 你好`。代码与构建验证不能代替真实请求成功的确认。
 
@@ -68,6 +68,11 @@ git diff --check
 | v4.8.3-l 结构化输出 | 用实际模型核对表情包分类、中期压缩、长期事实/风格、独立人格和主动发言；原生 JSON/Schema 与适配器声明一致，不支持时有警告。格式失败可定位字段或行列，普通日志不含原文；需要原文时临时启用[受限诊断](../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/structured/README.md#诊断)，排查后关闭。图片超限应报告具体约束，不泄漏地址 |
 | v4.8.3-l 图库迁移 | 备份并停旧实例后验证首次迁移耗时、独立删除索引/计数、重复采集拒绝、分页及显式恢复；迁移失败整体回滚，不混跑旧二进制；回退使用配套数据备份 |
 | v4.8.3-l 容量 | 大量终态任务下核对到期索引查询、启动补建耗时和四槽饱和；图库根锁下核对选图/采集/发送竞争、独立删除行增长、主目录容量及吞吐，离线夹具不代替 MySQL 测量 |
+| v4.8.6-l 观测 | 应用观测配置后核对 INFO、DEBUG、NONE 及独立内容开关；一次 Agent 链只汇总一次，默认仅摘要、本轮输入与最终回复；Schema/工具跨轮不重印，历史助手和凭据不出现 |
+| v4.8.6-l 结构与学习 | 真实供应商接受原生约束，JSON 对象模式仍取得字段说明；批次未满时等待、到期或重要事件触发，纯问候及已处理证据不发起模型提取；重启不重复推进，近义风格累加新证据，真实 MySQL 写入失败整体回滚 |
+| v4.8.6-l 共享回忆 | 显式装配后，同一真实用户从群聊转私聊能识别来源群与当前私聊；其他用户、私聊原文、旧代次及到期记录不混入；旧索引在维护后可查询 |
+| v4.8.6-l 受邀私聊 | 当前群消息明确邀请后，仅向同客户端、已启用 Agent 且同空间的本人私聊；目标未登记、映射改变、空间切换或未知回执时不误发、不重发 |
+| v4.8.6-l 情感与关怀 | 实际模型正确引用本轮原文调用情感工具；重复来信不加分；ACTIVE、静默、冷却、次数上限及新来信取消有效；人格表达自然，状态重启保留、清空空间后隔离并维护回收 |
 
 普通对话三十秒是目标，尚无实机数据证明达到。使用固定模型/输入规模记录样本数及 P50/P95，区分模型耗时、排队和平台发送；不要把单次 FakeClient 响应当作生产性能证明。
 

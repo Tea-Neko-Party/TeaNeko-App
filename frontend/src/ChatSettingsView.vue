@@ -483,6 +483,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                 :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null'">
                 <ElOption v-for="(label, value) in field.choices" :key="value" :value="value" :label="label" />
               </ElSelect>
+              <!-- 2026/11/06：只读空间绑定直接展示，不伪装成可手填的输入框。 -->
+              <p v-else-if="section === 'agent' && field.name === 'memoryNamespace'" class="small">{{ displayValue(field) }}</p>
               <ValueEditor v-else-if="['JSON', 'LONG_TEXT'].includes(field.kind) || field.editor && field.editor !== 'AUTO'" :kind="field.editor && field.editor !== 'AUTO' ? field.editor : field.kind" :label="field.label" :model-value="displayValue(field)" :maxlength="8192" :disabled="busy || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null' && field.kind !== 'JSON'" @update:model-value="value => updateValue(field, value)" />
               <ElInput v-else :id="'field-' + field.name" :model-value="displayValue(field)" @update:model-value="value => updateValue(field, value)"
                 :type="['JSON', 'LONG_TEXT'].includes(field.kind) ? 'textarea' : field.kind === 'NUMBER' ? 'number' : 'text'" :rows="3"

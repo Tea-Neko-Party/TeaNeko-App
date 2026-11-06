@@ -9,13 +9,14 @@ import java.util.*;
 /**
  * 不可变输出 Schema，同时用于提示、协议适配与本地校验，不能包含任意运行对象。
  * <br>2026/11/06：复用工具类型描述，所有字段显式出现，可空字段使用 null 分支。
+ * <br>2026/11/06：保留字段声明的标准长度和数量约束。
  *
  * @param name 协议中的稳定结构名称
  * @param schema 完整不可变 JSON Schema
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public record LLMJsonSchema(String name, Map<String, Object> schema) {
     /**
@@ -55,6 +56,8 @@ public record LLMJsonSchema(String name, Map<String, Object> schema) {
         }
         var result = new LinkedHashMap<String, Object>();
         result.put("type", parameter.getType());
+        // 2026/11/06：结构约束与字段描述分开提供，协议和本地校验共用。
+        result.putAll(parameter.getLimits().schema());
         if (parameter.getDescription() != null && !parameter.getDescription().isBlank()) {
             result.put("description", parameter.getDescription());
         }

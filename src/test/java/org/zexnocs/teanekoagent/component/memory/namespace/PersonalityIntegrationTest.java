@@ -67,10 +67,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
+ * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Timeout(20)
 class PersonalityIntegrationTest {
@@ -106,11 +108,12 @@ class PersonalityIntegrationTest {
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
      *
      * @author zExNocs
      * @date 2026/11/01
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.6-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
@@ -166,10 +169,12 @@ class PersonalityIntegrationTest {
                     settings.containsKey(target.scopeId()) ? settings.get(target.scopeId()).assembly() : org.zexnocs.teanekoagent.component.AgentAssembly.legacyDefaults()),
                     ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime)), logger);
             var models = mock(ILLMModelService.class);
+            // 2026/11/06：结构化人格学习复用简单端口默认的协议准备，而不是 Mockito 返回的空值。
+            when(models.prepareRequest(any(ILLMPrompt.class))).thenCallRealMethod();
             when(models.resolveOptions(any(ILLMPrompt.class))).thenAnswer(call -> call.<ILLMPrompt>getArgument(0).getOptions());
             when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
                 ILLMPrompt prompt = call.getArgument(0);
-                if (prompt.getOptions().findResponseSchema().map(schema -> schema.name().startsWith("PersonalityLearningOutput")).orElse(false)) {
+                if (Objects.requireNonNull(prompt.getOptions()).findResponseSchema().map(schema -> schema.name().startsWith("PersonalityLearningOutput")).orElse(false)) {
                     var response = new CompletableFuture<ILLMResult>(); pending.add(response); return new TaskFuture<>(logger, "后台人格模型", response);
                 }
                 prompts.add(call.getArgument(0)); beforeReply.run();
@@ -424,7 +429,7 @@ class PersonalityIntegrationTest {
                     "{\"adjustment\":{\"field\":\"speaking detail\",\"text\":\"先给简短结论，再举例\",\"confidence\":0.9}}"));
             assertEquals(PersonalityLearningService.Outcome.APPLIED, h.awaitReport().outcome());
             var next = h.mailbox.run(h.handle, request(scope)).toCompletableFuture().get(5, TimeUnit.SECONDS);
-            assertTrue(Objects.requireNonNull(next.promptTranscript()).input().personality().adjustmentsJson().contains("先给简短结论"));
+            assertTrue(Objects.requireNonNull(Objects.requireNonNull(next.promptTranscript()).input().personality()).adjustmentsJson().contains("先给简短结论"));
         }
     }
 

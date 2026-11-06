@@ -49,13 +49,56 @@ import java.util.function.Supplier;
  * <br>2026/11/06：仅为旧作业缺失的管理版本补零，不放宽其他字段反序列化校验。
  * <br>2026/11/06：持久化格式失败报告安全的类型与字段，不泄露 JSON 或反序列化异常正文。
  * <br>2026/11/06：分页发现已存画像主体，沿用空间代次与原索引。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ * <br>2026/11/06：共享事件使用独立索引，截断前区分个人画像，并在维护时补建旧事件索引。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.4-l
+ * @version 4.8.6-l
  */
 public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, IMemoryMaintenance {
+    /**
+     * 有界的成功学习检查点，只保存摘要，随原空间代次回收。
+     * <br>2026/11/06：水位负责完整历史，近期摘要防止重分段及重投再次调用模型。
+     * @param promptVersion 提示合同版本
+     * @param schemaVersion 输出合同版本
+     * @param fingerprints 最近成功的输入键
+     * @param evidenceKeys 最近成功的证据摘要
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.6-l
+     * @version 4.8.6-l
+     */
+    private record LearningCheckpoint(String promptVersion, String schemaVersion,
+                                      List<String> fingerprints, List<String> evidenceKeys) {
+        /** @return 新分区的空成功检查点 */
+        private static LearningCheckpoint empty() {
+            return new LearningCheckpoint(LongMemoryLearningPolicy.PROMPT_VERSION,
+                    LongMemoryLearningPolicy.SCHEMA_VERSION, List.of(), List.of());
+        }
+
+        /** @return 当前合同能否复用该检查点 */
+        private boolean current() {
+            return promptVersion.equals(LongMemoryLearningPolicy.PROMPT_VERSION)
+                    && schemaVersion.equals(LongMemoryLearningPolicy.SCHEMA_VERSION);
+        }
+
+        /**
+         * 仅在真实业务事务成功时累计摘要，不缓存失败或未提交的模型输出。
+         * @param batch 已通过原资格及租约复核的批次
+         * @return 有界的新检查点
+         */
+        private LearningCheckpoint completed(LongMemories.Batch batch) {
+            var inputs = new LinkedHashSet<>(current() ? fingerprints : List.of());
+            var evidence = new LinkedHashSet<>(current() ? evidenceKeys : List.of());
+            inputs.add(batch.fingerprint());
+            batch.evidence().forEach(value -> evidence.add(LongMemoryLearningPolicy.evidenceKey(value)));
+            return new LearningCheckpoint(LongMemoryLearningPolicy.PROMPT_VERSION, LongMemoryLearningPolicy.SCHEMA_VERSION,
+                    inputs.stream().skip(Math.max(0, inputs.size() - 64)).toList(),
+                    evidence.stream().skip(Math.max(0, evidence.size() - 256)).toList());
+        }
+    }
     /**
      * 2026/11/06：只从权威长期记录分页读取主体，排除已遗忘或失效记录。
      * @param reference 当前固定代次
@@ -182,7 +225,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
         });
     }
     /**
-     * 领取至多四个中期片段；只有一个片段时，空闲十分钟后也可整理。
+     * 2026/11/06：按聚合策略领取完整片段前缀，过滤已处理或低信息证据；默认最迟十分钟处理。
      * @param stream 原分区
      * @param now 当前时间
      * @return 已固定输入和租约
@@ -208,20 +251,56 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             }
             long covered = skipped;
             var segments = selected.stream().filter(item -> item.through() > covered).toList();
-            if (segments.isEmpty() || segments.size() == 1 && segments.getFirst().createdAt().plusSeconds(600).isAfter(now)) { return Optional.empty(); }
+            if (segments.isEmpty()) { return Optional.empty(); }
             if (segments.stream().anyMatch(item -> !item.stream().equals(stream))) { throw new IllegalStateException("长期整理中期来源不一致。"); }
+            // 2026/11/06：学习检查点与作业同分区，成功提交前不记录已处理证据。
+            var checkpointRow = dto("learning").find(stream.id(), EasyDataLock.READ);
+            var checkpoint = checkpointRow == null ? LearningCheckpoint.empty() : read(checkpointRow, LearningCheckpoint.class);
+            var policy = settings.get().learning();
+            var pendingSegments = segments;
+            var seen = new HashSet<>(checkpoint.current() ? checkpoint.evidenceKeys() : List.of());
             var evidence = new ArrayList<LongMemories.Evidence>(); int budget = settings.get().maxInputBytes() / 2;
+            int includedSegments = 0;
             for (var segment : segments) {
-                if (!segment.createdAt().plus(settings.get().retention()).isAfter(now)) { continue; }
+                if (!segment.createdAt().plus(settings.get().retention()).isAfter(now)) {
+                    includedSegments++;
+                    continue;
+                }
+                int startIndex = evidence.size();
+                boolean exceedsCapacity = false;
                 var messages = layer("short:" + stream.id()).scan(sequence(segment.from() - 1), sequence(segment.through()), 64, EasyDataLock.READ);
                 for (var messageRow : messages) {
                     var item = read(messageRow, MemoryLayers.Message.class);
-                    if (item.message().role() != HistoryMessage.Role.USER || !item.expiresAt().isAfter(now) || evidence.size() == 64) { continue; }
-                    evidence.add(new LongMemories.Evidence(stream.id() + ":" + item.sequence(), item.sequence(), item.message()));
-                    if (mapper.writeValueAsBytes(evidence).length > budget) { evidence.removeLast(); }
+                    if (item.message().role() != HistoryMessage.Role.USER || !item.expiresAt().isAfter(now)) { continue; }
+                    var candidate = new LongMemories.Evidence(stream.id() + ":" + item.sequence(), item.sequence(), item.message());
+                    if (!policy.informative(item.message()) || !seen.add(LongMemoryLearningPolicy.evidenceKey(candidate))) {
+                        continue;
+                    }
+                    evidence.add(candidate);
+                    if (evidence.size() > 64 || mapper.writeValueAsBytes(evidence).length > budget) {
+                        exceedsCapacity = true;
+                        break;
+                    }
                 }
+                if (exceedsCapacity) {
+                    // 2026/11/06：容量不足只提交完整片段前缀，不能省略证据却推进整个片段水位。
+                    evidence.subList(startIndex, evidence.size()).clear();
+                    if (includedSegments == 0) {
+                        throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
+                    }
+                    break;
+                }
+                includedSegments++;
+            }
+            segments = segments.subList(0, includedSegments);
+            if (!policy.ready(pendingSegments, evidence, now)) {
+                return Optional.empty();
             }
             var fingerprint = LongMemories.fingerprint(mapper.writeValueAsString(segments), mapper.writeValueAsString(evidence));
+            if (checkpoint.current() && checkpoint.fingerprints().contains(fingerprint)) {
+                evidence.clear();
+                fingerprint = LongMemories.fingerprint(mapper.writeValueAsString(segments), mapper.writeValueAsString(evidence));
+            }
             var trouble = job.trouble();
             boolean sameInput = trouble != null && trouble.fingerprint().equals(fingerprint);
             if (paused(job) && sameInput) {
@@ -257,7 +336,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     @Override public CompletionStage<Boolean> commit(LongMemories.Batch batch, StyleObservations.Analysis analysis,
             StyleObservations.@Nullable Target target, Instant now, Runnable guard) {
         var frozen = analysis.memories();
-        if (frozen.size() > 8) { throw new IllegalArgumentException("长期候选数量超过预算。"); }
+        if (frozen.size() > 4) { throw new IllegalArgumentException("长期候选数量超过预算。"); }
         // 2026/11/06：保留调用者的业务时钟基准，同时计入进入事务前的等待时间。
         var queuedAt = clock.instant();
         return data.transaction("提交长期记忆和画像证据", () -> {
@@ -284,6 +363,11 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             }
             for (var candidate : frozen) { merge(batch, candidate, committedAt); }
             if (!analysis.styles().isEmpty()) { Objects.requireNonNull(styles).acceptInTransaction(batch, Objects.requireNonNull(target), analysis.styles(), committedAt, guard); }
+            // 2026/11/06：证据摘要及版本幂等键与事实、风格和水位原子提交，失败整体回滚。
+            var checkpoints = dto("learning");
+            var checkpointRow = checkpoints.find(batch.stream().id(), EasyDataLock.WRITE);
+            var checkpoint = checkpointRow == null ? LearningCheckpoint.empty() : read(checkpointRow, LearningCheckpoint.class);
+            save(checkpoints, checkpointRow, batch.stream().id(), checkpoint.completed(batch));
             save(dto("jobs"), row, batch.stream().id(), new Job(job.claimedThrough(), null, Instant.EPOCH,
                     Instant.EPOCH, 0, 0, "", null, job.revision() + 1));
             guard.run();
@@ -473,6 +557,32 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
      * @return 有界投影
      */
     @Override public CompletionStage<LongMemories.Result> query(MemoryNamespaceReference reference, @Nullable UUID subjectId, String query, int limit) {
+        return query(reference, subjectId, query, limit, false);
+    }
+
+    /**
+     * 2026/11/06：事件与用户画像在同一存储查询时分开，不复制条目。
+     * @param reference 原空间
+     * @param query 话题
+     * @param limit 输出上限
+     * @return 无主体的共享事件
+     */
+    @Override
+    public CompletionStage<LongMemories.Result> events(MemoryNamespaceReference reference, String query, int limit) {
+        return query(reference, null, query, limit, true);
+    }
+
+    /**
+     * 2026/11/06：共享有界索引与权威记录复核，领域过滤在排序与截断之前执行。
+     * @param reference 原空间
+     * @param subjectId 可选主体
+     * @param query 话题
+     * @param limit 输出上限
+     * @param eventsOnly 是否仅无主体事件
+     * @return 有界查询结果
+     */
+    private CompletionStage<LongMemories.Result> query(MemoryNamespaceReference reference, @Nullable UUID subjectId,
+            String query, int limit, boolean eventsOnly) {
         if (limit < 1 || limit > 20 || query.length() > 1024) { throw new IllegalArgumentException("长期检索预算无效。"); }
         return data.transaction("检索长期记忆", () -> {
             requireGeneration(reference); String space = space(reference); var ids = new LinkedHashSet<UUID>(); boolean limited = false;
@@ -480,6 +590,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             // 2026/11/05：没有索引词的非空查询仍作有界字面筛选，不能退化为列出全部最近项。
             var literal = query.strip().toLowerCase(Locale.ROOT);
             var indices = new ArrayList<IEasyDataTransactionDto>();
+            // 2026/11/06：共享事件有独立索引，个人条目较多时也不会占掉事件查询窗口。
+            if (eventsOnly) { indices.add(dto("events:" + space)); }
             if (subjectId != null) { indices.add(dto("subject:" + space + ":" + subjectId)); }
             else if (!terms.isEmpty()) { for (var term : terms) { indices.add(dto("term:" + space + ":" + StableDigest.sha256(term).substring(0, 32))); } }
             else { indices.add(dto("recent:" + space)); }
@@ -495,6 +607,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 if ((value.status() == LongMemories.Status.ACTIVE || value.status() == LongMemories.Status.CONFLICT)
                         && liveExplicit(space, value.id())
                         && (subjectId == null || subjectId.equals(value.subjectId()))
+                        && (!eventsOnly || value.subjectId() == null)
                         && (terms.isEmpty() ? literal.isEmpty()
                                 || (value.attribute() + " " + value.text()).toLowerCase(Locale.ROOT).contains(literal)
                                 : score(value, terms) > 0)) { values.add(value); }
@@ -662,7 +775,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             for (var scanned : rows) {
                 var parts = scanned.getTarget().split(":");
                 MemoryNamespaceReference reference;
-                if (scanned.getTarget().equals("jobs")) { reference = lifecycle.streamReference(scanned.getKey()); }
+                if (Set.of("jobs", "learning").contains(scanned.getTarget())) { reference = lifecycle.streamReference(scanned.getKey()); }
                 // 2026/11/05：恢复回执同样按空间摘要定位，仅回收已退出的代次。
                 else if (parts.length >= 2 && parts[1].matches("[0-9a-f]{64}")) { reference = lifecycle.spaceReference(parts[1]); }
                 else { continue; }
@@ -672,13 +785,20 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
                 if (retired) { target.delete(row); changed++; continue; }
                 if (parts[0].equals("entries")) {
                     var value = read(row, LongMemories.Entry.class); var quotes = value.quotes().stream().filter(quote -> validQuote(quote, now)).toList();
+                    // 2026/11/06：后台维护为旧事件补建目录，不在每次页面请求上全表迁移。
+                    if (value.subjectId() == null && (value.status() == LongMemories.Status.ACTIVE || value.status() == LongMemories.Status.CONFLICT)) {
+                        var events = dto("events:" + parts[1]);
+                        if (events.find(indexKey(value), EasyDataLock.NONE) == null) {
+                            events.save(events.create(indexKey(value), value.id().toString()));
+                        }
+                    }
                     if (quotes.size() != value.quotes().size()) {
                         // 2026/11/03：公开内容与版本不变，保留来源摘要以继续抑制已遗忘旧证据。
                         save(target, row, row.getKey(), new LongMemories.Entry(value.id(), value.kind(), value.subjectId(), value.attribute(), value.text(),
                                 value.status(), value.revision(), value.locked(), quotes, value.sourceKeys(), value.segments(), value.observedAt(), value.updatedAt(), value.timeHint()));
                         changed++;
                     }
-                } else if (Set.of("recent", "subject", "term", "family").contains(parts[0])) {
+                } else if (Set.of("recent", "subject", "term", "family", "events").contains(parts[0])) {
                     var entryRow = dto("entries:" + parts[1]).find(row.getValue(), EasyDataLock.READ);
                     var value = entryRow == null ? null : read(entryRow, LongMemories.Entry.class);
                     if (value == null || value.status() != LongMemories.Status.ACTIVE && value.status() != LongMemories.Status.CONFLICT
@@ -833,6 +953,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
     private static Set<String> targets(String space, LongMemories.Entry entry) {
         var values = new LinkedHashSet<String>(); values.add("recent:" + space);
         if (entry.subjectId() != null) { values.add("subject:" + space + ":" + entry.subjectId()); }
+        else { values.add("events:" + space); }
         for (var term : LongMemories.terms(entry.attribute() + " " + entry.text(), 48)) { values.add("term:" + space + ":" + StableDigest.sha256(term).substring(0, 32)); }
         return values;
     }

@@ -51,10 +51,12 @@ import java.util.function.Supplier;
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
  * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
  * <br>2026/11/06：装配统一类型化 JSON 生成服务。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Configuration(proxyBeanMethods = false)
 public class LayeredMemoryConfig {
@@ -295,7 +297,13 @@ public class LayeredMemoryConfig {
                 environment.getProperty("tea-neko.agent.memory.layered.max-input-bytes", Integer.class, 131072),
                 Duration.ofSeconds(environment.getProperty("tea-neko.agent.memory.layered.timeout-seconds", Long.class, 45L)),
                 Duration.ofDays(environment.getProperty("tea-neko.agent.memory.layered.retention-days", Long.class, 90L)),
-                environment.getProperty("tea-neko.agent.memory.layered.trigger-bytes", Integer.class, 32768));
+                environment.getProperty("tea-neko.agent.memory.layered.trigger-bytes", Integer.class, 32768),
+                // 2026/11/06：长期提取使用独立有界聚合策略，不改变短期压缩频率。
+                new org.zexnocs.teanekoagent.component.memory.layered.LongMemoryLearningPolicy(
+                        environment.getProperty("tea-neko.agent.memory.long-term.batch-segments", Integer.class, 4),
+                        Duration.ofSeconds(environment.getProperty("tea-neko.agent.memory.long-term.max-wait-seconds", Long.class, 600L)),
+                        environment.getProperty("tea-neko.agent.memory.long-term.filter-low-information", Boolean.class, true),
+                        environment.getProperty("tea-neko.agent.memory.long-term.urgent-events", Boolean.class, true)));
     }
     /**
      * 沿用原 scope 登记、采集/读取与自动摘要开关，不默认授权未登记区域。

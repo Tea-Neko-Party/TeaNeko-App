@@ -14,6 +14,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMImage
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
@@ -29,21 +30,102 @@ import static org.junit.jupiter.api.Assertions.*;
  * 验证汇总保留实际输入和供应商字段，同时隐藏凭据、媒体与未公开状态。
  * <br>2026/11/06：覆盖有界长输入、内容开关及多次尝试的用量归属。
  * <br>2026/11/06：覆盖四条内容入口的编码 JSON、完整授权头、畸形输入与处理上限。
+ * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.5-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 @Timeout(10)
 class InteractionLogFormatterTest {
+    /** 显式开启诊断项以覆盖原有四条脱敏路径，默认值单独验证。 */
+    private static AgentObservationFileConfig diagnostics() {
+        var settings = new AgentObservationFileConfig();
+        settings.setIncludeReasoning(true);
+        settings.setIncludeSchema(true);
+        settings.setIncludeSystem(true);
+        settings.setIncludeTools(true);
+        return settings;
+    }
+
+    /** 2026/11/06：默认只含当前用户输入和最终回复，既有助手消息与工具链不会重印。 */
+    @Test
+    void defaultsAreReadableAndMinimal() {
+        var text = InteractionLogFormatter.details(result("本轮问题"), new AgentObservationFileConfig());
+        assertTrue(text.contains("【本轮用户输入】"));
+        assertTrue(text.contains("【最终回复】"));
+        assertTrue(text.contains("最终答案"));
+        assertFalse(text.contains("协议声明"));
+        assertFalse(text.contains("供应商提供的思考"));
+        assertFalse(text.contains("工具回填内容"));
+        assertFalse(text.contains("lookup"));
+        assertEquals(1, text.split("最终答案", -1).length - 1);
+    }
+
+    /** 2026/11/06：续轮输入相同的协议、历史助手及本轮输入均只按各自开关出现一次。 */
+    @Test
+    void repeatedAttemptsDoNotDuplicateSchemaOrHistory() {
+        var original = result("本轮问题");
+        var first = original.attempts().getFirst();
+        var nextInput = new LLMRequestSnapshot(first.input().orElseThrow().messages(),
+                "{\"tools\":[\"lookup\"],\"toolChoice\":\"none\"}");
+        var second = new LLMInteractionResult.ModelAttempt(2, first.response(), first.tokenUsage(), Optional.of(nextInput));
+        var repeated = new LLMInteractionResult(original.status(), original.transcript(),
+                original.finalCandidate().orElseThrow(), List.of(first, second), original.tools(), Map.of());
+        var text = InteractionLogFormatter.details(repeated, diagnostics());
+        assertEquals(1, text.split("【协议声明】", -1).length - 1);
+        assertEquals(1, text.split("本轮问题", -1).length - 1);
+        assertEquals(1, text.split("最终答案", -1).length - 1);
+        assertEquals(1, text.split("工具回填内容", -1).length - 1);
+    }
+
+    /**
+     * 2026/11/06：原生和提示模式下，JSON 行为要求和字段结构均按独立开关输出且不跨轮重复。
+     * @param nativeSchema 是否由协议承载字段结构
+     */
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void jsonGuidanceAndSchemaHaveIndependentSwitches(boolean nativeSchema) {
+        var original = result("本轮问题");
+        var first = original.attempts().getFirst();
+        String schema = "{\"type\":\"object\",\"properties\":{\"note\":{\"type\":\"string\",\"description\":\"限定字段\"}}}";
+        String guidance = "仅根据本轮证据提取事实。";
+        var json = new JsonMapper();
+        var input = new LLMRequestSnapshot(List.of(new LLMJsonInstruction(guidance, schema, nativeSchema)),
+                nativeSchema ? json.writeValueAsString(Map.of("responseSchema", json.readTree(schema))) : "{}");
+        var attempts = List.of(
+                new LLMInteractionResult.ModelAttempt(1, first.response(), first.tokenUsage(), Optional.of(input)),
+                new LLMInteractionResult.ModelAttempt(2, first.response(), first.tokenUsage(), Optional.of(input)));
+        var result = new LLMInteractionResult(original.status(), original.transcript(),
+                original.finalCandidate().orElseThrow(), attempts, original.tools(), Map.of());
+        var settings = new AgentObservationFileConfig();
+        settings.setIncludeSystem(true);
+        var text = InteractionLogFormatter.details(result, settings);
+        assertEquals(1, text.split(guidance, -1).length - 1);
+        assertFalse(text.contains("限定字段"));
+        settings.setIncludeSystem(false);
+        settings.setIncludeSchema(true);
+        text = InteractionLogFormatter.details(result, settings);
+        assertFalse(text.contains(guidance));
+        assertEquals(1, text.split("限定字段", -1).length - 1);
+        settings.setIncludeSystem(true);
+        text = InteractionLogFormatter.details(result, settings);
+        assertEquals(1, text.split(guidance, -1).length - 1);
+        assertEquals(1, text.split("限定字段", -1).length - 1);
+    }
+
     /** 完整工具链、推理和汇总都可检查，授权头和签名地址不能泄漏。 */
     @Test
     void includesActualContextAndPublicReasoningWithoutCredentials() {
-        var result = result("用户问题\nAuthorization: Bearer hidden-bearer\napi-key=hidden-key "
-                + "{\"password\":\"hidden-password\"} https://example.invalid/image?rkey=hidden-signature"
-                + "\nCookie: session=hidden-cookie; other=hidden-cookie-two\n正常内容");
-        var text = InteractionLogFormatter.details(result, new AgentObservationFileConfig());
+        var result = result("""
+                用户问题
+                Authorization: Bearer hidden-bearer
+                api-key=hidden-key \
+                {"password":"hidden-password"} https://example.invalid/image?rkey=hidden-signature
+                Cookie: session=hidden-cookie; other=hidden-cookie-two
+                正常内容""");
+        var text = InteractionLogFormatter.details(result, diagnostics());
         for (var expected : List.of("用户问题", "协议声明", "lookup", "工具回填内容", "最终答案", "供应商提供的思考", "公开推理摘要")) {
             assertTrue(text.contains(expected), expected);
         }
@@ -51,7 +133,7 @@ class InteractionLogFormatterTest {
                 "hidden-metadata", "hidden-encrypted", "hidden-image", "hidden-cookie", "hidden-cookie-two")) {
             assertFalse(text.contains(hidden), hidden);
         }
-        assertFalse(text.contains("\n"), "换行应转义，不能将一条请求拆成多行");
+        assertTrue(text.contains("\n    "), "正文采用固定缩进，不输出 JSON 日志信封");
         var metrics = InteractionLogFormatter.metrics(result);
         assertTrue(metrics.contains("已报告总token=23"));
         assertTrue(metrics.contains("估算token=11"));
@@ -62,7 +144,7 @@ class InteractionLogFormatterTest {
     @Test
     void contentSwitchesDoNotChangeMetrics() {
         var result = result("用户问题");
-        var settings = new AgentObservationFileConfig();
+        var settings = diagnostics();
         settings.setIncludeContext(false);
         var text = InteractionLogFormatter.details(result, settings);
         assertFalse(text.contains("用户问题"));
@@ -86,7 +168,7 @@ class InteractionLogFormatterTest {
     /** 长密钥和正文采用有界输出；不能发生正则递归溢出或将截断冒充完整内容。 */
     @Test
     void longEscapedSecretIsRedactedBeforeTruncation() {
-        var settings = new AgentObservationFileConfig();
+        var settings = diagnostics();
         settings.setMaxContentCharacters(1024);
         var result = result("{\"api-key\":\"" + "s\\\"".repeat(100_000) + "hidden-end\"} " + "长正文".repeat(100_000));
         var text = InteractionLogFormatter.details(result, settings);
@@ -123,12 +205,12 @@ class InteractionLogFormatterTest {
                     channel.equals("arguments") ? payload : "{\"query\":\"茶\"}",
                     channel.equals("output") ? payload : "工具回填内容",
                     channel.equals("reasoning") ? payload : "供应商提供的思考");
-            var text = InteractionLogFormatter.details(result, new AgentObservationFileConfig());
+            var text = InteractionLogFormatter.details(result, diagnostics());
             assertFalse(text.contains("review-hidden-"), channel + ": " + sample);
             assertTrue(text.contains("安全兄弟字段"), channel);
             assertTrue(text.contains("最终答案"));
             assertFalse(text.contains("正文已截断"));
-            assertFalse(text.contains("\n"));
+            assertTrue(text.contains("\n  【"));
             if (sample.contains("安全子字段")) {
                 assertTrue(text.contains("安全子字段"));
             }
@@ -137,7 +219,7 @@ class InteractionLogFormatterTest {
         for (var payload : samples.subList(0, 2)) {
             var text = InteractionLogFormatter.details(result(channel.equals("input") ? payload : "用户问题",
                     channel.equals("arguments") ? payload : "{}", channel.equals("output") ? payload : "工具回填内容",
-                    channel.equals("reasoning") ? payload : "供应商提供的思考"), new AgentObservationFileConfig());
+                    channel.equals("reasoning") ? payload : "供应商提供的思考"), diagnostics());
             assertFalse(text.contains("review-hidden-"));
             assertTrue(text.contains("最终答案"));
         }
@@ -155,7 +237,7 @@ class InteractionLogFormatterTest {
                 "[".repeat(40) + "\"review-hidden-depth\"" + "]".repeat(40),
                 "review-hidden-oversize" + "x".repeat(2_000_001),
                 "[" + "0,".repeat(45_000) + "\"review-hidden-nodes\"]")) {
-            var text = InteractionLogFormatter.details(result(payload), new AgentObservationFileConfig());
+            var text = InteractionLogFormatter.details(result(payload), diagnostics());
             assertFalse(text.contains("review-hidden-"));
             assertTrue(text.contains("超出脱敏处理上限"));
             assertTrue(InteractionLogFormatter.metrics(result(payload)).contains("已报告总token=23"));

@@ -25,11 +25,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/05：提供安全失败分类、持久暂停状态及版本化管理恢复合同。
  *
  * <br>2026/11/06：提供有界画像主体目录合同。
+ * <br>2026/11/06：增加共享事件查询合同，个人画像不占用共享事件输出名额。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.4-l
+ * @version 4.8.6-l
  */
 public interface ILongTermMemoryStore {
     /**
@@ -183,6 +184,17 @@ public interface ILongTermMemoryStore {
      * @return 不含原话的有限结果
      */
     CompletionStage<LongMemories.Result> query(MemoryNamespaceReference reference, @Nullable UUID subjectId, String query, int limit);
+    /**
+     * 2026/11/06：在结果截断前筛选共享事件，不能先取少量画像再在网页隐藏。
+     * @param reference 原授权空间
+     * @param query 字面话题
+     * @param limit 结果上限
+     * @return 不包含个人事实的事件结果
+     */
+    default CompletionStage<LongMemories.Result> events(MemoryNamespaceReference reference, String query, int limit) {
+        return java.util.concurrent.CompletableFuture.failedFuture(
+                new UnsupportedOperationException("当前长期存储未实现共享事件查询。"));
+    }
     /**
      * 使用前检查已采用条目仍为同一有效版本，不在原资料中混入后来的替代值。
      * @param reference 固定空间引用

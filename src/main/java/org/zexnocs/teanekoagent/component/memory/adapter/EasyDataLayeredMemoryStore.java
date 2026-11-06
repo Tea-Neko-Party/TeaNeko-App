@@ -11,6 +11,7 @@ import org.zexnocs.teanekoagent.component.memory.layered.IMemoryMaintenance;
 import org.zexnocs.teanekoagent.component.memory.layered.LayeredMemorySettings;
 import org.zexnocs.teanekoagent.component.memory.layered.MemoryLayers;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoagent.component.memory.shared.ISharedConversationStore;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
@@ -33,13 +34,14 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：增加真实用户共享索引与近期读取，按原有效期和空间代次复核。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
-public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IMemoryMaintenance {
+public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, ISharedConversationStore, IMemoryMaintenance {
     private final TeaNekoAgentEasyData data;
     private final EasyDataMemoryNamespaceStore namespaces;
     private final ObjectMapper mapper;
@@ -95,6 +97,8 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
         }
         long sequence = Math.incrementExact(state.last()); String key = key(sequence);
         messages.save(messages.create(key, mapper.writeValueAsString(new MemoryLayers.Message(sequence, message, context.personality().identity(), expiresAt))));
+        // 2026/11/06：只索引有真实参与者的来源，原文仍保存在短期权威记录。
+        indexShared(stream, new MemoryLayers.Message(sequence, message, context.personality().identity(), expiresAt));
         source.save(source.create(sourceKey, key));
         saveState(stream, stateRow, new State(sequence, state.covered(), state.discarded(), state.lease(), state.until(), state.notBefore(),
                 state.attempts(), state.claimedThrough(), state.fingerprint()));
@@ -220,6 +224,113 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
             return new MemoryLayers.View(recent, segments, state.covered());
         });
     }
+
+    /**
+     * 2026/11/06：互动观察只读取近期消息，不额外加载中期片段。
+     * @param reference 当前引用
+     * @param now 当前时间
+     * @return 按序排列的有效原消息
+     */
+    @Override public CompletionStage<List<MemoryLayers.Message>> recent(MemoryNamespaceReference reference, Instant now) {
+        return data.transaction("读取近期互动", () -> {
+            requireGeneration(reference);
+            return dto("short:" + MemoryLayers.stream(reference)).recent(Long.MAX_VALUE, 24).stream()
+                    .map(row -> decode(row, MemoryLayers.Message.class)).filter(value -> value.expiresAt().isAfter(now))
+                    .sorted(Comparator.comparingLong(MemoryLayers.Message::sequence)).toList();
+        });
+    }
+
+    /**
+     * 2026/11/06：按用户索引读取其他聊天，不在每条消息上遍历所有分区。
+     * @param current 当前空间
+     * @param user 真实参与者
+     * @param now 当前时间
+     * @return 最多二十四条有完整来源的消息
+     */
+    @Override
+    public CompletionStage<List<ISharedConversationStore.Entry>> related(MemoryNamespaceReference current, UUID user, Instant now) {
+        return data.transaction("读取同空间参与者对话", () -> {
+            requireGeneration(current);
+            var result = new ArrayList<ISharedConversationStore.Entry>();
+            var index = data.cleanable().get(sharedTarget(current, user)).atomic();
+            for (var row : index.recent(Long.MAX_VALUE, 128)) {
+                var pointer = decode(row, SharedPointer.class);
+                if (pointer.reference().scope().equals(current.scope()) || !pointer.expiresAt().isAfter(now)
+                        || !pointer.reference().namespaceId().equals(current.namespaceId())
+                        || pointer.reference().generation() != current.generation()) {
+                    continue;
+                }
+                var source = dto("short:" + MemoryLayers.stream(pointer.reference()))
+                        .find(key(pointer.sequence()), EasyDataLock.NONE);
+                if (source == null) { continue; }
+                var message = decode(source, MemoryLayers.Message.class);
+                if (message.expiresAt().isAfter(now)
+                        && message.message().source().origin() == org.zexnocs.teanekoagent.runtime.AgentActorContext.Origin.USER
+                        && message.message().source().userId().filter(user::equals).isPresent()) {
+                    result.add(new ISharedConversationStore.Entry(new ISharedConversationStore.Proof(
+                            pointer.reference(), message.sequence(), StableDigest.sha256(source.getValue())), message));
+                }
+            }
+            return result.stream().sorted(Comparator.comparing((ISharedConversationStore.Entry value) ->
+                    value.message().message().occurredAt()).reversed()).limit(24).toList();
+        });
+    }
+
+    /**
+     * @param proofs 原记录凭据
+     * @param now 当前时间
+     * @return 权威记录与原采用内容仍匹配
+     */
+    @Override
+    public CompletionStage<Boolean> verifyShared(List<ISharedConversationStore.Proof> proofs, Instant now) {
+        return data.transaction("复核共享对话原记录", () -> {
+            for (var proof : proofs) {
+                if (!generation(proof.reference())) { return false; }
+                var row = dto("short:" + MemoryLayers.stream(proof.reference())).find(key(proof.sequence()), EasyDataLock.READ);
+                if (row == null || !StableDigest.sha256(row.getValue()).equals(proof.fingerprint())
+                        || !decode(row, MemoryLayers.Message.class).expiresAt().isAfter(now)) { return false; }
+            }
+            return true;
+        });
+    }
+
+    /**
+     * 记录可重建的参与者索引，不复制原文；与原消息同事务提交。
+     * @param stream 原分区
+     * @param message 原消息
+     */
+    private void indexShared(MemoryLayers.Stream stream, MemoryLayers.Message message) {
+        var user = message.message().source().userId();
+        if (user.isEmpty() || message.message().source().origin()
+                != org.zexnocs.teanekoagent.runtime.AgentActorContext.Origin.USER) { return; }
+        var index = data.cleanable().get(sharedTarget(stream.reference(), user.get())).atomic();
+        var id = StableDigest.sha256(stream.id(), Long.toString(message.sequence()));
+        if (index.find(id, EasyDataLock.NONE) == null) {
+            index.save(index.create(id, mapper.writeValueAsString(new SharedPointer(
+                    stream.reference(), message.sequence(), message.expiresAt()))));
+        }
+    }
+
+    /**
+     * @param reference 原空间代次
+     * @param user 原主体
+     * @return 不含原文的索引分区
+     */
+    private static String sharedTarget(MemoryNamespaceReference reference, UUID user) {
+        return "shared:" + EasyDataMemoryLifecycle.space(reference) + ":" + user;
+    }
+
+    /**
+     * 可清理索引中的权威消息定位。
+     * @param reference 原引用
+     * @param sequence 原序号
+     * @param expiresAt 原保留期
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.6-l
+     * @version 4.8.6-l
+     */
+    private record SharedPointer(MemoryNamespaceReference reference, long sequence, Instant expiresAt) {}
     /**
      * 2026/11/03：每批维护一个分区，短期十六行和中期八行；清理不假装消息已压缩。
      * @param now 当前时间
@@ -241,7 +352,17 @@ public final class EasyDataLayeredMemoryStore implements ILayeredMemoryStore, IM
             long discarded = state.discarded(); long processed = Math.max(state.covered(), discarded);
             for (var row : rows) {
                 var message = decode(row, MemoryLayers.Message.class);
-                if (!retired && (message.expiresAt().isAfter(now) || message.sequence() > processed + 1)) { continue; }
+                if (!retired && message.expiresAt().isAfter(now)) {
+                    // 2026/11/06：低频维护补建旧记录索引，清理可重建表后也可恢复。
+                    indexShared(stream, message);
+                    continue;
+                }
+                message.message().source().userId().ifPresent(user -> {
+                    var shared = data.cleanable().get(sharedTarget(stream.reference(), user)).atomic();
+                    var pointer = shared.find(StableDigest.sha256(stream.id(), Long.toString(message.sequence())), EasyDataLock.WRITE);
+                    if (pointer != null) { shared.delete(pointer); }
+                });
+                if (!retired && message.sequence() > processed + 1) { continue; }
                 shortData.delete(row); changed++;
                 var link = source.find(StableDigest.sha256(message.message().role().name(), message.message().messageId()), EasyDataLock.WRITE);
                 if (link != null && link.getValue().equals(row.getKey())) { source.delete(link); }

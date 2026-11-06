@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.IContext
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMFunctionParameter;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.LLMParameterLimits;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
@@ -27,10 +28,12 @@ import java.util.function.BiFunction;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public final class LLMToolBinding {
     private final ILLMTool definition;
@@ -332,7 +335,7 @@ public final class LLMToolBinding {
             var items = source.getItems() == null ? null : snapshot(source.getItems(), visiting, depth + 1);
             return new Parameter(source.getType(), source.getDescription(), required,
                     Collections.unmodifiableMap(properties), items, List.copyOf(source.getEnumValues()),
-                    source.isAdditionalProperties());
+                    source.isAdditionalProperties(), source.getLimits());
         } finally {
             visiting.remove(source);
         }
@@ -387,17 +390,18 @@ public final class LLMToolBinding {
         }
     }
 
-    /**
+/**
      * 递归冻结的参数 schema，防止工具重载改变已暴露的定义。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
      *
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.8.6-l
      */
     @Getter
     private static final class Parameter implements ILLMFunctionParameter {
@@ -408,6 +412,8 @@ public final class LLMToolBinding {
         private final ILLMFunctionParameter items;
         private final List<String> enumValues;
         private final boolean additionalProperties;
+        // 2026/11/06：冻结时保留容量约束，执行校验与发给模型的声明一致。
+        private final LLMParameterLimits limits;
 
         /**
          * 固定参数类型及其不可变子 schema，供本轮输入验证与供应商映射共用。
@@ -419,10 +425,11 @@ public final class LLMToolBinding {
          * @param items 数组元素 schema
          * @param enumValues 允许的字符串取值
          * @param additionalProperties 是否允许 schema 未声明的对象属性
+         * @param limits 已冻结的容量约束
          */
         private Parameter(String type, String description, List<String> required,
                           Map<String, ILLMFunctionParameter> properties, ILLMFunctionParameter items,
-                          List<String> enumValues, boolean additionalProperties) {
+                          List<String> enumValues, boolean additionalProperties, LLMParameterLimits limits) {
             this.type = type;
             this.description = description;
             this.required = required;
@@ -430,6 +437,8 @@ public final class LLMToolBinding {
             this.items = items;
             this.enumValues = enumValues;
             this.additionalProperties = additionalProperties;
+            this.limits = Objects.requireNonNull(limits);
+            limits.validateType(type);
         }
     }
 }

@@ -4,13 +4,13 @@
 
 ## 使用
 
-根类型加 `@LLMJsonType`，类与字段用 Core 的 `@Description` 说明含义及约束。推荐使用记录类型，构造方法校验长度、范围及字段关系。
+根类型加 `@LLMJsonType`，类与字段用 Core 的 `@Description` 说明含义。字段或方法参数用 `@JsonConstraint` 声明可执行的长度、数量和字符串枚举；构造方法继续校验领域关系。
 
 ```java
 @LLMJsonType(maxCharacters = 8000)
 public record Summary(
-        @Description("非空简短摘要，最多600字。") String brief,
-        @Description("非空详细摘要，最多4000字。") String details) { }
+        @Description("简短摘要。") @JsonConstraint(minLength = 1, maxLength = 600) String brief,
+        @Description("详细摘要。") @JsonConstraint(minLength = 1, maxLength = 4000) String details) { }
 
 CompletionStage<Summary> result = json.generate(
         Summary.class, prompt, context, settings, guard);
@@ -24,17 +24,21 @@ CompletionStage<Summary> result = json.generate(
 
 所有字段都须出现；可空字段写 `null`，不能省略。Schema 不替代构造约束、证据核验、权限和事务检查。
 
+`@JsonConstraint` 的 `minLength/maxLength` 以 Unicode 字符计数，`minItems/maxItems` 限制集合数量，未声明的边界为 `-1`。`enumValues` 限定字符串值，只能收紧原枚举。类型不匹配或上下限矛盾在初始化时失败；请求读取缓存，超限输出明确拒绝，不截断后提交。工具定义冻结后也保留这些限制，实际工具执行前再次校验。
+
 ## 模型适配
 
 通用选项为 `LLMResponseFormat.JSON` 与不可变 `responseSchema`。适配器通过 `ILLMModel.getJsonOutputSupport(model)` 声明能力，未知实现默认 `NONE`。
 
 | 能力 | 实际请求 | 本地处理 |
 | --- | --- | --- |
-| `SCHEMA` | Chat Completions 的 `response_format.json_schema`，或 Responses 的 `text.format`，包含 `strict=true` | 仍严格解码并校验领域类型 |
+| `SCHEMA` | Chat Completions 的 `response_format.json_schema`，或 Responses 的 `text.format`，包含 `strict=true`；系统指令只保留行为要求 | 仍严格解码并校验领域类型 |
 | `OBJECT` | `response_format={"type":"json_object"}` | 完整 Schema 同时放入提示；本地检查字段和类型 |
 | `NONE` | 不发送原生 JSON 约束 | 实际调用时警告，保留结构提示及严格解码 |
 
 默认 DeepSeek、Kimi 适配对象模式；OpenAI Responses 适配 Schema；Chat Completions 按已知模型能力选择。自定义服务须按其实际支持声明，远端拒绝继续报告真实 HTTP 状态，不暗中换模型或重试。
+
+结构指令有独立类型标记，只调整宿主生成的指令，不按文本匹配删除业务 system 消息。结构化调用在预算、观察快照和真实发送前共用协议准备；原生 Schema 不再同时附带一份全文 Schema 提示。OBJECT/NONE 保留完整结构说明。
 
 JSON 对象模式只约束 JSON 格式，不保证符合字段结构。Schema 模式也可能遇到拒答或截断，必须检查模型终态。[OpenAI 官方说明](https://developers.openai.com/api/docs/guides/structured-outputs)、[DeepSeek 官方说明](https://api-docs.deepseek.com/guides/json_mode/)。
 

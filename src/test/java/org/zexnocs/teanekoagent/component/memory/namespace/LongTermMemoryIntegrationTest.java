@@ -56,13 +56,105 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：验证证据原因、混合回滚、来源失效与持久暂停的授权恢复。
  * <br>2026/11/06：覆盖排队证据到期、旧作业读取、网页恢复回执及数据库异常包装。
  * <br>2026/11/06：格式不匹配保留受控字段诊断，不清空原作业或误计模型错误。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ * <br>2026/11/06：验证共享事件与个人画像在输出截断前分离。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 @Timeout(25)
 class LongTermMemoryIntegrationTest {
+    /** 2026/11/06：单片段有效证据超过预算时明确失败，不能丢掉尾部证据后推进水位。 */
+    @Test
+    void oversizedEvidenceDoesNotAdvanceWholeSegment() {
+        try (var h = new Harness()) {
+            h.medium("有效事实".repeat(5000), false);
+            var failure = assertThrows(CompletionException.class, h::claim);
+            assertInstanceOf(MemoryProcessingException.class, failure.getCause());
+            assertEquals(0, h.longs.consolidationState(reference, now, () -> {}).toCompletableFuture().join().through());
+        }
+    }
+    /**
+     * 2026/11/06：纯问候经过真实领取和提交，不调用模型；短事实不能按长度丢掉。
+     * @throws Exception 当有界异步处理失败时
+     */
+    @Test
+    void skipsOnlyLowInformationBeforeCallingModel() throws Exception {
+        try (var h = new Harness(); var timers = Executors.newSingleThreadScheduledExecutor()) {
+            h.medium("你好！你好呀～", false);
+            var generator = mock(ILongTermMemoryConsolidator.class);
+            try (var processor = new LayeredMemoryProcessor(h.layers,
+                    (batch, control) -> { throw new AssertionError("不应压缩"); }, h.refs,
+                    () -> settings, ignored -> new LayeredMemoryPolicy(true, true, false), Runnable::run, timers,
+                    Clock.fixed(now.plusSeconds(200), ZoneOffset.UTC), mock(ILogger.class), h.longs, generator, ignored -> true)) {
+                processor.drain().toCompletableFuture().get(5, TimeUnit.SECONDS);
+                verifyNoInteractions(generator);
+                assertTrue(h.longs.consolidationState(reference, now, () -> {}).toCompletableFuture().join().through() > 0);
+            }
+        }
+        try (var h = new Harness()) {
+            h.medium("我爱茶", false);
+            assertFalse(h.claim().evidence().isEmpty());
+        }
+        var longGreeting = new HistoryMessage("问候", actor("问候"), HistoryMessage.Role.USER,
+                "哈".repeat(60000), now, false, false);
+        assertFalse(LongMemoryLearningPolicy.defaults().informative(longGreeting));
+    }
+
+    /** 2026/11/06：聚合数量、最大等待和重要事件分别触发，重建 Store 不丢待处理片段。 */
+    @Test
+    void batchesNewSegmentsAndHonorsDeadlineAndUrgency() {
+        try (var h = new Harness()) {
+            for (int index = 0; index < 3; index++) {
+                h.medium("我平时喝茶");
+                assertTrue(h.longs.claim(h.stream(), now.plusSeconds(200)).toCompletableFuture().join().isEmpty());
+            }
+            h.medium("我平时喝茶");
+            assertEquals(4, h.longs.claim(h.stream(), now.plusSeconds(200)).toCompletableFuture().join().orElseThrow().segments().size());
+        }
+        try (var h = new Harness()) {
+            h.medium("我爱茶", false);
+            var restored = new EasyDataLongTermMemoryStore(h.db.data, h.db.store, h.db.mapper, () -> settings);
+            assertTrue(restored.claim(h.stream(), now.plusSeconds(700)).toCompletableFuture().join().isEmpty());
+            assertTrue(restored.claim(h.stream(), now.plusSeconds(701)).toCompletableFuture().join().isPresent());
+        }
+        try (var h = new Harness()) {
+            h.medium("我已离职", false);
+            assertTrue(h.longs.claim(h.stream(), now.plusSeconds(200)).toCompletableFuture().join().isPresent());
+        }
+    }
+
+    /** 2026/11/06：成功后重放相同片段仍无新证据，检查点与合同版本跨 Store 重建保留。 */
+    @Test
+    void completedEvidenceCheckpointSurvivesReplay() {
+        try (var h = new Harness()) {
+            h.medium("我平时喜欢茶");
+            var batch = h.claim();
+            assertTrue(h.longs.commit(batch, List.of(), now.plusSeconds(1001)).toCompletableFuture().join());
+            var data = h.db.data.inNamespace("agent.memory.long.v1");
+            var stream = h.stream();
+            data.transaction("测试恢复旧水位", () -> {
+                var jobs = data.get("jobs").atomic();
+                var row = Objects.requireNonNull(jobs.find(stream.id(),
+                        org.zexnocs.teanekocore.database.easydata.core.EasyDataLock.WRITE));
+                var tree = (tools.jackson.databind.node.ObjectNode) h.db.mapper.readTree(row.getValue());
+                tree.put("through", 0);
+                row.setValue(h.db.mapper.writeValueAsString(tree));
+                jobs.save(row);
+                var checkpoint = Objects.requireNonNull(data.get("learning").atomic().find(stream.id(),
+                        org.zexnocs.teanekocore.database.easydata.core.EasyDataLock.READ));
+                assertTrue(checkpoint.getValue().contains(LongMemoryLearningPolicy.PROMPT_VERSION));
+                assertTrue(checkpoint.getValue().contains(LongMemoryLearningPolicy.SCHEMA_VERSION));
+                assertFalse(checkpoint.getValue().contains("喜欢茶"));
+                return true;
+            }).toCompletableFuture().join();
+            var restored = new EasyDataLongTermMemoryStore(h.db.data, h.db.store, h.db.mapper, () -> settings);
+            var replay = restored.claim(h.stream(), now.plusSeconds(1100)).toCompletableFuture().join().orElseThrow();
+            assertTrue(replay.evidence().isEmpty());
+        }
+    }
     /**
      * 2026/11/05：在数据库回调已排队后撤销事实资格或取消控制，纯事实与空候选均不推进水位。
      * @throws Exception 当有界异步检查超时或真实事务失败时
@@ -117,21 +209,39 @@ class LongTermMemoryIntegrationTest {
             assertEquals(1, h.longs.query(reference, null, "", 20).toCompletableFuture().join().items().size());
         }
     }
+
+    /** 2026/11/06：用户画像与共享事件由权威查询分离，不在取出一页后再丢弃个人条目。 */
+    @Test void separatesSharedEventsFromPersonalProfilesBeforeOutputLimit() {
+        try (var h = new Harness()) {
+            h.medium("我喜欢喝茶，我们今天完成了部署");
+            var batch = h.claim();
+            var personal = h.candidate(batch, "喜欢喝茶", LongMemories.Mode.ADD);
+            var event = new LongMemories.Candidate(LongMemories.Kind.EPISODE, null, "event.deployment", "今天完成了部署",
+                    LongMemories.Mode.ADD, personal.quotes(), personal.segments(), "");
+            assertTrue(h.longs.commit(batch, List.of(personal, event), now.plusSeconds(1001)).toCompletableFuture().join());
+            var events = h.longs.events(reference, "", 1).toCompletableFuture().join();
+            assertEquals(1, events.items().size());
+            assertNull(events.items().getFirst().subjectId());
+            assertEquals("今天完成了部署", events.items().getFirst().text());
+            assertEquals(1, h.longs.query(reference, user, "", 20).toCompletableFuture().join().items().size());
+        }
+    }
     private final Instant now = Instant.parse("2026-11-03T00:00:00Z");
     private final UUID user = new UUID(0, 1);
     private final AgentScope scope = new AgentScope("test", "群甲");
     private final MemoryNamespaceReference reference = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);
     private final LayeredMemorySettings settings = new LayeredMemorySettings(true, 6, 2, 4, 131072, Duration.ofSeconds(30), Duration.ofDays(90));
-    /**
+/**
      * 持有真实适配器，所有证据均经原历史事务进入分层存储。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.1-l
-     * @version 4.8.0-l
+     * @version 4.8.6-l
      */
     private final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db = new NamespaceDatabaseFixture();
@@ -150,12 +260,21 @@ class LongTermMemoryIntegrationTest {
          * @param statement 本轮作者原话
          */
         void medium(String statement) {
+            medium(statement, true);
+        }
+        /**
+         * 2026/11/06：可保留原短消息用于验证质量过滤，不以填充文本改变信息含量。
+         * @param statement 真实文本
+         * @param expanded 是否增加既有长文本夹具的讨论上下文
+         */
+        void medium(String statement, boolean expanded) {
             int count = sequence == 0 ? 6 : 4;
             for (int i = 0; i < count; i++) {
                 int number = ++sequence;
                 var actor = actor("消息" + number);
                 var message = new HistoryMessage(actor.sourceId(), actor, HistoryMessage.Role.USER,
-                        statement + "。我们正在讨论日常偏好与项目进展，先保存真实交流，再自然整理重要的信息。".repeat(5), now.plusSeconds(number), false, false);
+                        statement + (expanded ? "。我们正在讨论日常偏好与项目进展，先保存真实交流，再自然整理重要的信息。".repeat(5) : ""),
+                        now.plusSeconds(number), false, false);
                 var context = new HistoryContext(reference, new AgentPersonalitySnapshot("人格", "teaneko", 1, "补正", 0, "基础", "", null));
                 history.append(context, message, now.plus(Duration.ofDays(7))).toCompletableFuture().join();
             }

@@ -12,6 +12,7 @@ import java.time.Duration;
  * <br>2026/11/04：统一输入估算、输出上限与后台交互总预算，避免固定额度阻塞合法批次。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
  *
  * @param enabled 是否启用分层记忆
  * @param triggerMessages 自动压缩触发消息数
@@ -21,17 +22,33 @@ import java.time.Duration;
  * @param timeout 模型及提交观察总时限
  * @param retention 中期保留期
  * @param triggerBytes 原始消息字节触发阈值
- * <br>2026/11/04���Ƴ������� token ��ģ����������ҵ�����������ֱ�Լ����
+ * @param learning 长期增量提取策略
  *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public record LayeredMemorySettings(boolean enabled, int triggerMessages, int keepMessages, int batchMessages,
-                                    int maxInputBytes, Duration timeout, Duration retention, int triggerBytes) {
+                                    int maxInputBytes, Duration timeout, Duration retention, int triggerBytes,
+                                    LongMemoryLearningPolicy learning) {
+    /**
+     * 2026/11/06：旧宿主构造使用默认长期聚合策略。
+     * @param enabled 总开关
+     * @param triggerMessages 短期触发数量
+     * @param keepMessages 保留数量
+     * @param batchMessages 短期批量
+     * @param maxInputBytes 输入容量
+     * @param timeout 执行时限
+     * @param retention 保留期限
+     * @param triggerBytes 字节触发阈值
+     */
+    public LayeredMemorySettings(boolean enabled, int triggerMessages, int keepMessages, int batchMessages,
+            int maxInputBytes, Duration timeout, Duration retention, int triggerBytes) {
+        this(enabled, triggerMessages, keepMessages, batchMessages, maxInputBytes, timeout, retention,
+                triggerBytes, LongMemoryLearningPolicy.defaults());
+    }
     /**
      * 2026/11/04：保留一次无工具请求约束，输入及输出 token 容量由实际模型配置决定。
      *
@@ -65,10 +82,11 @@ public record LayeredMemorySettings(boolean enabled, int triggerMessages, int ke
      * @param timeout 工作时限
      * @param retention 中期保留期
      * @param triggerBytes 字节触发阈值
+     * @param learning 长期聚合与质量过滤
      * @throws IllegalArgumentException 当预算或时间无效时
      */
     public LayeredMemorySettings {
-        if (keepMessages < 2 || triggerMessages <= keepMessages || triggerMessages > 200 || batchMessages < 1 || batchMessages > 64
+        if (learning == null || keepMessages < 2 || triggerMessages <= keepMessages || triggerMessages > 200 || batchMessages < 1 || batchMessages > 64
                 || maxInputBytes < 4096 || maxInputBytes > 262144 || timeout == null || timeout.isNegative() || timeout.isZero()
                 || timeout.compareTo(Duration.ofMinutes(2)) > 0 || retention == null || retention.compareTo(Duration.ofDays(1)) < 0
                 || retention.compareTo(Duration.ofDays(365)) > 0 || triggerBytes < 1024 || triggerBytes > maxInputBytes) {

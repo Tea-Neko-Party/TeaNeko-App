@@ -13,11 +13,12 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：提供不混用中期保留策略的近期原消息查询端口。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 public interface ILayeredMemoryStore {
     /**
@@ -57,4 +58,14 @@ public interface ILayeredMemoryStore {
      * @return 受条数与原有效期限制的视图
      */
     CompletionStage<MemoryLayers.View> read(MemoryNamespaceReference reference, Instant now, java.time.Duration retention);
+
+    /**
+     * 2026/11/06：只需近期互动的组件使用原消息有效期，不混用中期保留策略。
+     * @param reference 当前授权引用
+     * @param now 查询时间
+     * @return 有界且未过期的近期原消息
+     */
+    default CompletionStage<List<MemoryLayers.Message>> recent(MemoryNamespaceReference reference, Instant now) {
+        return read(reference, now, java.time.Duration.ZERO).thenApply(MemoryLayers.View::recent);
+    }
 }

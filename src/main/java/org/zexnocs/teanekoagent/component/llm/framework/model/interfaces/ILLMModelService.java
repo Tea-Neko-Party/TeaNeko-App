@@ -21,10 +21,12 @@ import java.util.Map;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：显式模型身份覆盖不清除 JSON 选项。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public interface ILLMModelService {
     /**
@@ -62,6 +64,15 @@ public interface ILLMModelService {
      */
     default LLMModelOptions resolveOptions(ILLMPrompt prompt) {
         throw new UnsupportedOperationException("模型服务尚未提供有效参数预检能力。");
+    }
+
+    /**
+     * 2026/11/06：在预算、观察和调用前统一准备协议输入；简单端口保持原输入。
+     * @param prompt 宿主输入
+     * @return 协议适配后的完整输入
+     */
+    default ILLMPrompt prepareRequest(ILLMPrompt prompt) {
+        return prompt;
     }
 
     /**

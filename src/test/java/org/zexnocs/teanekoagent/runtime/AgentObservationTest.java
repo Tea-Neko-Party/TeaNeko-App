@@ -1,33 +1,54 @@
 package org.zexnocs.teanekoagent.runtime;
 
 import org.junit.jupiter.api.Test;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
-import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
-import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
+
 import java.sql.SQLSyntaxErrorException;
-import java.util.UUID;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 /**
  * 观测开关实时读取，异常快照不破坏业务类别和资源控制。
  * <br>2026/11/06：不用真实模型或配置目录。
+ * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.4-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 class AgentObservationTest {
+    /** 2026/11/06：DEBUG 和 NONE 热更新不再产生 INFO，关闭后不构造正文。 */
+    @Test
+    void visibilitySelectsExactlyOneLevel() {
+        var files = mock(IFileConfigService.class);
+        var logger = mock(ILogger.class);
+        var config = new AgentObservationFileConfig();
+        when(files.requireCurrent(AgentObservationFileConfig.class)).thenReturn(config);
+        var service = new AgentObservationService(files, logger);
+        var result = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(), null, List.of(), List.of(), Map.of());
+        config.setVisibility(AgentObservationFileConfig.Visibility.DEBUG);
+        service.finished(UUID.randomUUID(), 10, result);
+        verify(logger).debug(eq("LLM 请求汇总"), contains("状态=SUCCESS"));
+        verify(logger, never()).info(anyString(), anyString());
+        clearInvocations(logger);
+        config.setVisibility(AgentObservationFileConfig.Visibility.NONE);
+        service.finished(UUID.randomUUID(), 10, result);
+        verifyNoInteractions(logger);
+    }
     /** 热更新各自关闭节点日志，损坏配置和日志端口失败不能影响调用者。 */
     @Test
     void hotSwitchesObservationWithoutPropagatingLoggerFailure() {

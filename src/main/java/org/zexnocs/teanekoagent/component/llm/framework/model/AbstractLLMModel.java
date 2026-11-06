@@ -17,10 +17,12 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：身份固定保留 JSON 合同，直调遵循适配器原生输出能力。
+ * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.8.3-l
+ * @version 4.8.6-l
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
@@ -144,12 +146,17 @@ public abstract class AbstractLLMModel implements ILLMModel {
                 : LLMModelOptions.merge(baseOptions, prompt.getOptions());
         LLMOptionBoundary.validate(options);
         // 2026/11/06：直接使用适配器也遵循原生 JSON 能力，不静默忽略格式要求。
-        options = getJsonOutputSupport(options.getModel()).adapt(options, true);
+        var support = getJsonOutputSupport(options.getModel());
+        // 2026/11/06：直调适配器也使用与服务入口一致的结构提示。
+        var messages = support.messages(prompt.getMessages(), options);
+        options = support.adapt(options, true);
         if (!supports(options)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + provider);
         }
-        LLMInputValidator.validate(prompt.getMessages(), getCapabilities(options.getModel()));
-        return execution == null ? doCall(prompt, options) : doCall(prompt, options, execution);
+        LLMInputValidator.validate(messages, getCapabilities(options.getModel()));
+        var actual = new org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt(
+                messages, options, prompt.getOptionsPolicy());
+        return execution == null ? doCall(actual, options) : doCall(actual, options, execution);
     }
 
     /**

@@ -13,13 +13,14 @@ import java.util.Map;
 /**
  * 实际模型调用边界的临时输入快照，不保留凭据、执行器或任意模型扩展参数。
  * <br>2026/11/06：包含工具定义及临时纠正提示，结束后随交互结果释放，不写业务数据库。
+ * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
  *
  * @param messages 本次实际提交的完整消息
  * @param declaration 模型、工具及输出结构的纯 JSON 声明
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.5-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 public record LLMRequestSnapshot(List<ILLMMessage> messages, String declaration) {
     private static final JsonMapper JSON = new JsonMapper();
@@ -60,7 +61,8 @@ public record LLMRequestSnapshot(List<ILLMMessage> messages, String declaration)
      * @return 纯 JSON 对象
      */
     private static Map<String, Object> schema(ILLMFunctionParameter parameter) {
-        var value = new LinkedHashMap<String, Object>();
+        // 2026/11/06：观察快照同步保留实际协议的容量约束。
+        var value = new LinkedHashMap<String, Object>(parameter.getLimits().schema());
         value.put("type", parameter.getType());
         if (parameter.getDescription() != null) {
             value.put("description", parameter.getDescription());
