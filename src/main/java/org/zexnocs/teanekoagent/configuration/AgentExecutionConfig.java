@@ -2,16 +2,19 @@ package org.zexnocs.teanekoagent.configuration;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
+import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.component.skill.adapter.AgentSkills;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry;
 import org.zexnocs.teanekoagent.runtime.AgentService;
 import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
@@ -33,11 +36,12 @@ import java.util.concurrent.ScheduledExecutorService;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/06：组件资料只通过显式装配贡献，宿主来源冲突报告具体类型。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.6-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentExecutionConfig {
@@ -109,25 +113,36 @@ public class AgentExecutionConfig {
 
     /**
      * 取得明确的宿主附加工具来源，注解提供者由能力路径单独装配。
+     * <br>2026/11/06：冲突包含来源类型，便于定位不正确的归属声明。
      * @param providers 候选工具端口
      * @return 唯一附加来源或空来源
      * @throws IllegalStateException 当存在多个未明确组合的附加来源时
      */
     private IAgentToolSource extraTools(ObjectProvider<IAgentToolSource> providers) {
-        var values = providers.orderedStream().filter(value -> !org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.isProvider(value)).toList();
-        if (values.size() > 1) { throw new IllegalStateException("宿主附加工具来源必须明确组合为一个端口。"); }
+        var values = providers.orderedStream().filter(value -> !TeaNekoAgentToolRegistry.isProvider(value)).toList();
+        if (values.size() > 1) {
+            throw new IllegalStateException("宿主附加工具来源必须明确组合为一个端口。冲突类型："
+                    + values.stream().map(value -> AopUtils.getTargetClass(value).getName()).sorted().toList());
+        }
         return values.isEmpty() ? defaultTools() : values.getFirst();
     }
 
     /**
-     * 取得宿主附加资料，不重复处理注解能力已经拥有的平台资料。
+     * 取得宿主附加资料，不重复处理组件及注解能力已经拥有的资料。
+     * <br>2026/11/06：按端口归属筛选，不通过固定组件名单或任取首项掩盖错误装配。
      * @param providers 候选资料端口
      * @return 唯一附加来源或静态空来源
      * @throws IllegalStateException 当存在多个未明确组合的附加来源时
      */
     private IAgentPromptSource extraPrompts(ObjectProvider<IAgentPromptSource> providers) {
-        var values = providers.orderedStream().filter(value -> !org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.isProvider(value)).toList();
-        if (values.size() > 1) { throw new IllegalStateException("宿主附加资料来源必须明确组合为一个端口。"); }
+        var values = providers.orderedStream()
+                .filter(value -> !(value instanceof IAgentComponentPromptSource))
+                .filter(value -> !TeaNekoAgentToolRegistry.isProvider(value))
+                .toList();
+        if (values.size() > 1) {
+            throw new IllegalStateException("宿主附加资料来源必须明确组合为一个端口。冲突类型："
+                    + values.stream().map(value -> AopUtils.getTargetClass(value).getName()).sorted().toList());
+        }
         return values.isEmpty() ? IAgentPromptSource.empty() : values.getFirst();
     }
 }

@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.component.AgentComponents;
+import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
 import org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
@@ -33,9 +34,9 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.IContext
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.configuration.AgentExecutionConfig;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
@@ -46,8 +47,8 @@ import org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
-import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
+import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
@@ -77,11 +78,12 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
  * <br>2026/11/05：验证上下文首个失败原因在结果与日志中保留。
  * <br>2026/11/06：验证真实 Agent 管线只输出一条汇总，内部 LLM 不重复输出。
  * <br>2026/11/06：覆盖前置拒绝、取消和失败的唯一终态通知，观察故障不改变结果或资源释放。
+ * <br>2026/11/06：组件资料与宿主资料同时存在时只选择独立宿主来源，不自动执行未装配组件。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.5-l
+ * @version 4.8.6-l
  */
 @Timeout(10)
 class AgentServiceTest {
@@ -1066,11 +1068,16 @@ class AgentServiceTest {
         verify(executor, never()).shutdown();
     }
 
-    /** 验证可选 Prompt 端口通过真实 Spring Bean 选择，构造无 I/O 且默认 Bean 名称和共享资源所有权保持稳定。 */
+    /**
+     * 验证可选 Prompt 端口通过真实 Spring Bean 选择，构造无 I/O 且共享资源所有权保持稳定。
+     * <br>2026/11/06：两个未装配的组件资料服务不得参与全局选择或执行。
+     */
     @Test void springAssemblySelectsExplicitPromptSourceWithoutEagerReads() {
         var executor = mock(ExecutorService.class);
         doAnswer(invocation -> { runtime.execute(invocation.getArgument(0)); return null; }).when(executor).execute(any(Runnable.class));
         var source = mock(org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.class);
+        var componentSource = mock(IAgentComponentPromptSource.class);
+        var otherComponentSource = mock(IAgentComponentPromptSource.class);
         when(source.resolve(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(List.of()));
         var references = mock(IAgentMemoryReferences.class);
         var fixed = new org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
@@ -1082,11 +1089,14 @@ class AgentServiceTest {
             beans.registerSingleton("llmInteractionService", interactions); beans.registerSingleton("objectMapper", new ObjectMapper());
             beans.registerSingleton("virtualExecutor", executor); beans.registerSingleton("taskExecutor", runtime.scheduler);
             beans.registerSingleton("projectLogger", logger); beans.registerSingleton("memoryReferences", references); beans.registerSingleton("promptSource", source);
+            beans.registerSingleton("componentSource", componentSource);
+            beans.registerSingleton("otherComponentSource", otherComponentSource);
             context.register(AgentExecutionConfig.class); context.refresh();
             verifyNoInteractions(source, executor, scopes, readiness);
             var assembled = context.getBean(IAgentTurnService.class); assertSame(assembled, context.getBean("agentTurnService"));
             var result = context.getBean(AgentService.class).run(agent(), request(AgentActivity.SERVICE)).toCompletableFuture(); runtime.runAll(); reply(response());
             assertEquals(SUCCESS, result.join().status()); verify(source).resolve(any(), any(), any(), any());
+            verifyNoInteractions(componentSource, otherComponentSource);
         }
         verify(executor, never()).shutdown(); verify(runtime.scheduler, never()).shutdown();
     }

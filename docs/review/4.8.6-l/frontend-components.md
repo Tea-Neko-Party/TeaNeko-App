@@ -15,7 +15,7 @@
 | 请求与回执 | [api.ts](../../../frontend/src/api.ts) 统一同源、CSRF 和 JSON 错误；[management-receipts.ts](../../../frontend/src/management-receipts.ts) 已校验部分管理回执 | 运行时回执保护尚未覆盖全部有副作用入口，见 F01 |
 | 生命周期与目录 | `usePageDraft`、`useActivePolling` 与 `useAgentLibrary` 管草稿、可见轮询、目录遍历和取消 | 已有合适复用点；应补查询规模和等待期限，避免每个页面重写 |
 
-`WebChatView.vue` 约 669 行、`AgentWorkspaceView.vue` 约 580 行、`ChatSettingsView.vue` 约 519 行。行数本身不构成缺陷；风险来自同一文件同时管理多类请求、DTO、业务恢复与视图，F01 就暴露了不同页面恢复规则漂移。首发不要求全量迁目录或引入路由／全局状态库。
+`WebChatView.vue` 约 669 行、`AgentWorkspaceView.vue` 约 584 行、`ChatSettingsView.vue` 约 519 行。行数本身不构成缺陷；风险来自同一文件同时管理多类请求、DTO、业务恢复与视图，F01 就暴露了不同页面恢复规则漂移。首发不要求全量迁目录或引入路由／全局状态库。
 
 ## 已确认的问题
 
@@ -23,7 +23,7 @@
 | --- | --- | --- | --- |
 | **V486-F01／P1** | 聊天发送或定时器修改返回 HTTP 200 的 `{}`／其他操作的回执时，原请求立即消失；聊天正文、附图、引用同时清空。结果不明时失去按原编号恢复的状态 | [WebChatView.receive:391](../../../frontend/src/WebChatView.vue#L391)、[RuntimeView.receive:122](../../../frontend/src/RuntimeView.vue#L122) 信任 TypeScript 泛型，未核对 `operationId`、状态或目标就清 `pending`。JSON 解析成功不代表业务确认 | 为各端点定义运行时 decoder，确认后才释放原请求。无效回执进入“结果未知”，保留原编号、参数与草稿，不自动新建编号重发。两页各验证空对象、错编号、错目标／字段类型和有效结果；确认后刷新失败不得降回“未提交” |
 | **V486-F02／P2** | 打开普通组件参数，浏览器可访问性树呈现无名开关、无名数值框和无名文本框，辅助技术缺少可靠的字段名称 | [AgentAssemblyEditor:167](../../../frontend/src/AgentAssemblyEditor.vue#L167) 的可见 `label` 与后面的 `ElSwitch`、`ElInputNumber`、`ElInput` 没有 `for/id` 或 `aria-labelledby` 关联；一般分支也未传 `aria-label` | 由字段容器生成实例唯一 ID，给实际可聚焦控件传名称、描述与错误关联；覆盖布尔、数字、字符串、密钥及编辑器。浏览器按字段名取得控件，并用读屏验证状态和错误。对应适用的 WCAG 2.2 1.3.1、3.3.2、4.1.2 |
-| **V486-F03／P2** | 运行管理页签宣称 `tablist/tab`，但方向键不移动焦点；没有 `tabpanel` 和控件关联。相似手写结构散布在聊天配置及 Agent 工作区 | [RuntimeView:172](../../../frontend/src/RuntimeView.vue#L172)、[AgentWorkspaceView:369](../../../frontend/src/AgentWorkspaceView.vue#L369)、[ChatSettingsView:415](../../../frontend/src/ChatSettingsView.vue#L415) 只设置选中属性，未实现完整页签交互 | 优先复用已有 `ElTabs`，或封装一套共同的手动激活页签；补焦点移动、单一 Tab 停靠点、面板关联和离开保护。浏览器验证方向键、Home/End、Enter/Space、禁用项和返回焦点。这里是页签模式缺口，不能表述成所有功能均无法用键盘操作 |
+| **V486-F03／P2** | 运行管理页签宣称 `tablist/tab`，但方向键不移动焦点；没有 `tabpanel` 和控件关联。相似手写结构散布在聊天配置及 Agent 工作区 | [RuntimeView:172](../../../frontend/src/RuntimeView.vue#L172)、[AgentWorkspaceView:373](../../../frontend/src/AgentWorkspaceView.vue#L373)、[ChatSettingsView:415](../../../frontend/src/ChatSettingsView.vue#L415) 只设置选中属性，未实现完整页签交互 | 优先复用已有 `ElTabs`，或封装一套共同的手动激活页签；补焦点移动、单一 Tab 停靠点、面板关联和离开保护。浏览器验证方向键、Home/End、Enter/Space、禁用项和返回焦点。这里是页签模式缺口，不能表述成所有功能均无法用键盘操作 |
 
 F01 是原 V484-W01 同类风险在**另外两个页面**的覆盖缺口；不重新打开已完成回执校验的 Agent 工作区和指令台。部署代理异常、版本不一致或后端回归可能返回可解析但不匹配的正文；前端不能把这些情况当作提交确认。本轮没有证据表明真实部署已经发送重复消息。
 
@@ -261,6 +261,6 @@ const timerState = useTimerManagement() // 返回 reactive 控制器，由现有
 - [真实源码回执诊断](../../../temp/verification/4.8.6-l/mvp-review/frontend/receipt-diagnostics.mjs) 执行当前 `api.ts` 及两页真实 `run/deliver/receive`；只替换网络、响应式容器和刷新副作用。共 6 个场景：4 个无效回执场景失败并复现 F01，2 个有效回执对照通过。结果见 [receipt-diagnostics.json](../../../temp/verification/4.8.6-l/mvp-review/frontend/receipt-diagnostics.json)。
 - [真实 Vue 浏览器诊断](../../../temp/verification/4.8.6-l/mvp-review/frontend/browser-diagnostics.mjs) 使用本机无界面 Chrome 和替身 API。确认无名字段、页签模式缺口、正常空目录和选定窄屏布局；最终页面异常列表为空。结果见 [browser-diagnostics.json](../../../temp/verification/4.8.6-l/mvp-review/frontend/browser-diagnostics.json)。初次日志替身缺少 `policy` 的异常在补齐测试合同后消失，没有登记为产品缺陷。
 - 未连接真实后端、数据库或模型，未执行真实写入。未完成所有主题对比度、真实读屏、移动端触控、全站自动无障碍扫描及完整生产分包验收。
-- 计划归档后的收尾核对中，`api.ts`、`WebChatView.vue`、`RuntimeView.vue`、`AgentAssemblyEditor.vue`、`AgentWorkspaceView.vue`、`ChatSettingsView.vue` 的 SHA256 均与本轮诊断快照一致，相关结论保持有效；没有重复执行浏览器诊断或 Gradle。
+- 最终收尾核对中，`api.ts`、`WebChatView.vue`、`RuntimeView.vue`、`AgentAssemblyEditor.vue`、`ChatSettingsView.vue` 的 SHA256 仍与本轮诊断快照一致。`AgentWorkspaceView.vue` 经并行提交后摘要发生变化；只将其 `management-receipts` 多行导入在内存中还原为原单行形式，即能得到原快照摘要，确认变化仅为导入排版。已重读 F01–F03 关键片段，工作区页签缺口仍在，并将源码定位从 369 行更新为 373 行。原浏览器诊断范围不变，没有重复执行浏览器诊断或 Gradle，也没有覆盖原快照。
 
 临时文件可能不进入 Git，因此 F01–F03 的触发条件、源位置及修改边界已直接保存在本文。

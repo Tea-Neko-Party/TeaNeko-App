@@ -19,26 +19,30 @@ import org.zexnocs.teanekoagent.component.social.SocialStateService;
 import org.zexnocs.teanekoagent.component.tool.ToolComponent;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.mock;
 
 /**
  * 新社交组件通过真实目录校验依赖、字段与序列化，新 Agent 仍保持仅模型。
  * <br>2026/11/06：不是只增加前端卡片，后端装配缺失依赖时必须拒绝。
+ * <br>2026/11/06：不安装运行服务也能校验声明，防止目录发现提前解析业务依赖。
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
  * @version 4.8.6-l
  */
 class SocialAssemblyTest {
-    /** 可独立选择好感度与心情，关怀要求原主动能力和好感度；参数不能越界。 */
+    /**
+     * 可独立选择好感度与心情，关怀要求原主动能力和好感度；参数不能越界。
+     * <br>2026/11/06：空服务容器刻意不提供运行依赖，声明校验不得尝试取用。
+     */
     @Test void validatesRealDependenciesAndParameters() {
-        var histories = new DefaultListableBeanFactory().getBeanProvider(IAgentHistoryRecorder.class);
-        var states = mock(SocialStateService.class);
-        var access = mock(SocialAccess.class);
-        var refs = mock(IAgentMemoryReferences.class);
+        var services = new DefaultListableBeanFactory();
+        var histories = services.getBeanProvider(IAgentHistoryRecorder.class);
+        var states = services.getBeanProvider(SocialStateService.class);
+        var access = services.getBeanProvider(SocialAccess.class);
+        var refs = services.getBeanProvider(IAgentMemoryReferences.class);
         var registry = AgentAssemblyTest.registry(new ToolComponent(), new MemoryComponent(new MemoryInputSystem(histories), new MemoryOutputSystem(histories)),
                 new AffinityComponent(states, access, refs), new MoodComponent(states, access, refs), new CareComponent(), new ProactiveComponent(),
-                new SharedMemoryComponent(mock(SharedMemoryPromptSource.class)), new PrivateContactComponent());
+                new SharedMemoryComponent(services.getBeanProvider(SharedMemoryPromptSource.class)), new PrivateContactComponent());
         assertEquals(1, registry.validate(AgentAssembly.MINIMAL).parameters().size());
         String base = "\"llm\":{},\"tool\":{},\"memory\":{}";
         assertTrue(registry.validate("{\"version\":1,\"components\":{" + base + ",\"mood\":{}}}").has("mood"));

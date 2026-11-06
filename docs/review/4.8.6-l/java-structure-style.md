@@ -17,7 +17,9 @@
 
 ## 扫描范围与证据等级
 
-本轮只读扫描快照包含 `src/main/java` 的 1312 个 Java 文件与 `src/test/java` 的 200 个文件。下表是去掉注释、字符串后得到的**词法候选统计**，用于排序人工复核，不能把每个命中都算成缺陷。普通 `for` 的语句分隔符、方法声明和必要长类型等仍须结合语法判断；120 列是软上限，不是逐行拒绝标准。
+2026/11/06 21:00（Asia/Shanghai）的只读扫描快照包含 `src/main/java` 的 1312 个 Java 文件与 `src/test/java` 的 200 个文件。下表是去掉注释、字符串后得到的**词法候选统计**，用于排序人工复核，不能把每个命中都算成缺陷。普通 `for` 的语句分隔符、方法声明和必要长类型等仍须结合语法判断；120 列是软上限，不是逐行拒绝标准。
+
+21:47–21:50 期间又有并行实现变更。收尾已按当前文件内容和审查开始时的 SHA-256 复核本文具体定位：J01–J03 的引用实现未变，J04 的 `metadata` 未经检查转换及三个乱码示例仍在，J05 的配置缺口和 J06 的职责热点仍成立。下表和 J04 的全仓数量仍保留为 21:00 快照，未重算为后续修改后的精确总数；这些源码复核也不表示重新执行了诊断或回归。
 
 | 范围 | 文件数 | 代码行超过 120 列候选 | 同行多语句候选 | 同行压缩控制结构候选 |
 | --- | ---: | ---: | ---: | ---: |
@@ -207,13 +209,13 @@ public CompletionStage<MediaReplies.Page> list(
 
 ## V486-J04：JavaDoc、类型及空值
 
-本轮扫描发现 38 个生产／测试 Java 文件的 64 行包含真实 `U+FFFD` 替换字符。例：[LLMInteractionExecution.java:38](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/LLMInteractionExecution.java#L38)、[AgentConversationSummaryService.java:55](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/summary/AgentConversationSummaryService.java#L55)、[LLMStickerAnalyzer.java:48](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LLMStickerAnalyzer.java#L48)。这是文件内容已经损坏，不是本次终端显示字体问题。应根据 Git 中未损坏文本或相应提交事实恢复；无法确认的历史文字重新写清含义，但不要伪造原日期或重置 `@since`。
+21:00 扫描快照中，38 个生产／测试 Java 文件的 64 行包含真实 `U+FFFD` 替换字符。例：[LLMInteractionExecution.java:38](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/LLMInteractionExecution.java#L38)、[AgentConversationSummaryService.java:55](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/summary/AgentConversationSummaryService.java#L55)、[LLMStickerAnalyzer.java:48](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LLMStickerAnalyzer.java#L48)。收尾重读确认这三个示例仍在；这是文件内容已经损坏，不是本次终端显示字体问题。应根据 Git 中未损坏文本或相应提交事实恢复；无法确认的历史文字重新写清含义，但不要伪造原日期或重置 `@since`。
 
-另有 584 个文件的 1313 处修改记录之间空白行候选，与 AGENTS 要求“逐行追加、条目之间不插入空行”不一致。[StickerReplyService 类注释](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L44)就是可直接检查的例子。按本次修改范围整理，保留真实历史条目；未修改类型不机械更新 `@version`。
+同一快照另有 584 个文件的 1313 处修改记录之间空白行候选，与 AGENTS 要求“逐行追加、条目之间不插入空行”不一致。[StickerReplyService 类注释](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L44)就是可直接检查的例子。按本次修改范围整理，保留真实历史条目；未修改类型不机械更新 `@version`。
 
-[LLMProtocolSnapshots.metadata:173](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/message/LLMProtocolSnapshots.java#L173) 将已知 Map 输入交给返回 `Object` 的递归入口，再转回 `Map<String, Object>` 并压制 unchecked。内部实现已经验证 Map 键，因此本轮没有证据表明发生类型污染；更清楚的写法是将 Map 分支提为返回 `Map<String, Object>` 的辅助方法，递归 JSON 入口复用它，保留深度、循环、null、凭据及不可变合同。
+[LLMProtocolSnapshots.metadata:173](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/message/LLMProtocolSnapshots.java#L173) 将已知 Map 输入交给返回 `Object` 的递归入口，再转回 `Map<String, Object>` 并压制 unchecked。该文件 21:49 的更新没有移除这段写法，收尾已重新读取确认。内部实现已经验证 Map 键，因此本轮没有证据表明发生类型污染；更清楚的写法是将 Map 分支提为返回 `Map<String, Object>` 的辅助方法，递归 JSON 入口复用它，保留深度、循环、null、凭据及不可变合同。
 
-未发现声明的 `serialVersionUID` 缺少 `@Serial` 的候选，不将该项列为待修。空值与 Lombok 必须逐合同核查，本轮不以字段默认 `null` 或存在 `@Nullable` 本身判断错误。`AgentTurn` 对借用控制的资源提示抑制有明确生命周期背景，不能靠提前关闭控制来消除 IDE 告警。
+该扫描快照未发现声明的 `serialVersionUID` 缺少 `@Serial` 的候选，不将该项列为待修。空值与 Lombok 必须逐合同核查，本轮不以字段默认 `null` 或存在 `@Nullable` 本身判断错误。`AgentTurn` 对借用控制的资源提示抑制有明确生命周期背景，不能靠提前关闭控制来消除 IDE 告警。
 
 ## V486-J05：可执行的代码格式基线
 
@@ -248,7 +250,7 @@ JavaDoc 语义、事务回调外部副作用、异步资源释放不属于格式
 
 ## V486-J06：包结构与职责边界
 
-当前采用单 Gradle 应用、五层 Java 包的模块化单体。生产源码的 import／全限定类型引用静态扫描未发现逆层候选；已有 `ProjectLayerBoundaryTest` 还覆盖反射类名和单工具提供者规则。它适合当前小团队部署，不需要为了“现代扩展性”立即拆成独立服务。
+当前采用单 Gradle 应用、五层 Java 包的模块化单体。21:00 的生产源码 import／全限定类型引用扫描快照未发现逆层候选；已有 `ProjectLayerBoundaryTest` 还覆盖反射类名和单工具提供者规则，后续变更是否通过按本轮主审查的实际验证记录判断。它适合当前小团队部署，不需要为了“现代扩展性”立即拆成独立服务。
 
 但包边界仍靠约定与测试，不是编译期模块边界。新增业务应继续由上层实现下层接口、通过组件或工具声明注册，不能为了便利在 Core／App 写新的 Agent 条件分支。团队或发布责任真正分化后，再考虑把稳定的 Core／App 合同提取为 Gradle 子模块；这不是首发阻断项。
 

@@ -1,5 +1,6 @@
 package org.zexnocs.teanekoagent.component.affinity;
 
+import org.springframework.beans.factory.ObjectProvider;
 import org.zexnocs.teanekoagent.component.TeaNekoAgentComponent;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.social.SocialAccess;
@@ -15,6 +16,7 @@ import java.util.Map;
 /**
  * 独立、可序列化的亲近程度配置；状态按空间及真实用户共享。
  * <br>2026/11/06：通过本轮模型工具评估有效互动，限制单次变化与评估频率。
+ * <br>2026/11/06：声明阶段不创建运行服务，避免组件目录与空间策略循环依赖。
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
@@ -24,11 +26,13 @@ import java.util.Map;
 @PluginOwned("teaneko.agent")
 public final class AffinityComponent extends SocialComponent {
     /**
-     * @param states 事务状态
-     * @param access 当前配置
-     * @param references 空间复核
+     * 2026/11/06：只保存服务提供者，实际状态处理时再取得对应单例。
+     * @param states 事务状态服务提供者
+     * @param access 当前配置服务提供者
+     * @param references 空间复核服务提供者
      */
-    public AffinityComponent(SocialStateService states, SocialAccess access, IAgentMemoryReferences references) {
+    public AffinityComponent(ObjectProvider<SocialStateService> states, ObjectProvider<SocialAccess> access,
+                             ObjectProvider<IAgentMemoryReferences> references) {
         super("affinity", Map.of("enabled", true, "initial", 30, "positiveStep", 2, "negativeStep", 3, "cooldownMinutes", 60), List.of(
                 new Field("enabled", "启用好感度", "不改变基础人格与操作权限。", "BOOLEAN"),
                 new Field("initial", "初始亲近度", "0–100；只影响尚未建立关系的用户。", "NUMBER"),

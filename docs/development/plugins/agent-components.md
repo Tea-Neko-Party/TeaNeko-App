@@ -51,6 +51,8 @@ public final class LocaleComponent extends DeclaredAgentComponent {
 
 构造注入 System Bean，在 `systems()` 返回阶段配对。`keys()` 声明全部自有键，初始化及系统写入均不得越界。键与 System ID 使用 `agent.component.<组件id>.` 前缀；`after` 只引用同阶段系统。注解 `requires` 声明必需组件，配置须显式安装，运行时不偷偷补齐。
 
+组件目录会在初始化时创建组件并读取声明。组件与 System 的构造及声明方法只提供元数据，不访问运行服务；有作用域策略或组件目录依赖的业务服务通过 `ObjectProvider` 注入，在 `execute` 或资料构建、复核阶段取得。声明阶段调用 `getObject()` 仍会产生依赖环。运行时按类型取得已管理的单例，不重新扫描，也不缓存权限判断。
+
 内置可编译参考：
 
 - [人格组件](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/PersonalityComponent.java)与[解析系统](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/PersonalityResolveSystem.java)：独立参数、结果键。
@@ -58,6 +60,8 @@ public final class LocaleComponent extends DeclaredAgentComponent {
 - [表达系统](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/ExpressionCompileSystem.java)：异步编译后提交自有计划，发送仍由宿主控制。
 
 组件可覆写 `tools()`、`prompts()`、`promptNames()`；工具还需要 `tool`，资料名须唯一。复用旧 `AgentFeature` 用 `features()` 声明依赖，不重复实例化服务。插件参数从组件读取，不向 `AgentScopeConfigData` 加平铺字段。
+
+组件拥有的资料服务若作为独立 Spring Bean，须实现 `IAgentComponentPromptSource`，并由组件的 `prompts()` 返回。它只通过组件选择和插件守卫执行，不参与宿主全局来源选择。独立宿主仍可提供一个普通 `IAgentPromptSource`；多个宿主来源必须显式组合，启动冲突会列出来源类型。验证装配时应包含 `AgentExecutionConfig` 创建的实际 `AgentService`，仅创建目录不能验证完整服务组合。
 
 重复标识、未知依赖、依赖环及越权写入均被拒绝。插件禁用、参数变化使旧选择失效；注册不等于启用，参数不授予跨聊天权限。单例组件和系统不保存用户可变状态。
 

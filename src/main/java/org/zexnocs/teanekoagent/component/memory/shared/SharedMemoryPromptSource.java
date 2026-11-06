@@ -3,6 +3,7 @@ package org.zexnocs.teanekoagent.component.memory.shared;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekoagent.component.memory.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceBindings;
@@ -16,7 +17,6 @@ import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
-import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekoapp.teauser.ChatIdentityService;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -30,13 +30,14 @@ import java.util.concurrent.CompletionStage;
 /**
  * 根据真实用户恢复同空间的群聊经历；引用、原消息、代次和真实发送回执在使用前复核。
  * <br>2026/11/06：参考资料保留当前聊天类型及原来源，不把其他聊天原文当作当前指令。
+ * <br>2026/11/06：明确资料由跨聊天回忆组件拥有，不参与宿主全局附加来源聚合。
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
  * @version 4.8.6-l
  */
 @Service
-public final class SharedMemoryPromptSource implements IAgentPromptSource {
+public final class SharedMemoryPromptSource implements IAgentComponentPromptSource {
     public static final String NAME = "shared_conversation";
     private final ObjectProvider<ISharedConversationStore> store;
     private final IAgentMemoryReferences references;
