@@ -29,11 +29,12 @@ import java.util.concurrent.CompletionStage;
  *
  * 修改记录：<br>
  * 2026/11/04：监听器可登记异步业务完成阶段，网页入站不再将事件通知完成当成业务完成。
+ * <br>2026/11/07：将已登记消息业务接入事件层的实际完成合同。
  *
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9
- * @version 4.7.5-l
+ * @version 4.8.7-l
  */
 public class TeaNekoMessageReceiveEvent<T extends ITeaNekoMessageData> extends AbstractEvent<T> {
     private final List<CompletableFuture<?>> processing = new ArrayList<>();
@@ -57,6 +58,7 @@ public class TeaNekoMessageReceiveEvent<T extends ITeaNekoMessageData> extends A
      *
      * @return 所有已登记业务实际结束后的完成阶段
      */
+    @Override
     public synchronized CompletionStage<Void> processingCompletion() {
         processingSealed = true;
         return CompletableFuture.allOf(processing.toArray(CompletableFuture<?>[]::new)).minimalCompletionStage();

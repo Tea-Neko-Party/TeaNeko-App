@@ -34,7 +34,11 @@ import org.zexnocs.teanekoagent.component.memory.fact.MemoryEventTime;
 import org.zexnocs.teanekoagent.component.memory.fact.MemoryFactAppend;
 import org.zexnocs.teanekoagent.component.memory.fact.MemoryFactSource;
 import org.zexnocs.teanekoagent.component.memory.fact.MemoryFactValue;
-import org.zexnocs.teanekoagent.component.memory.history.*;
+import org.zexnocs.teanekoagent.component.memory.history.ConversationHistoryService;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryContext;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryPage;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryQuery;
 import org.zexnocs.teanekoagent.component.memory.history.adapter.EasyDataHistoryStore;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
@@ -55,16 +59,32 @@ import org.zexnocs.teanekoagent.component.skill.adapter.ConfiguredSkillPolicy;
 import org.zexnocs.teanekoagent.component.tool.command.CommandInvocationReceipt;
 import org.zexnocs.teanekoagent.component.tool.command.ICommandAttemptStore;
 import org.zexnocs.teanekoagent.configuration.file_config.personality.AgentPersonalityFileConfig;
-import org.zexnocs.teanekoagent.integration.command.*;
+import org.zexnocs.teanekoagent.integration.command.AgentCommand;
+import org.zexnocs.teanekoagent.integration.command.AgentCommandGateway;
+import org.zexnocs.teanekoagent.integration.command.AgentCommandToolSource;
+import org.zexnocs.teanekoagent.integration.command.AgentMemoryManagementCommands;
+import org.zexnocs.teanekoagent.integration.command.AgentNamespaceCommands;
+import org.zexnocs.teanekoagent.integration.command.AgentPersonalityManagementCommands;
+import org.zexnocs.teanekoagent.integration.command.AgentSkillCommands;
+import org.zexnocs.teanekoagent.integration.command.EasyDataCommandAttemptStore;
+import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.integration.config.AgentFailureReplyPolicy;
 import org.zexnocs.teanekoagent.integration.config.AgentNamespaceConfigFields;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
-import org.zexnocs.teanekoagent.integration.message.*;
+import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
+import org.zexnocs.teanekoagent.integration.message.AgentAutomaticGateway;
+import org.zexnocs.teanekoagent.integration.message.NativeAgentReceiver;
+import org.zexnocs.teanekoagent.integration.message.NativeMessageInput;
+import org.zexnocs.teanekoagent.integration.message.PlatformHistoryCapture;
 import org.zexnocs.teanekoagent.runtime.AgentFactory;
 import org.zexnocs.teanekoagent.runtime.AgentRegistry;
 import org.zexnocs.teanekoagent.runtime.AgentService;
-import org.zexnocs.teanekoagent.runtime.access.*;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
+import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
+import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
+import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationOptions;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationService;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationSettings;
@@ -85,7 +105,16 @@ import org.zexnocs.teanekoapp.message.TeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
 import org.zexnocs.teanekoapp.utils.TeaNekoScopeService;
-import org.zexnocs.teanekoclient.web.*;
+import org.zexnocs.teanekoclient.web.WebChat;
+import org.zexnocs.teanekoclient.web.WebChatService;
+import org.zexnocs.teanekoclient.web.WebChatSettings;
+import org.zexnocs.teanekoclient.web.WebChatStore;
+import org.zexnocs.teanekoclient.web.WebImages;
+import org.zexnocs.teanekoclient.web.WebMessageFactory;
+import org.zexnocs.teanekoclient.web.WebMessageSenderTools;
+import org.zexnocs.teanekoclient.web.WebTeaNekoClient;
+import org.zexnocs.teanekoclient.web.WebToolbox;
+import org.zexnocs.teanekoclient.web.WebTransport;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
@@ -93,12 +122,27 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
-import org.zexnocs.teanekocore.command.*;
-import org.zexnocs.teanekocore.command.api.*;
+import org.zexnocs.teanekocore.command.CommandArgumentProcessor;
+import org.zexnocs.teanekocore.command.CommandData;
+import org.zexnocs.teanekocore.command.CommandDescriptionScanner;
+import org.zexnocs.teanekocore.command.CommandDispatcher;
+import org.zexnocs.teanekocore.command.CommandExecutor;
+import org.zexnocs.teanekocore.command.CommandPermissionManager;
+import org.zexnocs.teanekocore.command.CommandResult;
+import org.zexnocs.teanekocore.command.CommandScanner;
+import org.zexnocs.teanekocore.command.api.Command;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.command.api.CommandScope;
+import org.zexnocs.teanekocore.command.api.DefaultCommand;
+import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.command.easydata.CommandEasyData;
 import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
 import org.zexnocs.teanekocore.database.configdata.ConfigDataService;
-import org.zexnocs.teanekocore.database.configdata.interfaces.*;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataGetService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataQueryService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataRegisterService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataSetService;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManagerScanner;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
@@ -119,15 +163,50 @@ import tools.jackson.databind.ObjectMapper;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 复用事务与 FakeClient，验证真实 Agent/命令往返、原权限、持久化防重及基本管理闭环。
@@ -135,25 +214,19 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/03：原命令、自动和自主发送集成逐段持久回执。
  * <br>2026/11/03：覆盖拟人编译、语义历史及双原生入口交付。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：验证主动发言继承模型完整输出额度并保留系统身份隔离。
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
- *
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：覆盖协调器取消提示、准入等待超时及迟到结果不再启动模型。
  * <br>2026/11/05：超时提示经过真实配置服务转发，验证失败回执策略使用管理器实例。
- *
  * <br>2026/11/05：验证自动失败原因与开关、撤权边界。
  * <br>2026/11/05：验证网页私聊的最小装配经过真实事件总线完成自动和命令回复。
  * <br>2026/11/06：自主发言使用真实 JSON 合同并保持原发送管道。
  * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -243,7 +316,6 @@ class AgentCommandIntegrationTest {
     /**
      * 受控原生命令，业务由用例完成；非静态测试类不参与应用自动扫描。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -268,11 +340,8 @@ class AgentCommandIntegrationTest {
      * 实际扫描、分发、权限、执行、事件和 Agent 管线；只替换任务调度、scope 覆盖存储和供应商传输。
      * <br>2026/11/03：加入真实专用数据发送账本，复用原发送、失败和取消用例。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
      *
@@ -301,9 +370,7 @@ class AgentCommandIntegrationTest {
         /**
          * 当前测试拥有的局部表达容器与队列，不引入新的数据库替身。
          * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-         *
          * <br>2026/11/04：校正 @since 为首次引入版本。
-         *
          * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
          *
          * @author zExNocs
@@ -1130,8 +1197,10 @@ class AgentCommandIntegrationTest {
      * @return 原生目标解析器
      */
     private ProactiveTargets proactiveTargets(Harness h, ITeaNekoMessageData source) {
-        var clients = new TeaNekoClientScanner(mock(IBeanScanner.class));
-        clients.getHandlerMap().put(source.getClient().getClientId(), org.zexnocs.teanekocore.framework.pair.IndependentPair.of(mock(TeaNekoClient.class), source.getClient()));
+        var clients = mock(TeaNekoClientScanner.class);
+        // 2026/11/06：目录查询夹具提供不可变快照，不绕过正式扫描器修改注册表。
+        doReturn(java.util.Map.of(source.getClient().getClientId(), org.zexnocs.teanekocore.framework.pair.IndependentPair.of(mock(TeaNekoClient.class), source.getClient()))).when(clients).getHandlerMap();
+        doAnswer(call -> clients.getHandlerMap().get(call.getArgument(0))).when(clients).getPair(anyString());
         return new ProactiveTargets(clients, new TeaNekoScopeService(clients), mock(ITeaUserService.class));
     }
 

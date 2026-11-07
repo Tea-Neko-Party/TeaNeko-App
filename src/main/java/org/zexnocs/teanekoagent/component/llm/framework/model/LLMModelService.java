@@ -9,7 +9,12 @@ import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMTokenEstimator;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.JsonLLMTokenEstimator;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.*;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.IDefaultModelResolver;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModel;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMModel;
+import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -25,18 +30,14 @@ import java.util.Map;
  *
  * 2026/11/03：同步构造模型请求时固定文件代次，拒绝旧参数使用新凭据。
  * <br>2026/11/04：所有调用路径在请求前按模型上下文容量及完整输出额度执行准入。
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：将未直接注册的配置路由解析为扫描注册的协议 Bean。
- *
  * <br>2026/11/04：模型解析与请求构造使用独立配置来源，私有路由不依赖模型文件。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：模型目录完整校验后原子发布，重扫失败保留原快照。
  * <br>2026/11/06：按适配器 JSON 能力发送请求，路由覆盖不重置输出格式。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/10/28

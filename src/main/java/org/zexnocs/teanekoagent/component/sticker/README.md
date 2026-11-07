@@ -15,7 +15,7 @@
 - catalog-id 默认 main，是部署实例的稳定身份。全实例共享，不按 client、scope、人格或记忆 namespace 分库；clear/reset 记忆不触及素材域。
 - storage-root 默认 data/agent/stickers；多副本必须同时共享目录和数据库。目录中的身份文件与数据库绑定，换盘或丢失身份时拒绝自动接管，不删除对方看不到的文件。
 
-默认原图位于 `data/agent/stickers/main/assets/`；描述、分类与状态在数据库的 `agent.sticker.v1` 域。收藏仅表示后台作业已提交，`SAVED` 才表示保存成功。当前没有可发送素材时，模型会收到空类别事实；插画不会因用户要求收藏而自动成为表情包。
+默认原图位于 `data/agent/stickers/main/assets/`。v4.8.7-l 起，描述与分类保存在本地文件；数据库的 `agent.sticker.v1` 域只保留文件引用、状态、租约、额度与删除决定。收藏仅表示后台作业已提交，`SAVED` 才表示保存成功。当前没有可发送素材时，模型会收到空类别事实；插画不会因用户要求收藏而自动成为表情包。
 
 | 预算 | 默认值及含义 |
 | --- | --- |
@@ -31,6 +31,38 @@
 
 categories 可配置至多 32 个稳定 ID 到中文说明的映射；缺省为开心、伤心、生气、疑惑、惊讶、赞同、拒绝、安慰、感谢、尴尬、调侃、等待。每图只有一个主类别和至多四个次级标签。
 
+## 自动解析概率
+
+在本地配置的“表情包采集与容量”中修改。概率只决定是否为**自动采集的新图片**调用视觉模型；明确收藏、管理端重新分析、已有同图结果复用不抽样。下载、权限与模型额度仍独立生效。
+
+| 字段 | 默认值 | 作用 |
+| --- | --- | --- |
+| analysis-probability-mode | DYNAMIC | DYNAMIC 使用动态曲线，STATIC 使用固定概率 |
+| analysis-probability-min / max | 0.10 / 1.00 | 动态最低 10%、最高 100% |
+| analysis-probability-decay | 0.01 | 动态变化率，越大越早降低概率，必须为有限正数 |
+| analysis-probability-static | 0.20 | 静态模式固定 20% |
+
+两套参数均保留并校验。动态公式为 `p(n) = min + (max - min) × exp(-(decay × n)²)`，`n` 为当前有效素材数。默认 0、50、100、200 张时约为 100%、80%、43%、12%；前期衰减逐渐加快，接近下限后趋于平缓。概率均填写 0–1，不填写百分数。
+
+同一作业使用固定抽样值。未命中返回 `PROBABILITY_SKIPPED`，不占用模型额度、不记录分析失败，也不阻止之后显式收藏同一消息。抽样在下载去重后执行，因此仍占用下载额度。
+
+## 本地描述与复制迁移
+
+| 默认位置 | 内容 |
+| --- | --- |
+| `data/agent/stickers/main/assets/<图片摘要>.<格式>` | 保留动画的原图 |
+| 同目录 `<图片摘要>.sticker.json` | 可复制的描述、分类、图片校验信息及启用状态 |
+| `data/agent/stickers/main/descriptions/<描述摘要>.json` | 数据库引用的不可变描述版本，用于事务安全与恢复 |
+| `data/agent/stickers/main/.teaneko-sticker-store` | 素材卷身份，多副本必须共享 |
+
+只迁移图库：先启动目标实例，让它建立自己的素材卷身份；将原图及同摘要的 `.sticker.json` 一起复制到目标 `assets/`。后台空闲维护默认每 60 秒校验一批，最多 32 项，不重新调用模型。可复制整个实例目录到全新目标，包含身份文件。合并到已运行的目标时只复制图文对，不覆盖其身份文件。
+
+导入按图片摘要去重，不覆盖目标已有条目，也不会复活已删除素材。原来停用、当前类别不支持、质量不足或有效数量超额的素材以停用状态保留；总文件预算不足则保留源文件并报告，调整预算后可再次巡检。坏文件报告具体摘要且不阻塞同批其他素材；原图仍须通过文件大小、解码和摘要校验。
+
+旧活动目录在首次访问时先安全保存描述文件，再提交引用；旧删除记录在访问或低频维护时分批迁移。编辑通过新描述版本切换引用，便携文件在下一次目录访问时发布，通常由一秒一次的后台轮询完成；发布失败保留待办。未提交版本不会进入便携导入目录。复制前确认 `.sticker.json` 已生成；不要手改 `descriptions/` 内文件，描述修正使用管理功能。
+
+恢复或回退原实例须一起恢复数据库、完整素材目录和配套程序；只恢复数据库会缺少描述。更新前的旧程序不能读取新描述引用，回退必须使用更新前的完整备份。复制图文对仅迁移图库，不迁移历史使用统计、在途作业或删除决定。
+
 ## 主动收藏工具
 
 Spring 自动扫描 `StickerCollectionTools` 和 `StickerCollectionStatusTool`，分别提供采集与状态查询，复用相同来源校验：
@@ -43,7 +75,7 @@ Spring 自动扫描 `StickerCollectionTools` 和 `StickerCollectionStatusTool`�
 
 工具不接受 URL、本地路径、client、scope 或任意作者。主动收藏仍须当前区域允许采集，不强制把画作认定为表情包。模型可以向用户说明“已提交收藏”，只有 SAVED 回执才能说明已入库。
 
-状态为 QUEUED、RUNNING、SAVED、DUPLICATE、REJECTED、FAILED。重复源消息可能返回同一作业；旧回执已回收时 SOURCE_SEEN 仅说明曾处理过该来源，不代表收藏成功。CONTENT_SEEN 且附带 stickerId 才表示复用已有有效素材。BUSY、CAPACITY、DOWNLOAD_RATE、ANALYSIS_RATE、VISUAL_REJECTED、QUALITY_CAPACITY 等原因码区分未受理、限流与分类/容量拒绝。
+状态为 QUEUED、RUNNING、SAVED、DUPLICATE、REJECTED、FAILED。重复源消息可能返回同一作业；旧回执已回收时 SOURCE_SEEN 仅说明曾处理过该来源，不代表收藏成功。CONTENT_SEEN 且附带 stickerId 才表示复用已有有效素材。PROBABILITY_SKIPPED 表示正常跳过自动分析；BUSY、CAPACITY、DOWNLOAD_RATE、ANALYSIS_RATE、VISUAL_REJECTED、QUALITY_CAPACITY 等原因码区分未受理、限流与分类/容量拒绝。
 
 ## 下载、视觉与维护
 

@@ -5,7 +5,13 @@ package org.zexnocs.teanekoagent.component.memory.summary;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.JsonLLMTokenEstimator;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
@@ -21,7 +27,12 @@ import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceRefere
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationKey;
@@ -37,7 +48,14 @@ import tools.jackson.databind.SerializationFeature;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -51,19 +69,17 @@ import java.util.stream.Collectors;
  * 在借用业务域生成可重建的会话压缩状态，最多两个在途任务、无等待队列。
  * 失败不修改窗口，成功结果仍须由邮箱核对覆盖指纹后采用，不写长期事实或用户画像。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04��ժҪ����̳�ģ�����ã�����ѡȡ���������ı�������ʽԤ�㲻���Ծܾ���
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：摘要生成继承模型配置，完整选取后的上下文超出显式预算时拒绝。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：组件数据引用迁入 component，保持原业务流程。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：展开候选提交、后台执行失败与资源释放分支。
  *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.7-l
  */
 public final class AgentConversationSummaryService implements IAgentConversationSummaries, AutoCloseable {
     private final AgentAccessGate gate;
@@ -147,9 +163,17 @@ public final class AgentConversationSummaryService implements IAgentConversation
      * @param window 截断前完整窗口
      * @param base 已接受摘要
      */
-    @Override public void offer(AgentHandle handle, AgentRunResult result, AgentConversationWindow window, @Nullable AgentSummarySnapshot base) {
-        try { executor.execute(() -> { try { begin(handle, result, window, base); } catch (RuntimeException ignored) { failedOffer(result); } }); }
-        catch (RuntimeException ignored) { /* 执行器停止后不再建立后台工作。 */ }
+    @Override
+    public void offer(AgentHandle handle, AgentRunResult result, AgentConversationWindow window, @Nullable AgentSummarySnapshot base) {
+        try {
+            executor.execute(() -> {
+                try {
+                    begin(handle, result, window, base);
+                } catch (RuntimeException ignored) {
+                    failedOffer(result);
+                }
+            });
+        } catch (RuntimeException ignored) { /* 执行器停止后不再建立后台工作。 */ }
     }
     /**
      * 在业务域确定有界完整前缀、预占后台槽位并使用独立预算运行。
@@ -159,38 +183,60 @@ public final class AgentConversationSummaryService implements IAgentConversation
      * @param base 原摘要
      */
     private void begin(AgentHandle handle, AgentRunResult result, AgentConversationWindow window, @Nullable AgentSummarySnapshot base) {
-        var projection = result.promptTranscript(); var stamp = result.conversation(); var reference = result.memoryReference();
-        if (result.status() != AgentRunResult.Status.SUCCESS || stamp == null || reference == null || projection == null || projection.input().personality() == null) { return; }
+        var projection = result.promptTranscript();
+        var stamp = result.conversation();
+        var reference = result.memoryReference();
+        if (result.status() != AgentRunResult.Status.SUCCESS || stamp == null || reference == null || projection == null || projection.input().personality() == null) {
+            return;
+        }
         var settings = policies.apply(stamp.key().scope());
         if (!settings.enabled() || window.turns().size() <= settings.keepTurns()
-                || window.turns().size() < settings.triggerTurns() && window.bytes() < settings.triggerBytes()) { return; }
-        if (base != null && !valid(base, stamp, reference, projection.input().personality().identity(), clock.instant())) { return; }
-        var runtime = result.access().flatMap(AgentAccessDecision::runtime).orElseThrow(); var options = runtime.modelOptions().toOptions();
+            || window.turns().size() < settings.triggerTurns() && window.bytes() < settings.triggerBytes()) {
+            return;
+        }
+        if (base != null && !valid(base, stamp, reference, projection.input().personality().identity(), clock.instant())) {
+            return;
+        }
+        var runtime = result.access().flatMap(AgentAccessDecision::runtime).orElseThrow();
+        var options = runtime.modelOptions().toOptions();
         // 2026/11/04：完整继承模型输出额度，输入窗口按模型上下文比例选择。
         options.setTools(List.of());
         options.setToolChoice("none");
         var estimator = new JsonLLMTokenEstimator(mapper);
         long inputLimit = options.findContextWindow()
-                .map(context -> context.maxInputTokens(options.getMaxTokens())).orElse(Long.MAX_VALUE);
+            .map(context -> context.maxInputTokens(options.getMaxTokens())).orElse(Long.MAX_VALUE);
         var selected = new ArrayList<>(window.turns().subList(0, window.turns().size() - settings.keepTurns()));
         List<ILLMMessage> messages = prompt(base, selected, settings.maxCharacters());
         while (!selected.isEmpty() && (codec.signature(messages).bytes() > settings.maxInputBytes()
-                || estimator.estimate(new LLMPrompt(messages, options, LLMOptionsPolicy.RESOLVED)).inputTokens() > inputLimit)) {
-            selected.removeLast(); messages = prompt(base, selected, settings.maxCharacters());
+            || estimator.estimate(new LLMPrompt(messages, options, LLMOptionsPolicy.RESOLVED)).inputTokens() > inputLimit)) {
+            selected.removeLast();
+            messages = prompt(base, selected, settings.maxCharacters());
         }
-        if (selected.isEmpty()) { return; }
-        var now = clock.instant(); var limits = new LLMCallLimits(settings.maxModelCalls(), 0, 0, settings.maxTokens());
+        if (selected.isEmpty()) {
+            return;
+        }
+        var now = clock.instant();
+        var limits = new LLMCallLimits(settings.maxModelCalls(), 0, 0, settings.maxTokens());
         var control = ExecutionControl.withDeadline(limits.newBudget(), now.plus(settings.timeout()), clock, scheduler);
         final Slot slot;
         final boolean admitted;
         synchronized (lock) {
             slot = slots.get(stamp.key());
             admitted = !closed && slot != null && slot.stamp.equals(stamp) && slot.control == null && active < 2 && !now.isBefore(slot.lastAttempt.plus(settings.cooldown()));
-            if (admitted) { slot.control = control; slot.lastAttempt = now; active++; }
+            if (admitted) {
+                slot.control = control;
+                slot.lastAttempt = now;
+                active++;
+            }
         }
-        if (!admitted) { control.close(); return; }
+        if (!admitted) {
+            control.close();
+            return;
+        }
         var acquired = Objects.requireNonNull(slot, "摘要运行槽位不能为空。");
-        var link = handle.onClose(control::cancel); var captured = List.copyOf(selected); var personality = projection.input().personality();
+        var link = handle.onClose(control::cancel);
+        var captured = List.copyOf(selected);
+        var personality = projection.input().personality();
         var observed = new AtomicReference<LLMInteractionResult>();
         try {
             var settingsForCall = new LLMInteractionSettings(limits, settings.timeout(), settings.timeout(), settings.timeout());
@@ -198,11 +244,16 @@ public final class AgentConversationSummaryService implements IAgentConversation
             var work = check(handle, stamp, reference, personality, result, control).thenComposeAsync(ignored -> interactions.interact(
                     new LLMPrompt(prompt(base, captured, settings.maxCharacters()), options, LLMOptionsPolicy.RESOLVED), new LLMToolSet(mapper, List.of()), trusted,
                     settingsForCall, ILLMInteractionGuard.asynchronous(context -> check(handle, stamp, reference, personality, result, context.control()))), executor)
-                    .thenApply(interaction -> { observed.set(interaction); return interaction; });
+                .thenApply(interaction -> {
+                    observed.set(interaction);
+                    return interaction;
+                });
             control.guard(work).thenComposeAsync(interaction -> check(handle, stamp, reference, personality, result, control).thenApply(ignored -> interaction), executor)
-                    .whenComplete((interaction, failure) -> finish(acquired, control, link, stamp, reference, personality, captured, base,
-                            window.discardedTurns() > 0, settings, interaction == null ? observed.get() : interaction, failure));
-        } catch (RuntimeException failure) { finish(acquired, control, link, stamp, reference, personality, captured, base, true, settings, null, failure); }
+                .whenComplete((interaction, failure) -> finish(acquired, control, link, stamp, reference, personality, captured, base,
+                    window.discardedTurns() > 0, settings, interaction == null ? observed.get() : interaction, failure));
+        } catch (RuntimeException failure) {
+            finish(acquired, control, link, stamp, reference, personality, captured, base, true, settings, null, failure);
+        }
     }
     /**
      * 构造固定的低信任摘要资料，工具结果不升级为系统指令。
@@ -345,7 +396,6 @@ public final class AgentConversationSummaryService implements IAgentConversation
     /**
      * 有界缓存与运行标识，所有字段由本服务锁保护。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -369,7 +419,6 @@ public final class AgentConversationSummaryService implements IAgentConversation
     /**
      * 与前台共享预算维度的非敏感后台用量，不保存 Prompt 或正文。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param executionId 后台执行 ID

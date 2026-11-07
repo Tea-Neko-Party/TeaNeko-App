@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AccessibleTabs from './AccessibleTabs.vue'
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
 import {computed, onBeforeUnmount, onMounted, reactive, ref, watch} from 'vue'
@@ -412,11 +413,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 <template>
   <!-- 2026/11/04：常用字段优先展示，隐藏修改和登记状态仍明确提示。 -->
   <div class="chat-settings">
-    <div class="agent-tabs" role="tablist" aria-label="聊天配置分区">
-      <button role="tab" :aria-selected="configGroup === 'agent'" :class="{selected: configGroup === 'agent'}" :disabled="busy" @click="chooseGroup('agent')">Agent 配置</button>
-      <!-- 2026/11/04：功能分区与聊天类型都使用本地矢量图标辅助识别。 -->
-      <button role="tab" :aria-selected="configGroup === 'general'" :class="{selected: configGroup !== 'agent'}" :disabled="busy" @click="chooseGroup('general')"><ConsoleIcon name="other" /> 其他功能配置</button>
-    </div>
+    <!-- 2026/11/06：共享键盘页签，页面切换仍经过原草稿守卫。 -->
+    <AccessibleTabs :model-value="configGroup" :items="[{id: 'agent', name: 'Agent 配置'}, {id: 'general', name: '其他功能配置'}]" label="聊天配置分区" :disabled="busy" @update:model-value="chooseGroup">
     <ElAlert v-if="!sections.length && !busy" title="当前没有可用的聊天配置，请检查客户端及插件是否已启用。" type="info" :closable="false" />
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="success" :closable="true" @close="notice = ''" />
@@ -515,5 +513,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         </ElCard>
       </div>
     </div>
+    </AccessibleTabs>
   </div>
 </template>

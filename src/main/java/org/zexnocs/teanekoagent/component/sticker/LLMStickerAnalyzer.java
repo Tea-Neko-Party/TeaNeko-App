@@ -21,7 +21,11 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationConte
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -42,18 +46,15 @@ import java.util.concurrent.Executor;
 /**
  * 通过统一门控进行一次零工具视觉任务，严格区分画作与聊天表情包。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04��ͼƬ����̳�ģ�������ȣ��Ƴ������� token ��
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：图片分类继承模型输出额度，移除额外的 token 限额。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：视觉分析失败保留请求号、模型状态、HTTP 原因及结构错误，不记录模型原文。
  * <br>2026/11/06：分类改用统一类型化 JSON 生成，保留真实状态和脱敏结构诊断。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l

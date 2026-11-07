@@ -12,7 +12,12 @@ import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPro
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.*;
+import org.zexnocs.teanekoagent.component.llm.framework.model.AbstractLLMModel;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelService;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.IDefaultModelResolver;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModel;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
@@ -21,7 +26,11 @@ import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
@@ -32,23 +41,34 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 使用真实模型服务、抽象适配器和交互循环验证已解析参数跨阶段固定，不发起 HTTP。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04�������������ȸ����ڼ䱣�����������ȣ���ʽԤ�㲻������������
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：模型输出额度更新期间保留请求快照，显式预算不足时拒绝请求。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -263,7 +283,6 @@ class LLMResolvedOptionsTest {
      * 通过真正的抽象适配器准备参数，仅将网络边界替换为可手动完成的任务。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs

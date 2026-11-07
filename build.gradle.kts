@@ -1,11 +1,9 @@
 import com.sun.management.OperatingSystemMXBean
-import org.gradle.api.file.FileSystemOperations
 import org.springframework.boot.gradle.tasks.bundling.BootJar
 import org.springframework.boot.gradle.tasks.run.BootRun
 import se.bjurr.gitchangelog.plugin.gradle.GitChangelogTask
 import java.lang.management.ManagementFactory
 import java.time.LocalDate
-import javax.inject.Inject
 
 /**
  * 提供构建资源同步所需的文件服务。
@@ -146,6 +144,11 @@ tasks.named<ProcessResources>("processResources") {
     from(layout.buildDirectory.dir("generated/web")) {
         into("static")
     }
+    // 2026/11/07：JAR 携带配套迁移器源码和 SQL，部署时显式提取运行，应用本身不执行 DDL。
+    from("scripts/database") {
+        include("SchemaMigration.java", "mysql/**")
+        into("schema")
+    }
     // 2026/11/06：带哈希的分包改名后，普通复制会留下旧文件；只同步控制台生成目录。
     doLast {
         val source = consoleSource.get().asFile.canonicalFile
@@ -282,7 +285,7 @@ tasks.register<GitChangelogTask>("generateGitChangelog") {
 
     templateContent.set(provider { """
         # [${versionProject.version}] - ${LocalDate.now()}
-        
+
         ### 更新内容
         {{#commits}}
         * [{{authorName}}] - {{messageTitle}} - `{{hash}}`
@@ -364,3 +367,14 @@ tasks {
         }
     }
 }
+
+// 2026/11/07：质量门槛仅检查相对 Git 基线的新 Java 改动，不将历史格式问题变成全仓重排。
+val checkJavaChanges = tasks.register<Exec>("checkJavaChanges") {
+    group = "verification"
+    description = "检查新增 Java 代码的控制流格式、缩进和编码"
+    val launcher = javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(25)) }
+    commandLine(launcher.get().executablePath.asFile.absolutePath,
+        "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8",
+        "scripts/quality/JavaChangeCheck.java", providers.gradleProperty("qualityBase").getOrElse("HEAD"))
+}
+tasks.named("check") { dependsOn(checkJavaChanges) }

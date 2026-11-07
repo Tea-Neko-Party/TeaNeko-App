@@ -8,7 +8,25 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.component.AgentComponents;
 import org.zexnocs.teanekoagent.component.expression.AgentReplyPlan.Mode;
-import org.zexnocs.teanekoagent.component.expression.*;
+import org.zexnocs.teanekoagent.component.expression.ExpressionCompileSystem;
+import org.zexnocs.teanekoagent.component.expression.ExpressionComponent;
+import org.zexnocs.teanekoagent.component.expression.ExpressionDelivery;
+import org.zexnocs.teanekoagent.component.expression.ExpressionFeature;
+import org.zexnocs.teanekoagent.component.expression.ExpressionReplyProtocol;
+import org.zexnocs.teanekoagent.component.expression.ExpressionRuntime;
+import org.zexnocs.teanekoagent.component.expression.IExpressionClientAdapter;
+import org.zexnocs.teanekoagent.component.expression.ImageReplyHandler;
+import org.zexnocs.teanekoagent.component.expression.JsonReplyProtocol;
+import org.zexnocs.teanekoagent.component.expression.MediaReplySettings;
+import org.zexnocs.teanekoagent.component.expression.NativeFaceService;
+import org.zexnocs.teanekoagent.component.expression.PlainReplyProtocol;
+import org.zexnocs.teanekoagent.component.expression.ReplyCompileContext;
+import org.zexnocs.teanekoagent.component.expression.ReplyCoordinator;
+import org.zexnocs.teanekoagent.component.expression.ReplyPlans;
+import org.zexnocs.teanekoagent.component.expression.ReplySendContext;
+import org.zexnocs.teanekoagent.component.expression.TeaNekoExpressionClient;
+import org.zexnocs.teanekoagent.component.expression.TextReplyDirective;
+import org.zexnocs.teanekoagent.component.expression.TextReplyHandler;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentExpressionFileConfig;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentMediaReplyFileConfig;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
@@ -33,13 +51,34 @@ import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatComp
 import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatCompletionResponseData;
 import org.zexnocs.teanekoagent.component.memory.adapter.EasyDataDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.history.AgentDeliveryService;
-import org.zexnocs.teanekoagent.component.sticker.*;
+import org.zexnocs.teanekoagent.component.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.FaceReplyDirective;
+import org.zexnocs.teanekoagent.component.sticker.FaceReplyHandler;
+import org.zexnocs.teanekoagent.component.sticker.IStickerAnalyzer;
+import org.zexnocs.teanekoagent.component.sticker.IStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoagent.component.sticker.MediaReplies;
+import org.zexnocs.teanekoagent.component.sticker.MediaReplyFeature;
+import org.zexnocs.teanekoagent.component.sticker.StickerComponent;
+import org.zexnocs.teanekoagent.component.sticker.StickerExtensionRegistry;
+import org.zexnocs.teanekoagent.component.sticker.StickerLibrary;
+import org.zexnocs.teanekoagent.component.sticker.StickerReplyDirective;
+import org.zexnocs.teanekoagent.component.sticker.StickerReplyException;
+import org.zexnocs.teanekoagent.component.sticker.StickerReplyHandler;
+import org.zexnocs.teanekoagent.component.sticker.StickerReplyService;
+import org.zexnocs.teanekoagent.component.sticker.StickerReplyTools;
+import org.zexnocs.teanekoagent.component.sticker.Stickers;
+import org.zexnocs.teanekoagent.component.sticker.WeightedStickerAdmission;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
@@ -70,14 +109,41 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 复用事务与平台夹具验证从完整目录到独立发送、回执、回避及实际文件占用的闭环。
@@ -90,13 +156,155 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：空图库明确提供空类别，未启用媒体能力不产生空值异常。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/05：补充真实工具目录、供应商协议纠正、图片交付及目录失效的离线闭环。
+ * <br>2026/11/07：验证事务重试、并发预算、取消、关闭和最终失败的查询合同。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Timeout(20)
 class MediaReplyIntegrationTest{
+    /**
+     * 2026/11/07：不同类别并发只结算可用的一页预算，结果重放不再收费。
+     * @throws Exception 当有界图库查询失败时
+     */
+    @Test
+    void concurrentCategoriesShareTheCommittedInputBudget() throws Exception {
+        try (var h = new Harness(directory); var control = ExecutionControl.create()) {
+            h.seed(7);
+            var sad = h.seed(8);
+            h.catalog.change(h.gallery.snapshot(), state -> {
+                var entry = state.getEntries().get(sad.getHash());
+                var old = Objects.requireNonNull(entry.getAnalysis());
+                entry.setAnalysis(new Stickers.Analysis(old.kind(), old.confidence(), true,
+                    old.visualDescription(), old.usageDescription(), "sad", old.secondaryTags(), old.quality(), old.reasons()));
+                return true;
+            }).toCompletableFuture().get(5, TimeUnit.SECONDS);
+            var calibration = h.request("并发预算");
+            var input = h.input(calibration, control);
+            long pageCost = 0;
+            for (String category : List.of("happy", "sad")) {
+                var page = h.service.list(calibration, input, category, control).toCompletableFuture().get(5, TimeUnit.SECONDS);
+                var unsigned = new MediaReplies.Page(page.requestId(), page.resourceProof(), page.category(),
+                    page.catalogRevision(), page.items(), page.complete(), page.reason(), "");
+                pageCost = Math.max(pageCost, h.db.mapper.writeValueAsBytes(unsigned).length + 512L);
+            }
+            long limit = new LLMMessageCodec(h.db.mapper).signature(input.messages()).bytes() + pageCost + 1024 + 128;
+            var original = h.request("并发预算");
+            var request = new AgentRunRequest(original.requestId(), original.actor(), original.activity(),
+                original.messages(), original.conversation(), original.memoryReference(), original.userText(), limit);
+            var actual = h.input(request, control);
+            var first = h.service.list(request, actual, "happy", control).toCompletableFuture();
+            var second = h.service.list(request, actual, "sad", control).toCompletableFuture();
+            CompletableFuture.allOf(first, second).get(5, TimeUnit.SECONDS);
+            var pages = List.of(first.join(), second.join());
+            assertEquals(1, pages.stream().filter(MediaReplies.Page::complete).count());
+            assertEquals(1, pages.stream().filter(page -> page.reason().equals("INPUT_BUDGET")).count());
+            for (var page : pages) {
+                assertEquals(page, h.service.list(request, actual, page.category(), control).toCompletableFuture().get(5, TimeUnit.SECONDS));
+            }
+        }
+    }
+
+    /**
+     * 2026/11/07：取消、宿主关闭与最终提交失败均结束共享查询，不等待不可取消的数据库阶段。
+     * @throws Exception 当隔离提交控制失败时
+     */
+    @Test
+    void cancelledClosedAndFailedQueriesAlwaysSettle() throws Exception {
+        for (String action : List.of("cancel", "close", "failure")) {
+            try (var h = new Harness(directory.resolve(action)); var control = ExecutionControl.create()) {
+                h.seed(7);
+                var request = h.request("生命周期");
+                var input = h.input(request, control);
+                var entered = new CountDownLatch(1);
+                var release = new CountDownLatch(1);
+                h.db.beforeCommit.set(() -> {
+                    entered.countDown();
+                    try {
+                        if (!release.await(5, TimeUnit.SECONDS)) {
+                            throw new IllegalStateException("测试提交等待超时。");
+                        }
+                    } catch (InterruptedException failure) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("测试提交被中断。", failure);
+                    }
+                    if (action.equals("failure")) {
+                        throw new IllegalStateException("测试最终提交失败。");
+                    }
+                });
+                var waiting = h.service.list(request, input, "happy", control).toCompletableFuture();
+                try {
+                    assertTrue(entered.await(3, TimeUnit.SECONDS));
+                    if (action.equals("cancel")) {
+                        control.cancel();
+                    } else if (action.equals("close")) {
+                        h.service.close();
+                    } else {
+                        release.countDown();
+                    }
+                    assertThrows(ExecutionException.class, () -> waiting.get(3, TimeUnit.SECONDS));
+                } finally {
+                    release.countDown();
+                    h.db.beforeCommit.set(() -> {
+                    });
+                }
+            }
+        }
+    }
+    /**
+     * 2026/11/06：提交冲突重试不重复结算图库输入预算，同类别重放保留原证明。
+     * @throws Exception 当隔离测试未能在期限内完成时
+     */
+    @Test
+    void queryRetryMustNotChargeInputBudgetTwice() throws Exception {
+        try (var h = new Harness(directory); var control = ExecutionControl.create()) {
+            h.seed(7);
+            var calibrationRequest = h.request("预算验证");
+            var calibrationInput = h.input(calibrationRequest, control);
+            var calibration = h.service.list(calibrationRequest, calibrationInput, "happy", control)
+                .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertTrue(calibration.complete(), "无上限对照必须能完整查询");
+            var unsigned = new MediaReplies.Page(calibration.requestId(), calibration.resourceProof(),
+                calibration.category(), calibration.catalogRevision(), calibration.items(), true, "", "");
+            long cost = h.db.mapper.writeValueAsBytes(unsigned).length + 512;
+            var codec = new LLMMessageCodec(h.db.mapper);
+            long budget = codec.signature(calibrationInput.messages()).bytes() + cost + 1024 + 96;
+
+            var original = h.request("预算验证");
+            var baselineRequest = new AgentRunRequest(original.requestId(), original.actor(), original.activity(),
+                original.messages(), original.conversation(), original.memoryReference(), original.userText(), budget);
+            var baselineInput = h.input(baselineRequest, control);
+            var baseline = h.service.list(baselineRequest, baselineInput, "happy", control)
+                .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            assertTrue(baseline.complete(), "相同有限预算下，无数据库重试的对照必须成功");
+
+            var retryOriginal = h.request("预算验证");
+            var retryRequest = new AgentRunRequest(retryOriginal.requestId(), retryOriginal.actor(),
+                retryOriginal.activity(), retryOriginal.messages(), retryOriginal.conversation(),
+                retryOriginal.memoryReference(), retryOriginal.userText(), budget);
+            var retryInput = h.input(retryRequest, control);
+            var firstCommit = new java.util.concurrent.atomic.AtomicBoolean(true);
+            int retriesBefore = h.db.retries.get();
+            h.db.beforeCommit.set(() -> {
+                if (firstCommit.getAndSet(false)) {
+                    throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                        org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyDataObject.class,
+                        "审查注入的一次提交冲突");
+                }
+            });
+            var retried = h.service.list(retryRequest, retryInput, "happy", control)
+                .toCompletableFuture().get(5, TimeUnit.SECONDS);
+            h.db.beforeCommit.set(() -> {
+            });
+            assertEquals(1, h.db.retries.get() - retriesBefore, "必须确实发生一次事务回滚和重试");
+            assertEquals(retried, h.service.list(retryRequest, retryInput, "happy", control)
+                .toCompletableFuture().get(5, TimeUnit.SECONDS), "同类别重放复用原回执");
+            assertTrue(retried.complete(), "一次回滚不得重复扣减进程内目录预算；实际原因=" + retried.reason());
+        }
+    }
+
     @TempDir Path directory;
 
     /** 2026/11/05：空图库与原生表情关闭时仍说明本轮资源状态，缺少表达能力则不注入资料。 */
@@ -300,9 +508,7 @@ class MediaReplyIntegrationTest{
     /**
      * 测试客户端显式声明媒体能力，实际编码直接借用已注册 OneBot 适配器。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -340,13 +546,9 @@ class MediaReplyIntegrationTest{
 /**
      * 局部默认装配，所有文件和目录仲裁真实执行，只有原生来源由受控租约替身提供。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：增加生产序列化与插件令牌夹具，验证资源签名往返。
-     *
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      * <br>2026/11/05：夹具提供现有客户端目录依赖，不连接真实客户端。
      * <br>2026/11/05：复用组件宿主完成模型到图片发送的离线验证。
@@ -447,6 +649,8 @@ class MediaReplyIntegrationTest{
             var job=new Stickers.Job();job.setLease(UUID.randomUUID());job.setSource(new Stickers.Source(new AgentScope("test","来源"),UUID.randomUUID(),"用户","机器人","消息",0,Instant.now(),false,UUID.randomUUID(),url));
             var settings=gallery.snapshot();var identity=assets.identity(settings);try(var control=ExecutionControl.create()){var prepared=assets.prepare(job,settings,control);job.setBlob(prepared.blob());assets.publish(job,settings,control);}
             var e=new Stickers.Entry();e.setId("stk_"+job.getBlob().hash().substring(0,32));e.setHash(job.getBlob().hash());e.setBlob(job.getBlob());e.setState(Stickers.EntryStatus.ACTIVE);e.setCreated(Instant.now());e.setActivatedAt(Instant.now());e.setCachedUntil(Instant.now().plusSeconds(3600));e.setAnalysis(new Stickers.Analysis(Stickers.Kind.STICKER,.99,true,"猫的表情","开心地打招呼","happy",List.of(),.9,"适合聊天"));
+            // 2026/11/07：便携描述要求真实分析版本，夹具与正常采集保持一致。
+            e.setAnalysisVersion(settings.analysisVersion());
             catalog.change(settings,s->{s.setStorageIdentity(identity);s.getEntries().put(e.getHash(),e);s.setRevision(s.getRevision()+1);return true;}).toCompletableFuture().join();return e;
         }
         /** @return 实际目录副本 */

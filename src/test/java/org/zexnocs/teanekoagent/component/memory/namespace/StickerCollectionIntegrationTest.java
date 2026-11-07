@@ -7,7 +7,21 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
-import org.zexnocs.teanekoagent.component.sticker.*;
+import org.zexnocs.teanekoagent.component.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.IStickerAnalyzer;
+import org.zexnocs.teanekoagent.component.sticker.IStickerAssetStore;
+import org.zexnocs.teanekoagent.component.sticker.IStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.IStickerLifecycle;
+import org.zexnocs.teanekoagent.component.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoagent.component.sticker.StickerAnalysisSampling;
+import org.zexnocs.teanekoagent.component.sticker.StickerCatalogTransaction;
+import org.zexnocs.teanekoagent.component.sticker.StickerCollectionService;
+import org.zexnocs.teanekoagent.component.sticker.StickerExtensionRegistry;
+import org.zexnocs.teanekoagent.component.sticker.StickerLibrary;
+import org.zexnocs.teanekoagent.component.sticker.StickerSettings;
+import org.zexnocs.teanekoagent.component.sticker.Stickers;
+import org.zexnocs.teanekoagent.component.sticker.TeaNekoStickerAnalyzer;
+import org.zexnocs.teanekoagent.component.sticker.WeightedStickerAdmission;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -25,13 +39,22 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.awaitility.Awaitility.await;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -42,10 +65,11 @@ import static org.mockito.Mockito.mock;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：采集调用边界验证真实模型交互必需的父预算，防止模拟视觉端口掩盖空预算错误。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/07：原采集合同使用固定全量概率，概率边界另行验证。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Timeout(20)
 class StickerCollectionIntegrationTest {
@@ -100,7 +124,7 @@ class StickerCollectionIntegrationTest {
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.7-l
      */
     static final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db=new NamespaceDatabaseFixture();
@@ -123,6 +147,9 @@ class StickerCollectionIntegrationTest {
          */
         Harness(Path path,@org.jspecify.annotations.Nullable IStickerLifecycle lifecycle){
             file.setStorageRoot(path.toString());file.setAnalyzer("test");file.setMaintenanceSeconds(1);
+            // 2026/11/07：原采集合同测试固定全量，概率边界由专门回归验证，避免随机失败。
+            file.setAnalysisProbabilityMode(StickerAnalysisSampling.Mode.STATIC);
+            file.setAnalysisProbabilityStatic(1);
             context.getBeanFactory().registerSingleton("data",db.data);context.getBeanFactory().registerSingleton("mapper",db.mapper);
             context.register(EasyDataStickerCatalog.class,LocalStickerAssets.class,WeightedStickerAdmission.class,Analyzer.class);context.refresh();
             analyzer=context.getBean(Analyzer.class);registry=new StickerExtensionRegistry(new BeanScanner(context,mock(ILogger.class)),null);

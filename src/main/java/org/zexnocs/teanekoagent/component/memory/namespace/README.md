@@ -24,7 +24,7 @@ tea-neko.agent.memory.max-created-namespaces=5
 
 ## 适配器与存储布局
 
-`IMemoryNamespaceStore` 是可替换的事务端口；`EasyDataMemoryNamespaceStore` 复用现有 `IDatabaseService`、`DatabaseTaskConfig.pushAsync()` 及 `GeneralEasyDataRepository`，不新增线程池、通用事务框架或数据库表。
+`IMemoryNamespaceStore` 是可替换的事务端口；`EasyDataMemoryNamespaceStore` 经 `TeaNekoAgentEasyData` 的 DTO 复用原事务、行锁与版本仲裁，不直接访问 Repository。专用表与数据保留职责见[Agent EasyData](../../../database/easydata/README.md)。
 
 | 表 | 物理 namespace | target | o_key | 存储内容 |
 | --- | --- | --- | --- | --- |

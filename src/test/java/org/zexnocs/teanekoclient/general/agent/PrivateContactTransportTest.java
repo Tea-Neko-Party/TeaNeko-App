@@ -21,8 +21,20 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 使用原客户端注册表验证私聊目标定位、账号切换拒绝与实际发送器选项。
@@ -35,11 +47,14 @@ import static org.mockito.Mockito.*;
 @Timeout(10)
 class PrivateContactTransportTest {
     /** 只使用已有映射和机器人账号，发送关闭重试，账号变化后原目标立即失效。 */
-    @Test void usesExistingMappingAndRejectsChangedBotIdentity() {
+    @Test
+    void usesExistingMappingAndRejectsChangedBotIdentity() {
         var scanner = mock(IBeanScanner.class);
-        var clients = new TeaNekoClientScanner(scanner);
+        var clients = mock(TeaNekoClientScanner.class);
         var client = mock(ITeaNekoClient.class);
-        clients.getHandlerMap().put("test", IndependentPair.of(mock(TeaNekoClient.class), client));
+        // 2026/11/06：目录查询夹具提供不可变快照，不绕过正式扫描器修改注册表。
+        doReturn(java.util.Map.of("test", IndependentPair.of(mock(TeaNekoClient.class), client))).when(clients).getHandlerMap();
+        doAnswer(call -> clients.getHandlerMap().get(call.getArgument(0))).when(clients).getPair(anyString());
         var users = mock(ITeaUserService.class);
         var user = UUID.randomUUID();
         var scope = new AgentScope("test", "test-group@42");
@@ -61,7 +76,7 @@ class PrivateContactTransportTest {
         var response = mock(IMessageSendResponseData.class);
         when(response.getMessageId()).thenReturn("confirmed");
         when(sender.sendWithFuture()).thenAnswer(ignored -> new TaskFuture<>(mock(ILogger.class), "离线私聊",
-                CompletableFuture.completedFuture(response)));
+            CompletableFuture.completedFuture(response)));
         var guard = mock(Runnable.class);
         service.send(target, "邀请中的私聊内容", guard).toCompletableFuture().join();
         verify(guard, times(2)).run();

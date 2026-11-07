@@ -16,7 +16,8 @@ const components = ref<ComponentDoc[]>([])
 const tools = ref<ToolDoc[]>([])
 const search = ref('')
 // 2026/11/06：摘要目录与详情分开；客户端筛选只限制展示，不替代调用时权限检查。
-const client = ref('')
+// 2026/11/07：数字表示通用，字符串只表示真实客户端 ID，避免筛选值与扩展标识冲突。
+const client = ref<string | number>('')
 const selected = ref('')
 const detailOpen = ref(false)
 const clientOptions = computed(() => [...new Set(tools.value.flatMap(tool => tool.clients))].sort((a, b) => a.localeCompare(b, 'zh-CN')))
@@ -31,7 +32,8 @@ const error = ref('')
 let generation = 0
 const matches = (value: unknown) => JSON.stringify(value).toLowerCase().includes(search.value.toLowerCase())
 const visibleComponents = computed(() => components.value.filter(matches))
-const visibleTools = computed(() => tools.value.filter(tool => matches(tool) && (!client.value || !tool.clients.length || tool.clients.includes(client.value))))
+const visibleTools = computed(() => tools.value.filter(tool => matches(tool)
+  && (client.value === '' || (client.value === 0 ? !tool.clients.length : tool.clients.includes(String(client.value))))))
 const phases: Record<string, string> = {BEFORE_PROMPT: '准备输入前', BEFORE_INTERACTION: '调用模型前', AFTER_INTERACTION: '模型返回后', BEFORE_DELIVERY: '最终交付前'}
 async function load() {
   const current = ++generation
@@ -58,13 +60,14 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
   <section class="api-docs-view">
     <div class="toolbar">
       <ElInput v-model="search" clearable :placeholder="mode === 'components' ? '搜索组件、参数或系统' : '搜索工具或参数'" aria-label="筛选 API 文档" />
-      <ElSelect v-if="mode === 'tools'" v-model="client" clearable filterable placeholder="全部客户端" aria-label="筛选工具客户端">
+      <ElSelect v-if="mode === 'tools'" v-model="client" clearable :value-on-clear="''" filterable placeholder="全部客户端" aria-label="筛选工具客户端">
+        <ElOption label="通用" :value="0" />
         <ElOption v-for="name in clientOptions" :key="name" :label="name" :value="name" />
       </ElSelect>
       <RefreshButton :disabled="busy" @click="load" />
     </div>
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
-    <div class="api-directory-caption"><p class="small muted">{{ mode === 'components' ? '按需装配组件，点击查看参数与执行系统。' : '选择客户端查看适用工具，通用工具始终包含在结果中。' }}</p><span class="small muted">{{ mode === 'components' ? visibleComponents.length : visibleTools.length }} 项</span></div>
+    <div class="api-directory-caption"><p class="small muted">{{ mode === 'components' ? '按需装配组件，点击查看参数与执行系统。' : '选择客户端查看专用工具，或选择通用工具。' }}</p><span class="small muted">{{ mode === 'components' ? visibleComponents.length : visibleTools.length }} 项</span></div>
     <div v-if="mode === 'components'" class="api-docs-grid">
       <article v-for="item in visibleComponents" :key="item.id" class="api-docs-card">
         <button class="api-docs-summary component-summary" @click="showDetail(item.id)" :aria-label="'查看组件 ' + item.name">
@@ -78,7 +81,8 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
     <div v-else class="api-docs-grid">
       <article v-for="tool in visibleTools" :key="tool.name" class="api-docs-card">
         <button class="api-docs-summary" @click="showDetail(tool.name)" :aria-label="'查看工具 ' + tool.name">
-          <header><h3>{{ tool.name }}</h3><ElTag size="small">{{ tool.clients.length ? '专用' : '通用' }}</ElTag></header>
+          <!-- 2026/11/07：展示实际客户端标识，多客户端及长标识允许换行。 -->
+          <header class="tool-summary-heading"><h3>{{ tool.name }}</h3><div class="tool-client-tags"><ElTag v-for="id in tool.clients.length ? tool.clients : ['通用']" :key="id" size="small">{{ id }}</ElTag></div></header>
           <p class="api-docs-brief">{{ tool.description }}</p>
           <footer><span>{{ Object.keys(tool.parameters.properties ?? {}).length }} 个参数{{ tool.conditional ? ' · 有使用条件' : '' }}</span><span class="api-docs-link">查看详情 →</span></footer>
         </button>

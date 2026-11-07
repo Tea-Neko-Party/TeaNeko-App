@@ -45,28 +45,32 @@ import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 用真实处理器、生成器、输入估算及交互预算验证大批次的准入与容量边界。
  *
- * 修改记录：<br>
- * 2026/11/04：覆盖超过旧固定额度的中长期输入、完整输出预留及超限批次不推进进度。
- *
- * <br>2026/11/04����֤�г������������̳�ģ�������ȣ��Ϸ������벻�ܾɳ���Լ����
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：覆盖超过旧固定额度的中长期输入、完整输出预留及超限批次不推进进度。
+ * <br>2026/11/04：验证中长期记忆生成继承模型输出额度，合法长输入不受旧长度约束。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
  * <br>2026/11/06：按带失败原因的退避接口核对预算拒绝后的原进度保留。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：预算夹具保留模型接口的默认请求准备行为，不跳过 JSON 输入预检。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Timeout(15)
 class MemoryGenerationBudgetTest {
@@ -112,6 +116,8 @@ class MemoryGenerationBudgetTest {
         // 2026/11/05：长期退避携带真实失败分类，预算失败仍不得提交水位。
         when(longs.retry(eq(longBatch), any(), any())).thenReturn(CompletableFuture.completedStage(null));
         var models = mock(ILLMModelService.class);
+        // 2026/11/07：模型替身使用接口的原样准备合同；供应商适配由协议测试独立覆盖。
+        when(models.prepareRequest(any())).thenCallRealMethod();
         var options = LLMModelOptions.builder().provider("test").model("受控模型").maxTokens(configuredOutput).build();
         when(models.resolveOptions(any())).thenAnswer(call -> {
             ILLMPrompt prompt = call.getArgument(0);

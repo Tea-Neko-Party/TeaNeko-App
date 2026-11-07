@@ -4,7 +4,12 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.TreeMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -12,11 +17,12 @@ import java.util.concurrent.CompletionStage;
  * 传输无关的插件管理路由；没有显式授权适配器时拒绝所有管理访问。
  * 不发布 HTTP，不根据客户端类型名反射调用，也不授予 Web 身份聊天来源资格。
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/07：为宿主提供实际业务完成阶段，等待截止独立包装。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.7-l
  */
 @Service
 public final class ManagementGateway {
@@ -67,16 +73,38 @@ public final class ManagementGateway {
      * @return 真实业务结果
      */
     public CompletionStage<?> execute(String key, ManagementContext context, Object request) {
+        return context.control().guard(executePhysical(key, context, request));
+    }
+
+    /**
+     * 2026/11/06：物理阶段完整结束才完成，宿主另以控制器限制调用者等待。
+     * @param key 资源全局 ID
+     * @param context 已认证上下文
+     * @param request 明确请求 DTO
+     * @return 授权、业务和返回复核实际完成的阶段，不以逻辑超时提前完成
+     */
+    public CompletionStage<?> executePhysical(String key, ManagementContext context, Object request) {
         try {
-            context.control().checkActive(); var resource = resources.get(key);
-            if (resource == null) { throw new IllegalArgumentException("管理资源不存在或不可见。"); }
-            var authority = authority(); var descriptor = resource.descriptor();
-            return context.control().guard(authority.authorize(context, descriptor)).thenCompose(ignored -> {
+            context.control().checkActive();
+            var resource = resources.get(key);
+            if (resource == null) {
+                throw new IllegalArgumentException("管理资源不存在或不可见。");
+            }
+            var authority = authority();
+            var descriptor = resource.descriptor();
+            return authority.authorize(context, descriptor).thenCompose(ignored -> {
+                context.checkActive();
                 var token = plugins.capture(descriptor.pluginId());
-                return call(resource, context, request).thenCompose(value -> context.control().guard(authority.authorize(context, descriptor))
-                        .thenApply(authorized -> { plugins.check(token); return value; }));
+                return call(resource, context, request).thenCompose(value -> authority.authorize(context, descriptor)
+                    .thenApply(authorized -> {
+                        context.checkActive();
+                        plugins.check(token);
+                        return value;
+                    }));
             });
-        } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
+        } catch (RuntimeException failure) {
+            return CompletableFuture.failedStage(failure);
+        }
     }
     /**
      * 保留资源泛型并进行运行时请求类型检查。
@@ -88,7 +116,8 @@ public final class ManagementGateway {
      * @return 完整业务阶段
      */
     private static <Q, R> CompletionStage<R> call(ManagementResource<Q, R> resource, ManagementContext context, Object request) {
-        context.control().checkActive(); return context.control().guard(resource.execute(context, resource.requestType().cast(request)));
+        context.checkActive();
+        return resource.execute(context, resource.requestType().cast(request));
     }
     /**
      * 要求唯一显式授权适配器，避免默认开放。

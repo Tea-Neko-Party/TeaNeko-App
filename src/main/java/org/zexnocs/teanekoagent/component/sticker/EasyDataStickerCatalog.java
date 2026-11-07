@@ -2,17 +2,19 @@ package org.zexnocs.teanekoagent.component.sticker;
 
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoagent.database.easydata.TeaNekoAgentEasyData;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Map;
 import java.util.UUID;
-import java.util.LinkedHashMap;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Function;
 
@@ -23,11 +25,12 @@ import java.util.function.Function;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：已回收删除条目逐行存储，按指纹与公开标识索引，旧目录迁移与原操作共同提交。
  * <br>2026/11/06：分流终态作业与短期管理回执，待执行和待清理状态继续持久保存。
+ * <br>2026/11/07：描述迁入不可变本地文件，事务仅保存引用；便携发布意图随目录共同提交。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.5-l
+ * @version 4.8.7-l
  */
 @Component
 @TeaNekoStickerCatalog("easydata")
@@ -35,6 +38,7 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
     private static final int MAX_CHARACTERS = 8 * 1024 * 1024;
     private final TeaNekoAgentEasyData data;
     private final ObjectMapper mapper;
+    private final StickerMetadataFiles metadata;
 
     /**
      * @param data 专用入口
@@ -43,6 +47,8 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
     public EasyDataStickerCatalog(TeaNekoAgentEasyData data, ObjectMapper mapper) {
         this.data = data.inNamespace("agent.sticker.v1");
         this.mapper = mapper;
+        // 2026/11/07：文件帮助对象由目录独占，不是另一个 Spring 服务或扫描器。
+        this.metadata = new StickerMetadataFiles(mapper);
     }
 
     /**
@@ -69,6 +75,17 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
             var dto = data.get("catalog:" + settings.catalogId()).atomic();
             var row = dto.find("state", EasyDataLock.WRITE);
             var state = row == null ? new Stickers.State() : mapper.readValue(row.getValue(), Stickers.State.class);
+            // 2026/11/07：只发布上一次已提交的意图；本次回滚也不会导出未提交的描述。
+            if (!state.getMetadataIdentity().isEmpty() || !state.getPendingPortable().isEmpty()) {
+                bindMetadata(settings, state);
+            }
+            state.getPendingPortable().forEach((hash, reference) -> metadata.publish(settings, hash, reference));
+            state.getPendingPortable().clear();
+            var before = new HashMap<String, StickerPortableReference>();
+            state.getEntries().forEach((hash, entry) -> {
+                before.put(hash, StickerPortableReference.from(entry));
+                metadata.hydrate(settings, entry);
+            });
             // 2026/11/06：根锁同时保护两表，已结束作业和短期管理回执仅留在可清理表。
             var observations = data.cleanable().get("catalog:" + settings.catalogId()).atomic();
             var observedRow = observations.find("observations", EasyDataLock.WRITE);
@@ -90,6 +107,23 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
             var transaction = new Transaction(settings, state);
             transaction.archive();
             var result = Objects.requireNonNull(action.apply(transaction));
+            // 2026/11/07：先落不可变描述，后写引用；旁车只排队，失败事务不会发布新版本。
+            state.getEntries().forEach((hash, entry) -> {
+                if (entry.getAnalysis() != null && state.getMetadataIdentity().isEmpty()) {
+                    bindMetadata(settings, state);
+                }
+                metadata.persist(settings, entry);
+                var next = StickerPortableReference.from(entry);
+                var prior = before.remove(hash);
+                if (!next.equals(prior) && (next.blob() != null || prior != null && prior.blob() != null)) {
+                    state.getPendingPortable().put(hash, next);
+                }
+            });
+            before.forEach((hash, prior) -> {
+                if (prior.blob() != null) {
+                    state.getPendingPortable().put(hash, new StickerPortableReference(null, "", 0, false));
+                }
+            });
             transaction.archive();
             var completed = new LinkedHashMap<UUID, Stickers.Job>();
             state.getJobs().forEach((id, job) -> {
@@ -129,6 +163,10 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
      */
     private String durableJson(Stickers.State state) {
         var json = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(state);
+        // 2026/11/07：不改变回调视图，但数据库不再保存任何条目的描述正文。
+        if (json.get("entries") instanceof tools.jackson.databind.node.ObjectNode entries) {
+            entries.properties().forEach(entry -> ((tools.jackson.databind.node.ObjectNode) entry.getValue()).remove("analysis"));
+        }
         json.remove("operations");
         if (json.get("jobs") instanceof tools.jackson.databind.node.ObjectNode jobs) {
             state.getJobs().forEach((id, job) -> {
@@ -138,6 +176,67 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
             });
         }
         return mapper.writeValueAsString(json);
+    }
+
+    /**
+     * @param settings 当前目录
+     * @param state 本事务状态
+     * @throws IllegalStateException 当只迁移数据库却没有共享原描述卷时
+     */
+    private void bindMetadata(StickerSettings settings, Stickers.State state) {
+        String identity = StickerStoragePaths.identity(settings);
+        if (!state.getMetadataIdentity().isEmpty() && !state.getMetadataIdentity().equals(identity)) {
+            throw new IllegalStateException("表情包描述卷身份不一致；恢复数据库时须一并恢复完整素材目录。");
+        }
+        state.setMetadataIdentity(identity);
+    }
+
+    /**
+     * @param settings 固定目录
+     * @param state 根锁内的状态
+     * @param entry 待归档条目
+     * @return 不含描述正文的删除记录
+     */
+    private String entryJson(StickerSettings settings, Stickers.State state, Stickers.Entry entry) {
+        if (entry.getAnalysis() != null && state.getMetadataIdentity().isEmpty()) {
+            bindMetadata(settings, state);
+        }
+        metadata.persist(settings, entry);
+        var json = (tools.jackson.databind.node.ObjectNode) mapper.valueToTree(entry);
+        json.remove("analysis");
+        return mapper.writeValueAsString(json);
+    }
+
+    /**
+     * 旧删除记录每批迁移至多 32 行，图片校验及目录扫描留在事务外。
+     * @param settings 固定配置
+     * @param assets 文件后端
+     * @param policy 准入策略
+     * @param control 宿主控制
+     * @param verify 实时配置及插件复核
+     * @return 实际导入统计
+     */
+    @Override
+    public Maintenance maintain(StickerSettings settings, IStickerAssetStore assets, IStickerAdmissionPolicy policy,
+                                ExecutionControl control, Runnable verify) {
+        change(settings, state -> {
+            verify.run();
+            control.checkActive();
+            var deleted = data.get("deleted:" + settings.catalogId()).atomic();
+            var rows = deleted.scan(state.getDeletedMetadataCursor(), null, 32, EasyDataLock.WRITE);
+            for (var row : rows) {
+                var entry = mapper.readValue(row.getValue(), Stickers.Entry.class);
+                metadata.hydrate(settings, entry);
+                String json = entryJson(settings, state, entry);
+                if (!json.equals(row.getValue())) {
+                    row.setValue(json);
+                    deleted.save(row);
+                }
+            }
+            state.setDeletedMetadataCursor(rows.size() == 32 ? rows.getLast().getKey() : "");
+            return true;
+        }).toCompletableFuture().join();
+        return new StickerPortableLibrary(this, metadata).maintain(settings, assets, policy, control, verify);
     }
 
     /**
@@ -154,17 +253,19 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
                                 Map<UUID, Stickers.Job> completedJobs) {}
 
     /**
-     * 根锁下的删除索引访问，不另开事务；完整条目分行保留原描述和恢复版本。
+     * 根锁下的删除索引访问，不另开事务；条目分行保留本地描述引用和恢复版本。
      * <br>2026/11/06：目录容量按持久部分计量，不包含可清理观察。
+     * <br>2026/11/07：删除记录按键恢复本地描述，旧内联正文在原事务中迁出。
      * @author zExNocs
      * @date 2026/11/05
      * @since 4.8.3-l
-     * @version 4.8.5-l
+     * @version 4.8.7-l
      */
     private final class Transaction implements StickerCatalogTransaction {
         private final Stickers.State state;
         private final IEasyDataTransactionDto deleted;
         private final IEasyDataTransactionDto ids;
+        private final StickerSettings settings;
 
         /**
          * @param settings 已锁根目录的实例
@@ -172,6 +273,7 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
          */
         private Transaction(StickerSettings settings, Stickers.State state) {
             this.state = state;
+            this.settings = settings;
             deleted = data.get("deleted:" + settings.catalogId()).atomic();
             ids = data.get("deleted-ids:" + settings.catalogId()).atomic();
         }
@@ -185,7 +287,18 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
          */
         @Override public Optional<Stickers.Entry> deletedByHash(String hash) {
             var row = deleted.find(hash, EasyDataLock.READ);
-            return row == null ? Optional.empty() : Optional.of(mapper.readValue(row.getValue(), Stickers.Entry.class));
+            if (row == null) {
+                return Optional.empty();
+            }
+            // 2026/11/07：旧墓碑按键访问时迁出描述，仍由同一个目录根锁仲裁。
+            var entry = mapper.readValue(row.getValue(), Stickers.Entry.class);
+            metadata.hydrate(settings, entry);
+            String json = entryJson(settings, state, entry);
+            if (!row.getValue().equals(json)) {
+                row.setValue(json);
+                deleted.save(row);
+            }
+            return Optional.of(entry);
         }
 
         /**
@@ -278,14 +391,14 @@ public final class EasyDataStickerCatalog implements IStickerCatalog {
                 }
                 var row = deleted.find(entry.getHash(), EasyDataLock.WRITE);
                 if (row == null) {
-                    deleted.save(deleted.create(entry.getHash(), mapper.writeValueAsString(entry)));
+                    deleted.save(deleted.create(entry.getHash(), entryJson(settings, state, entry)));
                     state.setDeletedDecisions(Math.addExact(state.getDeletedDecisions(), 1));
                 } else {
                     var prior = mapper.readValue(row.getValue(), Stickers.Entry.class);
                     if (!prior.getId().equals(entry.getId()) || prior.getRevision() > entry.getRevision()) {
                         throw new IllegalStateException("表情包删除记录身份或版本冲突，未覆盖原决定。");
                     }
-                    var json = mapper.writeValueAsString(entry);
+                    var json = entryJson(settings, state, entry);
                     if (!row.getValue().equals(json)) {
                         row.setValue(json);
                         deleted.save(row);

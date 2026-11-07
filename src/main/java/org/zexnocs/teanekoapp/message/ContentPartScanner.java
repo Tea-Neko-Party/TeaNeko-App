@@ -4,80 +4,71 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.TeaNekoContentPart;
-import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 用于扫描带有 {@link TeaNekoContentPart} 和实现了 {@link ITeaNekoContentPart} 的类。
+ * 发布消息内容类型目录，不在消息处理路径发现类型。
+ * <br>2026/11/06：标识冲突拒绝发布，失败重扫保留完整旧目录。
+ * <br>2026/11/07：拒绝重复内容类型并原子发布完整目录。
  *
- * @see TeaNekoContentPart
  * @author zExNocs
  * @date 2026/02/27
  * @since 4.0.10
+ * @version 4.8.7-l
  */
 @Service
-public class ContentPartScanner extends AbstractScanner {
-    /// key → contentType
-    private final Map<String, Class<? extends ITeaNekoContentPart>> contentClassMap = new ConcurrentHashMap<>();
+public class ContentPartScanner implements IScanner {
+    private volatile @Nullable Map<String, Class<? extends ITeaNekoContentPart>> types;
+    private final IClassScanner classes;
 
-    /// 类扫描器
-    private final IClassScanner iClassScanner;
-    private final ILogger logger;
-
-    public ContentPartScanner(IClassScanner iClassScanner, ILogger logger) {
-        super();
-        this.iClassScanner = iClassScanner;
-        this.logger = logger;
+    /** @param classes 仅初始化或显式重扫使用的类型发现设施 */
+    public ContentPartScanner(IClassScanner classes) {
+        this.classes = classes;
     }
 
-    /**
-     * 扫描方法。
-     *
-     */
+    /** 首次成功后不再重复扫描。 */
     @Override
-    protected void _scan() {
-        var map = iClassScanner.getClassesWithAnnotationAndInterface(TeaNekoContentPart.class, ITeaNekoContentPart.class);
-        for (var entry : map.entrySet()) {
-            var clazz = entry.getKey();
-            var annotation = entry.getValue();
-            var key = annotation.value();
-            // 鲁棒性
-            if(key == null || key.isEmpty()) {
-                logger.warn(this.getClass().getName(), """
-                                %s 其 @TeaNekoContent 注解的 value 为空，请检查该类是否正确使用了注解。"""
-                                .formatted(clazz.getName()));
-            }
-            var existing = contentClassMap.put(key, clazz);
-            if(existing != null) {
-                logger.warn(this.getClass().getName(), """
-                                %s 和 %s 的 @TeaNekoContent 注解的 value 都是 %s，存在冲突，请检查这两个类是否正确使用了注解。"""
-                                .formatted(existing.getName(), clazz.getName(), key));
-            }
+    public synchronized void init() {
+        if (types == null) {
+            reload();
         }
     }
 
     /**
-     * 清理原始数据的方法。
-     *
+     * 重扫在局部完成，失败时不发布任何部分结果。
+     * @throws IllegalArgumentException 当内容标识为空或有重复声明时
      */
     @Override
-    protected void _clear() {
-        contentClassMap.clear();
+    public synchronized void reload() {
+        var next = new LinkedHashMap<String, Class<? extends ITeaNekoContentPart>>();
+        for (var entry : classes.getClassesWithAnnotationAndInterface(TeaNekoContentPart.class, ITeaNekoContentPart.class).entrySet()) {
+            String id = entry.getValue().value();
+            var type = entry.getKey();
+            if (id.isBlank()) {
+                throw new IllegalArgumentException("内容类型标识为空，来源=" + type.getName());
+            }
+            var previous = next.putIfAbsent(id, type);
+            if (previous != null) {
+                throw new IllegalArgumentException("内容类型标识冲突：" + id + "，来源=" + previous.getName() + "、" + type.getName());
+            }
+        }
+        types = Map.copyOf(next);
     }
 
     /**
-     * 根据 key 获取到对应的内容类。
-     *
-     * @param key 内容类型
-     * @return 对应的内容类，如果不存在则返回 null。
+     * @param key 内容类型标识
+     * @return 对应类型，未登记时为空
+     * @throws IllegalStateException 当目录尚未成功初始化时
      */
-    @Nullable
-    public Class<? extends ITeaNekoContentPart> getContentClass(String key) {
-        if(key == null) return null;
-        return contentClassMap.get(key);
+    public @Nullable Class<? extends ITeaNekoContentPart> getContentClass(@Nullable String key) {
+        var current = types;
+        if (current == null) {
+            throw new IllegalStateException("消息内容目录尚未就绪，请完成初始化或显式重扫。");
+        }
+        return key == null ? null : current.get(key);
     }
 }

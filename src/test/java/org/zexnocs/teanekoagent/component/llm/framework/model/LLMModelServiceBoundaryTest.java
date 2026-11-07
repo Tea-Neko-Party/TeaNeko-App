@@ -22,28 +22,35 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证模型服务的路由、选项优先级与单次调用契约，不启动应用容器。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04����ֱ֤��ģ�͵��õ������ı߽�����������ȡ�
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：验证直接模型调用的上下文边界与完整输出额度。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：明确未配置别名，验证原模型调用及未知路由边界。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：测试替身沿用模型接口的默认 JSON 能力，覆盖真实协议准备入口。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.8.7-l
  */
 class LLMModelServiceBoundaryTest {
     /**
@@ -95,6 +102,8 @@ class LLMModelServiceBoundaryTest {
                         .metadata(Map.of("vendor.extension", "from-file")).build()));
         when(model.supports(any())).thenReturn(true);
         when(model.getCapabilities(anyString())).thenReturn(ModelCapabilities.textOnly());
+        // 2026/11/07：默认方法必须执行，不能让 Mockito 的 null 代替合法能力声明。
+        when(model.getJsonOutputSupport(anyString())).thenCallRealMethod();
         when(model.call(any(ILLMPrompt.class))).thenReturn(new TaskFuture<>(mock(ILogger.class), "fake-model", pending));
         service.init();
     }

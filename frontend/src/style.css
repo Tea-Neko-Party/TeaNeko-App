@@ -332,8 +332,10 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .commands-page > .editor-heading .el-input { max-width: 600px; }
 .command-detail code { overflow-wrap: anywhere; }
 .command-parameters { font-size: 13px; line-height: 1.7; }
-.command-parameters dt { font-weight: 600; margin-top: 12px; }
+.command-parameters dt { display: grid; gap: 2px; font-weight: 600; margin-top: 12px; }
 .command-parameters dd { margin: 4px 0 0; color: var(--muted); }
+/* 2026/11/07：分行元信息与正文保持紧凑间距。 */
+.command-parameters dd p { margin: 4px 0; }
 /* 2026/11/04：目录与说明采用交替底色，房间内管理页复用编辑器并保持合理留白。 */
 .command-list .target-button { display: flex; justify-content: space-between; gap: 12px; background: var(--surface); }
 .command-list .target-button.alternate, .command-detail.alternate { background: var(--surface-soft); }
@@ -494,6 +496,11 @@ dd { margin: 0; overflow-wrap: anywhere; }
 .api-docs-summary h3 { margin: 0 0 4px; font-size: 16px; line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .api-docs-summary code { font-size: 11px; color: var(--muted); }
 .api-docs-summary .el-tag { flex-shrink: 0; }
+/* 2026/11/07：工具的真实客户端标识完整换行，避免长标识挤压名称。 */
+.api-docs-summary:has(.tool-summary-heading) { grid-template-rows: minmax(54px, auto) 66px 26px; }
+.tool-summary-heading h3 { flex: 1; min-width: 0; }
+.tool-client-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 55%; }
+.tool-client-tags .el-tag { max-width: 100%; height: auto; min-height: 20px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
 .api-docs-brief { margin: 0; font-size: 13px; line-height: 22px; color: var(--muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
 .api-docs-summary footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); }
 .api-docs-link { color: var(--el-color-primary); white-space: nowrap; }

@@ -3,7 +3,13 @@ package org.zexnocs.teanekoagent.component.llm.framework.message;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.*;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMContent;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMContentPart;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMSystemMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMToolMessage;
+import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMInputValidator;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMOptionBoundary;
@@ -18,21 +24,28 @@ import java.lang.reflect.Array;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 冻结交互边界的协议数据；透明状态只接受有限深度的 JSON 值，不保留任意运行句柄。
  * 不通过序列化猜测消息角色，因而保留工具配对及供应商回放所需的接口类型。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ * <br>2026/11/07：透明元数据使用类型明确的对象递归入口，移除未经检查的转换。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.6-l
+ * @version 4.8.7-l
  */
 public final class LLMProtocolSnapshots {
     /** 禁止实例化无状态快照工具。 */
@@ -169,14 +182,35 @@ public final class LLMProtocolSnapshots {
      * @param source 可选的 JSON 对象
      * @return 不可变对象，空输入规范化为空对象
      */
-    @SuppressWarnings("unchecked")
     public static Map<String, Object> metadata(Map<String, Object> source) {
         if (source == null) {
             return Map.of();
         }
-        var frozen = (Map<String, Object>) json(source, Collections.newSetFromMap(new IdentityHashMap<>()), 0);
+        // 2026/11/07：对象分支保持类型合同，不把已知 Map 绕行 Object 再作未经检查的转换。
+        var visiting = Collections.newSetFromMap(new IdentityHashMap<>());
+        visiting.add(source);
+        var frozen = object(source, visiting, 0);
         LLMOptionBoundary.validateMetadata(frozen);
         return frozen;
+    }
+
+    /**
+     * 对象的递归转换共享循环及深度检查，保留 null 值而不暴露可变容器。
+     * @param source 当前已登记到递归路径的对象
+     * @param visiting 当前路径，调用方负责移除当前对象
+     * @param depth 当前深度
+     * @return 冻结且键类型明确的对象
+     * @throws IllegalArgumentException 对象键不是字符串或子值无效时
+     */
+    private static Map<String, Object> object(Map<?, ?> source, Set<Object> visiting, int depth) {
+        var result = new LinkedHashMap<String, Object>();
+        for (var entry : source.entrySet()) {
+            if (!(entry.getKey() instanceof String key)) {
+                throw new IllegalArgumentException("交互透明状态的对象键必须是字符串。");
+            }
+            result.put(key, json(entry.getValue(), visiting, depth + 1));
+        }
+        return Collections.unmodifiableMap(result);
     }
 
     /**
@@ -193,10 +227,10 @@ public final class LLMProtocolSnapshots {
             throw new IllegalArgumentException("交互透明状态嵌套过深。");
         }
         if (source == null || source instanceof String || source instanceof Boolean
-                || source instanceof Byte || source instanceof Short || source instanceof Integer
-                || source instanceof Long || source.getClass() == BigInteger.class || source.getClass() == BigDecimal.class
-                || source instanceof Double value && Double.isFinite(value)
-                || source instanceof Float floatValue && Float.isFinite(floatValue)) {
+            || source instanceof Byte || source instanceof Short || source instanceof Integer
+            || source instanceof Long || source.getClass() == BigInteger.class || source.getClass() == BigDecimal.class
+            || source instanceof Double value && Double.isFinite(value)
+            || source instanceof Float floatValue && Float.isFinite(floatValue)) {
             return source;
         }
         if (!visiting.add(source)) {
@@ -204,14 +238,7 @@ public final class LLMProtocolSnapshots {
         }
         try {
             if (source instanceof Map<?, ?> map) {
-                var result = new LinkedHashMap<String, Object>();
-                for (var entry : map.entrySet()) {
-                    if (!(entry.getKey() instanceof String key)) {
-                        throw new IllegalArgumentException("交互透明状态的对象键必须是字符串。");
-                    }
-                    result.put(key, json(entry.getValue(), visiting, depth + 1));
-                }
-                return Collections.unmodifiableMap(result);
+                return object(map, visiting, depth);
             }
             var result = new ArrayList<>();
             if (source instanceof List<?> list) {
@@ -235,7 +262,6 @@ public final class LLMProtocolSnapshots {
      * 兼容既有文本 mapper 的只读文本，禁止通过 Lombok 生成的父类 setter 修改快照。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -261,7 +287,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变正文项。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getType 内容类型
@@ -276,7 +301,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变系统消息。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getName 消息名称
@@ -293,7 +317,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变用户消息。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getName 消息名称
@@ -310,7 +333,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变模型消息，保留原始工具顺序和供应商推理回放状态。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getName 消息名称
@@ -329,7 +351,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变工具回填。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getName 工具名称
@@ -347,7 +368,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变工具调用。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getId 调用 ID
@@ -364,7 +384,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变供应商用量；零值不推断为缺失，也不推断为精确计费信息。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getCompletionTokens 输出 token
@@ -384,7 +403,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变候选，不把 logprobs 或推理状态拼入可见正文。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getFinishReason 统一终止标识
@@ -402,7 +420,6 @@ public final class LLMProtocolSnapshots {
     /**
      * 不可变单次响应，保留完整候选与供应商 usage。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getId 响应 ID

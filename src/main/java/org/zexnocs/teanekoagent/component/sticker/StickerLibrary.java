@@ -11,14 +11,21 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
- * 宿主管理候选、指纹缓存、实际人类统计和容量仲裁；文件 I/O 不进入目录事务。
+ * 宿主管理候选、指纹缓存、实际人类统计和容量仲裁；原图 I/O 不进入目录事务。
+ * 描述的不可变落盘由目录适配器负责，业务回调仍只操作内存视图。
  * 每个实例只有一个持久后台租约，迟到结果不能越过原代次激活。
  *
  * <br>2026/11/03：采集决策、管理墓碑、后台刷新及真实提交观察共用原事务，分析和字节回收推进公开版本。
@@ -28,11 +35,13 @@ import java.util.function.Supplier;
  * <br>2026/11/05：已回收文件的删除决定与分析缓存独立计量。
  * <br>2026/11/05：下载后按指纹复核独立删除记录，禁止重复采集恢复人工拒绝。
  * <br>2026/11/06：维护清理与存储分流使用同一作业恢复条件。
+ * <br>2026/11/07：展开采集、租约与清理事务的控制流，保留原状态顺序。
+ * <br>2026/11/07：新视觉调用按作业抽样，已分析缓存和显式请求保持原行为。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.5-l
+ * @version 4.8.7-l
  */
 public final class StickerLibrary {
     private final StickerExtensionRegistry registry;
@@ -68,29 +77,52 @@ public final class StickerLibrary {
      * @param source 宿主固定消息
      * @return 持久作业回执；拒绝的候选没有作业 ID
      */
-    public CompletionStage<Stickers.Receipt> offer(Stickers.Source source){
-        var config=settings();var ports=registry.select(config);var now=clock.instant();validateSource(source,now);check(config,ports,source,null);
+    public CompletionStage<Stickers.Receipt> offer(Stickers.Source source) {
+        var config = settings();
+        var ports = registry.select(config);
+        var now = clock.instant();
+        validateSource(source, now);
+        check(config, ports, source, null);
         // 2026/11/03：没有锁跨事件等待；监听结果不能替代当前来源、预算和事务检查。
-        var deciding=lifecycle==null?CompletableFuture.completedStage(new IStickerLifecycle.Decision(true,"")):lifecycle.before(source,config);
-        return deciding.thenCompose(decision->{
-        if(!decision.allowed()){return CompletableFuture.completedStage(new Stickers.Receipt(null,Stickers.JobStatus.REJECTED,"EVENT_REJECTED",""));}
-        if(decision.hint()==null||decision.hint().length()>256){throw new IllegalArgumentException("素材识别建议超过边界。");}
-        return ports.catalog().change(config,state->{
-            check(config,ports,source,null);prune(state,now);var receipt=sourceKey(source);
-            if(state.getReceipts().containsKey(receipt)){
-                return state.getJobs().values().stream().filter(j->sourceKey(j.getSource()).equals(receipt)).findFirst().map(StickerLibrary::receipt)
-                        .orElseGet(()->new Stickers.Receipt(null,Stickers.JobStatus.DUPLICATE,"SOURCE_SEEN",""));
+        var deciding = lifecycle == null ? CompletableFuture.completedStage(new IStickerLifecycle.Decision(true, "")) : lifecycle.before(source, config);
+        return deciding.thenCompose(decision -> {
+            if (!decision.allowed()) {
+                return CompletableFuture.completedStage(new Stickers.Receipt(null, Stickers.JobStatus.REJECTED, "EVENT_REJECTED", ""));
             }
-            if(state.getJobs().values().stream().filter(j->pending(j)||needsCleanup(j)).count()>=config.maxPending()
-                    ||state.getJobs().values().stream().mapToLong(Stickers.Job::getReserved).sum()+config.maxFileBytes()>config.maxPendingBytes()
-                    ||bytes(state)+config.maxFileBytes()>config.maxStorageBytes()||state.getReceipts().size()>=8192||state.getJobs().size()>=384){return new Stickers.Receipt(null,Stickers.JobStatus.REJECTED,"CAPACITY","");}
-            var global=quota(state,"global",now);var scope=quota(state,scopeKey(source),now);
-            if(global.getDownloads()>=config.downloadsPerHour()||scope.getDownloads()>=config.scopeDownloadsPerHour()){return new Stickers.Receipt(null,Stickers.JobStatus.REJECTED,"DOWNLOAD_RATE","");}
-            global.setDownloads(global.getDownloads()+1);scope.setDownloads(scope.getDownloads()+1);
-            var job=new Stickers.Job();job.setSource(source);job.setCreated(now);job.setNextAttempt(now);job.setReserved(config.maxFileBytes());
-            job.setHint(decision.hint());
-            state.getReceipts().put(receipt,now);state.getJobs().put(job.getId(),job);return receipt(job);
-        });});
+            if (decision.hint() == null || decision.hint().length() > 256) {
+                throw new IllegalArgumentException("素材识别建议超过边界。");
+            }
+            return ports.catalog().change(config, state -> {
+                check(config, ports, source, null);
+                prune(state, now);
+                var receipt = sourceKey(source);
+                if (state.getReceipts().containsKey(receipt)) {
+                    return state.getJobs().values().stream().filter(j -> sourceKey(j.getSource()).equals(receipt)).findFirst().map(StickerLibrary::receipt)
+                        .orElseGet(() -> new Stickers.Receipt(null, Stickers.JobStatus.DUPLICATE, "SOURCE_SEEN", ""));
+                }
+                if (state.getJobs().values().stream().filter(j -> pending(j) || needsCleanup(j)).count() >= config.maxPending()
+                    || state.getJobs().values().stream().mapToLong(Stickers.Job::getReserved).sum() + config.maxFileBytes() > config.maxPendingBytes()
+                    || bytes(state) + config.maxFileBytes() > config.maxStorageBytes() || state.getReceipts().size() >= 8192 || state.getJobs().size() >= 384) {
+                    return new Stickers.Receipt(null, Stickers.JobStatus.REJECTED, "CAPACITY", "");
+                }
+                var global = quota(state, "global", now);
+                var scope = quota(state, scopeKey(source), now);
+                if (global.getDownloads() >= config.downloadsPerHour() || scope.getDownloads() >= config.scopeDownloadsPerHour()) {
+                    return new Stickers.Receipt(null, Stickers.JobStatus.REJECTED, "DOWNLOAD_RATE", "");
+                }
+                global.setDownloads(global.getDownloads() + 1);
+                scope.setDownloads(scope.getDownloads() + 1);
+                var job = new Stickers.Job();
+                job.setSource(source);
+                job.setCreated(now);
+                job.setNextAttempt(now);
+                job.setReserved(config.maxFileBytes());
+                job.setHint(decision.hint());
+                state.getReceipts().put(receipt, now);
+                state.getJobs().put(job.getId(), job);
+                return receipt(job);
+            });
+        });
     }
     /**
      * 选择清理或正常作业，过期在途任务标为不确定，不自动重发视觉请求。
@@ -99,26 +131,52 @@ public final class StickerLibrary {
      * @param identity 实际共享卷身份
      * @return 当前拥有的后台工作，空表示忙碌或无任务
      */
-    public CompletionStage<Optional<Work>> claim(StickerSettings config,StickerExtensionRegistry.Selected ports,String identity){
-        var now=clock.instant();return ports.catalog().change(config,state->{
-            registry.verify(ports);if(!settings().equals(config)){return Optional.empty();}
-            if(!state.getStorageIdentity().isEmpty()&&!state.getStorageIdentity().equals(identity)){throw new IllegalStateException("表情包目录与素材卷身份不一致；共享数据库须同时共享素材卷。");}
-            state.setStorageIdentity(identity);validatePinned(state,config);
-            if(state.getWorkerUntil().isAfter(now)){return Optional.empty();}
-            for(var job:state.getJobs().values()){
-                if(job.getStatus()==Stickers.JobStatus.RUNNING){terminal(job,Stickers.JobStatus.FAILED,"INTERRUPTED",now);}
-                if(pending(job)&&(!config.enabled()||!config.collectEnabled())){terminal(job,Stickers.JobStatus.FAILED,"COLLECTION_DISABLED",now);}
-                if(pending(job)&&job.getCreated().plus(Duration.ofHours(24)).isBefore(now)){terminal(job,Stickers.JobStatus.FAILED,"EXPIRED",now);}
+    public CompletionStage<Optional<Work>> claim(StickerSettings config, StickerExtensionRegistry.Selected ports, String identity) {
+        var now = clock.instant();
+        return ports.catalog().change(config, state -> {
+            registry.verify(ports);
+            if (!settings().equals(config)) {
+                return Optional.empty();
             }
-            prune(state,now);var jobs=state.getJobs().values();
-            var selected=jobs.stream().filter(j->!pending(j)&&needsCleanup(j)).findFirst().orElse(null);
-            boolean cleanup=selected!=null;
-            if(selected==null){selected=jobs.stream().filter(j->j.getStatus()==Stickers.JobStatus.QUEUED&&!j.getNextAttempt().isAfter(now))
-                    .min(Comparator.<Stickers.Job,Boolean>comparing(j->!j.getSource().manual()).thenComparing(Stickers.Job::getCreated)).orElse(null);}
-            if(selected==null){return Optional.empty();}
-            var owner=UUID.randomUUID();state.setWorker(owner);state.setWorkerUntil(now.plusSeconds(300));
-            if(!cleanup){selected.setStatus(Stickers.JobStatus.RUNNING);selected.setLease(UUID.randomUUID());selected.setLeaseUntil(state.getWorkerUntil());}
-            return Optional.of(new Work(owner,selected,cleanup));
+            if (!state.getStorageIdentity().isEmpty() && !state.getStorageIdentity().equals(identity)) {
+                throw new IllegalStateException("表情包目录与素材卷身份不一致；共享数据库须同时共享素材卷。");
+            }
+            state.setStorageIdentity(identity);
+            validatePinned(state, config);
+            if (state.getWorkerUntil().isAfter(now)) {
+                return Optional.empty();
+            }
+            for (var job : state.getJobs().values()) {
+                if (job.getStatus() == Stickers.JobStatus.RUNNING) {
+                    terminal(job, Stickers.JobStatus.FAILED, "INTERRUPTED", now);
+                }
+                if (pending(job) && (!config.enabled() || !config.collectEnabled())) {
+                    terminal(job, Stickers.JobStatus.FAILED, "COLLECTION_DISABLED", now);
+                }
+                if (pending(job) && job.getCreated().plus(Duration.ofHours(24)).isBefore(now)) {
+                    terminal(job, Stickers.JobStatus.FAILED, "EXPIRED", now);
+                }
+            }
+            prune(state, now);
+            var jobs = state.getJobs().values();
+            var selected = jobs.stream().filter(j -> !pending(j) && needsCleanup(j)).findFirst().orElse(null);
+            boolean cleanup = selected != null;
+            if (selected == null) {
+                selected = jobs.stream().filter(j -> j.getStatus() == Stickers.JobStatus.QUEUED && !j.getNextAttempt().isAfter(now))
+                    .min(Comparator.<Stickers.Job, Boolean>comparing(j -> !j.getSource().manual()).thenComparing(Stickers.Job::getCreated)).orElse(null);
+            }
+            if (selected == null) {
+                return Optional.empty();
+            }
+            var owner = UUID.randomUUID();
+            state.setWorker(owner);
+            state.setWorkerUntil(now.plusSeconds(300));
+            if (!cleanup) {
+                selected.setStatus(Stickers.JobStatus.RUNNING);
+                selected.setLease(UUID.randomUUID());
+                selected.setLeaseUntil(state.getWorkerUntil());
+            }
+            return Optional.of(new Work(owner, selected, cleanup));
         });
     }
     /**
@@ -128,7 +186,15 @@ public final class StickerLibrary {
      * @param delay 延后时长
      * @return 实际释放阶段
      */
-    public CompletionStage<Boolean> defer(StickerSettings config,StickerExtensionRegistry.Selected ports,Work work,Duration delay){return ports.catalog().change(config,s->{var j=running(s,work);j.setStatus(Stickers.JobStatus.QUEUED);j.setNextAttempt(clock.instant().plus(delay));release(s);return true;});}
+    public CompletionStage<Boolean> defer(StickerSettings config, StickerExtensionRegistry.Selected ports, Work work, Duration delay) {
+        return ports.catalog().change(config, s -> {
+            var j = running(s, work);
+            j.setStatus(Stickers.JobStatus.QUEUED);
+            j.setNextAttempt(clock.instant().plus(delay));
+            release(s);
+            return true;
+        });
+    }
     /**
      * 下载后先持久化元数据，重复指纹不进入视觉调用；人类统计只在真实入站时计数。
      * @param config 配置
@@ -162,7 +228,15 @@ public final class StickerLibrary {
                 if(entry.getAnalysisVersion()==config.analysisVersion()&&entry.getCachedUntil().isAfter(now)){
                     if(entry.getAnalysis()==null){terminal(job,Stickers.JobStatus.REJECTED,"ANALYSIS_UNCERTAIN",now);return "DONE";}return "CACHED";
                 }
-            }else{
+            }
+            // 2026/11/07：去重与缓存先于抽样；未命中时不占模型额度，也不写分析失败缓存。
+            long activeCount = s.getEntries().values().stream()
+                    .filter(value -> value.getState() == Stickers.EntryStatus.ACTIVE).count();
+            if (!job.getSource().manual() && !config.sampling().accepts(job.getId(), activeCount)) {
+                terminal(job, Stickers.JobStatus.REJECTED, "PROBABILITY_SKIPPED", now);
+                return "DONE";
+            }
+            if (entry == null) {
                 if(cacheSize(s)>=2048){terminal(job,Stickers.JobStatus.REJECTED,"CACHE_CAPACITY",now);return "DONE";}
                 entry=new Stickers.Entry();entry.setHash(blob.hash());entry.setId("stk_"+StableDigest.sha256(config.catalogId(),blob.hash()).substring(0,32));entry.setCreated(now);observe(entry,job.getSource(),now);s.getEntries().put(blob.hash(),entry);
                 job.setExpectedEntryRevision(entry.getRevision());
@@ -261,19 +335,37 @@ public final class StickerLibrary {
      * @param work 原工作
      * @return 实际清理确认
      */
-    public CompletionStage<Boolean> cleaned(StickerSettings config,StickerExtensionRegistry.Selected ports,Work work){return ports.catalog().change(config,s->{
-        var job=owned(s,work);if(pending(job)){throw new IllegalStateException("在途素材不能提前释放预约。");}
-        // 2026/11/03：刷新使用已有文件，清理只释放它自己的占用，保留人工状态和墓碑。
-        var blob=job.getBlob();if(blob!=null){var entry=s.getEntries().get(blob.hash());if(entry!=null){
-            if(job.isRefresh()){entry.getReaders().remove(job.getId());}
-            else if(entry.getState()!=Stickers.EntryStatus.ACTIVE&&entry.getBlob()==null){
-                // 2026/11/03：发布后遇到人工删除也保留待删文件定位，不留下未计账孤儿。
-                entry.setBlob(blob);if(!Set.of(Stickers.EntryStatus.DELETED,Stickers.EntryStatus.DISABLED).contains(entry.getState())){entry.setState(Stickers.EntryStatus.RETIRED);}
+    public CompletionStage<Boolean> cleaned(StickerSettings config, StickerExtensionRegistry.Selected ports, Work work) {
+        return ports.catalog().change(config, s -> {
+            var job = owned(s, work);
+            if (pending(job)) {
+                throw new IllegalStateException("在途素材不能提前释放预约。");
             }
-        }}
-        job.setReserved(0);job.setCleanup(true);release(s);
-        return new IStickerLifecycle.Notice(config.catalogId(),"COLLECTION_COMPLETED",job.getId(),job.getStickerId(),s.getRevision(),clock.instant(),job.getStatus().name());
-    }).thenApply(notice->{notifyCommitted(notice);return true;});}
+            // 2026/11/03：刷新使用已有文件，清理只释放它自己的占用，保留人工状态和墓碑。
+            var blob = job.getBlob();
+            if (blob != null) {
+                var entry = s.getEntries().get(blob.hash());
+                if (entry != null) {
+                    if (job.isRefresh()) {
+                        entry.getReaders().remove(job.getId());
+                    } else if (entry.getState() != Stickers.EntryStatus.ACTIVE && entry.getBlob() == null) {
+                        // 2026/11/03：发布后遇到人工删除也保留待删文件定位，不留下未计账孤儿。
+                        entry.setBlob(blob);
+                        if (!Set.of(Stickers.EntryStatus.DELETED, Stickers.EntryStatus.DISABLED).contains(entry.getState())) {
+                            entry.setState(Stickers.EntryStatus.RETIRED);
+                        }
+                    }
+                }
+            }
+            job.setReserved(0);
+            job.setCleanup(true);
+            release(s);
+            return new IStickerLifecycle.Notice(config.catalogId(), "COLLECTION_COMPLETED", job.getId(), job.getStickerId(), s.getRevision(), clock.instant(), job.getStatus().name());
+        }).thenApply(notice -> {
+            notifyCommitted(notice);
+            return true;
+        });
+    }
     /**
      * 无在途工作时取得有限维护租约，撤销过期配置下的候选与超额未固定素材。
      * @param config 配置
@@ -408,7 +500,11 @@ public final class StickerLibrary {
      * @param source 固定消息
      * @return 不含原文的来源摘要
      */
-    private static String sourceKey(Stickers.Source source){return StableDigest.sha256(source.scope().clientId(),source.scope().scopeId(),source.self(),source.message(),Integer.toString(source.image()));}
+    private static String sourceKey(Stickers.Source source){
+        // 2026/11/07：用户随后显式收藏同一图片时，不受自动采集抽样回执阻挡。
+        return StableDigest.sha256(source.scope().clientId(),source.scope().scopeId(),source.self(),source.message(),Integer.toString(source.image()))
+                + (source.manual() ? ":manual" : "");
+    }
     /**
      * @param source 固定消息
      * @return 单来源额度键
@@ -479,9 +575,7 @@ public final class StickerLibrary {
     /**
      * 固定后台代次，不进入组件、模型或持久状态。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param owner 根租约

@@ -4,6 +4,7 @@ import lombok.Getter;
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
+import org.zexnocs.teanekocore.actuator.task.TaskExecution;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
@@ -21,9 +22,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 标准的数据库任务配置。
+ * <br>2026/11/07：在事务代理外延迟任务中断，覆盖完整提交、回滚及连接归还过程。
  *
  * @author zExNocs
  * @date 2026/02/15
+ * @since 4.0.7
+ * @version 4.8.7-l
  */
 public class DatabaseTaskConfig implements IDatabaseTaskConfig {
     /// 任务名称
@@ -74,7 +78,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * 该方法会原子性地设置任务的 push 状态，以防止任务提交给服务后再次更改该任务的状态。
      * 此外，会获取 TaskFuture 对象来获取执行的异常；获取到 future 后应当使用 .finish() 方法来报告异常。
      *
-     * @return {@link TaskFuture }<{@link ITaskResult }<{@link Void }>> 任务执行结果的 future 对象。
+     * @return 2026/11/07：任务执行结果 {@code TaskFuture<ITaskResult<Void>>}，调用方负责处理失败
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
@@ -199,7 +203,9 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
                 .retryStrategy(TaskRetryStrategy.NO_RETRY)      // 只有抛出 retry exception 时才会重试，其他异常不重试。
                 .callable(() -> {
                     // 执行 Transaction 任务。
-                    databaseService.__executeTaskWithTransaction(transactionQueue);
+                    // 2026/11/07：先让事务按执行控制回滚，再投递线程中断，不能中断回滚所用的连接。
+                    TaskExecution.withDeferredInterrupt(
+                            () -> databaseService.__executeTaskWithTransaction(transactionQueue));
                     // 如果事务没有抛出异常，则执行 Cache 任务。
                     databaseService.__executeTaskWithCache(cacheQueue);
                     return EmptyTaskResult.INSTANCE;

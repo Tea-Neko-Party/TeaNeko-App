@@ -13,7 +13,18 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.ConcurrentModificationException;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -22,20 +33,20 @@ import java.util.function.Supplier;
 
 /**
  * 网页平台的档案、聊天、消息、受理账本与图片；只经原 EasyData DTO 事务操作。
- * 元数据、每个聊天窗口和每张图片分行保存，共用固定根任务锁及数据库当前读，避免跨域竞态。
+ * 元数据、每个聊天窗口和每张图片分行保存；读事务共享目录锁，修改事务持有目录写锁，避免跨域竞态。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：消息回执区分持久化、事件通知与已登记业务完成事实。
  * <br>2026/11/05：原子删除网页房间、消息及附件，不影响共享记忆或配置。
  * <br>2026/11/05：允许私聊原成员修改网页角色，保持唯一成员和原聊天归属。
  * <br>2026/11/05：持久回执保留实际失败阶段与脱敏原因，支持后续查询。
- *
  * <br>2026/11/06：网页管理消息使用原房间事务，发送前核对授权及版本。
+ * <br>2026/11/07：纯读取使用共享锁，初始化及修改继续使用写锁仲裁。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.8.7-l
  */
 @Service
 public final class WebChatStore {
@@ -72,21 +83,34 @@ public final class WebChatStore {
      * @return 当前档案与聊天，不初始化任何 Agent 配置或记忆
      */
     public CompletionStage<WebChat.Home> home(UUID uuid, Runnable guard) {
-        return transaction(guard, state -> {
-            if (!state.catalog.profiles().containsKey(WebChat.DEFAULT_PROFILE)) {
-                if (state.catalog.profiles().size() >= limits.get().profiles()) {
-                    throw new IllegalStateException("网页档案容量不足，无法登记默认档案。");
-                }
-                state.catalog.profiles().put(WebChat.DEFAULT_PROFILE,
+        // 2026/11/06：常规首页读取不取得写锁，仅缺少默认档案时进入初始化事务并复核。
+        return read(guard, state -> state.catalog.profiles().containsKey(WebChat.DEFAULT_PROFILE)
+            ? Optional.of(homeView(state, uuid)) : Optional.<WebChat.Home>empty())
+            .thenCompose(existing -> existing.map(
+                java.util.concurrent.CompletableFuture::completedStage).orElseGet(() -> transaction(guard, state -> {
+                if (!state.catalog.profiles().containsKey(WebChat.DEFAULT_PROFILE)) {
+                    if (state.catalog.profiles().size() >= limits.get().profiles()) {
+                        throw new IllegalStateException("网页档案容量不足，无法登记默认档案。");
+                    }
+                    state.catalog.profiles().put(WebChat.DEFAULT_PROFILE,
                         new WebChat.Profile(WebChat.DEFAULT_PROFILE, uuid, "网页用户"));
-                state.save();
-            }
-            if (!state.profile(WebChat.DEFAULT_PROFILE).uuid().equals(uuid)) {
-                throw new IllegalStateException("网页默认档案的 TeaUser 映射已变化，不能自动改写旧身份。");
-            }
-            return new WebChat.Home(List.copyOf(state.catalog.profiles().values()),
-                    state.catalog.rooms().values().stream().map(WebChatStore::view).toList(), WebChat.SELF, Instant.now());
-        });
+                    state.save();
+                }
+                return homeView(state, uuid);
+            })));
+    }
+
+    /**
+     * @param state 同一事务的目录
+     * @param uuid 原身份映射
+     * @return 不修改目录的首页视图
+     */
+    private WebChat.Home homeView(State state, UUID uuid) {
+        if (!state.profile(WebChat.DEFAULT_PROFILE).uuid().equals(uuid)) {
+            throw new IllegalStateException("网页默认档案的 TeaUser 映射已变化，不能自动改写旧身份。");
+        }
+        return new WebChat.Home(List.copyOf(state.catalog.profiles().values()),
+            state.catalog.rooms().values().stream().map(WebChatStore::view).toList(), WebChat.SELF, Instant.now());
     }
 
     /**
@@ -208,7 +232,7 @@ public final class WebChatStore {
      * @return 内部已确认聊天，不直接作为 HTTP 响应
      */
     public CompletionStage<List<WebChat.Room>> rooms(Runnable guard) {
-        return transaction(guard, state -> List.copyOf(state.catalog.rooms().values()));
+        return read(guard, state -> List.copyOf(state.catalog.rooms().values()));
     }
 
     /**
@@ -217,7 +241,7 @@ public final class WebChatStore {
      * @return 已知聊天；未知目标不按请求临时构造
      */
     public CompletionStage<WebChat.Room> room(String id, Runnable guard) {
-        return transaction(guard, state -> state.room(id));
+        return read(guard, state -> state.room(id));
     }
 
     /**
@@ -226,7 +250,7 @@ public final class WebChatStore {
      * @return 已存在档案
      */
     public CompletionStage<WebChat.Profile> profile(String id, Runnable guard) {
-        return transaction(guard, state -> state.profile(id));
+        return read(guard, state -> state.profile(id));
     }
 
     /**
@@ -239,9 +263,9 @@ public final class WebChatStore {
         if (after < 0) {
             throw new IllegalArgumentException("网页消息游标不能为负数。");
         }
-        return transaction(guard, state -> {
+        return read(guard, state -> {
             state.room(room);
-            var journal = journal(room);
+            var journal = journal(room, EasyDataLock.READ);
             long first = journal.messages().isEmpty() ? journal.sequence() + 1 : journal.messages().getFirst().sequence();
             boolean reset = after > journal.sequence() || after > 0 && after < first - 1;
             long cursor = reset ? first - 1 : after;
@@ -434,7 +458,8 @@ public final class WebChatStore {
         if (id.length() > 128 || fields.length != 3 || !fields[0].equals("web-msg")) {
             throw new IllegalArgumentException("网页消息编号无效。");
         }
-        return transaction(guard, state -> new Found(state.room(fields[1]), requireMessage(journal(fields[1]), id)));
+        return read(guard, state -> new Found(state.room(fields[1]),
+            requireMessage(journal(fields[1], EasyDataLock.READ), id)));
     }
 
     /**
@@ -477,7 +502,7 @@ public final class WebChatStore {
      * @return 经过归一化的 PNG 字节
      */
     public CompletionStage<byte[]> image(String room, String id, Runnable guard) {
-        return transaction(guard, state -> {
+        return read(guard, state -> {
             state.room(room);
             state.media(room, id);
             var row = data.apply("media-" + id).atomic().find("png", EasyDataLock.READ);
@@ -494,10 +519,10 @@ public final class WebChatStore {
      * @return 本聊天媒体号，不提供其他聊天的资源引用
      */
     public CompletionStage<List<String>> images(String room, Runnable guard) {
-        return transaction(guard, state -> {
+        return read(guard, state -> {
             state.room(room);
             return state.catalog.media().entrySet().stream().filter(item -> item.getValue().room().equals(room))
-                    .map(Map.Entry::getKey).toList();
+                .map(Map.Entry::getKey).toList();
         });
     }
 
@@ -625,7 +650,16 @@ public final class WebChatStore {
      * @return 当前窗口；序列号从持久末尾而非进程计数恢复
      */
     private Journal journal(String room) {
-        var row = data.apply("room-" + room).atomic().find("journal", EasyDataLock.WRITE);
+        return journal(room, EasyDataLock.WRITE);
+    }
+
+    /**
+     * @param room 已知聊天
+     * @param lock 读取窗口使用共享锁，修改仍使用排他锁
+     * @return 当前窗口
+     */
+    private Journal journal(String room, EasyDataLock lock) {
+        var row = data.apply("room-" + room).atomic().find("journal", lock);
         return row == null ? new Journal(0, List.of(), Map.of()) : mapper.readValue(row.getValue(), Journal.class);
     }
 
@@ -660,16 +694,38 @@ public final class WebChatStore {
      * @return 提交后结果；返回时仍复核原会话
      */
     private <T> CompletionStage<T> transaction(Runnable guard, Function<State, T> action) {
+        return transaction(guard, EasyDataLock.WRITE, action);
+    }
+
+    /**
+     * 2026/11/06：轮询读取共享目录锁，不升级写锁；与删除和成员修改继续保持同一锁序。
+     * @param guard 当前授权
+     * @param action 无写入的快照投影
+     * @param <T> 返回类型
+     * @return 授权复核后的只读结果
+     */
+    private <T> CompletionStage<T> read(Runnable guard, Function<State, T> action) {
+        return transaction(guard, EasyDataLock.READ, action);
+    }
+
+    /**
+     * @param guard 当前会话
+     * @param lock 本次目录锁模式
+     * @param action 原事务动作
+     * @param <T> 返回类型
+     * @return 原事务提交和返回授权复核后的结果
+     */
+    private <T> CompletionStage<T> transaction(Runnable guard, EasyDataLock lock, Function<State, T> action) {
         var dto = data.apply("catalog");
         var result = new AtomicReference<T>();
         var task = dto.getTaskConfig("网页聊天事务");
         task.addTransactionTask(() -> {
             result.set(null);
             guard.run();
-            var row = dto.atomic().find("catalog", EasyDataLock.WRITE);
+            var row = dto.atomic().find("catalog", lock);
             var catalog = row == null ? new Catalog(Map.of(), Map.of(), Map.of(), Map.of(), Map.of())
-                    : mapper.readValue(row.getValue(), Catalog.class);
-            result.set(Objects.requireNonNull(action.apply(new State(dto, catalog))));
+                : mapper.readValue(row.getValue(), Catalog.class);
+            result.set(Objects.requireNonNull(action.apply(new State(dto, catalog, lock == EasyDataLock.WRITE))));
             guard.run();
         });
         return task.pushAsync().thenApply(ignored -> {
@@ -739,18 +795,24 @@ public final class WebChatStore {
     private final class State {
         final IEasyDataDto dto;
         final Catalog catalog;
+        private final boolean writable;
 
         /**
          * @param dto 固定根 DTO
          * @param catalog 当前目录
+         * @param writable 是否持有目录写入资格
          */
-        State(IEasyDataDto dto, Catalog catalog) {
+        State(IEasyDataDto dto, Catalog catalog, boolean writable) {
+            this.writable = writable;
             this.dto = dto;
             this.catalog = catalog;
         }
 
         /** 持久化本事务已明确变更的元数据。 */
         void save() {
+            if (!writable) {
+                throw new IllegalStateException("只读网页聊天事务不能保存状态。");
+            }
             write(dto, "catalog", mapper.writeValueAsString(catalog));
         }
 

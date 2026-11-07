@@ -17,7 +17,11 @@ import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
@@ -37,23 +41,36 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOTAL_TOKENS;
-import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.*;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.BUDGET_EXCEEDED;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.CANCELLED;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.CONFIGURATION_ERROR;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.FAILED;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.INVALID_INPUT;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.INVALID_RESPONSE;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.SUCCESS;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult.Status.TIMED_OUT;
 
 /**
  * 使用真实预算与阶段执行验证 token 准入、结算、共享、未知用量和取消边界。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04����֤�������Ԥ�������������������Ӷ�Ȳ���ʱ�ܾ��Ҳ����������
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：验证每轮预留完整输出额度，父额度不足时拒绝且不缩减输出。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l

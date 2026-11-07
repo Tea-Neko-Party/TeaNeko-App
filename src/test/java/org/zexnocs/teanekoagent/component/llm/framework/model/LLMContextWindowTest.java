@@ -11,17 +11,18 @@ import org.zexnocs.teanekoagent.component.llm.instance.openai.completions.OpenAI
 import org.zexnocs.teanekoagent.component.llm.instance.openai.responses.OpenAIModelOptions;
 import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * 验证模型容量、默认输入比例及参数快照在供应商转换期间保持一致。
  *
  * 修改记录：<br>
  * 2026/11/04：覆盖比例边界、完整输出预留、配置缺失及上下文参数复制。
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/04

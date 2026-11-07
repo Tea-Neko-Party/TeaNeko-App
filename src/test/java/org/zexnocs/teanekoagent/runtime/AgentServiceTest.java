@@ -15,7 +15,13 @@ import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
 import org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenEstimate;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
@@ -29,7 +35,11 @@ import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.IContextualToolExecutor;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
@@ -40,7 +50,13 @@ import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.configuration.AgentExecutionConfig;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
-import org.zexnocs.teanekoagent.runtime.access.*;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
+import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
+import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
+import org.zexnocs.teanekoagent.runtime.access.IAgentReadiness;
+import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationKey;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationStamp;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline;
@@ -52,16 +68,60 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.contains;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doCallRealMethod;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.notNull;
+import static org.mockito.Mockito.nullable;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.MODEL_REQUESTS;
 import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOTAL_TOKENS;
-import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.BUDGET_EXCEEDED;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.CANCELLED;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.CONFIGURATION_ERROR;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.FAILED;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.INVALID_INPUT;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.SKIPPED;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.SUCCESS;
+import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.TIMED_OUT;
 
 /**
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
@@ -71,7 +131,7 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
  * <br>2026/11/03：复用冷轮次用例验证实际活动节点，不把模型结果当作平台发送。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证跨轮次完整输出额度与显式共享预算拒绝。
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：验证上下文配置错误的根因诊断及秘密脱敏。
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
@@ -79,6 +139,7 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.*;
  * <br>2026/11/06：验证真实 Agent 管线只输出一条汇总，内部 LLM 不重复输出。
  * <br>2026/11/06：覆盖前置拒绝、取消和失败的唯一终态通知，观察故障不改变结果或资源释放。
  * <br>2026/11/06：组件资料与宿主资料同时存在时只选择独立宿主来源，不自动执行未装配组件。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/01

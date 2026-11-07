@@ -17,7 +17,12 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
-import org.zexnocs.teanekoagent.component.memory.history.*;
+import org.zexnocs.teanekoagent.component.memory.history.AgentDeliveryService;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryContext;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryPage;
+import org.zexnocs.teanekoagent.component.memory.history.HistoryQuery;
+import org.zexnocs.teanekoagent.component.memory.history.IConversationHistory;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.component.proactive.ProactiveContexts;
@@ -26,7 +31,16 @@ import org.zexnocs.teanekoagent.component.tool.command.ICommandAttemptStore;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
+import org.zexnocs.teanekoagent.runtime.IAgentRegistry;
+import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor.Delivery;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
@@ -39,8 +53,18 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -49,13 +73,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>2026/11/03：自主文本沿用原控制并加入同目标顺序。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04���������Լ̳�ģ�������ȣ�����������ʱ�޲��Ƴ����� token ��
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：主动决策继承模型输出额度，保留请求时限并移除额外 token 限额。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：区分容量忙与跳过，未安装记忆时使用独立持久活动身份。
  * <br>2026/11/06：主动决策启用原生 JSON，使用统一 Schema 与解码并保留原交付管道。
  * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  * <br>2026/11/06：可选组件参与原主动候选，复核资格并按真实交付结果提交状态。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -382,7 +407,6 @@ public final class ProactiveService implements AutoCloseable {
     /**
      * 当前自主策略的纯快照，不保存配置 Bean。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param readHistory 是否读取历史

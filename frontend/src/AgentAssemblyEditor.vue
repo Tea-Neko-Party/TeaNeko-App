@@ -6,6 +6,7 @@ import {ApiError, request} from './api'
 import ModelNamePicker from './ModelNamePicker.vue'
 import ModelIcon from './ModelIcon.vue'
 import ValueEditor from './ValueEditor.vue'
+import FieldFrame from './FieldFrame.vue'
 import type {ModelCatalog} from './ModelTemplateEditor.vue'
 import {useConsolePreferences} from './console-preferences'
 
@@ -135,7 +136,8 @@ function open(id: string) {
         <!-- 2026/11/05：安装状态由开关表达，仅保留必要标识；参数入口统一靠卡片底部右侧。 -->
         <div class="assembly-card-actions">
           <ElTag v-if="item.id === 'llm'" size="small">必要组件</ElTag>
-          <ElButton v-if="assembly.components[item.id]" text :disabled="disabled" @click="open(item.id)">参数设置</ElButton>
+          <!-- 2026/11/07：使用主题色突出参数入口，与组件安装开关区分。 -->
+          <ElButton v-if="assembly.components[item.id]" type="primary" plain :disabled="disabled" @click="open(item.id)">参数设置</ElButton>
         </div>
       </article>
     </div>
@@ -164,14 +166,14 @@ function open(id: string) {
           </template>
         </template>
         <template v-else>
-          <div v-for="field in current.fields" :key="field.name" class="assembly-parameter"><label>{{ field.label }}</label><p class="config-description">{{ field.description }}</p>
-            <ElSwitch v-if="field.kind === 'BOOLEAN'" :model-value="Boolean(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
-            <ElInputNumber v-else-if="field.kind === 'NUMBER'" :model-value="Number(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
+          <FieldFrame v-for="field in current.fields" :key="field.name" :label="field.label" :description="field.description" :error="invalidJSON.has(field.name) ? 'JSON 格式尚未完成' : ''" v-slot="{attributes}">
+            <ElSwitch v-bind="attributes" v-if="field.kind === 'BOOLEAN'" :model-value="Boolean(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
+            <ElInputNumber v-bind="attributes" v-else-if="field.kind === 'NUMBER'" :model-value="Number(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
             <ValueEditor v-else-if="field.kind === 'JSON'" kind="JSON" :label="field.label" :model-value="editingJSON[field.name] ?? JSON.stringify(parameters[field.name] ?? current.defaults[field.name] ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField(field.name, value)" />
             <ValueEditor v-else-if="field.kind === 'LONG_TEXT'" :label="field.label" :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />
             <template v-else-if="field.kind === 'SECRET' && typeof parameters[field.name] === 'object'"><span class="small">已保存，不回显</span><ElButton :disabled="disabled" @click="parameter(field.name, '')">替换</ElButton></template>
-            <ElInput v-else :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :type="field.kind === 'LONG_TEXT' ? 'textarea' : field.kind === 'SECRET' ? 'password' : 'text'" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />
-          </div>
+            <ElInput v-bind="attributes" v-else :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :type="field.kind === 'LONG_TEXT' ? 'textarea' : field.kind === 'SECRET' ? 'password' : 'text'" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />
+          </FieldFrame>
         </template>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" />
         <p v-if="current.requires.length" class="small muted">依赖：{{ current.requires.map(id => catalog?.components.find(item => item.id === id)?.name ?? id).join('、') }}</p>

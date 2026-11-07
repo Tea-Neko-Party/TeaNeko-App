@@ -27,6 +27,7 @@ import ChatSettingsView from './ChatSettingsView.vue'
 import AgentChatStatus from './AgentChatStatus.vue'
 import {usePageDraft} from './pages/page-guards'
 import {useActivePolling} from './pages/active-polling'
+import {chatReceipt, type ChatReceipt as Receipt} from './operation-receipts'
 
 interface Profile { id: string; uuid: string; name: string }
 interface Member { profile: string; card: string; role: string }
@@ -35,7 +36,6 @@ interface Home { profiles: Profile[]; rooms: Room[]; self: string; observedAt: s
 interface Part { kind: string; value: string }
 interface Message { id: string; sequence: number; sender: Profile; card: string; role: string; bot: boolean; origin: string; parts: Part[]; at: string }
 interface Page { items: Message[]; next: number; more: boolean; reset: boolean }
-interface Receipt { operationId: string; messageId: string; status: string; note: string }
 interface Send { operationId: string; profile: string; text: string; mention: boolean; reply: string; media: string; observedAt: string }
 interface Admin { path: string; body: { operationId: string; [key: string]: unknown }; action: string }
 interface Settings { registered: boolean; fields: { name: string; label: string; value: string }[] }
@@ -381,15 +381,16 @@ function openCreateRoom(kind: 'PRIVATE' | 'GROUP') {
 async function deliver() {
   const original = pending.value!
   const current = generation
-  const result = await request<Receipt>(`${base(original.room)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(original.body) })
+  const result = await request<unknown>(`${base(original.room)}/messages`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(original.body) })
   if (current !== generation) return
   receive(result)
   await pull()
   await images()
 }
 
-function receive(result: Receipt) {
-  receipt.value = result
+// 2026/11/06：确认必须先于清理草稿；确认后的刷新失败不会恢复为未提交。
+function receive(result: unknown) {
+  receipt.value = chatReceipt(result, pending.value!.body.operationId)
   pending.value = undefined
   text.value = ''
   media.value = ''
@@ -426,10 +427,10 @@ async function query() {
   const id = original?.body.operationId ?? receipt.value?.operationId
   if (!id) return
   const current = generation
-  const result = await request<Receipt>(`${base(original?.room ?? roomId.value)}/operations/${encodeURIComponent(id)}`)
+  const result = await request<unknown>(`${base(original?.room ?? roomId.value)}/operations/${encodeURIComponent(id)}`)
   if (current === generation) {
     if (original) receive(result)
-    else receipt.value = result
+    else receipt.value = chatReceipt(result, id)
     await pull()
   }
 }

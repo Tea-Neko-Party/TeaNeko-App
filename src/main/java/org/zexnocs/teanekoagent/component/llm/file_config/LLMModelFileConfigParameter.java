@@ -8,7 +8,11 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.llm.framework.model.*;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMContextWindow;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.component.llm.framework.model.LLMOptionBoundary;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
 
@@ -31,13 +35,11 @@ import java.util.Optional;
  *     context-input-ratio: 0.8
  * }</pre>
  *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：为模型参数提供可由控制台读取的用途和单位。
- *
  * <br>2026/11/04：分离唯一配置路由和协议适配器，同协议可配置多个模型及密钥。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/02

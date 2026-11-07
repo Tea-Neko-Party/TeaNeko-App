@@ -9,7 +9,12 @@ import org.zexnocs.teanekocore.actuator.task.exception.TaskDuplicateKeyException
 import org.zexnocs.teanekocore.actuator.task.exception.TaskExpirationException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNotFoundException;
-import org.zexnocs.teanekocore.actuator.task.interfaces.*;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskExecuteService;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskRetryService;
+import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.task.state.TaskFinishedState;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheData;
@@ -26,14 +31,50 @@ import java.util.concurrent.CompletableFuture;
  * 任务服务。
  * 用于注册任务、提交任务结果。
  * <br>2026/11/03：注册真实任务回执的有界观测，不将提交当作业务完成。
+ * <br>2026/11/07：限制任务准入并将逻辑等待与实际工作收尾分开。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.8.7-l
  */
 @Service
-public class TaskService implements ITaskService {
+public class TaskService implements ITaskService, AutoCloseable {
+    private final java.util.Map<UUID, ITask<?>> inFlight = new java.util.HashMap<>();
+    private int maxInFlight = 1024;
+    private boolean closed;
+
+    /**
+     * @param limit 本机任务准入总数，包含排队、实际执行及外部结果等待
+     * @throws IllegalArgumentException 当限制不在支持范围时
+     */
+    @org.springframework.beans.factory.annotation.Value("${tea-neko.tasks.max-in-flight:1024}")
+    public void setMaxInFlight(int limit) {
+        if (limit < 1 || limit > 100000) {
+            throw new IllegalArgumentException("任务在途上限须在 1～100000 之间。 ");
+        }
+        synchronized (inFlight) {
+            maxInFlight = limit;
+        }
+    }
+
+    /** @return 包含逻辑超时后尚未收尾工作的实际占用数量 */
+    public int inFlightCount() {
+        synchronized (inFlight) {
+            return inFlight.size();
+        }
+    }
+
+    /** 关闭停止新准入并请求协作停止；不丢弃尚未收尾的物理工作。 */
+    @Override
+    public void close() {
+        java.util.List<ITask<?>> remaining;
+        synchronized (inFlight) {
+            closed = true;
+            remaining = java.util.List.copyOf(inFlight.values());
+        }
+        remaining.forEach(task -> stopWaiting(task, new TaskExpirationException("任务宿主正在关闭，已开始的工作仍需收尾。")));
+    }
     private org.zexnocs.teanekocore.actuator.runtime.@org.jspecify.annotations.Nullable RuntimeMonitor monitor;
 
     /**
@@ -84,24 +125,43 @@ public class TaskService implements ITaskService {
      */
     @Override
     public <T> TaskFuture<ITaskResult<T>> subscribeWithFuture(UUID key, @NonNull ITaskConfig<T> config, Class<T> clazz)
-            throws TaskDuplicateKeyException {
-        // 如果 key 已经存在，则抛出异常
-        if(taskMap.containsKey(key)) {
-            throw new TaskDuplicateKeyException(key.toString());
+        throws TaskDuplicateKeyException {
+        // 2026/11/06：准入覆盖真实工作，等待取消和截止不提前释放容量。
+        Task<T> task;
+        TaskFuture<ITaskResult<T>> future;
+        synchronized (inFlight) {
+            if (inFlight.containsKey(key)) {
+                throw new TaskDuplicateKeyException(key.toString());
+            }
+            if (closed || inFlight.size() >= maxInFlight) {
+                throw new org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException("任务在途容量已满或正在关闭。");
+            }
+            future = new TaskFuture<>(logger, config.getName(), new CompletableFuture<>());
+            task = new Task<>(key, config, future, clazz);
+            inFlight.put(key, task);
+            taskMap.putIfAbsent(key, task);
         }
-        // 创建一个新的 Task 对象
-        var future = new TaskFuture<>(logger, config.getName(), new CompletableFuture<ITaskResult<T>>());
-        var task = new Task<>(key, config, future, clazz);
-        // 原子注册，避免多个区域同时提交相同键时覆盖彼此的任务。
-        if (taskMap.putIfAbsent(key, task) != null) {
-            throw new TaskDuplicateKeyException(key.toString());
-        }
-        // 2026/11/03：先关联原回执，随后才进入原执行域，避免快速任务丢失终态。
+        var released = task.getExecution().completion().whenComplete((ignored, failure) -> {
+            taskMap.remove(key);
+            synchronized (inFlight) {
+                inFlight.remove(key, task);
+            }
+        });
+        future.bindPhysical(released);
+        future.getFuture().whenComplete((ignored, failure) -> {
+            if (future.getFuture().isCancelled()) {
+                task.getExecution().stop();
+            }
+        });
         if (monitor != null) {
             monitor.observe(task);
         }
-        // 执行任务
-        iTaskExecuteService.__executeTask(task);
+        try {
+            iTaskExecuteService.__executeTask(task);
+        } catch (RuntimeException failure) {
+            stopWaiting(task, failure);
+            task.getExecution().settled();
+        }
         return future;
     }
 
@@ -119,35 +179,40 @@ public class TaskService implements ITaskService {
     @Override
     @SuppressWarnings("unchecked")
     public boolean complete(UUID key, @NonNull ITaskResult<?> result)
-            throws TaskNotFoundException, ClassCastException, TaskIllegalStateException {
+        throws TaskNotFoundException, ClassCastException, TaskIllegalStateException {
         var task = taskMap.get(key);
-        if(task == null) {
+        if (task == null) {
             // 没有找到对应的任务，抛出异常
             throw new TaskNotFoundException(key);
         }
         // 检测结果类型是否匹配
         var clazz = task.getResultType();
         var resultValue = result.getResult();
-        if(!clazz.isInstance(resultValue) && resultValue != null) {
+        if (!clazz.isInstance(resultValue) && resultValue != null) {
             // 如果 resultValue 不为 null 且类型不匹配，则抛出异常
             throw new ClassCastException("""
-                    结果类型与任务配置的类型不匹配：
-                    目标任务名称：%s
-                    目标类型：%s
-                    传入类型：%s"""
-                    .formatted(task.getConfig().getName(),
-                            clazz.getName(),
-                            resultValue.getClass().getName()));
+                结果类型与任务配置的类型不匹配：
+                目标任务名称：%s
+                目标类型：%s
+                传入类型：%s"""
+                .formatted(task.getConfig().getName(),
+                    clazz.getName(),
+                    resultValue.getClass().getName()));
+        }
+        if (task.getExecution().stopped()) {
+            task.getExecution().settled();
+            return false;
         }
         // 尝试 retry 任务，是否符合由 retry service 判断
-        if(iTaskRetryService.__retryTaskWithResult(task, result)) {
+        if (iTaskRetryService.__retryTaskWithResult(task, result)) {
             // 如果 retry 成功，则返回 false
             return false;
         }
         // 否则，完成任务并返回 true
-        taskMap.remove(key);
         task.switchState(new TaskFinishedState());
-        return _forceComplete((ITask<Object>) task, (ITaskResult<Object>) result);
+        boolean completed = _forceComplete((ITask<Object>) task, (ITaskResult<Object>) result);
+        task.getExecution().settled();
+        return completed;
     }
 
     /**
@@ -175,19 +240,24 @@ public class TaskService implements ITaskService {
     @Override
     public boolean completeExceptionally(UUID key, Throwable exception) throws TaskNotFoundException, TaskIllegalStateException {
         var task = taskMap.get(key);
-        if(task == null) {
+        if (task == null) {
             // 没有找到对应的任务，抛出异常
             throw new TaskNotFoundException(key);
         }
+        if (task.getExecution().stopped()) {
+            task.getExecution().settled();
+            return false;
+        }
         // 尝试 retry 任务，是否符合由 retry service 判断
-        if(iTaskRetryService.__retryTaskWithException(task, exception)) {
+        if (iTaskRetryService.__retryTaskWithException(task, exception)) {
             // 如果 retry 成功，则返回 false
             return false;
         }
         // 否则，完成任务并返回 true
-        taskMap.remove(key);
         task.switchState(new TaskFinishedState());
-        return task.getFuture().completeExceptionally(exception);
+        boolean completed = task.getFuture().completeExceptionally(exception);
+        task.getExecution().settled();
+        return completed;
     }
 
     /**
@@ -203,13 +273,11 @@ public class TaskService implements ITaskService {
     @Override
     public void forceCompleteExceptionally(UUID key, Throwable exception) throws TaskNotFoundException, TaskIllegalStateException {
         var task = taskMap.get(key);
-        if(task == null) {
+        if (task == null) {
             // 没有找到对应的任务，抛出异常
             throw new TaskNotFoundException(key);
         }
-        taskMap.remove(key);
-        task.switchState(new TaskFinishedState());
-        task.getFuture().completeExceptionally(exception);
+        stopWaiting(task, exception);
     }
 
     // ---------- Task 专用的 TaskCache -------------
@@ -266,28 +334,21 @@ public class TaskService implements ITaskService {
          */
         @Override
         public boolean onExpire(Instant currentTime, ITask<?> value) {
-            // 以异常的形式完成任务
-            try {
-                var e = new TaskExpirationException("任务过期：" + task.getConfig().getName());
-                // 尝试使用过期异常 retry 任务，是否符合由 retry service 判断
-                if(iTaskRetryService.__retryTaskWithException(task, e)) {
-                    // 如果 retry 成功，则返回 false，暂时不进行删除
-                    return false;
-                } else {
-                    // 否则，完成任务并返回 true，进行删除
-                    task.getFuture().completeExceptionally(e);
-                    task.switchState(new TaskFinishedState());
-                    return true;
-                }
-            } catch (TaskIllegalStateException e) {
-                // 说明该任务没有执行完却过期了，任务执行时间过长，可能发生了死锁或者死循环
-                task.getExecutingFuture().cancel(true);
-                task.getFuture().completeExceptionally(new TaskExpirationException(
-                        "任务执行时间过长，可能出现了死锁或死循环，已取消任务并完成异常：" + task.getConfig().getName()));
-                task.switchState(new TaskFinishedState());
-                return true;
-            }
+            // 2026/11/06：未知副作用不自动重试，停止等待但保留物理工作及原编号。
+            stopWaiting(task, new TaskExpirationException("任务等待超过期限，已开始的工作可能仍在执行："
+                + task.getConfig().getName()));
+            return false;
         }
+    }
+
+    /**
+     * @param task 原在途任务
+     * @param failure 固定等待失败，不能宣称实际写入已回滚
+     */
+    private void stopWaiting(ITask<?> task, Throwable failure) {
+        task.getExecution().stop();
+        task.getFuture().completeExceptionally(failure);
+        task.switchState(new TaskFinishedState());
     }
 
     /**

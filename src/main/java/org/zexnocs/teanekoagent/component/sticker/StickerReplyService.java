@@ -7,7 +7,13 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
-import org.zexnocs.teanekoagent.component.expression.*;
+import org.zexnocs.teanekoagent.component.expression.ExpressionClientRegistry;
+import org.zexnocs.teanekoagent.component.expression.ExpressionRuntime;
+import org.zexnocs.teanekoagent.component.expression.ExpressionSettings;
+import org.zexnocs.teanekoagent.component.expression.MediaReplySettings;
+import org.zexnocs.teanekoagent.component.expression.ReplyCompileContext;
+import org.zexnocs.teanekoagent.component.expression.ReplyPlans;
+import org.zexnocs.teanekoagent.component.expression.ReplySendContext;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentExpressionFileConfig;
 import org.zexnocs.teanekoagent.component.expression.file_config.AgentMediaReplyFileConfig;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
@@ -22,6 +28,7 @@ import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.utils.StableDigest;
@@ -38,28 +45,43 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HexFormat;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 将当前资源资料、真实目录回执和原平台发送连接；签名只绑定本请求，不授予其他 scope 权限。
  * 查询缓存、轮次和展示窗口有界；文件占用持续到真实在途工作收尾，取消不提前释放原文件。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：规范化签名 Map 键序，修复插件令牌往返导致资源证明误拒绝和 Agent 无回复。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：明确空图库与收藏状态，未启用媒体能力时返回空资料而非初始化异常。
  * <br>2026/11/05：图库资料不再重复提供原生表情目录。
  * <br>2026/11/05：目录失效明确报告，最终工具过滤后复核选图依赖并明确结构化调用方式。
+ * <br>2026/11/06：图库查询提交后结算预算，取消和失败完成原查询。
+ * <br>2026/11/07：图库查询提交成功后一次结算预算，取消和关闭收束共享结果。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Component
 public final class StickerReplyService implements AutoCloseable {
@@ -210,29 +232,93 @@ public final class StickerReplyService implements AutoCloseable {
      * @param control 借用工具控制
      * @return 完整类别或没有条目的明确拒绝
      */
-    public CompletionStage<MediaReplies.Page> list(AgentRunRequest request,AgentPromptInput input,String category,ExecutionControl control){
-        control.checkActive();var resources=resources(request,input);var a=access(request).orElseThrow();
-        if(!resources.images()||resources.categories().stream().noneMatch(v->v.id().equals(category))){throw new IllegalArgumentException("类别不是本轮提供的可用类别。");}
-        CompletableFuture<MediaReplies.Page> result;Query query;
-        synchronized(queries){
-            queries.values().removeIf(q->q.expires.isBefore(Instant.now()));query=queries.get(request.requestId());
-            if(query==null){if(queries.size()>=1024){throw new IllegalStateException("本轮媒体查询目录已满。");}query=new Query(resources.binding().expiresAt());queries.put(request.requestId(),query);}
-            var previous=query.pages.get(category);if(previous!=null){return previous.minimalCompletionStage();}
-            if(query.pages.size()>=a.media().maxCategories()){return CompletableFuture.failedStage(new IllegalArgumentException("本轮类别展开次数已达到上限。"));}
-            result=new CompletableFuture<>();query.pages.put(category,result);
+    public CompletionStage<MediaReplies.Page> list(AgentRunRequest request, AgentPromptInput input,
+                                                   String category, ExecutionControl control) {
+        // 2026/11/06：事务重试只重建候选页；内存预算、签名及共享结果在真实提交后结算一次。
+        control.checkActive();
+        var resources = resources(request, input);
+        var access = access(request).orElseThrow();
+        if (!resources.images() || resources.categories().stream().noneMatch(value -> value.id().equals(category))) {
+            throw new IllegalArgumentException("类别不是本轮提供的可用类别。");
         }
-        var original=query;
-        CompletableFuture.completedFuture(null).thenCompose(ignored->a.storage().catalog().change(a.settings(),s->{
-            control.checkActive();check(resources.binding(),request,a);var usage=touch(s,request,a.data());
-            if(!s.getStorageIdentity().equals(resources.binding().storage())){throw new IllegalStateException("素材卷身份已经变化。");}
-            var items=eligible(s,a,usage,category).stream().map(e->new MediaReplies.Listing(e.getId(),e.getRevision(),description(e))).sorted(Comparator.comparing(MediaReplies.Listing::id)).toList();
-            var page=new MediaReplies.Page(request.requestId(),resources.proof(),category,s.getRevision(),items,true,"","");
-            long bytes=mapper.writeValueAsBytes(page).length+512;String reason="";
-            if(items.size()>a.settings().maxPerCategory()||mapper.writeValueAsString(page).length()+128>a.media().maxCategoryCharacters()){reason="CATEGORY_BUDGET";}
-            synchronized(queries){if(request.inputMaxBytes()>0&&codec.signature(input.messages()).bytes()+original.bytes+bytes+1024>request.inputMaxBytes()){reason="INPUT_BUDGET";}if(reason.isEmpty()){original.bytes+=bytes;}}
-            if(!reason.isEmpty()){page=new MediaReplies.Page(request.requestId(),resources.proof(),category,s.getRevision(),List.of(),false,reason,"");}
-            return new MediaReplies.Page(page.requestId(),page.resourceProof(),page.category(),page.catalogRevision(),page.items(),page.complete(),page.reason(),sign(page));
-        })).whenComplete((page,failure)->{if(failure==null){result.complete(page);}else{result.completeExceptionally(failure);}});
+        CompletableFuture<MediaReplies.Page> result;
+        Query query;
+        synchronized (queries) {
+            if (closed) {
+                throw new IllegalStateException("图库查询宿主已关闭。");
+            }
+            queries.values().removeIf(value -> value.expires.isBefore(Instant.now()));
+            query = queries.get(request.requestId());
+            if (query == null) {
+                if (queries.size() >= 1024) {
+                    throw new IllegalStateException("本轮媒体查询目录已满。");
+                }
+                query = new Query(resources.binding().expiresAt());
+                queries.put(request.requestId(), query);
+            }
+            var previous = query.pages.get(category);
+            if (previous != null) {
+                return control.guard(previous.minimalCompletionStage());
+            }
+            if (query.pages.size() >= access.media().maxCategories()) {
+                return CompletableFuture.failedStage(new IllegalArgumentException("本轮类别展开次数已达到上限。"));
+            }
+            result = new CompletableFuture<>();
+            query.pages.put(category, result);
+        }
+        var original = query;
+        var termination = control.onTermination(reason -> {
+            synchronized (queries) {
+                result.completeExceptionally(new ExecutionStoppedException(reason));
+            }
+        });
+        CompletableFuture.completedFuture(null).thenCompose(ignored ->
+            access.storage().catalog().change(access.settings(), state -> {
+                control.checkActive();
+                check(resources.binding(), request, access);
+                var usage = touch(state, request, access.data());
+                if (!state.getStorageIdentity().equals(resources.binding().storage())) {
+                    throw new IllegalStateException("素材卷身份已经变化。");
+                }
+                var items = eligible(state, access, usage, category).stream()
+                    .map(entry -> new MediaReplies.Listing(entry.getId(), entry.getRevision(), description(entry)))
+                    .sorted(Comparator.comparing(MediaReplies.Listing::id)).toList();
+                return new MediaReplies.Page(request.requestId(), resources.proof(), category,
+                    state.getRevision(), items, true, "", "");
+            })).thenAccept(candidate -> {
+            long bytes = mapper.writeValueAsBytes(candidate).length + 512L;
+            long inputBytes = codec.signature(input.messages()).bytes();
+            String categoryReason = candidate.items().size() > access.settings().maxPerCategory()
+                || mapper.writeValueAsString(candidate).length() + 128 > access.media().maxCategoryCharacters()
+                ? "CATEGORY_BUDGET" : "";
+            synchronized (queries) {
+                control.checkActive();
+                if (closed) {
+                    throw new IllegalStateException("图库查询宿主已关闭。");
+                }
+                if (result.isDone()) {
+                    return;
+                }
+                String reason = categoryReason;
+                if (request.inputMaxBytes() > 0
+                    && inputBytes + original.bytes + bytes + 1024 > request.inputMaxBytes()) {
+                    reason = "INPUT_BUDGET";
+                }
+                var page = reason.isEmpty() ? candidate : new MediaReplies.Page(candidate.requestId(),
+                    candidate.resourceProof(), category, candidate.catalogRevision(), List.of(), false, reason, "");
+                var signed = new MediaReplies.Page(page.requestId(), page.resourceProof(), page.category(),
+                    page.catalogRevision(), page.items(), page.complete(), page.reason(), sign(page));
+                if (reason.isEmpty()) {
+                    original.bytes += bytes;
+                }
+                result.complete(signed);
+            }
+        }).whenComplete((ignored, failure) -> {
+            termination.close();
+            if (failure != null) {
+                result.completeExceptionally(failure);
+            }
+        });
         return result.minimalCompletionStage();
     }
     /**
@@ -242,22 +328,45 @@ public final class StickerReplyService implements AutoCloseable {
      * @param id 选择的素材 ID
      * @return 单项不可变许可
      */
-    public CompletionStage<MediaReplies.Permit> sticker(ReplyCompileContext context, String id){
-        checkQuantity(context,true);var resource=resources(context.request(),context.input());var a=access(context.request()).orElseThrow();
-        MediaReplies.Listing selected=null;
-        for(var tool:context.tools()){
-            if(!tool.call().getName().equals("sticker_list")||tool.status()!=ToolInvocationResult.Status.SUCCESS||tool.truncated()){continue;}
-            var page=mapper.readValue(tool.output(),MediaReplies.Page.class);
-            var unsigned=new MediaReplies.Page(page.requestId(),page.resourceProof(),page.category(),page.catalogRevision(),page.items(),page.complete(),page.reason(),"");
-            if(!page.requestId().equals(context.request().requestId())||!page.resourceProof().equals(resource.proof())||!valid(unsigned,page.proof())){throw new IllegalArgumentException("本轮图库回执证明无效。");}
-            if(!page.complete()){continue;}
-            for(var candidate:page.items()){if(candidate.id().equals(id)){if(selected!=null&&!selected.equals(candidate)){throw new IllegalArgumentException("素材在本轮存在冲突版本。");}selected=candidate;}}
+    public CompletionStage<MediaReplies.Permit> sticker(ReplyCompileContext context, String id) {
+        checkQuantity(context, true);
+        var resource = resources(context.request(), context.input());
+        var a = access(context.request()).orElseThrow();
+        MediaReplies.Listing selected = null;
+        for (var tool : context.tools()) {
+            if (!tool.call().getName().equals("sticker_list") || tool.status() != ToolInvocationResult.Status.SUCCESS || tool.truncated()) {
+                continue;
+            }
+            var page = mapper.readValue(tool.output(), MediaReplies.Page.class);
+            var unsigned = new MediaReplies.Page(page.requestId(), page.resourceProof(), page.category(), page.catalogRevision(), page.items(), page.complete(), page.reason(), "");
+            if (!page.requestId().equals(context.request().requestId()) || !page.resourceProof().equals(resource.proof()) || !valid(unsigned, page.proof())) {
+                throw new IllegalArgumentException("本轮图库回执证明无效。");
+            }
+            if (!page.complete()) {
+                continue;
+            }
+            for (var candidate : page.items()) {
+                if (candidate.id().equals(id)) {
+                    if (selected != null && !selected.equals(candidate)) {
+                        throw new IllegalArgumentException("素材在本轮存在冲突版本。");
+                    }
+                    selected = candidate;
+                }
+            }
         }
-        if(selected==null){throw new IllegalArgumentException("只能使用本轮实际完整查询过的素材 ID。");}var item=selected;
-        return a.storage().catalog().change(a.settings(),s->{
-            context.getControl().checkActive();check(resource.binding(),context.request(),a);var entry=s.getEntries().values().stream().filter(e->e.getId().equals(item.id())&&e.getRevision()==item.revision()).findFirst().orElseThrow();var usage=touch(s,context.request(),a.data());
-            if(!usable(entry,a,usage)||!description(entry).equals(item.description())){throw new IllegalStateException("素材版本、类别或回避条件已经变化。");}
-            return permit(resource.binding(),item(entry),true);
+        if (selected == null) {
+            throw new IllegalArgumentException("只能使用本轮实际完整查询过的素材 ID。");
+        }
+        var item = selected;
+        return a.storage().catalog().change(a.settings(), s -> {
+            context.getControl().checkActive();
+            check(resource.binding(), context.request(), a);
+            var entry = s.getEntries().values().stream().filter(e -> e.getId().equals(item.id()) && e.getRevision() == item.revision()).findFirst().orElseThrow();
+            var usage = touch(s, context.request(), a.data());
+            if (!usable(entry, a, usage) || !description(entry).equals(item.description())) {
+                throw new IllegalStateException("素材版本、类别或回避条件已经变化。");
+            }
+            return permit(resource.binding(), item(entry), true);
         });
     }
     /**
@@ -280,10 +389,14 @@ public final class StickerReplyService implements AutoCloseable {
      * @param mode 独立方式
      * @return 原平台确认与资源释放
      */
-    public CompletionStage<Void> sendSticker(ReplySendContext context, MediaReplies.Permit permit, org.zexnocs.teanekoagent.component.expression.AgentReplyPlan.Mode mode){
-        return CompletableFuture.runAsync(()->acquireTransfer(context),executor).thenCompose(ignored->{
-            try{return sendStickerWithLease(context,permit,mode).whenComplete((done,failure)->transfers.release());}
-            catch(RuntimeException failure){transfers.release();return CompletableFuture.failedStage(failure);}
+    public CompletionStage<Void> sendSticker(ReplySendContext context, MediaReplies.Permit permit, org.zexnocs.teanekoagent.component.expression.AgentReplyPlan.Mode mode) {
+        return CompletableFuture.runAsync(() -> acquireTransfer(context), executor).thenCompose(ignored -> {
+            try {
+                return sendStickerWithLease(context, permit, mode).whenComplete((done, failure) -> transfers.release());
+            } catch (RuntimeException failure) {
+                transfers.release();
+                return CompletableFuture.failedStage(failure);
+            }
         });
     }
     /**
@@ -291,15 +404,30 @@ public final class StickerReplyService implements AutoCloseable {
      * 2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
      * @param context 原请求控制
      */
-    private void acquireTransfer(ReplySendContext context){
-        try{
-            while(true){context.getControl().checkActive();if(closed){throw new IllegalStateException("媒体发送宿主已关闭。");}
-                if(transfers.tryAcquire(100,TimeUnit.MILLISECONDS)){
-                    try{context.getControl().checkActive();if(closed){throw new IllegalStateException("媒体发送宿主已关闭。");}return;}
-                    catch(RuntimeException failure){transfers.release();throw failure;}
+    private void acquireTransfer(ReplySendContext context) {
+        try {
+            while (true) {
+                context.getControl().checkActive();
+                if (closed) {
+                    throw new IllegalStateException("媒体发送宿主已关闭。");
+                }
+                if (transfers.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+                    try {
+                        context.getControl().checkActive();
+                        if (closed) {
+                            throw new IllegalStateException("媒体发送宿主已关闭。");
+                        }
+                        return;
+                    } catch (RuntimeException failure) {
+                        transfers.release();
+                        throw failure;
+                    }
                 }
             }
-        }catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IllegalStateException("等待图片发送容量已中断。");}
+        } catch (InterruptedException failure) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待图片发送容量已中断。");
+        }
     }
     /**
      * 已取得实例发送容量后的真实文件与平台生命周期，实际结束后由外层释放容量。
@@ -348,23 +476,54 @@ public final class StickerReplyService implements AutoCloseable {
      * @param lease 原占用
      * @return 幂等记录真实展示，不推断人类喜欢程度
      */
-    private CompletionStage<Void> shown(ReplySendContext context,Lease lease){
-        var a=lease.access();return a.storage().catalog().change(a.settings(),s->{
-            var now=Instant.now();s.getShown().values().removeIf(t->t.plusSeconds(600).isBefore(now));String key=context.request().requestId()+":"+context.index();
-            if(s.getShown().containsKey(key)){return true;}if(s.getShown().size()>=8192){throw new IllegalStateException("机器人展示幂等窗口已满。");}
-            s.getShown().put(key,now);var e=s.getEntries().get(lease.blob().hash());if(e!=null){e.setRobotShows(e.getRobotShows()+1);e.setLastRobot(now);}
-            var usage=touch(s,context.request(),a.data());usage.getUsed().put(permitId(lease.permit()),usage.getRequests().get(context.request().requestId()));return true;
-        }).thenAccept(ignored->{});
+    private CompletionStage<Void> shown(ReplySendContext context, Lease lease) {
+        var a = lease.access();
+        return a.storage().catalog().change(a.settings(), s -> {
+            var now = Instant.now();
+            s.getShown().values().removeIf(t -> t.plusSeconds(600).isBefore(now));
+            String key = context.request().requestId() + ":" + context.index();
+            if (s.getShown().containsKey(key)) {
+                return true;
+            }
+            if (s.getShown().size() >= 8192) {
+                throw new IllegalStateException("机器人展示幂等窗口已满。");
+            }
+            s.getShown().put(key, now);
+            var e = s.getEntries().get(lease.blob().hash());
+            if (e != null) {
+                e.setRobotShows(e.getRobotShows() + 1);
+                e.setLastRobot(now);
+            }
+            var usage = touch(s, context.request(), a.data());
+            usage.getUsed().put(permitId(lease.permit()), usage.getRequests().get(context.request().requestId()));
+            return true;
+        }).thenAccept(ignored -> {
+        });
     }
     /**
      * @param lease 原文件占用
      * @param physical 实际在途工作
      * @return 保留原失败且等清理完成的阶段
      */
-    private CompletionStage<Void> releasing(Lease lease,CompletionStage<Void> physical){
-        return physical.handle((ignored,failure)->failure).thenCompose(failure->lease.access().storage().catalog().change(lease.access().settings(),s->{
-            var e=s.getEntries().get(lease.blob().hash());if(e!=null){e.getReaders().remove(lease.token());}return true;
-        }).handle((ignored,cleanup)->{if(failure!=null){if(cleanup!=null){failure.addSuppressed(cleanup);}throw new CompletionException(failure);}if(cleanup!=null){throw new CompletionException(cleanup);}return null;}));
+    private CompletionStage<Void> releasing(Lease lease, CompletionStage<Void> physical) {
+        return physical.handle((ignored, failure) -> failure).thenCompose(failure -> lease.access().storage().catalog().change(lease.access().settings(), s -> {
+            var e = s.getEntries().get(lease.blob().hash());
+            if (e != null) {
+                e.getReaders().remove(lease.token());
+            }
+            return true;
+        }).handle((ignored, cleanup) -> {
+            if (failure != null) {
+                if (cleanup != null) {
+                    failure.addSuppressed(cleanup);
+                }
+                throw new CompletionException(failure);
+            }
+            if (cleanup != null) {
+                throw new CompletionException(cleanup);
+            }
+            return null;
+        }));
     }
     /**
      * 2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
@@ -522,13 +681,21 @@ public final class StickerReplyService implements AutoCloseable {
      */
     private boolean valid(Object value,String proof){return proof!=null&&MessageDigest.isEqual(sign(value).getBytes(StandardCharsets.US_ASCII),proof.getBytes(StandardCharsets.US_ASCII));}
     /** 关闭只撤销本进程查询缓存，原文件占用继续由真实在途阶段释放。 */
-    @Override public void close(){closed=true;synchronized(queries){queries.clear();}}
+    @Override
+    public void close() {
+        // 2026/11/07：关闭必须收束尚未提交的共享查询，迟到提交不能重新签发许可。
+        List<CompletableFuture<MediaReplies.Page>> pending;
+        synchronized (queries) {
+            closed = true;
+            pending = queries.values().stream().flatMap(query -> query.pages.values().stream()).toList();
+            queries.clear();
+        }
+        pending.forEach(result -> result.completeExceptionally(new IllegalStateException("图库查询宿主已关闭。")));
+    }
     /**
      * 当前受控宿主，只在方法链中传递。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param data 原目标
@@ -547,9 +714,7 @@ public final class StickerReplyService implements AutoCloseable {
     /**
      * 实际文件在途占用，不进入计划或模型。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param access 原后端
@@ -565,9 +730,7 @@ public final class StickerReplyService implements AutoCloseable {
     /**
      * 有界请求内类别缓存，不保存聊天或执行控制。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs

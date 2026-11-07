@@ -1,35 +1,51 @@
 package org.zexnocs.teanekoapp.web;
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.ManagementTargets;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
-import org.zexnocs.teanekocore.plugin.management.*;
+import org.zexnocs.teanekocore.plugin.management.GlobalManagementResource;
+import org.zexnocs.teanekocore.plugin.management.ManagementAuthority;
+import org.zexnocs.teanekocore.plugin.management.ManagementContext;
+import org.zexnocs.teanekocore.plugin.management.ManagementGateway;
+import org.zexnocs.teanekocore.plugin.management.ManagementResource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.function.Supplier;
 
 /**
  * 将真实 Web 会话映射到原管理网关，只授权本次服务器持有的上下文与本地白名单。
  * 在途能力随物理阶段释放，浏览器断开不被当作事务已回滚。
  * <br>2026/11/03：实例级资源使用独立入口，继续复用原管理网关与在途授权。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/06：限制每资源在途并分离等待截止和物理回收，关闭时撤销执行资格。
+ * <br>2026/11/07：同步阻塞也受等待期限约束，实际阶段和逻辑结果都结束后回收。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.8.7-l
  */
 @Service
-public final class WebManagementCalls implements ManagementAuthority {
+public final class WebManagementCalls implements ManagementAuthority, AutoCloseable {
     private final ManagementGateway gateway;
     private final ClientManagementDirectory clients;
     private final PluginRegistry plugins;
@@ -37,7 +53,11 @@ public final class WebManagementCalls implements ManagementAuthority {
     private final ObjectMapper mapper;
     private final Map<String, ManagementResource<?, ?>> resources;
     private final Map<UUID, ManagementContext> active = new ConcurrentHashMap<>();
-    private final Semaphore slots = new Semaphore(32);
+    // 2026/11/06：物理占用包含目标解析及资源阶段，逻辑超时不提前归还。
+    private final Map<UUID, Work> physical = new HashMap<>();
+    private final ScheduledExecutorService scheduler;
+    private final ExecutorService workers;
+    private boolean closed;
 
     /**
      * @param gateway 原显式授权网关
@@ -46,10 +66,16 @@ public final class WebManagementCalls implements ManagementAuthority {
      * @param files 本地白名单
      * @param mapper 原数据转换器
      * @param contributions 已声明的类型化资源
+     * @param scheduler 借用的截止时间调度器
+     * @param workers 借用的执行器，隔离扩展在返回阶段前的同步阻塞
      */
     public WebManagementCalls(ManagementGateway gateway, ClientManagementDirectory clients, PluginRegistry plugins,
                               IFileConfigService files, ObjectMapper mapper,
-                              List<ManagementResource<?, ?>> contributions) {
+                              List<ManagementResource<?, ?>> contributions,
+                              @Qualifier("taskExecutor") ScheduledExecutorService scheduler,
+                              @Qualifier("virtualExecutor") ExecutorService workers) {
+        this.scheduler = scheduler;
+        this.workers = workers;
         this.gateway = gateway;
         this.clients = clients;
         this.plugins = plugins;
@@ -74,7 +100,7 @@ public final class WebManagementCalls implements ManagementAuthority {
      * @return 原网关的实际业务结果
      */
     public CompletionStage<?> invoke(String client, String account, String target, String key,
-                                      JsonNode body, Runnable session) {
+                                     JsonNode body, Runnable session) {
         var resource = resources.get(key);
         if (resource == null || resource instanceof GlobalManagementResource<?, ?> || !allowed(key)) {
             throw new SecurityException("该管理资源未在本地明确开放。");
@@ -85,8 +111,8 @@ public final class WebManagementCalls implements ManagementAuthority {
         Object request = mapper.treeToValue(body, resource.requestType());
         var platform = clients.guard(client, session);
         // 2026/11/03：目标解析之后复用同一在途授权，不复制全局管理网关。
-        return clients.invoke(client, adapter -> adapter.resolve(account, target).thenCompose(resolved ->
-                execute(resource, request, ManagementTargets.encode(client, resolved.scope()), platform)));
+        return execute(resource, request, () -> clients.invoke(client, adapter -> adapter.resolve(account, target)
+            .thenApply(resolved -> ManagementTargets.encode(client, resolved.scope()))), platform);
     }
 
     /**
@@ -105,53 +131,116 @@ public final class WebManagementCalls implements ManagementAuthority {
         if (!body.isObject() || mapper.writeValueAsString(body).length() > 65536) {
             throw new IllegalArgumentException("管理请求必须是有界对象。");
         }
-        return execute(resource, mapper.treeToValue(body, resource.requestType()), "global", session);
+        return execute(resource, mapper.treeToValue(body, resource.requestType()),
+            () -> CompletableFuture.completedStage("global"), session);
     }
 
     /**
      * @param resource 原注册资源
      * @param request 原类型化请求
-     * @param scope 宿主固定作用域
+     * @param scope 受准入和截止约束的目标解析
      * @param platform 当前会话及可选平台守卫
-     * @return 实际阶段结束后才释放控制与并发槽
+     * @return 有界等待；物理阶段实际结束后才释放容量
      */
-    private CompletionStage<?> execute(ManagementResource<?, ?> resource, Object request, String scope, Runnable platform) {
+    private CompletionStage<?> execute(ManagementResource<?, ?> resource, Object request,
+                                       Supplier<CompletionStage<String>> scope, Runnable platform) {
         String key = resource.descriptor().key();
-        if (!slots.tryAcquire()) {
-            return CompletableFuture.failedStage(new IllegalStateException("管理操作正在繁忙，请稍后重试。"));
+        var policy = files.requireCurrent(WebManagementFileConfig.class).snapshot();
+        UUID id = UUID.randomUUID();
+        Work work;
+        synchronized (physical) {
+            if (closed || physical.size() >= policy.maxInFlight()
+                || physical.values().stream().filter(value -> value.resource().equals(key)).count() >= policy.maxPerResource()) {
+                return CompletableFuture.failedStage(new ExecutionBusyException("管理操作繁忙或正在关闭，请保留原编号稍后查询。"));
+            }
+            var control = ExecutionControl.withDeadline(new ResourceBudget(Map.of()),
+                Instant.now().plusMillis(policy.timeoutMillis()), Clock.systemUTC(), scheduler);
+            work = new Work(key, Instant.now(), control);
+            physical.put(id, work);
         }
-        var control = ExecutionControl.create();
-        ManagementContext context;
+        var control = work.control();
+        CompletionStage<?> source;
         try {
-            var token = plugins.capture(resource.descriptor().pluginId());
-            Runnable checked = () -> {
-                platform.run();
-                plugins.check(token);
-                if (!allowed(key)) {
-                    throw new SecurityException("管理资源授权已经撤销。");
-                }
-            };
-            checked.run();
-            context = new ManagementContext("web.local-admin", scope,
-                    UUID.randomUUID(), control, checked);
-            active.put(context.requestId(), context);
+            // 2026/11/06：同步阻塞同样计入物理占用，HTTP 等待不依赖扩展及时返回 stage。
+            source = CompletableFuture.completedFuture(null).thenComposeAsync(ignored -> {
+                control.checkActive();
+                var token = plugins.capture(resource.descriptor().pluginId());
+                Runnable checked = () -> {
+                    control.checkActive();
+                    platform.run();
+                    plugins.check(token);
+                    if (!allowed(key)) {
+                        throw new SecurityException("管理资源授权已经撤销。");
+                    }
+                };
+                checked.run();
+                return scope.get().thenCompose(resolved -> {
+                    checked.run();
+                    var context = new ManagementContext("web.local-admin", resolved, id, control, checked);
+                    active.put(id, context);
+                    return gateway.executePhysical(key, context, request);
+                });
+            }, workers);
         } catch (RuntimeException failure) {
-            control.close();
-            slots.release();
-            return CompletableFuture.failedStage(failure);
+            source = CompletableFuture.failedStage(failure);
         }
-        CompletionStage<?> physical;
-        try {
-            physical = Objects.requireNonNull(gateway.execute(key, context, request), "管理网关没有返回执行阶段。");
-        } catch (RuntimeException failure) {
-            physical = CompletableFuture.failedStage(failure);
-        }
-        return physical.whenComplete((ignored, failure) -> {
-            active.remove(context.requestId(), context);
+        // 2026/11/07：CompletableFuture 的兄弟回调没有注册顺序保证；两种结束都观察到后才能关闭控制。
+        var waiting = control.guard(source);
+        CompletableFuture.allOf(source.handle((value, failure) -> null).toCompletableFuture(),
+                waiting.handle((value, failure) -> null).toCompletableFuture()).whenComplete((ignored, failure) -> {
+            active.remove(id);
+            synchronized (physical) {
+                physical.remove(id);
+            }
             control.close();
-            slots.release();
-        }).toCompletableFuture().minimalCompletionStage();
+        });
+        return waiting;
     }
+
+    /** @return 不含主体、目标和请求正文的物理占用及年龄，供管理员定位挂起资源 */
+    public List<InFlight> inFlight() {
+        synchronized (physical) {
+            return physical.entrySet().stream().map(entry -> new InFlight(entry.getKey(), entry.getValue().resource(),
+                Duration.between(entry.getValue().started(), Instant.now()).toMillis(),
+                entry.getValue().control().termination().toCompletableFuture().isDone())).toList();
+        }
+    }
+
+    /** 关闭后拒绝新调用并撤销在途权限；不声称物理写入已经停止或回滚。 */
+    @Override
+    public void close() {
+        List<Work> remaining;
+        synchronized (physical) {
+            closed = true;
+            remaining = List.copyOf(physical.values());
+        }
+        remaining.forEach(work -> work.control().close());
+    }
+
+    /**
+     * 单个资源的物理占用，不进入序列化视图。
+     * @param resource 已注册资源
+     * @param started 准入时间
+     * @param control 本次控制
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.7-l
+     * @version 4.8.7-l
+     */
+    private record Work(String resource, Instant started, ExecutionControl control) {}
+
+    /**
+     * 管理员可见的运行边界，不包含业务输入。
+     * @param requestId 宿主调用标识，与业务操作编号分开
+     * @param resource 资源标识
+     * @param ageMillis 实际占用毫秒数
+     * @param waitingEnded 等待是否已截止或关闭，物理阶段仍未完成
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.7-l
+     * @version 4.8.7-l
+     */
+    public record InFlight(UUID requestId, String resource, long ageMillis, boolean waitingEnded) {}
 
     /**
      * @param context 必须是本入口本次持有的同一对象

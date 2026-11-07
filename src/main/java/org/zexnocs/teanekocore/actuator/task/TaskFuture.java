@@ -25,10 +25,12 @@ import java.util.function.Function;
  * 方法来处理异常
  *
  * @param <T> 组件值类型
+ * <br>2026/11/07：提供不受逻辑超时提前完成的物理结束观察。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.8.7-l
  */
 public class TaskFuture<T> {
     /// 共享资源
@@ -51,7 +53,8 @@ public class TaskFuture<T> {
      */
     public TaskFuture(ILogger logger, String taskName, CompletableFuture<T> future) {
         this.future = future;
-        this.state = new SharedState(logger, taskName);
+        this.state = new SharedState(logger, taskName, new java.util.concurrent.atomic.AtomicReference<>(
+            future.handle((ignored, failure) -> (Void) null).minimalCompletionStage()));
     }
 
     /**
@@ -99,6 +102,16 @@ public class TaskFuture<T> {
         return future.minimalCompletionStage();
     }
 
+    /** @return 2026/11/06：实际任务收尾信号，不因调用者取消或等待截止提前归还资源 */
+    public CompletionStage<Void> physicalCompletion() {
+        return state.physical().get();
+    }
+
+    /** @param completion 任务服务在发布 Future 前绑定的唯一实际完成阶段 */
+    void bindPhysical(CompletionStage<Void> completion) {
+        state.physical().set(completion);
+    }
+
     // --------- 共享资源管理部分 ---------
 
     /**
@@ -106,12 +119,14 @@ public class TaskFuture<T> {
      *
      * @param logger   日志
      * @param taskName 任务名称
+     * @param physical 2026/11/07：共享的实际完成阶段，不随链式观察提前终止
      * @author zExNocs
      * @date 2026/10/28
      * @since 4.0.0
-     * @version 4.5.0-l
+     * @version 4.8.7-l
      */
-    private record SharedState(ILogger logger, String taskName) {}
+    private record SharedState(ILogger logger, String taskName,
+                               java.util.concurrent.atomic.AtomicReference<CompletionStage<Void>> physical) {}
 
     /**
      * 手动在 Future 结束时调用，用于处理异常日志等操作。

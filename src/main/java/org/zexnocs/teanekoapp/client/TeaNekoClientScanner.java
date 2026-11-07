@@ -1,71 +1,87 @@
 package org.zexnocs.teanekoapp.client;
 
-import lombok.Getter;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.client.api.TeaNekoClient;
 import org.zexnocs.teanekocore.framework.pair.Pair;
-import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 负责扫描和注册所有标记了 {@link TeaNekoClient} 注解实现了 {@link ITeaNekoClient} 的类，并将它们注册到 TeaNeko 客户端中。
+ * 发布带客户端声明的单例目录，动态连接和启用资格仍由调用方复核。
+ * <br>2026/11/06：拒绝重复标识；完整重扫成功后原子替换，失败保留原快照。
+ * <br>2026/11/07：拒绝重复客户端声明，重扫失败保留原目录。
  *
- * @see TeaNekoClient
- * @see ITeaNekoClient
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9
+ * @version 4.8.7-l
  */
 @Service
-public class TeaNekoClientScanner extends AbstractScanner {
-    /// 处理器映射，key 是客户端名称，value 是一个 Pair，包含了注解和实例
-    @Getter
-    private final Map<String, Pair<TeaNekoClient, ITeaNekoClient>> handlerMap = new ConcurrentHashMap<>();
+public class TeaNekoClientScanner implements IScanner {
+    private volatile @Nullable Map<String, Pair<TeaNekoClient, ITeaNekoClient>> handlers;
+    private final IBeanScanner beans;
 
-    /// bean 扫描器
-    private final IBeanScanner iBeanScanner;
-
-    public TeaNekoClientScanner(IBeanScanner iBeanScanner) {
-        super();
-        this.iBeanScanner = iBeanScanner;
+    /** @param beans 只在初始化和显式重扫中调用的 Bean 发现设施 */
+    public TeaNekoClientScanner(IBeanScanner beans) {
+        this.beans = beans;
     }
 
     /**
-     * 从 handler map 获取到 pair
-     *
-     * @param key 客户端名称
-     * @return pair of {@link TeaNekoClient}, {@link ITeaNekoClient}
+     * @return 不可变客户端快照
+     * @throws IllegalStateException 当目录尚未成功初始化时
      */
-    public Pair<TeaNekoClient, ITeaNekoClient> getPair(String key) {
-        return handlerMap.get(key);
+    public Map<String, Pair<TeaNekoClient, ITeaNekoClient>> getHandlerMap() {
+        var current = handlers;
+        if (current == null) {
+            throw new IllegalStateException("客户端目录尚未就绪，请完成初始化或显式重扫。");
+        }
+        return current;
     }
 
     /**
-     * 扫描方法。
-     *
+     * @param key 客户端标识
+     * @return 当前快照中的声明和单例，不存在时为空
      */
+    public @Nullable Pair<TeaNekoClient, ITeaNekoClient> getPair(String key) {
+        return getHandlerMap().get(key);
+    }
+
+    /** 首次成功后不重复发现，失败仅由初始化或显式重扫恢复。 */
     @Override
-    protected synchronized void _scan() {
-        var beanPairs = iBeanScanner.getBeansWithAnnotationAndInterface(TeaNekoClient.class, ITeaNekoClient.class);
-        for (var pair : beanPairs.values()) {
-            var beanAnnotation = pair.first();
-            if(!beanAnnotation.enabled()) {
-                continue;
-            }
-            handlerMap.put(beanAnnotation.value(), pair);
+    public synchronized void init() {
+        if (handlers == null) {
+            reload();
         }
     }
 
     /**
-     * 清理原始数据的方法。
-     *
+     * 完整验证后一次发布；不清空读者正在使用的旧快照。
+     * @throws IllegalArgumentException 当标识为空或有重复声明时
      */
     @Override
-    protected void _clear() {
-        handlerMap.clear();
+    public synchronized void reload() {
+        var next = new LinkedHashMap<String, Pair<TeaNekoClient, ITeaNekoClient>>();
+        var owners = new LinkedHashMap<String, String>();
+        for (var entry : beans.getBeansWithAnnotationAndInterface(TeaNekoClient.class, ITeaNekoClient.class).entrySet()) {
+            var pair = entry.getValue();
+            if (!pair.first().enabled()) {
+                continue;
+            }
+            String id = pair.first().value();
+            if (id.isBlank()) {
+                throw new IllegalArgumentException("客户端标识为空，来源=" + entry.getKey());
+            }
+            var previous = owners.putIfAbsent(id, entry.getKey());
+            if (previous != null) {
+                throw new IllegalArgumentException("客户端标识冲突：" + id + "，来源=" + previous + "、" + entry.getKey());
+            }
+            next.put(id, pair);
+        }
+        handlers = Map.copyOf(next);
     }
 }

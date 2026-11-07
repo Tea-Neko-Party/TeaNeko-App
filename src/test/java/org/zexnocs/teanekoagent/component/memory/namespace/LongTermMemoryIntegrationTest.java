@@ -11,15 +11,41 @@ import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
-import org.zexnocs.teanekoagent.component.memory.adapter.*;
+import org.zexnocs.teanekoagent.component.memory.adapter.EasyDataLayeredMemoryStore;
+import org.zexnocs.teanekoagent.component.memory.adapter.EasyDataLongTermMemoryStore;
+import org.zexnocs.teanekoagent.component.memory.adapter.LongTermCorrectTool;
+import org.zexnocs.teanekoagent.component.memory.adapter.LongTermForgetTool;
+import org.zexnocs.teanekoagent.component.memory.adapter.LongTermMemoryPromptSource;
+import org.zexnocs.teanekoagent.component.memory.adapter.LongTermMemoryTools;
+import org.zexnocs.teanekoagent.component.memory.adapter.LongTermProfileTool;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryContext;
 import org.zexnocs.teanekoagent.component.memory.history.HistoryMessage;
 import org.zexnocs.teanekoagent.component.memory.history.adapter.EasyDataHistoryStore;
-import org.zexnocs.teanekoagent.component.memory.layered.*;
+import org.zexnocs.teanekoagent.component.memory.layered.ILongTermMemoryConsolidator;
+import org.zexnocs.teanekoagent.component.memory.layered.LLMLongTermMemoryConsolidator;
+import org.zexnocs.teanekoagent.component.memory.layered.LayeredMemoryPolicy;
+import org.zexnocs.teanekoagent.component.memory.layered.LayeredMemoryProcessor;
+import org.zexnocs.teanekoagent.component.memory.layered.LayeredMemorySettings;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryEvidence;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryJobs;
+import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryLearningPolicy;
+import org.zexnocs.teanekoagent.component.memory.layered.LongTermMemoryAccess;
+import org.zexnocs.teanekoagent.component.memory.layered.MemoryEvidenceException;
+import org.zexnocs.teanekoagent.component.memory.layered.MemoryLayers;
+import org.zexnocs.teanekoagent.component.memory.layered.MemoryProcessingException;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentUserText;
+import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
@@ -32,15 +58,30 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
@@ -48,7 +89,7 @@ import static org.mockito.Mockito.*;
  * 复用事务夹具检验从真实发言到长期画像、召回和本人维护的完整闭环。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证长期生成器保留宿主配置的更小输出上限。
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：独立工具组合继续覆盖原文意图和共享长期画像边界。
  * <br>2026/11/05：核对联合输出的 JSON 对象约束及字段失败安全诊断。
@@ -58,6 +99,7 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/06：格式不匹配保留受控字段诊断，不清空原作业或误计模型错误。
  * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
  * <br>2026/11/06：验证共享事件与个人画像在输出截断前分离。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/03
@@ -234,7 +276,6 @@ class LongTermMemoryIntegrationTest {
 /**
      * 持有真实适配器，所有证据均经原历史事务进入分层存储。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
      *

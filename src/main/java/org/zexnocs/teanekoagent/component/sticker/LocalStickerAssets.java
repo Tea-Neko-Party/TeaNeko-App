@@ -4,6 +4,7 @@ package org.zexnocs.teanekoagent.component.sticker;
 
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.logger.DiagnosticException;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 
 import javax.imageio.ImageIO;
@@ -14,16 +15,29 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.net.*;
+import java.net.InetAddress;
+import java.net.Proxy;
+import java.net.ProxySelector;
+import java.net.SocketAddress;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
+import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -37,17 +51,18 @@ import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
  * <br>2026/11/03：持有发送占用时按内容地址读取原图并验证完整性。
  * <br>2026/11/03：管理预览与视觉刷新复用相同解码预算。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：保留素材下载真实原因，分别报告域名、网络、HTTP 状态和大小限制。
- *
  * <br>2026/11/05：按真实动画子帧计解码预算，支持有界长动画并公开格式及尺寸限制原因。
+ * <br>2026/11/06：I/O 边界保留安全类型和位置，不将本机路径或原始异常文本带入公开结果。
+ * <br>2026/11/07：保留安全 I/O 分类与位置，并展开文件资源的拥有和释放边界。
+ * <br>2026/11/07：图片和描述共用卷身份与受控路径。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Component @TeaNekoStickerAssets("local")
 public final class LocalStickerAssets implements IStickerAssetStore {
@@ -55,22 +70,10 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param settings 固定目录
      * @return 存储卷持久身份
      */
-    @Override public String identity(StickerSettings settings){
-        var root=root(settings);var marker=root.resolve(".teaneko-sticker-store");
-        try{
-            if(!Files.exists(marker,NOFOLLOW_LINKS)){
-                try(var paths=Files.list(root)){
-                    for(var path:paths.toList()){
-                        if(path.equals(marker)){continue;}
-                        if(!Set.of("staging","assets").contains(path.getFileName().toString())){throw new IllegalStateException("素材目录没有身份文件且包含未知内容，须人工核实。");}
-                        try(var children=Files.list(path)){if(children.findAny().isPresent()&&!Files.exists(marker,NOFOLLOW_LINKS)){throw new IllegalStateException("非空素材卷缺少身份文件，不能自动接管。");}}
-                    }
-                }
-                try{Files.writeString(marker,UUID.randomUUID().toString(),StandardOpenOption.CREATE_NEW);}catch(FileAlreadyExistsException ignored){/* 其他副本先建成。 */}
-            }
-            regular(marker);if(Files.size(marker)>64){throw new IllegalStateException("素材卷身份文件长度无效。");}String id=Files.readString(marker);
-            if(!id.matches("[a-f0-9-]{36}")){throw new IllegalStateException("素材卷身份文件无效。");}return id;
-        }catch(IOException failure){throw new IllegalStateException("无法读取素材卷身份。");}
+    @Override
+    public String identity(StickerSettings settings) {
+        // 2026/11/07：沿用共同卷身份，不让描述迁移建立另一套接管规则。
+        return StickerStoragePaths.identity(settings);
     }
     /**
      * @param job 原作业
@@ -78,11 +81,20 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param control 借用控制
      * @return 验证后的暂存与预览
      */
-    @Override public Prepared prepare(Stickers.Job job,StickerSettings settings,ExecutionControl control){
-        control.checkActive();byte[] bytes=download(job.getSource().url(),settings,control);
-        var prepared=decode(bytes,control);var path=stage(job,settings);
-        try{control.checkActive();Files.write(path,bytes,StandardOpenOption.CREATE_NEW);control.checkActive();return prepared;}
-        catch(IOException failure){throw new IllegalStateException("无法写入素材暂存文件。");}
+    @Override
+    public Prepared prepare(Stickers.Job job, StickerSettings settings, ExecutionControl control) {
+        control.checkActive();
+        byte[] bytes = download(job.getSource().url(), settings, control);
+        var prepared = decode(bytes, control);
+        var path = stage(job, settings);
+        try {
+            control.checkActive();
+            Files.write(path, bytes, StandardOpenOption.CREATE_NEW);
+            control.checkActive();
+            return prepared;
+        } catch (IOException failure) {
+            throw new DiagnosticException("无法写入素材暂存文件。", failure);
+        }
     }
     /**
      * @param job 已登记文件的原作业
@@ -90,14 +102,30 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param control 控制
      * @return 原文件元数据
      */
-    @Override public Stickers.Blob publish(Stickers.Job job,StickerSettings settings,ExecutionControl control){
-        control.checkActive();var blob=Objects.requireNonNull(job.getBlob());var target=asset(blob,settings);var source=stage(job,settings);
-        try{
-            regular(source);if(Files.size(source)!=blob.bytes()||blob.bytes()>settings.maxFileBytes()||!digest(Files.readAllBytes(source)).equals(blob.hash())){throw new IllegalStateException("素材暂存内容已变化。");}
-            if(Files.exists(target,NOFOLLOW_LINKS)){if(!exists(blob,settings)){throw new IllegalStateException("素材内容地址发生冲突。");}Files.delete(source);}
-            else{Files.move(source,target,StandardCopyOption.ATOMIC_MOVE);}
-            control.checkActive();return blob;
-        }catch(IOException failure){throw new IllegalStateException("无法原子发布素材文件。");}
+    @Override
+    public Stickers.Blob publish(Stickers.Job job, StickerSettings settings, ExecutionControl control) {
+        control.checkActive();
+        var blob = Objects.requireNonNull(job.getBlob());
+        var target = asset(blob, settings);
+        var source = stage(job, settings);
+        try {
+            regular(source);
+            if (Files.size(source) != blob.bytes() || blob.bytes() > settings.maxFileBytes() || !digest(Files.readAllBytes(source)).equals(blob.hash())) {
+                throw new IllegalStateException("素材暂存内容已变化。");
+            }
+            if (Files.exists(target, NOFOLLOW_LINKS)) {
+                if (!exists(blob, settings)) {
+                    throw new IllegalStateException("素材内容地址发生冲突。");
+                }
+                Files.delete(source);
+            } else {
+                Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+            }
+            control.checkActive();
+            return blob;
+        } catch (IOException failure) {
+            throw new DiagnosticException("无法原子发布素材文件。", failure);
+        }
     }
     /**
      * @param job 原作业
@@ -126,11 +154,24 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param control 借用控制
      * @return 有界且摘要匹配的原图
      */
-    @Override public byte[] read(Stickers.Blob blob,StickerSettings settings,ExecutionControl control){
-        control.checkActive();var path=asset(blob,settings);
-        try{regular(path);if(blob.bytes()<1||blob.bytes()>settings.maxFileBytes()||Files.size(path)!=blob.bytes()){throw new IllegalStateException("素材文件大小或状态已变化。");}
-            var bytes=Files.readAllBytes(path);control.checkActive();if(!digest(bytes).equals(blob.hash())){throw new IllegalStateException("素材文件指纹校验失败。");}return bytes;
-        }catch(IOException failure){throw new IllegalStateException("素材文件读取失败。");}
+    @Override
+    public byte[] read(Stickers.Blob blob, StickerSettings settings, ExecutionControl control) {
+        control.checkActive();
+        var path = asset(blob, settings);
+        try {
+            regular(path);
+            if (blob.bytes() < 1 || blob.bytes() > settings.maxFileBytes() || Files.size(path) != blob.bytes()) {
+                throw new IllegalStateException("素材文件大小或状态已变化。");
+            }
+            var bytes = Files.readAllBytes(path);
+            control.checkActive();
+            if (!digest(bytes).equals(blob.hash())) {
+                throw new IllegalStateException("素材文件指纹校验失败。");
+            }
+            return bytes;
+        } catch (IOException failure) {
+            throw new DiagnosticException("素材文件读取失败。", failure);
+        }
     }
     /**
      * 2026/11/03：不复制暂存，不使用可能过期的原 URL。
@@ -139,7 +180,10 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param control 借用控制
      * @return 原文件对应的有界采样
      */
-    @Override public Prepared preview(Stickers.Blob blob,StickerSettings settings,ExecutionControl control){return decode(read(blob,settings,control),control);}
+    @Override
+    public Prepared preview(Stickers.Blob blob, StickerSettings settings, ExecutionControl control) {
+        return decode(read(blob, settings, control), control);
+    }
     /**
      * 逐跳验证可信域名与解析地址，禁止代理和隐式重定向；显式域名信任不能替代网络层 DNS 隔离。
      * 2026/11/05：不再用宽泛捕获抹去下载拒绝原因，公开诊断不包含完整图片地址。
@@ -340,26 +384,49 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param control 当前控制
      * @return 有界采样输入
      */
-    private Prepared decode(byte[] bytes,ExecutionControl control){
-        try(var input=ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))){
-            var readers=ImageIO.getImageReaders(input);if(!readers.hasNext()){throw new StickerImageException("没有可用解码器，请使用 PNG、JPEG 或 GIF；当前运行环境未必提供 WebP 解码器。");}
-            var reader=readers.next();
-            try{
-                reader.setInput(input);String format=reader.getFormatName().toLowerCase(Locale.ROOT);if(format.equals("jpeg")){format="jpg";}
-                if(!Set.of("png","jpg","gif","webp").contains(format)){throw new StickerImageException("格式不受支持，请使用 PNG、JPEG、GIF 或已安装解码器的 WebP。");}
-                if(format.equals("png")){validatePng(bytes);}
-                int count=reader.getNumImages(true),width=reader.getWidth(0),height=reader.getHeight(0);
-                Color background=new Color(0,true);
-                if(format.equals("gif")){var tree=(IIOMetadataNode)reader.getStreamMetadata().getAsTree("javax_imageio_gif_stream_1.0");var nodes=tree.getElementsByTagName("LogicalScreenDescriptor");if(nodes.getLength()>0){var node=(IIOMetadataNode)nodes.item(0);width=Integer.parseInt(node.getAttribute("logicalScreenWidth"));height=Integer.parseInt(node.getAttribute("logicalScreenHeight"));}}
-                if(format.equals("gif")){background=gifBackground((IIOMetadataNode)reader.getStreamMetadata().getAsTree("javax_imageio_gif_stream_1.0"));}
+    private Prepared decode(byte[] bytes, ExecutionControl control) {
+        try (var input = ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))) {
+            var readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) {
+                throw new StickerImageException("没有可用解码器，请使用 PNG、JPEG 或 GIF；当前运行环境未必提供 WebP 解码器。");
+            }
+            var reader = readers.next();
+            try {
+                reader.setInput(input);
+                String format = reader.getFormatName().toLowerCase(Locale.ROOT);
+                if (format.equals("jpeg")) {
+                    format = "jpg";
+                }
+                if (!Set.of("png", "jpg", "gif", "webp").contains(format)) {
+                    throw new StickerImageException("格式不受支持，请使用 PNG、JPEG、GIF 或已安装解码器的 WebP。");
+                }
+                if (format.equals("png")) {
+                    validatePng(bytes);
+                }
+                int count = reader.getNumImages(true), width = reader.getWidth(0), height = reader.getHeight(0);
+                Color background = new Color(0, true);
+                if (format.equals("gif")) {
+                    var tree = (IIOMetadataNode) reader.getStreamMetadata().getAsTree("javax_imageio_gif_stream_1.0");
+                    var nodes = tree.getElementsByTagName("LogicalScreenDescriptor");
+                    if (nodes.getLength() > 0) {
+                        var node = (IIOMetadataNode) nodes.item(0);
+                        width = Integer.parseInt(node.getAttribute("logicalScreenWidth"));
+                        height = Integer.parseInt(node.getAttribute("logicalScreenHeight"));
+                    }
+                }
+                if (format.equals("gif")) {
+                    background = gifBackground((IIOMetadataNode) reader.getStreamMetadata().getAsTree("javax_imageio_gif_stream_1.0"));
+                }
                 if (count < 1 || count > 600) {
                     throw new StickerImageException("帧数=" + count + "，允许 1–600 帧；请缩短动画后再采集。");
                 }
                 if (width < 1 || height < 1 || (long) width * height > 4_194_304L) {
                     throw new StickerImageException("画布=" + width + "×" + height
-                            + "，允许最多 4194304 像素；请缩小图片后再采集。");
+                        + "，允许最多 4194304 像素；请缩小图片后再采集。");
                 }
-                if(count>1&&!format.equals("gif")){throw new StickerImageException("当前解码器不支持此格式的可靠动画合成，请转换为 GIF。");}
+                if (count > 1 && !format.equals("gif")) {
+                    throw new StickerImageException("当前解码器不支持此格式的可靠动画合成，请转换为 GIF。");
+                }
                 // 2026/11/05：优化 GIF 的子帧通常小于画布，不再按整幅画布乘以所有帧误计解码量。
                 long decodedPixels = 0;
                 for (int index = 0; index < count; index++) {
@@ -371,28 +438,75 @@ public final class LocalStickerAssets implements IStickerAssetStore {
                     decodedPixels += (long) frameWidth * frameHeight;
                     if (decodedPixels > 33_554_432L) {
                         throw new StickerImageException("累计子帧解码像素=" + decodedPixels
-                                + "，最多 33554432；请缩小图片或减少动画帧数。");
+                            + "，最多 33554432；请缩小图片或减少动画帧数。");
                     }
                 }
-                var canvas=new BufferedImage(width,height,BufferedImage.TYPE_INT_ARGB);var previews=new ArrayList<String>();long elapsed=0;
-                var moments=new ArrayList<Long>();var samples=new HashSet<Integer>();for(int i=0;i<Math.min(4,count);i++){samples.add(count==1?0:i*(count-1)/(Math.min(4,count)-1));}
-                for(int index=0;index<count;index++){
-                    control.checkActive();int frameWidth=reader.getWidth(index),frameHeight=reader.getHeight(index);
-                    if(frameWidth<1||frameHeight<1||frameWidth>width||frameHeight>height){throw new StickerImageException("动画子帧尺寸超出画布预算。");}
-                    var frame=reader.read(index);int x=0,y=0,delay=0;String disposal="none";boolean transparent=false;
-                    if(format.equals("gif")){
-                        var tree=(IIOMetadataNode)reader.getImageMetadata(index).getAsTree("javax_imageio_gif_image_1.0");
-                        var node=(IIOMetadataNode)tree.getElementsByTagName("ImageDescriptor").item(0);x=Integer.parseInt(node.getAttribute("imageLeftPosition"));y=Integer.parseInt(node.getAttribute("imageTopPosition"));
-                        var controls=tree.getElementsByTagName("GraphicControlExtension");if(controls.getLength()>0){var gc=(IIOMetadataNode)controls.item(0);delay=Integer.parseInt(gc.getAttribute("delayTime"))*10;disposal=gc.getAttribute("disposalMethod");transparent=Boolean.parseBoolean(gc.getAttribute("transparentColorFlag"));}
+                var canvas = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                var previews = new ArrayList<String>();
+                long elapsed = 0;
+                var moments = new ArrayList<Long>();
+                var samples = new HashSet<Integer>();
+                for (int i = 0; i < Math.min(4, count); i++) {
+                    samples.add(count == 1 ? 0 : i * (count - 1) / (Math.min(4, count) - 1));
+                }
+                for (int index = 0; index < count; index++) {
+                    control.checkActive();
+                    int frameWidth = reader.getWidth(index), frameHeight = reader.getHeight(index);
+                    if (frameWidth < 1 || frameHeight < 1 || frameWidth > width || frameHeight > height) {
+                        throw new StickerImageException("动画子帧尺寸超出画布预算。");
                     }
-                    if(x<0||y<0||x+frame.getWidth()>width||y+frame.getHeight()>height){throw new StickerImageException("动画子帧位置超出画布。");}
-                    if(index==0&&!transparent){var initial=canvas.createGraphics();try{initial.setColor(background);initial.fillRect(0,0,width,height);}finally{initial.dispose();}}
+                    var frame = reader.read(index);
+                    int x = 0, y = 0, delay = 0;
+                    String disposal = "none";
+                    boolean transparent = false;
+                    if (format.equals("gif")) {
+                        var tree = (IIOMetadataNode) reader.getImageMetadata(index).getAsTree("javax_imageio_gif_image_1.0");
+                        var node = (IIOMetadataNode) tree.getElementsByTagName("ImageDescriptor").item(0);
+                        x = Integer.parseInt(node.getAttribute("imageLeftPosition"));
+                        y = Integer.parseInt(node.getAttribute("imageTopPosition"));
+                        var controls = tree.getElementsByTagName("GraphicControlExtension");
+                        if (controls.getLength() > 0) {
+                            var gc = (IIOMetadataNode) controls.item(0);
+                            delay = Integer.parseInt(gc.getAttribute("delayTime")) * 10;
+                            disposal = gc.getAttribute("disposalMethod");
+                            transparent = Boolean.parseBoolean(gc.getAttribute("transparentColorFlag"));
+                        }
+                    }
+                    if (x < 0 || y < 0 || x + frame.getWidth() > width || y + frame.getHeight() > height) {
+                        throw new StickerImageException("动画子帧位置超出画布。");
+                    }
+                    if (index == 0 && !transparent) {
+                        var initial = canvas.createGraphics();
+                        try {
+                            initial.setColor(background);
+                            initial.fillRect(0, 0, width, height);
+                        } finally {
+                            initial.dispose();
+                        }
+                    }
                     // 2026/11/05：仅保存子帧覆盖区域，避免小子帧恢复时反复复制整张大画布。
                     BufferedImage previous = disposal.equals("restoreToPrevious")
-                            ? copy(canvas.getSubimage(x, y, frame.getWidth(), frame.getHeight())) : null;
-                    var graphics=canvas.createGraphics();try{graphics.drawImage(frame,x,y,null);}finally{graphics.dispose();}
-                    if(samples.contains(index)){previews.add(preview(canvas));moments.add(elapsed);}
-                    if(disposal.equals("restoreToBackgroundColor")){var g=canvas.createGraphics();try{g.setComposite(AlphaComposite.Src);g.setColor(transparent?new Color(0,true):background);g.fillRect(x,y,frame.getWidth(),frame.getHeight());}finally{g.dispose();}}
+                        ? copy(canvas.getSubimage(x, y, frame.getWidth(), frame.getHeight())) : null;
+                    var graphics = canvas.createGraphics();
+                    try {
+                        graphics.drawImage(frame, x, y, null);
+                    } finally {
+                        graphics.dispose();
+                    }
+                    if (samples.contains(index)) {
+                        previews.add(preview(canvas));
+                        moments.add(elapsed);
+                    }
+                    if (disposal.equals("restoreToBackgroundColor")) {
+                        var g = canvas.createGraphics();
+                        try {
+                            g.setComposite(AlphaComposite.Src);
+                            g.setColor(transparent ? new Color(0, true) : background);
+                            g.fillRect(x, y, frame.getWidth(), frame.getHeight());
+                        } finally {
+                            g.dispose();
+                        }
+                    }
                     if (previous != null) {
                         var restored = canvas.createGraphics();
                         try {
@@ -402,11 +516,15 @@ public final class LocalStickerAssets implements IStickerAssetStore {
                             restored.dispose();
                         }
                     }
-                    elapsed+=delay;
+                    elapsed += delay;
                 }
-                return new Prepared(new Stickers.Blob(digest(bytes),format,bytes.length,width,height,count),List.copyOf(previews),"原图共"+count+"帧；采样时间毫秒="+moments+"；未采样细节不得臆测。");
-            }finally{reader.dispose();}
-        }catch(IOException failure){throw new StickerImageException("图片数据损坏或不完整，无法完成解码；请重新获取图片。");}
+                return new Prepared(new Stickers.Blob(digest(bytes), format, bytes.length, width, height, count), List.copyOf(previews), "原图共" + count + "帧；采样时间毫秒=" + moments + "；未采样细节不得臆测。");
+            } finally {
+                reader.dispose();
+            }
+        } catch (IOException failure) {
+            throw new DiagnosticException("图片数据损坏或不完整，无法完成解码；请重新获取图片。", failure);
+        }
     }
     /**
      * @param tree 原 GIF 全局元数据
@@ -442,21 +560,31 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param image 完整画布
      * @return 缩小且编码后的 PNG
      */
-    private String preview(BufferedImage image){
-        double scale=Math.min(1,512.0/Math.max(image.getWidth(),image.getHeight()));var small=new BufferedImage(Math.max(1,(int)(image.getWidth()*scale)),Math.max(1,(int)(image.getHeight()*scale)),BufferedImage.TYPE_INT_RGB);
-        var g=small.createGraphics();try{g.setColor(Color.WHITE);g.fillRect(0,0,small.getWidth(),small.getHeight());g.drawImage(image,0,0,small.getWidth(),small.getHeight(),null);}finally{g.dispose();}
-        try(var out=new ByteArrayOutputStream()){ImageIO.write(small,"png",out);return "data:image/png;base64,"+Base64.getEncoder().encodeToString(out.toByteArray());}catch(IOException failure){throw new IllegalStateException("素材预览编码失败。");}
+    private String preview(BufferedImage image) {
+        double scale = Math.min(1, 512.0 / Math.max(image.getWidth(), image.getHeight()));
+        var small = new BufferedImage(Math.max(1, (int) (image.getWidth() * scale)), Math.max(1, (int) (image.getHeight() * scale)), BufferedImage.TYPE_INT_RGB);
+        var g = small.createGraphics();
+        try {
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, small.getWidth(), small.getHeight());
+            g.drawImage(image, 0, 0, small.getWidth(), small.getHeight(), null);
+        } finally {
+            g.dispose();
+        }
+        try (var out = new ByteArrayOutputStream()) {
+            ImageIO.write(small, "png", out);
+            return "data:image/png;base64," + Base64.getEncoder().encodeToString(out.toByteArray());
+        } catch (IOException failure) {
+            throw new DiagnosticException("素材预览编码失败。", failure);
+        }
     }
     /**
      * @param settings 宿主目录
      * @return 无符号链接的实例根
      */
-    private Path root(StickerSettings settings){
-        var path=Path.of(settings.storageRoot()).toAbsolutePath().normalize().resolve(settings.catalogId());
-        try{Path current=path.getRoot();for(var part:path){current=current.resolve(part);if(Files.isSymbolicLink(current)){throw new IllegalStateException("素材目录不允许符号链接。");}}
-            Files.createDirectories(path.resolve("staging"));Files.createDirectories(path.resolve("assets"));
-            if(Files.isSymbolicLink(path.resolve("staging"))||Files.isSymbolicLink(path.resolve("assets"))){throw new IllegalStateException("素材子目录不允许符号链接。");}return path;
-        }catch(IOException failure){throw new IllegalStateException("素材目录无法创建。");}
+    private Path root(StickerSettings settings) {
+        // 2026/11/07：图片与描述使用同一父路径校验。
+        return StickerStoragePaths.root(settings);
     }
     /**
      * @param job 固定作业及租约
@@ -476,7 +604,16 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      */
     private void regular(Path path)throws IOException{if(!Files.isRegularFile(path,NOFOLLOW_LINKS)||Files.isSymbolicLink(path)){throw new IOException("素材文件类型无效。");}}
     /** @param path 精确受控文件 */
-    private void deleteFile(Path path){try{if(Files.exists(path,NOFOLLOW_LINKS)){regular(path);Files.delete(path);}}catch(IOException failure){throw new IllegalStateException("素材文件尚未成功回收。");}}
+    private void deleteFile(Path path) {
+        try {
+            if (Files.exists(path, NOFOLLOW_LINKS)) {
+                regular(path);
+                Files.delete(path);
+            }
+        } catch (IOException failure) {
+            throw new DiagnosticException("素材文件尚未成功回收。", failure);
+        }
+    }
     /**
      * @param bytes 原始内容
      * @return SHA-256 指纹

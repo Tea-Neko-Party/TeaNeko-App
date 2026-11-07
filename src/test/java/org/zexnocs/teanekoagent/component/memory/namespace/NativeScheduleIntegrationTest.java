@@ -34,7 +34,6 @@ import org.zexnocs.teanekocore.command.CommandData;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -42,13 +41,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Status.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Status.CANCELLED;
+import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Status.INDETERMINATE;
+import static org.zexnocs.teanekoagent.component.schedule.AgentScheduledTask.Status.PAUSED;
 
 /**
  * 实际原生任务入口到专用数据库及发送适配的必要闭环，不连接真实平台。
@@ -67,9 +87,7 @@ class NativeScheduleIntegrationTest {
     /**
      * 复用事务夹具，平台仅模拟当前身份与实际发送回执。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -99,31 +117,50 @@ class NativeScheduleIntegrationTest {
         final AgentTaskCommands commands;
 
         /** 装配实际原生 scope 解析、身份策略和发送器，恢复完成后才开放命令。 */
-        @SuppressWarnings("unchecked") Fixture() {
-            var clients = new TeaNekoClientScanner(mock(IBeanScanner.class)); when(client.getClientId()).thenReturn("native");
-            clients.getHandlerMap().put("native", IndependentPair.of(mock(TeaNekoClient.class), client));
-            when(client.getTeaNekoToolbox()).thenReturn(toolbox); when(toolbox.getGroupMemberInfoSender()).thenReturn(members);
+        @SuppressWarnings("unchecked")
+        Fixture() {
+            var clients = mock(TeaNekoClientScanner.class);
+            when(client.getClientId()).thenReturn("native");
+            // 2026/11/06：目录查询夹具提供不可变快照，不绕过正式扫描器修改注册表。
+            doReturn(java.util.Map.of("native", IndependentPair.of(mock(TeaNekoClient.class), client))).when(clients).getHandlerMap();
+            doAnswer(call -> clients.getHandlerMap().get(call.getArgument(0))).when(clients).getPair(anyString());
+            when(client.getTeaNekoToolbox()).thenReturn(toolbox);
+            when(toolbox.getGroupMemberInfoSender()).thenReturn(members);
             when(toolbox.getMessageSenderTools()).thenReturn(messages);
             when(users.get(eq(client), anyString())).thenAnswer(call -> ids.get(call.<String>getArgument(1)));
-            roles.put("alice", "member"); roles.put("bob", "member");
+            roles.put("alice", "member");
+            roles.put("bob", "member");
             doAnswer(call -> {
-                var member = mock(IGroupMemberResponseData.class); String user = call.getArgument(1);
-                when(member.getUserId()).thenReturn(user); when(member.getRole()).thenAnswer(ignored -> roles.get(user));
+                var member = mock(IGroupMemberResponseData.class);
+                String user = call.getArgument(1);
+                when(member.getUserId()).thenReturn(user);
+                when(member.getRole()).thenAnswer(ignored -> roles.get(user));
                 return new TaskFuture<>(logger, "当前成员", CompletableFuture.completedFuture(member));
             }).when(members).get(anyString(), anyString());
-            when(messages.getGroupBuilder("42")).thenReturn(sender); when(messages.getPrivateBuilder("alice")).thenReturn(sender);
-            when(sender.sendWithFuture()).thenAnswer(ignored -> { sending.complete(null); return new TaskFuture<>(logger, "提醒发送", sent); });
+            when(messages.getGroupBuilder("42")).thenReturn(sender);
+            when(messages.getPrivateBuilder("alice")).thenReturn(sender);
+            when(sender.sendWithFuture()).thenAnswer(ignored -> {
+                sending.complete(null);
+                return new TaskFuture<>(logger, "提醒发送", sent);
+            });
             var adapter = new NativeScheduleAdapter(scope -> new AgentScopePolicy(true, enabled.get(), AgentScopePolicy.Mode.PASSIVE_BASIC),
-                    clients, new TeaNekoScopeService(clients), users, Runnable::run);
-            var clock = mock(Clock.class); when(clock.instant()).thenAnswer(ignored -> now.get());
+                clients, new TeaNekoScopeService(clients), users, Runnable::run);
+            var clock = mock(Clock.class);
+            when(clock.instant()).thenAnswer(ignored -> now.get());
             schedules = new AgentScheduleService(store, clock, adapter, Map.of("remind", adapter));
-            var timers = mock(ITimerService.class); ITimerTaskConfig<Void> timer = mock(ITimerTaskConfig.class);
+            var timers = mock(ITimerService.class);
+            ITimerTaskConfig<Void> timer = mock(ITimerTaskConfig.class);
             when(timers.registerByDelay(anyString(), anyString(), any(), any(), eq(Void.class))).thenReturn(timer);
-            lifecycle = new AgentScheduleLifecycle(schedules, timers, logger); lifecycle.onReady(); lifecycle.onReady();
+            lifecycle = new AgentScheduleLifecycle(schedules, timers, logger);
+            lifecycle.onReady();
+            lifecycle.onReady();
             verify(timers, times(1)).registerByDelay(anyString(), anyString(), any(), any(), eq(Void.class));
-            var configs = mock(IConfigDataService.class); var config = new AgentScopeConfigData(null); config.setTaskTimeZone("Asia/Shanghai");
+            var configs = mock(IConfigDataService.class);
+            var config = new AgentScopeConfigData(null);
+            config.setTaskTimeZone("Asia/Shanghai");
             when(configs.getConfigData(any(), eq(AgentScopeConfigData.class), anyString())).thenAnswer(ignored -> {
-                config.setEnabled(enabled.get()); return Optional.of(config);
+                config.setEnabled(enabled.get());
+                return Optional.of(config);
             });
             commands = new AgentTaskCommands(schedules, lifecycle, Runnable::run, deadlines, configs, new AgentScopeConfigManager());
         }

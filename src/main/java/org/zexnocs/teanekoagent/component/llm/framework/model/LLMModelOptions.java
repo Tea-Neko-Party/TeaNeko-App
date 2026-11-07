@@ -1,6 +1,10 @@
 package org.zexnocs.teanekoagent.component.llm.framework.model;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMResponseFormat;
@@ -17,12 +21,11 @@ import java.util.Optional;
  * 大语言模型请求参数的通用实现类。
  * <br>用于在不同模型供应商之间传递统一的模型参数和扩展数据。
  * <br>2026/11/04：复制与合并模型上下文策略，保留本次调用的容量快照。
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/06：复制与合并保留不可变输出 Schema。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ *
  * @author zExNocs
  * @date 2026/05/15
  * @since 4.4.0

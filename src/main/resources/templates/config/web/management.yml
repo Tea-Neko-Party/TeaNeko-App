@@ -1,0 +1,4 @@
+# 2026/11/07：HTTP 等待结束后保留实际工作占用，不将截止视为写入已回滚。
+timeout-millis: 30000
+max-in-flight: 32
+max-per-resource: 4

@@ -2,6 +2,8 @@ package org.zexnocs.teanekoagent.integration.web;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemories;
 import org.zexnocs.teanekoagent.component.memory.layered.LongMemoryJobs;
@@ -19,11 +21,12 @@ import java.util.UUID;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：展示后台整理状态并提供版本化暂停恢复。
  * <br>2026/11/06：提供共享事件查询选项，保留原调用的长期记忆语义。
+ * <br>2026/11/07：可选事件筛选缺省为 false，不受宿主全局基本类型空值策略影响。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.6-l
+ * @version 4.8.7-l
  */
 public final class AgentLayersConsole {
     /** 禁止实例化契约容器。 */
@@ -36,6 +39,7 @@ public final class AgentLayersConsole {
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * <br>2026/11/05：新增 REPLAY 和 REPLAY_OPERATION，沿用固定空间和操作回执。
+     * <br>2026/11/07：仅 eventsOnly 的缺省及空值使用 false，其他请求参数仍执行严格绑定与校验。
      * @param action READ、EDIT、FORGET、OPERATION、REPLAY 或 REPLAY_OPERATION
      * @param namespace 空串使用当前绑定
      * @param generation 原代次，首次读取为 -1
@@ -45,14 +49,15 @@ public final class AgentLayersConsole {
      * @param revision 原内容版本
      * @param operationId 原操作编号
      * @param text 可选修正正文
-     * @param eventsOnly 仅查询无个人主体的共享事件
+     * @param eventsOnly 仅查询无个人主体的共享事件，缺省或 null 为 false
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.6-l
+     * @version 4.8.7-l
      */
     public record Query(String action, String namespace, long generation, @Nullable UUID subjectId, String topic,
-            @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text, boolean eventsOnly) {
+            @Nullable UUID id, long revision, @Nullable UUID operationId, @Nullable String text,
+            @JsonSetter(nulls = Nulls.AS_EMPTY) boolean eventsOnly) {
         /**
          * 2026/11/06：保留原调用的全部长期条目语义，新的网页事件页显式选择过滤。
          * @param action 动作

@@ -1,6 +1,7 @@
 package org.zexnocs.teanekocore.event;
 
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -14,17 +15,22 @@ import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 
 /**
  * 事件服务，负责处理事件的推送和分发。
  * 当前事件服务是一旦有任何监听器出现异常就会停止处理事件，并将异常抛出到命名空间或者 TaskFuture 中处理。
  * <br>2026/11/02：按插件归属过滤监听器，决策事件拒绝异步监听并复核调用版本。
+ * <br>2026/11/07：完整事件入口跟踪通知、异步监听和各级业务的实际完成。
  *
  * @author zExNocs
  * @date 2026/02/17
  * @since 4.0.8
- * @version 4.6.0-l
+ * @version 4.8.7-l
  */
 @Service
 public class EventService implements IEventService {
@@ -103,17 +109,38 @@ public class EventService implements IEventService {
     @Override
     public TaskFuture<ITaskResult<Void>> pushEventWithFuture(@NonNull IEvent<?> event) {
         String eventProcessNamespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
-                .map(Event::namespace)
-                .filter(s -> !s.isEmpty())
-                .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
+            .map(Event::namespace)
+            .filter(s -> !s.isEmpty())
+            .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
         return iTaskService.subscribeWithFuture(
-                    "事件{" + event.getClass().getName() + "}的处理",
-                    eventProcessNamespace,
-                    () -> {
-                        _processEvent(event);
-                        return EmptyTaskResult.INSTANCE;
-                    },
-                    EmptyTaskResult.getResultType());
+            "事件{" + event.getClass().getName() + "}的处理",
+            eventProcessNamespace,
+            () -> {
+                _processEvent(event, null);
+                return EmptyTaskResult.INSTANCE;
+            },
+            EmptyTaskResult.getResultType());
+    }
+
+    /**
+     * 2026/11/06：在原事件分发中收集每一级实际业务，不阻塞事件线程。
+     * @param event 原始事件
+     * @return 通知和实际业务均收尾后的阶段，异常继续传播
+     */
+    @Override
+    public CompletionStage<Void> pushEventWithCompletion(@NonNull IEvent<?> event) {
+        var work = new ArrayList<CompletionStage<?>>();
+        String namespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
+            .map(Event::namespace).filter(value -> !value.isEmpty()).orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
+        var notification = iTaskService.subscribeWithFuture("完整事件处理", namespace, () -> {
+            _processEvent(event, work);
+            return EmptyTaskResult.INSTANCE;
+        }, Void.class);
+        return notification.physicalCompletion().thenCompose(ignored -> {
+            work.add(notification.asStage());
+            return CompletableFuture.allOf(work.stream().map(CompletionStage::toCompletableFuture)
+                .toArray(CompletableFuture<?>[]::new));
+        });
     }
 
     /**
@@ -123,83 +150,95 @@ public class EventService implements IEventService {
      * @param event 事件
      * @throws RuntimeException 当监听、决策异步约束或生命周期回调失败时
      */
-    private void _processEvent(IEvent<?> event) throws RuntimeException {
+    private void _processEvent(IEvent<?> event, @Nullable List<CompletionStage<?>> work) throws RuntimeException {
         int iteration = 0;
         while (event != null) {
-            String TAG = "事件{%s}".formatted(event.getClass().getName());
-
-            iteration += 1;
-            // 判断迭代次数是否超过最大值
-            if (iteration > MAX_ITERATION) {
-                logger.warn(this.getClass().getSimpleName(),  "迭代次数超过最大值，停止处理事件。");
-                return;
-            }
-
-            // 通知之前的操作
+            var currentEvent = event;
             try {
-                event._beforeNotify();
-            } catch (Exception e) {
-                throw new RuntimeException("%s 的通知前预处理异常".formatted(TAG), e);
-            }
+                String TAG = "事件{%s}".formatted(event.getClass().getName());
 
-            // 判断事件是否已经被取消
-            if (event.isCancelled()) {
-                logger.debug(this.getClass().getSimpleName(), "%s 在通知前预处理后被取消。".formatted(TAG));
-                // 不返回，因为可能存在忽略取消事件的监听器
-            }
-
-            // 通知事件的监听器
-            try {
-                // 获取事件的监听器
-                var eventListenerPatchList = eventHandlerScanner.getEventHandlerList(event.getClass());
-                // 遍历事件的监听器
-                for (var patch: eventListenerPatchList) {
-                    // 2026/11/02：只向有效插件通知，决策链禁止不等待的异步修改。
-                    if (!accepts(event, patch)) { continue; }
-                    // 获取注解来决定其运行的配置
-                    var annotation = patch.getAnnotation();
-                    // 如果事件被取消，且监听器不忽略取消事件，则跳过该监听器
-                    if(event.isCancelled() && !annotation.ignoreCancelled()) {
-                        continue;
-                    }
-                    // 判断监听器是否异步
-                    if (annotation.async()) {
-                        if (event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped && !scoped.allowsAsyncListeners()) {
-                            throw new IllegalArgumentException("可修改决策事件不允许异步监听器。");
-                        }
-                        _asyncProcessListener(TAG, event, patch);
-                    } else {
-                        // 如果不异步执行，则在当前线程中运行
-                        invokeListener(event, patch);
-                    }
+                iteration += 1;
+                // 判断迭代次数是否超过最大值
+                if (iteration > MAX_ITERATION) {
+                    logger.warn(this.getClass().getSimpleName(), "迭代次数超过最大值，停止处理事件。");
+                    return;
                 }
-            } catch (Exception e) {
-                throw new RuntimeException("%s 通知异常".formatted(TAG), e);
-            }
 
-            // 判断事件是否已经被取消
-            if (event.isCancelled()) {
-                logger.debug(this.getClass().getSimpleName(), "%s 在通知时被取消。".formatted(TAG));
-                // 返回，因为如果事件被取消，则不需要处理后续的操作
-                return;
-            }
+                // 通知之前的操作
+                try {
+                    event._beforeNotify();
+                } catch (Exception e) {
+                    throw new RuntimeException("%s 的通知前预处理异常".formatted(TAG), e);
+                }
 
-            // 通知完后处理事件
-            try {
-                event._afterNotify();
-            } catch (Exception e) {
-                throw new RuntimeException("%s 通知后处理异常".formatted(TAG), e);
-            }
+                // 判断事件是否已经被取消
+                if (event.isCancelled()) {
+                    logger.debug(this.getClass().getSimpleName(), "%s 在通知前预处理后被取消。".formatted(TAG));
+                    // 不返回，因为可能存在忽略取消事件的监听器
+                }
 
-            // 判断事件是否已经被取消
-            if (event.isCancelled()) {
-                logger.debug(this.getClass().getSimpleName(), "%s 在通知后处理后被取消。".formatted(TAG));
-                // 如果事件被取消则不推送下一个事件
-                return;
-            }
+                // 通知事件的监听器
+                try {
+                    // 获取事件的监听器
+                    var eventListenerPatchList = eventHandlerScanner.getEventHandlerList(event.getClass());
+                    // 遍历事件的监听器
+                    for (var patch : eventListenerPatchList) {
+                        // 2026/11/02：只向有效插件通知，决策链禁止不等待的异步修改。
+                        if (!accepts(event, patch)) {
+                            continue;
+                        }
+                        // 获取注解来决定其运行的配置
+                        var annotation = patch.getAnnotation();
+                        // 如果事件被取消，且监听器不忽略取消事件，则跳过该监听器
+                        if (event.isCancelled() && !annotation.ignoreCancelled()) {
+                            continue;
+                        }
+                        // 判断监听器是否异步
+                        if (annotation.async()) {
+                            if (event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped && !scoped.allowsAsyncListeners()) {
+                                throw new IllegalArgumentException("可修改决策事件不允许异步监听器。");
+                            }
+                            var listener = _asyncProcessListener(TAG, event, patch);
+                            if (work != null) {
+                                work.add(listener.physicalCompletion().thenCompose(ignored -> listener.asStage()));
+                            }
+                        } else {
+                            // 如果不异步执行，则在当前线程中运行
+                            invokeListener(event, patch);
+                        }
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException("%s 通知异常".formatted(TAG), e);
+                }
 
-            // 同一线程处理下一个事件
-            event = event._getNextEvent();
+                // 判断事件是否已经被取消
+                if (event.isCancelled()) {
+                    logger.debug(this.getClass().getSimpleName(), "%s 在通知时被取消。".formatted(TAG));
+                    // 返回，因为如果事件被取消，则不需要处理后续的操作
+                    return;
+                }
+
+                // 通知完后处理事件
+                try {
+                    event._afterNotify();
+                } catch (Exception e) {
+                    throw new RuntimeException("%s 通知后处理异常".formatted(TAG), e);
+                }
+
+                // 判断事件是否已经被取消
+                if (event.isCancelled()) {
+                    logger.debug(this.getClass().getSimpleName(), "%s 在通知后处理后被取消。".formatted(TAG));
+                    // 如果事件被取消则不推送下一个事件
+                    return;
+                }
+
+                // 同一线程处理下一个事件
+                event = event._getNextEvent();
+            } finally {
+                if (work != null) {
+                    work.add(currentEvent.processingCompletion());
+                }
+            }
         }
     }
 
@@ -210,9 +249,9 @@ public class EventService implements IEventService {
      * @param event 事件
      * @param patch 监听器补丁
      */
-    private void _asyncProcessListener(String TAG,
-                IEvent<?> event,
-                EventHandlerScanner.EventHandlerPatch<?> patch) {
+    private TaskFuture<ITaskResult<Void>> _asyncProcessListener(String TAG,
+                                                                IEvent<?> event,
+                                                                EventHandlerScanner.EventHandlerPatch<?> patch) {
         var annotation = patch.getAnnotation();
         var listener = patch.getTarget();
         // 获取命名空间，如果没有则使用默认命名空间
@@ -220,14 +259,16 @@ public class EventService implements IEventService {
             .filter(s -> !s.isEmpty())
             .orElse(EVENT_LISTENER_DEFAULT_NAMESPACE);
         // 注册
-        iTaskService.subscribe("""
-                        %s_监听器{%s}_{%s}的异步处理"""
-                        .formatted(TAG, listener.getClass().getName(), patch.getMethod().getName()),
-                taskChainNamespace,
-                () -> {
-                    // 2026/11/02：排队期间禁用的插件不再执行。
-                    invokeListener(event, patch);
-                    return EmptyTaskResult.INSTANCE;
-                }, EmptyTaskResult.getResultType());
+        var result = iTaskService.subscribeWithFuture("""
+                %s_监听器{%s}_{%s}的异步处理"""
+                .formatted(TAG, listener.getClass().getName(), patch.getMethod().getName()),
+            taskChainNamespace,
+            () -> {
+                // 2026/11/02：排队期间禁用的插件不再执行。
+                invokeListener(event, patch);
+                return EmptyTaskResult.INSTANCE;
+            }, EmptyTaskResult.getResultType());
+        result.finish();
+        return result;
     }
 }

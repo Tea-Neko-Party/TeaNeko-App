@@ -11,10 +11,12 @@ import java.util.concurrent.CompletionStage;
  *
  * @param <Q> 明确请求 DTO 类型
  * @param <R> 明确返回 View 类型
+ * <br>2026/11/07：明确实际完成、提交前复核与原编号查询责任。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.6.0-l
+ * @version 4.8.7-l
  */
 public interface ManagementResource<Q, R> {
     /** @return 不可变资源及权限声明 */
@@ -23,6 +25,8 @@ public interface ManagementResource<Q, R> {
     Class<Q> requestType();
     /**
      * 执行已授权用例，不导出 Bean、控制、密钥或 Throwable。
+     * <br>2026/11/06：返回阶段必须覆盖实际工作收尾；不可用提前截止的包装阶段冒充物理完成。
+     * 下游须在副作用前复核 context；不能撤回的写入保留原编号查询责任。
      * @param context 可信管理上下文
      * @param request 明确类型的请求
      * @return 真实业务完成及不可变视图

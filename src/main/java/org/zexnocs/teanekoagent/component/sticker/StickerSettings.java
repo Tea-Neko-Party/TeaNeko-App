@@ -9,10 +9,9 @@ import java.util.Map;
 /**
  * 一次作业固定使用的图库预算；模型路由仍引用原 model.yml。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：固定自动解析概率快照，显式请求不受抽样影响。
  *
  * @param enabled 总开关
  * @param collectEnabled 主动及被动采集总开关
@@ -45,19 +44,22 @@ import java.util.Map;
  * @param privateHosts 明确允许私有地址的可信主机
  * @param categories 稳定类别及中文说明
  * @param scoreWeights 质量、人数、频率、近期及稀缺性的权重
+ * @param sampling 自动解析概率
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.7-l
  */
 public record StickerSettings(boolean enabled, boolean collectEnabled, boolean passiveEnabled, String catalogId, String storageRoot,
         String analyzer, String assets, String admission, String catalog, String modelId, int analysisVersion,
         int maxActive, int maxPerCategory, int maxPending, long maxStorageBytes, long maxPendingBytes, int maxFileBytes,
         int downloadsPerHour, int scopeDownloadsPerHour, int analysesPerHour, int scopeAnalysesPerHour,
         int timeoutSeconds, int maintenanceSeconds, double minConfidence, double minQuality, int probationDays, double replacementMargin,
-        List<String> allowedHosts, List<String> privateHosts, Map<String,String> categories,List<Double> scoreWeights) {
+        List<String> allowedHosts, List<String> privateHosts, Map<String,String> categories,List<Double> scoreWeights,
+        StickerAnalysisSampling sampling) {
     /**
      * 校验有界配置，拒绝不可兑现的容量与类别。
+     * 2026/11/07：概率策略必须随快照提供。
      * @param enabled 总开关
      * @param collectEnabled 采集开关
      * @param passiveEnabled 被动开关
@@ -89,9 +91,11 @@ public record StickerSettings(boolean enabled, boolean collectEnabled, boolean p
      * @param privateHosts 私有媒体主机
      * @param categories 类别
      * @param scoreWeights 排序权重
+     * @param sampling 自动解析概率
      * @throws IllegalArgumentException 当配置越界时
      */
     public StickerSettings {
+        java.util.Objects.requireNonNull(sampling);
         if (!catalogId.matches("[a-z0-9][a-z0-9_-]{0,47}") || storageRoot.isBlank()
                 || analysisVersion < 1 || maxActive < 1 || maxActive > 1000 || maxPerCategory < 1 || maxPerCategory > 64
                 || maxPending < 1 || maxPending > 128 || maxFileBytes < 1024 || maxFileBytes > 8*1024*1024

@@ -23,12 +23,17 @@ import java.util.concurrent.atomic.AtomicInteger;
  * 不允许外部直接创建 {@link Task} 实例，必须通过 {@link TaskConfig} 创建。
  *
  * @param <T> 任务结果的类型
- * @see TaskConfig
  * @author zExNocs
  * @date 2026/02/10
  * @since 4.0.0
+ * @see TaskConfig
+ * <br>2026/11/07：持有独立执行控制，保持取消后的实际工作可追踪。
+ *
  */
 public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
+    // 2026/11/06：等待结果与真正执行收尾分开，取消不再依赖 CompletableFuture.cancel 中断线程。
+    @Getter
+    private final TaskExecution execution = new TaskExecution();
     /// 任务执行的 config
     @Getter
     private final ITaskConfig<T> config;
@@ -69,6 +74,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
         super(new TaskCreatedState());
         this.config = config;
         this.future = future;
+        future.bindPhysical(execution.completion());
         this.resultType = resultType;
         this.key = key;
         // 第一次尝试时间应该等于 当前时间 + 执行时间
@@ -88,10 +94,11 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
      */
     @Override
     public boolean switchToRetryState() throws TaskIllegalStateException {
+        execution.control().checkActive();
         // 如果当前状态不是 Created，则抛出异常
         if (!switchStateUnderExpected(TaskExecutedState.class, new TaskCreatedState())) {
             throw new TaskIllegalStateException("任务在非 Executed 状态下尝试重试",
-                    getCurrentState().getClass(), TaskExecutedState.class);
+                getCurrentState().getClass(), TaskExecutedState.class);
         }
 
         // 判断是不是已经达到了最大重试次数
@@ -112,7 +119,7 @@ public class Task<T> extends LockStateMachine<ITaskState> implements ITask<T> {
      */
     @Override
     public boolean isExpired(Instant currentTime) {
-        return currentTime.isAfter(lastRetryTime.plus(config.getExpirationDuration()));
+        return !execution.stopped() && currentTime.isAfter(lastRetryTime.plus(config.getExpirationDuration()));
     }
 
     /**

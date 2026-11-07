@@ -2,6 +2,7 @@ package org.zexnocs.teanekoapp.web;
 
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -14,14 +15,14 @@ import java.util.concurrent.CompletionStage;
 /**
  * 只接受已知平台目标与已声明资源，读写统一经过会话、CSRF 和原管理授权网关。
  * <br>2026/11/03：实例级资源单独路由，禁止用聊天目标扩大授权范围。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/05：通过端点声明接入统一安全错误映射。
+ * <br>2026/11/07：提供不包含业务正文的在途管理调用观察。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.0-l
+ * @version 4.8.7-l
  */
 @RestController
 // 2026/11/05：主动接入统一安全错误映射，保持原认证与 HTTP 路径。
@@ -37,6 +38,19 @@ public final class WebManagementController {
     public WebManagementController(WebManagementCalls calls, WebSessionGuard sessions) {
         this.calls = calls;
         this.sessions = sessions;
+    }
+
+    /**
+     * 2026/11/06：管理员直接查看物理占用，不占用资源调用自身的容量。
+     * @param request 当前请求
+     * @param authentication 真实认证
+     * @return 不含业务正文的资源占用和年龄
+     */
+    @GetMapping("/api/v1/management-calls")
+    public java.util.List<WebManagementCalls.InFlight> inFlight(HttpServletRequest request,
+                                                                Authentication authentication) {
+        sessions.capture(request, authentication).run();
+        return calls.inFlight();
     }
 
     /**

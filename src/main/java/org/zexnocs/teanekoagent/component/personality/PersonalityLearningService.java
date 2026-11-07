@@ -5,7 +5,11 @@ package org.zexnocs.teanekoagent.component.personality;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenUsage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
@@ -17,7 +21,11 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMM
 import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationKey;
@@ -32,7 +40,14 @@ import tools.jackson.databind.SerializationFeature;
 
 import java.time.Clock;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -47,13 +62,14 @@ import java.util.stream.Collectors;
  * 从已提交的真实互动生成一条表达候选，独立于画像、摘要及前台回答。
  * 同会话只运行一个、全局最多两个；容量不足不排队，所有来源由宿主固定。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04���˸��ѡ�����̳�ģ�������ȣ�������ʽ��Ԥ��ܾ���
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：人格候选生成继承模型输出额度，保留显式预算拒绝。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：移除包迁移后重复或未使用的类型导入。
  * <br>2026/11/05：支持无记忆的人格独立采样，使用会话与人格代次拒绝迟到候选。
  * <br>2026/11/06：使用统一结构化生成，并报告安全解析原因，保留原用量和提交守卫。
  * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/01
@@ -324,7 +340,6 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     /**
      * 冷却和运行槽位，仅由服务锁保护，不作为实体组件持久化。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -345,7 +360,6 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     /**
      * 已观察结果，拒绝不等于数据库已开始的副作用回滚。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -357,7 +371,6 @@ public final class PersonalityLearningService implements IAgentPersonalityLearni
     /**
      * 不含原文的独立后台用量，可供统一监控消费。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param requestId 原互动请求

@@ -17,7 +17,12 @@ import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonServic
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.component.personality.StyleObservations;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
@@ -25,7 +30,11 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -39,17 +48,14 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：保留长期生成资格、预算及模型输出失败的安全分类。
  * <br>2026/11/04：统一完整输入估算及输出预算，消除合法批次的固定预算失败。
- *
- * <br>2026/11/04���Ƴ�ҵ����� token ��������ʵ������������ɼ̳�ģ�Ͷ�ȡ�
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：移除业务侧 token 裁剪，事实与风格生成继承模型额度。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：明确联合输出的唯一对象协议并保留解析原因，避免数组与对象指令冲突。
  * <br>2026/11/05：提供证据作者和片段映射，解析后预校验关系，不替代最终事务复核。
  * <br>2026/11/06：独立与联合整理共用类型化 JSON 对象，保留完整证据及提交前复核。
  * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/02

@@ -11,8 +11,8 @@ import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
+import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
@@ -32,12 +32,29 @@ import tools.jackson.databind.ObjectMapper;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
-import java.util.*;
+import java.util.ConcurrentModificationException;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 // 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
 
@@ -47,15 +64,15 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：自动类型投影与明确的热更新适配器共享真实文件事务。
  * <br>2026/11/04：模型文件与表单夹具提供必需的上下文及输出容量声明。
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：验证原文件类型说明及字段注解通过秘密保护投影。
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：适配模型专属 configuration 包，保留原凭据和文件边界验证。
  * <br>2026/11/05：验证保存版本检测、失败脱敏、凭据释放与运行配置隔离。
  * <br>2026/11/05：验证环境变量缺失的安全说明、原文件保留以及环境模板与小数的联合保存。
  * <br>2026/11/05：配置管理复用专用类型目录，模型换代校验只使用运行缓存查询。
- *
  * <br>2026/11/06：验证观测模板、表单保存与实际热应用事务。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/03

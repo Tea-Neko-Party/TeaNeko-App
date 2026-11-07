@@ -16,7 +16,12 @@ import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonServic
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.memory.history.IAgentDeliveryStore;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
@@ -24,7 +29,12 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
@@ -37,18 +47,15 @@ import java.util.stream.Collectors;
  * 模型不能提交覆盖序号、主体或持久化指令，业务实例到首次工作才创建。
  * <br>2026/11/03：压缩时读取实际平台回执，区分已确认、部分发送和原生成候选。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：保留准入、预算、模型状态及格式失败的安全原因。
  * <br>2026/11/04：使用完整输入估算和统一输出预算，避免摘要被固定小额度截断。
- *
- * <br>2026/11/04���Ƴ�ҵ����� token �����������̳�ģ�����ò�����ժҪ������Լ��
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：移除业务侧 token 裁剪，输入继承模型配置并保留摘要结构约束。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/06：统一 JSON 生成与解码，保留预算、动态准入及失败暂停分类。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l

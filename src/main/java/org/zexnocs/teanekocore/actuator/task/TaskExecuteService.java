@@ -1,10 +1,10 @@
 package org.zexnocs.teanekocore.actuator.task;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.actuator.task.api.SetTaskStage;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
-import org.zexnocs.teanekocore.actuator.task.exception.TaskNotFoundException;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskExecuteService;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
@@ -14,9 +14,11 @@ import org.zexnocs.teanekocore.actuator.task.state.TaskSubmittedState;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
+import java.time.Duration;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,11 +26,12 @@ import java.util.concurrent.TimeUnit;
  * v4.0.8: 新增 AOP 处理 TaskStage namespace
  * <br>2026/11/02：同步任务阶段接入插件启停检查，原调用栈保持单线程。
  * <br>2026/11/03：观测排队、同步阶段和外部结果等待，不改变阶段推进线程。
+ * <br>2026/11/07：使用可撤销的排队调度，运行尝试实际退出后才归还占用。
  *
  * @author zExNocs
  * @date 2026/02/11
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.8.7-l
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {
@@ -82,6 +85,7 @@ public class TaskExecuteService implements ITaskExecuteService {
     }
     /// 虚拟线程池
     private final ExecutorService virtualExecutor;
+    private final ScheduledExecutorService scheduler;
 
     /// logger
     private final ILogger logger;
@@ -98,13 +102,16 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @param logger 项目日志
      * @param taskStageScanner 阶段目录
      * @param iTaskService 原完成服务
+     * @param scheduler 可撤销延迟任务的借用调度器
      */
     @Autowired
     public TaskExecuteService(ExecutorService virtualExecutor,
                               ILogger logger,
                               TaskStageScanner taskStageScanner,
-                              ITaskService iTaskService) {
+                              ITaskService iTaskService,
+                              @Qualifier("taskExecutor") ScheduledExecutorService scheduler) {
         this.virtualExecutor = virtualExecutor;
+        this.scheduler = scheduler;
         this.logger = logger;
         this.taskStageScanner = taskStageScanner;
         this.iTaskService = iTaskService;
@@ -118,28 +125,21 @@ public class TaskExecuteService implements ITaskExecuteService {
      */
     @Override
     public void __executeTask(ITask<?> task) {
+        // 2026/11/07：关闭与首次提交竞争时按取消收束，不把已撤销任务误报为重复订阅。
+        task.getExecution().control().checkActive();
         logger.debug(this.getClass().getSimpleName(),
-                "尝试执行任务：%s".formatted(task.getConfig().getName()));
+            "尝试执行任务：%s".formatted(task.getConfig().getName()));
         // 任务处于 Created 状态才允许执行
-        if(!task.switchStateUnderExpected(TaskCreatedState.class, new TaskSubmittedState())) {
+        if (!task.switchStateUnderExpected(TaskCreatedState.class, new TaskSubmittedState())) {
             logger.errorWithReport(this.getClass().getSimpleName(),
-                    "订阅任务：%s 在准备执行时发生异常，可能是重复提交任务".formatted(task.getConfig().getName()),
-                    new TaskIllegalStateException("重复提交任务",
-                            task.getCurrentState().getClass(), TaskCreatedState.class));
+                "订阅任务：%s 在准备执行时发生异常，可能是重复提交任务".formatted(task.getConfig().getName()),
+                new TaskIllegalStateException("重复提交任务",
+                    task.getCurrentState().getClass(), TaskCreatedState.class));
             return;
         }
         // 2026/11/03：排队与真正开始分开观测。
         observed(task, "QUEUED", "等待首次执行");
-        // 执行任务，间隔是 delayDuration
-        var future = CompletableFuture.runAsync(
-                () -> _executeTask(task, _getTaskStageChain(task)),
-                CompletableFuture.delayedExecutor(
-                        task.getConfig().getDelayDuration().toMillis(),
-                        TimeUnit.MILLISECONDS,
-                        virtualExecutor
-                )
-        );
-        task.setExecutingFuture(future);
+        schedule(task, task.getConfig().getDelayDuration());
     }
 
     /**
@@ -150,34 +150,66 @@ public class TaskExecuteService implements ITaskExecuteService {
      */
     @Override
     public void __executeTaskRetry(ITask<?> task) {
+        task.getExecution().control().checkActive();
         // 第一次重试不再 warn；超过再 warn
-        if(task.getCurrentRetryCount() >= 2) {
+        if (task.getCurrentRetryCount() >= 2) {
             logger.warn(this.getClass().getSimpleName(),
-                    "尝试重试任务：%s，当前重试次数：%d / %d"
-                            .formatted(task.getConfig().getName(),
-                                    task.getCurrentRetryCount(),
-                                    task.getConfig().getMaxRetries()));
+                "尝试重试任务：%s，当前重试次数：%d / %d"
+                    .formatted(task.getConfig().getName(),
+                        task.getCurrentRetryCount(),
+                        task.getConfig().getMaxRetries()));
         }
         // 任务处于 Created 状态才允许执行
-        if(!task.switchStateUnderExpected(TaskCreatedState.class, new TaskSubmittedState())) {
+        if (!task.switchStateUnderExpected(TaskCreatedState.class, new TaskSubmittedState())) {
             logger.errorWithReport(this.getClass().getSimpleName(),
-                    "订阅任务：%s 在准备重试执行时发生异常，可能是重复提交任务".formatted(task.getConfig().getName()),
-                    new TaskIllegalStateException("重复提交任务",
-                            task.getCurrentState().getClass(), TaskCreatedState.class));
+                "订阅任务：%s 在准备重试执行时发生异常，可能是重复提交任务".formatted(task.getConfig().getName()),
+                new TaskIllegalStateException("重复提交任务",
+                    task.getCurrentState().getClass(), TaskCreatedState.class));
             return;
         }
         // 2026/11/03：重试仍属于同一个原任务回执。
         observed(task, "QUEUED", "等待重试");
-        // 执行任务，间隔是 retryInterval
-        var future = CompletableFuture.runAsync(
-                () -> _executeTask(task, _getTaskStageChain(task)),
-                CompletableFuture.delayedExecutor(
-                        task.getConfig().getRetryInterval().toMillis(),
-                        TimeUnit.MILLISECONDS,
-                        virtualExecutor
-                )
-        );
-        task.setExecutingFuture(future);
+        schedule(task, task.getConfig().getRetryInterval());
+    }
+
+    /**
+     * 2026/11/06：调度占用从排队持续到真实线程退出；取消排队不启动原 Callable。
+     * @param task 原任务
+     * @param delay 延迟时长
+     */
+    private void schedule(ITask<?> task, Duration delay) {
+        var attempt = task.getExecution().prepare();
+        var execution = new CompletableFuture<Void>();
+        task.setExecutingFuture(execution);
+        // 2026/11/06：排队被撤销时也收束旧执行观察，但不在等待超时就伪造实际退出。
+        task.getExecution().completion().whenComplete((ignored, failure) -> execution.complete(null));
+        try {
+            var scheduled = scheduler.schedule(() -> {
+                try {
+                    virtualExecutor.execute(() -> {
+                        try {
+                            attempt.run(() -> _executeTask(task, _getTaskStageChain(task)));
+                            execution.complete(null);
+                        } catch (Throwable failure) {
+                            execution.completeExceptionally(failure);
+                            iTaskService.forceCompleteExceptionally(task.getKey(), failure);
+                            task.getExecution().settled();
+                        }
+                    });
+                } catch (RuntimeException failure) {
+                    attempt.rejected();
+                    execution.completeExceptionally(failure);
+                    iTaskService.forceCompleteExceptionally(task.getKey(), failure);
+                    task.getExecution().settled();
+                }
+            }, delay.toMillis(), TimeUnit.MILLISECONDS);
+            attempt.scheduled(scheduled);
+        } catch (RuntimeException failure) {
+            attempt.rejected();
+            execution.completeExceptionally(failure);
+            iTaskService.forceCompleteExceptionally(task.getKey(), failure);
+            task.getExecution().settled();
+        }
     }
 
     /**
@@ -210,35 +242,31 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @param taskStageChain 本次独立链
      */
     private void _executeTask(ITask<?> task, TaskStageChain taskStageChain) {
-        // 2026/11/03：Callable 返回空值时仍等待外部实际结果，不能展示为完成。
         observed(task, "RUNNING", "进入同步阶段链");
         try {
-            // 执行任务。
+            task.getExecution().control().checkActive();
             var result = taskStageChain.next();
-            // 成功获取到 result，将 task 设置为 Executed
+            if (result == null) {
+                task.getExecution().waitingExternal();
+            }
+            if (task.getExecution().stopped()) {
+                if (result != null) {
+                    task.getExecution().settled();
+                }
+                return;
+            }
             task.switchState(new TaskExecutedState());
             observed(task, "WAITING_RESULT", "等待原任务结果");
-            if(result != null) {
-                try {
-                    iTaskService.complete(task.getKey(), result);
-                } catch (TaskNotFoundException e) {
-                    // 任务已经过期了
-                    logger.errorWithReport(this.getClass().getSimpleName(),
-                            "尝试完成任务时发生错误，请增加任务过期时间，未找到对应的任务："
-                                    + task.getConfig().getName(), e);
-                }
+            if (result != null) {
+                iTaskService.complete(task.getKey(), result);
             }
-        } catch (Exception e) {
-            // 执行任务阶段链时发生异常，将 task 设置为 Executed
+        } catch (Exception failure) {
+            if (task.getExecution().stopped()) {
+                task.getExecution().settled();
+                return;
+            }
             task.switchState(new TaskExecutedState());
-            try {
-                iTaskService.completeExceptionally(task.getKey(), e);
-            } catch (TaskNotFoundException ignore) {
-                // 任务已经过期了
-                logger.errorWithReport(this.getClass().getSimpleName(),
-                        "尝试以异常方式完成任务时发生错误，请增加任务过期时间，未找到对应的任务："
-                                + task.getConfig().getName(), e);
-            }
+            iTaskService.completeExceptionally(task.getKey(), failure);
         }
     }
 }

@@ -66,7 +66,11 @@ onMounted(load)
             <div v-if="differentPackages(item)" class="command-packages"><small>特殊权限组</small><ElTag v-for="value in item.permissionPackages" :key="value" type="warning">{{ value }}</ElTag></div>
             <p class="command-introduction">{{ item.description || '该方法未提供额外说明。' }}</p>
             <div v-if="item.management || item.regex || item.subAliases.length > 1" class="editor-actions"><ElTag v-if="item.management" type="warning">仅管理来源</ElTag><ElTag v-if="item.regex" type="info">正则匹配</ElTag><span v-if="item.subAliases.length > 1" class="small muted">别名：{{ item.subAliases.join('、') }}</span></div>
-            <dl v-if="item.parameters.length" class="command-parameters"><template v-for="parameter in item.parameters" :key="parameter.name"><dt>{{ parameter.name }} <span class="small muted">{{ parameter.optional ? '可选' : '必填' }} · {{ parameter.type }}</span></dt><dd>{{ parameter.description || '未提供参数说明' }}<span v-if="parameter.optional" class="small muted"> · 默认：{{ parameter.defaultValue || '空值' }}</span></dd></template></dl>
+            <!-- 2026/11/07：参数标识、填写要求和类型分行，说明与默认值独立展示。 -->
+            <dl v-if="item.parameters.length" class="command-parameters"><template v-for="parameter in item.parameters" :key="parameter.name">
+              <dt><code>{{ parameter.name }}</code><span class="small muted">{{ parameter.optional ? '可选' : '必填' }}</span><span class="small muted">类型：{{ parameter.type }}</span></dt>
+              <dd><p>{{ parameter.description || '未提供参数说明' }}</p><p v-if="parameter.optional" class="small muted">默认：{{ parameter.defaultValue || '空值' }}</p></dd>
+            </template></dl>
           </ElCard>
         </section>
       </div>

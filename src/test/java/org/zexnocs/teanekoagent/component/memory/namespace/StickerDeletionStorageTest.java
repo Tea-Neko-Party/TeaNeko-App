@@ -2,36 +2,59 @@ package org.zexnocs.teanekoagent.component.memory.namespace;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.zexnocs.teanekoagent.component.sticker.*;
+import org.junit.jupiter.api.io.TempDir;
+import org.zexnocs.teanekoagent.component.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.StickerCatalogTransaction;
+import org.zexnocs.teanekoagent.component.sticker.StickerLibrary;
+import org.zexnocs.teanekoagent.component.sticker.StickerManagement;
+import org.zexnocs.teanekoagent.component.sticker.StickerSettings;
+import org.zexnocs.teanekoagent.component.sticker.Stickers;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
+import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.CompletionException;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 复用事务夹具验证删除目录增长、旧数据迁移、稀疏分页及失败回滚，不替代数据库压测。
  * <br>2026/11/05：覆盖超过旧主行容量的真实条目集合。
  * <br>2026/11/06：验证根锁竞争、缺省计数迁移与混合目录分页不遗漏。
+ * <br>2026/11/07：使用独立临时素材卷验证本地描述迁移，避免访问业务目录。
+ * <br>2026/11/07：批量迁移单独设置有界等待，保留后续分页查询的短等待期限。
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Timeout(30)
 class StickerDeletionStorageTest {
+    // 2026/11/07：描述迁入本地后，删除目录回归也必须使用测试拥有的独立素材卷。
+    @TempDir Path directory;
+
+    /** @return 使用测试目录的真实图库配置 */
+    private StickerSettings settings() {
+        var config = new AgentStickerFileConfig();
+        config.setStorageRoot(directory.toString());
+        return config.snapshot();
+    }
     /**
      * 大量删除记录分行保存，主目录仍可写入新素材，按键和分页查询不读取全部历史。
      * 2026/11/06：分页逐次有界等待，失败不挂起整轮回归。
+     * 2026/11/07：万条迁移包含真实文件校验，单独允许 30 秒；该用例验证容量与完整性，不作吞吐基准。
      * @throws Exception 当分页或迁移未在期限内完成时
      */
     @Test
+    @Timeout(60)
     void largeDeletionHistoryDoesNotFillRootAndPagesRemainBounded() throws Exception {
         try (var db = new NamespaceDatabaseFixture()) {
-            var settings = new AgentStickerFileConfig().snapshot();
+            var settings = settings();
             var catalog = new EasyDataStickerCatalog(db.data, db.mapper);
             var legacy = new Stickers.State();
             for (int index = 0; index < 12000; index++) {
@@ -42,7 +65,7 @@ class StickerDeletionStorageTest {
             catalog.change(settings, state -> {
                 state.getEntries().putAll(legacy.getEntries());
                 return true;
-            }).toCompletableFuture().get(10, java.util.concurrent.TimeUnit.SECONDS);
+            }).toCompletableFuture().get(30, java.util.concurrent.TimeUnit.SECONDS);
             var rebuilt = new EasyDataStickerCatalog(db.data, db.mapper);
             assertTrue(rebuilt.transact(settings, transaction -> {
                 assertEquals(12000, transaction.deletedCount());
@@ -75,7 +98,7 @@ class StickerDeletionStorageTest {
     @Test
     void mergedPagesIncludeActiveEntriesWithoutSkippingOrRepeating() throws Exception {
         try (var db = new NamespaceDatabaseFixture()) {
-            var settings = new AgentStickerFileConfig().snapshot();
+            var settings = settings();
             var catalog = new EasyDataStickerCatalog(db.data, db.mapper);
             catalog.change(settings, state -> {
                 for (int index = 0; index < 300; index++) {
@@ -111,7 +134,7 @@ class StickerDeletionStorageTest {
     @Test
     void migrationAndRestoreRollbackKeepDeletionDecisions() {
         try (var db = new NamespaceDatabaseFixture()) {
-            var settings = new AgentStickerFileConfig().snapshot();
+            var settings = settings();
             var catalog = new EasyDataStickerCatalog(db.data, db.mapper);
             var legacy = new Stickers.State();
             var entry = deleted(1);
@@ -154,7 +177,7 @@ class StickerDeletionStorageTest {
     @Test
     void competingCataloguesKeepAtomicCountersAndState() throws Exception {
         try (var db = new NamespaceDatabaseFixture()) {
-            var settings = new AgentStickerFileConfig().snapshot();
+            var settings = settings();
             var first = new EasyDataStickerCatalog(db.data, db.mapper);
             var second = new EasyDataStickerCatalog(db.data, db.mapper);
             first.change(settings, state -> true).toCompletableFuture().join();

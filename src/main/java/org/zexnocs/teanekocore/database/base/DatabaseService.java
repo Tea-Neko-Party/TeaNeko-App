@@ -19,6 +19,8 @@ import java.util.Collection;
 /**
  * 数据库服务实现类。
  *
+ * <br>2026/11/07：事务动作及提交前复核当前任务的停止状态。
+ *
  * @author zExNocs
  * @date 2026/02/15
  */
@@ -83,9 +85,12 @@ public class DatabaseService implements IDatabaseService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void __executeTaskWithTransaction(Collection<VoidCallable> tasks) throws Exception {
+        // 2026/11/06：在原事务内复核协作取消，未知写入不因等待结束而自动重试。
         for (var task : tasks) {
+            org.zexnocs.teanekocore.actuator.task.TaskExecution.checkCurrent();
             task.call();
         }
+        org.zexnocs.teanekocore.actuator.task.TaskExecution.checkCurrent();
     }
 
     /**

@@ -2,7 +2,6 @@ package org.zexnocs.teanekocore.actuator.timer;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
@@ -24,13 +23,13 @@ import java.util.concurrent.ConcurrentHashMap;
  * 管理定时器的服务。
  * <br>2026/11/03：注册真实目录，触发与管理暂停共用门禁。
  * <br>2026/11/04：先验证展示声明再纳入实际调度，调度循环只读展示。
- *
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ * <br>2026/11/07：固定间隔循环直接使用同一调度器，取消异步重复投递。
  *
  * @author zExNocs
  * @date 2026/02/14
  * @since 4.0.0
- * @version 4.7.3-l
+ * @version 4.8.7-l
  */
 @Service
 public class TimerService implements ITimerService {
@@ -74,14 +73,14 @@ public class TimerService implements ITimerService {
 
     // --------------- 计时器循环 -----------------
     /** 2026/11/03：原循环使用管理门禁，暂停不会撤销已经提交的任务。 */
-    @Async("timerScheduler")
+    // 2026/11/06：直接在同一调度器按 fixedDelay 驱动，避免异步二次投递形成积压及关闭竞态。
     // 2026/11/04：调度循环不能被网页暂停，否则全部业务计时器都会停止。
     // 2026/11/04：补充任务用途、执行边界与网页控制说明。
     @TimerDisplay(category = "core.maintenance", categoryName = "Core 维护", name = "Core 定时调度循环",
-            description = "按配置的短轮询间隔驱动 Core 定时器，检查存活条件、暂停状态和触发时间，再提交符合条件的业务任务。"
+        description = "按配置的短轮询间隔驱动 Core 定时器，检查存活条件、暂停状态和触发时间，再提交符合条件的业务任务。"
             + "本卡片表示调度循环的运行情况，不表示某个异步业务已经处理完成；可在单次运行列表查看已提交任务。"
             + "该入口只读，避免停止循环后使所有依赖它的业务定时器同时失去调度。", controllable = false)
-    @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}")
+    @Scheduled(fixedDelayString = "${tea-neko.timer.update-delay-ms:10}", scheduler = "timerScheduler")
     public void timerLoop() {
         // 获得当前的时间戳。
         var now = Instant.now();
@@ -90,7 +89,7 @@ public class TimerService implements ITimerService {
         List<ITimer<?>> copy = new ArrayList<>(timers);
         List<ITimer<?>> toRemove = new ArrayList<>();
 
-        for (var timer: copy) {
+        for (var timer : copy) {
             // 2026/11/03：所有时间和生命周期判定均在门禁内重新执行。
             Runnable update = () -> {
                 var livable = timer.getTimerTaskConfig().getLivable();
@@ -113,7 +112,7 @@ public class TimerService implements ITimerService {
         }
 
         // 删除已经销毁的定时器。
-        for (var key: toRemove) {
+        for (var key : toRemove) {
             timers.remove(key);
             if (directory != null) {
                 directory.remove(key);

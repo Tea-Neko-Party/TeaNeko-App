@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AccessibleTabs from './AccessibleTabs.vue'
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
 // 2026/11/05：详细操作回执只在高级模式展示。
@@ -166,9 +167,10 @@ async function loadMemory(more = false) {
 
 async function loadProfile() {
   if (!subject.value.trim()) return
+  // 2026/11/07：个人画像显式关闭共享事件筛选，严格 JSON 绑定不再收到缺失的 boolean。
   const [facts, learned] = await Promise.all([
     call<Profile>('profiles', { subjectId: subject.value.trim(), namespace: namespace.value.trim(), generation: -1 }),
-    call<Layers>('layers', { action: 'READ', subjectId: subject.value.trim(), namespace: namespace.value.trim(), generation: -1, revision: -1, topic: '' }),
+    call<Layers>('layers', { action: 'READ', subjectId: subject.value.trim(), namespace: namespace.value.trim(), generation: -1, revision: -1, topic: '', eventsOnly: false }),
   ])
   if (facts.namespace !== learned.namespace || facts.generation !== learned.generation) throw new Error('读取期间记忆代次已经变化，请重新读取画像。')
   profile.value = facts
@@ -305,16 +307,19 @@ async function editLong(item: LongItem, source: { namespace: string; generation:
       replacement = result.value
     } catch { return }
   }
-  await commit('layers', { action: forget ? 'FORGET' : 'EDIT', namespace: source.namespace, generation: source.generation, revision: item.revision, id: item.id, text: replacement, topic: '' },
+  // 2026/11/07：事件筛选只用于读取；写操作及其后续回执查询显式携带 false。
+  await commit('layers', { action: forget ? 'FORGET' : 'EDIT', namespace: source.namespace, generation: source.generation, revision: item.revision, id: item.id, text: replacement, topic: '', eventsOnly: false },
     forget ? '遗忘会影响整个共享空间。保留墓碑以阻止旧证据自动复活，不删除原始聊天。' : '修正共享长期记忆并保护人工纠正，所有引用此条目的聊天都会受到影响。')
 }
 
-/** 2026/11/05：管理员明确解除当前分区暂停，失败回执沿用原操作查询。 */
+/** 2026/11/05：管理员明确解除当前分区暂停，失败回执沿用原操作查询。
+ * 2026/11/07：恢复及回执查询显式关闭只读事件筛选。
+ */
 async function resumeConsolidation() {
   const current = layers.value
   if (!current?.consolidation || current.consolidation.state !== 'PAUSED') return
   await commit('layers', { action: 'REPLAY', namespace: current.namespace, generation: current.generation,
-    revision: current.consolidation.revision, topic: '' },
+    revision: current.consolidation.revision, topic: '', eventsOnly: false },
   '重新尝试本聊天暂停的长期整理，不删除证据或跳过原水位。请先检查失败原因；同一输入再次连续三次无效仍会暂停。')
 }
 
@@ -370,9 +375,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <!-- 2026/11/05：目标返回入口统一使用图标并保留可访问名称。 -->
       <button class="icon-button" aria-label="返回聊天列表" title="返回聊天列表" @click="emit('selectTarget')"><ConsoleIcon name="back" /></button><h2>{{ targetName }}</h2>
       </div>
-    <div class="agent-tabs" role="tablist" aria-label="Agent 管理分区">
-      <button v-for="item in tabs" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="choosePanel(item.id)">{{ item.name }}</button>
-      </div>
+    <!-- 2026/11/06：共享键盘页签，页面切换仍经过原草稿守卫。 -->
+    <AccessibleTabs :model-value="panel" :items="tabs" label="Agent 管理分区" :disabled="busy" @update:model-value="choosePanel">
     <ElAlert v-if="error" :title="error" type="error" :closable="false" show-icon />
     <ElAlert v-if="notice" :title="notice" type="info" :closable="true" @close="notice = ''" />
     <ElCard v-if="pending" shadow="never" class="pending-operation">
@@ -580,5 +584,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <p>结果目标 {{ receipt.target }} · 版本 {{ receipt.revision }}</p>
       <p>{{ receipt.note }}</p>
       </ElCard>
+    </AccessibleTabs>
   </div>
 </template>

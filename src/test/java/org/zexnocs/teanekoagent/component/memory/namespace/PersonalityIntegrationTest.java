@@ -21,7 +21,13 @@ import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSu
 import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
 import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.personality.*;
+import org.zexnocs.teanekoagent.component.personality.PersonalityCorrection;
+import org.zexnocs.teanekoagent.component.personality.PersonalityLearningService;
+import org.zexnocs.teanekoagent.component.personality.PersonalityLearningSettings;
+import org.zexnocs.teanekoagent.component.personality.PersonalityManagementCommand;
+import org.zexnocs.teanekoagent.component.personality.PersonalityManagementResult;
+import org.zexnocs.teanekoagent.component.personality.PersonalityService;
+import org.zexnocs.teanekoagent.component.personality.StyleObservationService;
 import org.zexnocs.teanekoagent.component.personality.adapter.ConfiguredPersonalities;
 import org.zexnocs.teanekoagent.component.personality.adapter.EasyDataPersonalityStore;
 import org.zexnocs.teanekoagent.configuration.file_config.personality.AgentPersonalityDefinition;
@@ -29,12 +35,26 @@ import org.zexnocs.teanekoagent.configuration.file_config.personality.AgentPerso
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeFieldChecker;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentService;
+import org.zexnocs.teanekoagent.runtime.AgentUserText;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
-import org.zexnocs.teanekoagent.runtime.conversation.*;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationEngine;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationOptions;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationService;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationSettings;
+import org.zexnocs.teanekoagent.runtime.conversation.AgentQueueSettings;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
@@ -47,27 +67,53 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 复用既有事务夹具验证人格实际生效、共享补正、切换回滚和旧轮失效，不增加数据结构镜像测试。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04��ʹ�ÿ�ѡ��ʽԤ����Լ��֤�˸�ѧϰ�볬ʱ��
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：使用可选显式预算合同验证人格学习与超时。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
  * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/01
@@ -104,9 +150,7 @@ class PersonalityIntegrationTest {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：人格夹具使用可空显式总预算契约。
      * <br>2026/11/04：本次夹具调整归入 v4.7.2-l。
-     *
      * <br>2026/11/04：夹具明确保留历史装配及原业务行为，适配可选组件路径。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      * <br>2026/11/06：离线模型沿用默认协议准备合同，验证原主动与人格管道。
      *

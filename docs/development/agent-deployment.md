@@ -21,7 +21,7 @@ DeepSeek 的 `reasoning_effort` 位于请求顶层，不能放进 `thinking`；�
 
 ## 数据与旧配置
 
-所有新版 Agent 数据含 /cfg 使用 tea_neko_agent_data，经专用 EasyData DTO、原事务/行锁/版本重试访问。实体与索引以[专用 EasyData](../../src/main/java/org/zexnocs/teanekoagent/database/easydata/README.md)为准；当前 dev/prod 采用 ddl-auto=update，关闭自动 DDL 的部署必须自行按实体建表并检查权限。
+所有新版 Agent 数据含 /cfg 使用 tea_neko_agent_data，经专用 EasyData DTO、原事务/行锁/版本重试访问。实体与索引以[专用 EasyData](../../src/main/java/org/zexnocs/teanekoagent/database/easydata/README.md)为准；v4.8.7-l 起 prod 只做结构校验，部署前执行[版本化迁移](database-upgrades.md)。任务容量、超时和关闭合同见[运行边界](runtime-limits.md)。
 
 用户已明确 Agent 尚未上线，新版直接使用新表，不迁移、读取或删除旧 general_data/llm_related/历史表中的 Agent 数据；需要登记的 scope 在新版重新注册。不要为本次升级清理共用业务表。旧 Java 包及其专属测试已删除，内部 Client ID 保留，外部 Java 调用改用[新版三类 Sender/直接服务](../../src/main/java/org/zexnocs/teanekoclient/agent/README.md)。
 

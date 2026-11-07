@@ -31,8 +31,8 @@ import java.util.Objects;
  * Agent 各文件按模块贡献显式表单及原语义校验，不反射开放任意字段。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04��ģ�ͱ����ṩ������������������������á�
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：模型表单提供上下文窗口与输入比例配置。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：模型文件编辑声明增加协议字段，允许唯一配置路由复用协议。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
@@ -40,11 +40,13 @@ import java.util.Objects;
  * <br>2026/11/06：新增观测日志专用热应用表单。
  * <br>2026/11/06：观测表单补充上下文、推理和汇总长度配置。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：开放自动表情解析概率的模式及两套参数说明。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.6-l
+ * @version 4.8.7-l
  */
 public final class AgentFileSettings {
     /** 禁止实例化贡献命名空间。 */
@@ -73,9 +75,7 @@ public final class AgentFileSettings {
     /**
      * 复用文件身份确认，具体模块补充实际消费端口检查。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * @author zExNocs
      * @date 2026/11/03
@@ -183,7 +183,6 @@ public final class AgentFileSettings {
     /**
      * Agent 总开关表单，不借配置应用直接触发模型。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -224,11 +223,8 @@ public final class AgentFileSettings {
      * 统一模型文件表单，凭据、连接及扩展参数只以保护字段替换。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：上下文容量与输入比例表单归入 v4.7.2-l。
-     *
      * <br>2026/11/04：开放协议适配器字段，校验唯一配置路由及协议标识。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * <br>2026/11/05：模型连接地址及路径按普通字段显示，密钥继续隐藏。
      *
@@ -324,9 +320,7 @@ public final class AgentFileSettings {
     /**
      * 人格基础文件编辑，复用原基础人格冻结和引用检查。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * @author zExNocs
      * @date 2026/11/03
@@ -396,9 +390,7 @@ public final class AgentFileSettings {
     /**
      * 拟人分段和节奏设置，由实际表达编译端口确认。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * @author zExNocs
      * @date 2026/11/03
@@ -448,14 +440,12 @@ public final class AgentFileSettings {
     /**
      * 图库安全额度字段，后端身份和存储目录仍由本地管理。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.0-l
+     * @version 4.8.7-l
      */
     @Component
     @PluginOwned("teaneko.agent")
@@ -463,13 +453,20 @@ public final class AgentFileSettings {
     public static final class Stickers extends Base {
         private final StickerLibrary library;
         /**
+         * 2026/11/07：提供自动解析模式及两套概率字段说明。
          * @param files 原文件入口
          * @param library 原图库端口
          */
         public Stickers(IFileConfigService files, StickerLibrary library) {
+            // 2026/11/07：两种概率模式及参数都可编辑，实际模型调用只读取所选模式。
             super(files, AgentStickerFileConfig.class, "表情包采集与容量", List.of(
                     field("/enabled", "启用图库", "BOOLEAN"), field("/collect-enabled", "启用采集", "BOOLEAN"),
                     field("/passive-enabled", "自动采集", "BOOLEAN"), field("/max-active", "有效表情包上限", "NUMBER"),
+                    new FileSettings.Rule("/analysis-probability-mode", "自动解析模式", "DYNAMIC：随有效素材数量降低；STATIC：固定概率。显式收藏及重新分析不抽样。", "TEXT", false),
+                    new FileSettings.Rule("/analysis-probability-min", "动态最低概率", "0 至 1，默认 0.10（10%）。", "NUMBER", false),
+                    new FileSettings.Rule("/analysis-probability-max", "动态最高概率", "0 至 1，不低于最低概率；默认 1（100%）。", "NUMBER", false),
+                    new FileSettings.Rule("/analysis-probability-decay", "动态变化率", "有限正数，默认 0.01。p=min+(max-min)×exp(-(变化率×有效数量)²)。默认 100 张时约 43%。", "NUMBER", false),
+                    new FileSettings.Rule("/analysis-probability-static", "静态解析概率", "0 至 1，默认 0.20（20%）；仅 STATIC 模式使用。", "NUMBER", false),
                     field("/max-per-category", "每类上限", "NUMBER"), field("/max-pending", "待处理上限", "NUMBER"),
                     field("/max-storage-bytes", "磁盘预算字节", "NUMBER"), field("/max-pending-bytes", "待处理预算字节", "NUMBER"),
                     field("/max-file-bytes", "单文件字节上限", "NUMBER"), field("/downloads-per-hour", "每小时下载数", "NUMBER"),
@@ -520,9 +517,7 @@ public final class AgentFileSettings {
     /**
      * 媒体选图和客户端表情规则，原调用点逐次读取快照。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：用显式类型转换及类型校验替代静态反射 cast，保留原模块语义检查。
      * @author zExNocs
      * @date 2026/11/03

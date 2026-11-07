@@ -16,18 +16,39 @@ import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
-import org.zexnocs.teanekocore.actuator.execution.*;
+import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
+import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
+import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.*;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.MODEL_REQUESTS;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOOL_EXECUTIONS;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOOL_ROUNDS;
+import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOTAL_TOKENS;
 
 /**
  * 单个交互的有界阶段执行器，统一模型、顺序工具、父共享预算及阶段资源生命周期。
@@ -35,14 +56,15 @@ import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCa
  * 此类型不自动循环、不提交业务历史，模型响应与工具调用的关联由上层编排验证。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04��ÿ������Ԥ��ģ�������ı��������������ȣ����Զ�����������ޡ�
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：每轮预留模型上下文比例和完整输出额度，不自动缩减输出上限。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
  * <br>2026/11/05：工具历史续轮保留本轮工具定义，以 none 禁止调用，避免供应商退化为正文调用标记。
  * <br>2026/11/05：协议纠正复用原调用权限、共享预算和截止时间，不增加工具执行次数。
  * <br>2026/11/06：实际模型调用前固定临时输入，供请求结束后的统一汇总使用。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -544,7 +566,6 @@ public final class LLMInteractionExecution implements AutoCloseable {
      * 响应违反工具开放策略的专用信号，避免把执行器故障误判为非法模型响应。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -560,7 +581,6 @@ public final class LLMInteractionExecution implements AutoCloseable {
     /**
      * 无法安全冻结模型响应的协议错误，不持有原始供应商异常。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -577,7 +597,6 @@ public final class LLMInteractionExecution implements AutoCloseable {
      * 本批工具请求的不可变协议快照。
      *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param getId 工具调用 ID

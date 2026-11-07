@@ -15,7 +15,15 @@ import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSumma
 import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalityLearning;
 import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentDeliveryException;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRunExecution;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentService;
+import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -32,8 +40,27 @@ import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.Deque;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -49,13 +76,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/05：邮箱交付及重放保留安全诊断而不保存异常对象。
  * <br>2026/11/05：会话准备和策略加载失败保留首个安全原因，避免只返回通用配置错误。
  * <br>2026/11/05：资料重放拒绝及复核异常保留安全原因，避免发送端只得到通用失效错误。
- *
  * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ * <br>2026/11/07：展开提交与准备启动的控制流，保留原会话状态拥有者。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.4-l
+ * @version 4.8.7-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
     private final IAgentTurnService turns;
@@ -559,8 +586,12 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             return immediate(handle, request, AgentRunResult.Status.INVALID_INPUT, parent);
         }
         boolean unavailable;
-        synchronized (lock) { unavailable = closed; }
-        if (unavailable || handle.isClosed()) { return immediate(handle, request, AgentRunResult.Status.CANCELLED, parent); }
+        synchronized (lock) {
+            unavailable = closed;
+        }
+        if (unavailable || handle.isClosed()) {
+            return immediate(handle, request, AgentRunResult.Status.CANCELLED, parent);
+        }
         final AgentQueueSettings settings;
         final AgentConversationSettings retention;
         final AgentRequestJournal.Identity identity;
@@ -573,15 +604,20 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             var diagnostic = FailureDiagnostic.from(failure);
             report(request.requestId(), diagnostic);
             return CompletableFuture.completedStage(rejectedResult(handle, request,
-                    AgentRunResult.Status.CONFIGURATION_ERROR, parent).withFailure(diagnostic));
+                AgentRunResult.Status.CONFIGURATION_ERROR, parent).withFailure(diagnostic));
         }
-        try { identity = engine.identity(request); }
-        catch (RuntimeException failure) { return immediate(handle, request, AgentRunResult.Status.INVALID_INPUT, parent); }
+        try {
+            identity = engine.identity(request);
+        } catch (RuntimeException failure) {
+            return immediate(handle, request, AgentRunResult.Status.INVALID_INPUT, parent);
+        }
         final Entry entry;
         try {
             entry = new Entry(handle, request, settings, acceptedAt,
-                    parent == null ? ExecutionControl.create() : parent.child(), parent == null, identity);
-        } catch (RuntimeException failure) { return immediate(handle, request, failureStatus(failure), parent); }
+                parent == null ? ExecutionControl.create() : parent.child(), parent == null, identity);
+        } catch (RuntimeException failure) {
+            return immediate(handle, request, failureStatus(failure), parent);
+        }
         entry.own(entry.lifetime.onTermination(reason -> stop(entry, stopStatus(reason), false)));
         entry.own(handle.onClose(entry.lifetime::cancel));
         Entry selected = null;
@@ -591,7 +627,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         AgentRunResult.Status rejection = null;
         try {
             var candidate = new Mailbox(entry.key, retention, acceptedAt);
-            for (;;) {
+            for (; ; ) {
                 final Mailbox observed;
                 final AgentRunExecution owner;
                 synchronized (lock) {
@@ -600,42 +636,66 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 }
                 boolean recursive = parent != null && owner != null && owner.contains(parent);
                 synchronized (lock) {
-                    if (entry.phase == Phase.FINISHED) { return entry.result.minimalCompletionStage(); }
+                    if (entry.phase == Phase.FINISHED) {
+                        return entry.result.minimalCompletionStage();
+                    }
                     var current = mailboxes.get(entry.key);
                     var currentOwner = current == null || current.active == null ? null : current.active.execution;
-                    if (current != observed || currentOwner != owner) { continue; }
+                    if (current != observed || currentOwner != owner) {
+                        continue;
+                    }
                     purgeExpired(retention, acceptedAt);
                     current = mailboxes.get(entry.key);
-                    if (closed) { rejection = AgentRunResult.Status.CANCELLED; }
-                    else if (recursive) { rejection = AgentRunResult.Status.REENTRANT; }
-                    else if (current != null && current.retired) { rejection = AgentRunResult.Status.BUSY; }
-                    else if (current != null && current.requests.containsKey(request.requestId())) {
+                    if (closed) {
+                        rejection = AgentRunResult.Status.CANCELLED;
+                    } else if (recursive) {
+                        rejection = AgentRunResult.Status.REENTRANT;
+                    } else if (current != null && current.retired) {
+                        rejection = AgentRunResult.Status.BUSY;
+                    } else if (current != null && current.requests.containsKey(request.requestId())) {
                         rejection = current.requests.get(request.requestId()).identity.equals(identity)
-                                ? AgentRunResult.Status.DUPLICATE_REQUEST : AgentRunResult.Status.REQUEST_CONFLICT;
+                            ? AgentRunResult.Status.DUPLICATE_REQUEST : AgentRunResult.Status.REQUEST_CONFLICT;
                     } else if (current != null && journal(current).find(request.requestId()).isPresent()) {
                         var completed = journal(current).find(request.requestId()).orElseThrow();
-                        if (!completed.identity().equals(identity)) { rejection = AgentRunResult.Status.REQUEST_CONFLICT; }
-                        else if (completed.result() == null) { rejection = AgentRunResult.Status.REPLAY_UNAVAILABLE; }
-                        else { replayed = completed.result(); replayStamp = state(current).stamp(); }
+                        if (!completed.identity().equals(identity)) {
+                            rejection = AgentRunResult.Status.REQUEST_CONFLICT;
+                        } else if (completed.result() == null) {
+                            rejection = AgentRunResult.Status.REPLAY_UNAVAILABLE;
+                        } else {
+                            replayed = completed.result();
+                            replayStamp = state(current).stamp();
+                        }
                     } else if (current != null && current.active != null && current.waiting.size() >= settings.maxWaiting()) {
                         rejection = AgentRunResult.Status.BUSY;
                     } else if (current == null && !makeRoom(retention.maxConversations() - 1)) {
                         rejection = AgentRunResult.Status.BUSY;
                     } else {
-                        if (current == null) { current = candidate; created = current; mailboxes.put(entry.key, current); }
+                        if (current == null) {
+                            current = candidate;
+                            created = current;
+                            mailboxes.put(entry.key, current);
+                        }
                         current.retention = retention;
                         touch(current, acceptedAt);
                         entry.mailbox = current;
                         entry.stamp = state(current).stamp();
                         current.requests.put(request.requestId(), entry);
                         if (current.active == null) {
-                            current.active = entry; entry.phase = Phase.SELECTED; selected = entry;
-                        } else { current.waiting.addLast(entry); entry.phase = Phase.WAITING; }
+                            current.active = entry;
+                            entry.phase = Phase.SELECTED;
+                            selected = entry;
+                        } else {
+                            current.waiting.addLast(entry);
+                            entry.phase = Phase.WAITING;
+                        }
                     }
                     break;
                 }
             }
-        } catch (RuntimeException failure) { rejection = AgentRunResult.Status.FAILED; report(failure); }
+        } catch (RuntimeException failure) {
+            rejection = AgentRunResult.Status.FAILED;
+            report(failure);
+        }
         drainRetired();
         if (created != null) {
             var owner = created;
@@ -645,10 +705,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             stop(entry, AgentRunResult.Status.CANCELLED, false);
             return replay(handle, request, CompletableFuture.completedStage(replayed), Objects.requireNonNull(replayStamp), parent);
         }
-        if (rejection != null) { stop(entry, rejection, false); }
-        else {
+        if (rejection != null) {
+            stop(entry, rejection, false);
+        } else {
             armWaiting(entry);
-            if (selected != null && entry.phase != Phase.FINISHED) { schedule(selected); }
+            if (selected != null && entry.phase != Phase.FINISHED) {
+                schedule(selected);
+            }
         }
         return entry.result.minimalCompletionStage();
     }
@@ -1098,10 +1161,12 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             AgentConversationWindow window;
             final AgentSummarySnapshot previousSummary;
             synchronized (lock) {
-                if (entry.phase != Phase.PREPARING) { return; }
+                if (entry.phase != Phase.PREPARING) {
+                    return;
+                }
                 var box = Objects.requireNonNull(entry.mailbox);
                 if (!Objects.equals(entry.stamp, state(box).stamp())
-                        || reference != null && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).filter(reference::equals).isEmpty()) {
+                    || reference != null && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).filter(reference::equals).isEmpty()) {
                     throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
                 }
                 entry.memoryReference = reference;
@@ -1114,17 +1179,27 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     synchronized (lock) {
                         var box = Objects.requireNonNull(entry.mailbox);
                         if (entry.phase != Phase.PREPARING || !Objects.equals(entry.stamp, state(box).stamp())
-                                || box.entity.snapshot().require(AgentConversationWindow.COMPONENT) != window) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
+                            || box.entity.snapshot().require(AgentConversationWindow.COMPONENT) != window) {
+                            throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
+                        }
                         var patch = ComponentPatch.builder().put(AgentConversationWindow.COMPONENT, selected.window());
-                        if (selected.summary() == null) { patch.remove(AgentSummarySnapshot.COMPONENT); }
-                        else { patch.put(AgentSummarySnapshot.COMPONENT, selected.summary()); }
+                        if (selected.summary() == null) {
+                            patch.remove(AgentSummarySnapshot.COMPONENT);
+                        } else {
+                            patch.put(AgentSummarySnapshot.COMPONENT, selected.summary());
+                        }
                         box.entity.commit(box.entity.snapshot().revision(), patch.build());
                     }
-                    window = selected.window(); entry.summary = selected.summary();
-                } catch (RuntimeException failure) { report(failure); entry.summary = null; }
+                    window = selected.window();
+                    entry.summary = selected.summary();
+                } catch (RuntimeException failure) {
+                    report(failure);
+                    entry.summary = null;
+                }
             }
-            try { entry.options = Objects.requireNonNull(policy.resolve(entry.handle, entry.request), "窗口策略不能为空。"); }
-            catch (RuntimeException failure) {
+            try {
+                entry.options = Objects.requireNonNull(policy.resolve(entry.handle, entry.request), "窗口策略不能为空。");
+            } catch (RuntimeException failure) {
                 stop(entry, AgentRunResult.Status.CONFIGURATION_ERROR, false, failure);
                 return;
             }
@@ -1133,23 +1208,34 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             try {
                 var original = entry.request;
                 var fixed = new AgentRunRequest(original.requestId(), original.actor(), original.activity(), original.messages(), original.conversation(),
-                        original.memoryReference(), original.userText(), original.inputMaxBytes(), entry.personalityIdentity, entry.summary);
+                    original.memoryReference(), original.userText(), original.inputMaxBytes(), entry.personalityIdentity, entry.summary);
                 prepared = engine.prepare(fixed, Objects.requireNonNull(entry.stamp), window, entry.options,
-                        Math.addExact(entry.reservedPersonalityBytes, entry.summary == null ? 0 : engine.summaryBytes(entry.summary))); entry.prepared = prepared;
+                    Math.addExact(entry.reservedPersonalityBytes, entry.summary == null ? 0 : engine.summaryBytes(entry.summary)));
+                entry.prepared = prepared;
+            } catch (AgentConversationEngine.InputTooLargeException failure) {
+                stop(entry, AgentRunResult.Status.INPUT_TOO_LARGE, false);
+                return;
             }
-            catch (AgentConversationEngine.InputTooLargeException failure) { stop(entry, AgentRunResult.Status.INPUT_TOO_LARGE, false); return; }
             var base = prepared.request();
             var request = reference == null ? base : new AgentRunRequest(base.requestId(), base.actor(), base.activity(), base.messages(), base.conversation(), reference, base.userText(), base.inputMaxBytes(), base.personalityIdentity(), base.summary());
             entry.startedAt = clock.instant();
             var execution = Objects.requireNonNull(reference != null ? turns.prepareReferenced(entry.handle, request, entry.independent ? null : entry.lifetime)
-                    : entry.independent ? turns.prepare(entry.handle, request) : turns.prepare(entry.handle, request, entry.lifetime), "独立轮次端口返回的句柄不能为空。");
-            if (!clock.instant().isBefore(entry.waitDeadline)) { stop(entry, AgentRunResult.Status.QUEUE_TIMED_OUT, true); }
+                : entry.independent ? turns.prepare(entry.handle, request) : turns.prepare(entry.handle, request, entry.lifetime), "独立轮次端口返回的句柄不能为空。");
+            if (!clock.instant().isBefore(entry.waitDeadline)) {
+                stop(entry, AgentRunResult.Status.QUEUE_TIMED_OUT, true);
+            }
             final boolean accepted;
             synchronized (lock) {
                 accepted = entry.phase == Phase.PREPARING;
-                if (accepted) { entry.execution = execution; entry.phase = Phase.RUNNING; }
+                if (accepted) {
+                    entry.execution = execution;
+                    entry.phase = Phase.RUNNING;
+                }
             }
-            if (!accepted) { execution.cancel(); return; }
+            if (!accepted) {
+                execution.cancel();
+                return;
+            }
             cancelTimer(entry);
             execution.result().whenComplete((result, failure) -> finished(entry, result, failure));
             execution.start();
@@ -1157,9 +1243,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             stop(entry, stopStatus(stopped.reason()), false);
         } catch (RuntimeException failure) {
             report(failure);
-            if (memory != null) { stop(entry, AgentMemoryBoundary.status(failure), false); }
-            else if (entry.phase == Phase.RUNNING) { stop(entry, AgentRunResult.Status.FAILED, false); }
-            else { finished(entry, null, failure); }
+            if (memory != null) {
+                stop(entry, AgentMemoryBoundary.status(failure), false);
+            } else if (entry.phase == Phase.RUNNING) {
+                stop(entry, AgentRunResult.Status.FAILED, false);
+            } else {
+                finished(entry, null, failure);
+            }
         }
     }
 
@@ -1526,7 +1616,6 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     /**
      * 单请求状态；FINISHED 已完成业务仲裁，交付结束前保留请求索引以阻止重复执行。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -1539,7 +1628,6 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     /**
      * 邮箱运行拥有者；实体只保留不可变数据，控制和监听不进入组件。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @author zExNocs
@@ -1597,11 +1685,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     /**
      * 单个请求的受控拥有者，不存入实体组件；状态变更由邮箱锁仲裁。
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：排队上下文固定当前组件装配，按需准备记忆与人格。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
-     *
      * <br>2026/11/05：保存首次准备失败的安全诊断，不持有异常对象或配置原值。
      * @author zExNocs
      * @date 2026/10/29

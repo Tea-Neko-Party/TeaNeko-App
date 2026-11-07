@@ -11,7 +11,11 @@ import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.description.JsonConstraint;
 
 import java.time.Instant;
-import java.util.*;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * 素材与作业的有界持久数据；来源仅用于审计，不投影为跨群对话资料。
@@ -25,11 +29,12 @@ import java.util.*;
  * <br>2026/11/06：分析类型声明字段语义与输出容量，复用统一 JSON 合同。
  * <br>2026/11/06：作业明确声明恢复责任，只有已结束并释放资源的状态可转为短期观察。
  * <br>2026/11/06：将长度、数量或枚举约束纳入协议声明，并在本地落实校验。
+ * <br>2026/11/07：增加本地描述引用、便携发布意图及低频迁移游标。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.6-l
+ * @version 4.8.7-l
  */
 public final class Stickers {
     /** 不实例化数据命名空间。 */
@@ -223,22 +228,23 @@ public final class Stickers {
      * <br>2026/11/03：持久保存真实确认次数，不加入人类评分。
      * <br>2026/11/03：管理删除在物理回收完成前禁止恢复。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：分析正文只存在于本地文件和业务视图，持久目录保存摘要引用。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.0-l
+     * @version 4.8.7-l
      */
+    // 2026/11/07：analysis 只作为兼容读取和业务视图；目录适配器持久化时仅保存 analysisRef。
     @Data @NoArgsConstructor public static class Entry {
         private String id, hash;
         private EntryStatus state=EntryStatus.CACHED;
         private int analysisVersion;
         private long revision=1;
         private @Nullable Analysis analysis;
+        private String analysisRef = "";
         private @Nullable Blob blob;
         private Instant created, activatedAt, lastHuman, cachedUntil;
         private boolean pinned;
@@ -266,21 +272,23 @@ public final class Stickers {
     @Data @NoArgsConstructor public static class Quota {private long hour; private int downloads,analyses;}
     /**
      * 一行活动目录快照；已回收删除记录独立存储，仍由同一根锁仲裁。
-     * <br>2026/11/05：增加独立删除决定计数，旧记录由根事务迁移。
      * <br>2026/11/03：按真实区域保存有限轮次与机器人展示回执摘要。
      * <br>2026/11/03：管理回执与条目变更原子提交。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/05：增加独立删除决定计数，旧记录由根事务迁移。
+     * <br>2026/11/07：保存本地描述卷身份、便携发布意图和低频迁移游标。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.8.3-l
+     * @version 4.8.7-l
      */
     @Data @NoArgsConstructor public static class State {
+        // 2026/11/07：描述正文不进入数据库；提交后的便携发布可重做，导入与旧墓碑迁移使用有界游标。
+        private String metadataIdentity = "", importCursor = "", deletedMetadataCursor = "";
+        private Map<String, StickerPortableReference> pendingPortable = new LinkedHashMap<>();
         // 2026/11/05：仅保存独立删除行的计数；旧 JSON 缺省零，迁移在根事务内完成。
         private long deletedDecisions;
         private long revision;

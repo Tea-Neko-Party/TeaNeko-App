@@ -13,10 +13,12 @@ import java.util.List;
  * 阶段链的执行应该在一个线程中，不应该横跨线程。
  * 执行顺序为 阶段A → 阶段B → ... → 阶段N → 任务 → 阶段N → ... → 阶段B → 阶段A → 提交任务
  * <br>2026/11/03：增加同步只读阶段通知，不在其他线程推进链。
+ * <br>2026/11/07：各同步阶段及原任务入口复核停止状态。
+ *
  * @author zExNocs
  * @date 2026/02/11
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.8.7-l
  */
 public class TaskStageChain {
     /// 任务执行的阶段链，从 taskConfig 中获取。
@@ -66,7 +68,9 @@ public class TaskStageChain {
      */
     @Nullable
     public ITaskResult<?> next() throws Exception {
-        if(index < stages.size()) {
+        // 2026/11/06：每个阶段及原 Callable 入口复核同一任务控制。
+        task.getExecution().control().checkActive();
+        if (index < stages.size()) {
             var stage = stages.get(index++);
             // 2026/11/03：记录真实进入的阶段，不提前展开或执行其他阶段。
             observed("同步阶段 " + index + "/" + stages.size());

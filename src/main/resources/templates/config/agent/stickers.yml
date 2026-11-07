@@ -2,6 +2,15 @@
 enabled: true
 collect-enabled: true
 passive-enabled: true
+# 2026/11/07：仅自动采集抽样；明确收藏、重新分析及已有缓存不抽样。
+# DYNAMIC 使用动态曲线，STATIC 使用固定概率；两套参数都须有效。
+analysis-probability-mode: DYNAMIC
+# 动态 p(n)=min+(max-min)*exp(-(decay*n)^2)，n 为当前有效素材数。
+# 默认 0/50/100/200 张时约为 100%/80%/43%/12%，最终趋近 10%。
+analysis-probability-min: 0.10
+analysis-probability-max: 1.00
+analysis-probability-decay: 0.01
+analysis-probability-static: 0.20
 catalog-id: main
 # 多副本共享数据库时必须共享此素材卷及其身份文件，不可只共享数据库。
 storage-root: data/agent/stickers

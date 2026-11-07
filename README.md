@@ -36,7 +36,8 @@
 | 3 · 生成配置 | `./gradlew copyTemplatesToConfig` | 补充缺少的模板，不覆盖已有配置 |
 | 4 · 配置连接 | `src/main/resources/application-prod.properties`<br>`config/web/security.yml` | 分别配置数据库、控制台 HTTPS 来源与可信代理 |
 | 5 · 构建项目 | `./gradlew bootJar` | 自动安装前端依赖、检查并打包网页 |
-| 6 · 启动服务 | `./gradlew bootRun` | 默认 **`prod`**，同一后端提供网页和 API |
+| 6 · 准备数据库 | [安装与迁移](docs/development/database-upgrades.md) | 备份后执行配套迁移；生产启动只校验结构 |
+| 7 · 启动服务 | `./gradlew bootRun` | 默认 **`prod`**，同一后端提供网页和 API |
 
 构建产物为 `build/libs/TeaNeko-App-版本号.jar`；需要构建并运行测试时使用 `./gradlew build`。生产通过 HTTPS 代理访问 `https://你的域名/console/`。环境变量、JAR 部署及更多命令见下方“详细文档”中的构建指南。
 
@@ -86,13 +87,14 @@
 | 分类 | 文档 | 内容 |
 | --- | --- | --- |
 | 构建与运行 | [构建指南](docs/development/build-and-run.md) | 数据库、Gradle 任务、JAR 部署与开发环境 |
+| 数据库与容量 | [安装、升级与恢复](docs/development/database-upgrades.md) · [运行边界](docs/development/runtime-limits.md) | 生产迁移、账号权限、备份和在途限制 |
 | Web 部署 | [控制台配置](docs/development/web-console.md) | HTTPS、登录令牌、代理、端口与排错 |
 | 平台接入 | [客户端与机器令牌](docs/development/web-console-clients.md) | OneBot、Docker、WS / WSS 与认证 |
 | 模型与配置 | [模型配置](docs/development/web-console-models.md) · [文件配置](docs/development/web-console-files.md) | 添加模型、API 密钥、环境变量与应用修改 |
 | Agent | [部署说明](docs/development/agent-deployment.md) · [组件装配](docs/development/agent-composition.md) | 启用对话、装配记忆、人格与工具 |
 | 网页操作 | [聊天](docs/development/web-console-chat.md) · [工作区](docs/development/web-console-agent.md) · [任务与日志](docs/development/web-console-runtime.md) | 聊天、活动、记忆与运行状态 |
 | 插件开发 | [插件指南](docs/development/plugins/README.md) · [项目分层](docs/development/project-layers.md) | Core、Agent、工具、组件、事件与管理扩展 |
-| 代码审查 | [审查索引](docs/review/README.md) · [当前下一步实施](docs/review/4.8.6-l/next-steps.md) · [生产 MVP 评估标准](docs/review/4.8.6-l/assessment-standard.md) | 按版本区分待实施事项、已完成项与历史证据 |
+| 代码质量 | [格式与增量检查](docs/development/code-quality.md) · [审查索引](docs/review/README.md) · [当前剩余验收](docs/review/4.8.7-l/next-steps.md) | 共享代码样式、检查命令、已完成范围与验证边界 |
 | 版本与计划 | [版本操作](docs/development/versioning.md) · [发布日志](docs/changelog/README.md) · [计划索引](docs/plan/README.md) | 构建版本、发布流程与开发记录 |
 
 ## 交流

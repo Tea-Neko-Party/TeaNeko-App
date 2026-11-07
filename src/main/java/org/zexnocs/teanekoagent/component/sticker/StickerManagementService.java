@@ -20,25 +20,34 @@ import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 全实例图库的授权管理用例，版本写入和幂等回执共用专用 DTO 根事务。
  * 没有显式授权实现时默认拒绝；Web 身份不转为聊天 USER，刷新始终通过 SYSTEM 视觉活动。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：重新分析复用客户端发现缓存，连接资格仍在操作时读取。
- *
  * <br>2026/11/05：容量查询区分缓存占用和删除决定，不暴露来源。
  * <br>2026/11/05：分页合并独立删除记录，显式恢复与根目录容量及版本同事务仲裁。
+ * <br>2026/11/07：展开预读取、外部校验、版本提交及预览资源释放边界。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Component
 public final class StickerManagementService {
@@ -121,59 +130,142 @@ public final class StickerManagementService {
      * @param request 固定动作和版本
      * @return 实际提交的回执
      */
-    public CompletionStage<StickerManagement.ChangeResult> change(ManagementContext context,StickerManagement.Change request){
-        String digest=StableDigest.sha256(mapper.writeValueAsString(request));
-        return begin(context,StickerManagementResources.CHANGE).thenComposeAsync(s->s.storage().catalog().transact(s.settings(),transaction->{
+    public CompletionStage<StickerManagement.ChangeResult> change(ManagementContext context, StickerManagement.Change request) {
+        String digest = StableDigest.sha256(mapper.writeValueAsString(request));
+        return begin(context, StickerManagementResources.CHANGE).thenComposeAsync(s -> s.storage().catalog().transact(s.settings(), transaction -> {
             // 2026/11/05：管理只载入一个目标，提交后删除项重新归档，不扩大主目录。
             var state = transaction.state();
-            verify(context,s);var previous=original(state,context,request,digest);if(previous!=null){return new Preparation(previous,null);}
-            var entry=entry(transaction,request.id(),request.expectedRevision());return new Preparation(null,entry.getBlob());
-        }).thenComposeAsync(prepared->{
-            if(prepared.previous()!=null){return finish(context,s,StickerManagementResources.CHANGE,CompletableFuture.completedStage(replay(prepared.previous())));}
-            Stickers.Source source=null;
-            if(request.action()==StickerManagement.Action.REFRESH){source=refreshSource(Objects.requireNonNull(request.analysisScope()),request.operationId());if(!library.allows(source)){throw new IllegalStateException("所选区域尚未允许素材分析或客户端账号未就绪。");}}
-            String volume="";
-            if(request.action()==StickerManagement.Action.REFRESH||request.action()==StickerManagement.Action.ENABLE){
-                var blob=prepared.blob();if(blob==null||!s.storage().assets().exists(blob,s.settings())){throw new IllegalStateException("现有素材文件不可用，不能启用或重新分析。");}
-                volume=verifyVolume(s);
+            verify(context, s);
+            var previous = original(state, context, request, digest);
+            if (previous != null) {
+                return new Preparation(previous, null);
             }
-            var fixedSource=source;var expectedVolume=volume;
-            return authorize(context,StickerManagementResources.CHANGE).thenCompose(ignored->s.storage().catalog().transact(s.settings(),transaction->{
+            var entry = entry(transaction, request.id(), request.expectedRevision());
+            return new Preparation(null, entry.getBlob());
+        }).thenComposeAsync(prepared -> {
+            if (prepared.previous() != null) {
+                return finish(context, s, StickerManagementResources.CHANGE, CompletableFuture.completedStage(replay(prepared.previous())));
+            }
+            Stickers.Source source = null;
+            if (request.action() == StickerManagement.Action.REFRESH) {
+                source = refreshSource(Objects.requireNonNull(request.analysisScope()), request.operationId());
+                if (!library.allows(source)) {
+                    throw new IllegalStateException("所选区域尚未允许素材分析或客户端账号未就绪。");
+                }
+            }
+            String volume = "";
+            if (request.action() == StickerManagement.Action.REFRESH || request.action() == StickerManagement.Action.ENABLE) {
+                var blob = prepared.blob();
+                if (blob == null || !s.storage().assets().exists(blob, s.settings())) {
+                    throw new IllegalStateException("现有素材文件不可用，不能启用或重新分析。");
+                }
+                volume = verifyVolume(s);
+            }
+            var fixedSource = source;
+            var expectedVolume = volume;
+            return authorize(context, StickerManagementResources.CHANGE).thenCompose(ignored -> s.storage().catalog().transact(s.settings(), transaction -> {
                 var state = transaction.state();
-                verify(context,s);var previous=original(state,context,request,digest);if(previous!=null){return replay(previous);}
-                var now=Instant.now();state.getOperations().values().removeIf(op->op.at().plus(Duration.ofHours(24)).isBefore(now));
-                if(state.getOperations().size()>=512){throw new IllegalStateException("管理操作回执窗口已满，请等待过期记录回收。");}
-                var e=entry(transaction,request.id(),request.expectedRevision());if(e.isDeleting()||e.getState()==Stickers.EntryStatus.DELETING){throw new IllegalStateException("素材字节正在回收，请稍后按最新版本操作。");}
-                if(!expectedVolume.isEmpty()&&!state.getStorageIdentity().equals(expectedVolume)){throw new IllegalStateException("目录与实际素材卷不一致。");}
-                UUID jobId=null;switch(request.action()){
-                    case PIN -> {existing(e);e.setPinned(true);}
-                    case UNPIN -> e.setPinned(false);
-                    case DISABLE -> {existing(e);e.setState(Stickers.EntryStatus.DISABLED);}
-                    case ENABLE -> {if(e.getState()!=Stickers.EntryStatus.DISABLED){throw new IllegalStateException("只可启用已人工停用的素材。");}eligible(e,s.settings());capacity(state,e,s.settings());e.setState(Stickers.EntryStatus.ACTIVE);e.setActivatedAt(now);}
-                    case DELETE -> {e.setState(Stickers.EntryStatus.DELETED);e.setPinned(false);}
-                    case RESTORE -> {
-                        if(e.getState()!=Stickers.EntryStatus.DELETED){throw new IllegalStateException("只有删除墓碑可以显式恢复。");}
-                        if(e.getBlob()==null && StickerLibrary.cacheSize(state)>=2048){throw new IllegalStateException("素材缓存已满，请先释放容量再恢复。");}
-                        transaction.restoreDeleted(e);
-                        e.setState(e.getBlob()==null?Stickers.EntryStatus.CACHED:Stickers.EntryStatus.DISABLED);e.setCachedUntil(now);
+                verify(context, s);
+                var previous = original(state, context, request, digest);
+                if (previous != null) {
+                    return replay(previous);
+                }
+                var now = Instant.now();
+                state.getOperations().values().removeIf(op -> op.at().plus(Duration.ofHours(24)).isBefore(now));
+                if (state.getOperations().size() >= 512) {
+                    throw new IllegalStateException("管理操作回执窗口已满，请等待过期记录回收。");
+                }
+                var e = entry(transaction, request.id(), request.expectedRevision());
+                if (e.isDeleting() || e.getState() == Stickers.EntryStatus.DELETING) {
+                    throw new IllegalStateException("素材字节正在回收，请稍后按最新版本操作。");
+                }
+                if (!expectedVolume.isEmpty() && !state.getStorageIdentity().equals(expectedVolume)) {
+                    throw new IllegalStateException("目录与实际素材卷不一致。");
+                }
+                UUID jobId = null;
+                switch (request.action()) {
+                    case PIN -> {
+                        existing(e);
+                        e.setPinned(true);
                     }
-                    case PATCH -> {existing(e);var old=Objects.requireNonNull(e.getAnalysis());var details=Objects.requireNonNull(request.details());if(old.kind()!=Stickers.Kind.STICKER||!s.settings().categories().containsKey(details.category())){throw new IllegalArgumentException("只能修正表情包的受控类别和描述。");}
-                        if(e.getState()==Stickers.EntryStatus.ACTIVE){capacityForCategory(state,e,details.category(),s.settings());}
-                        e.setAnalysis(new Stickers.Analysis(old.kind(),old.confidence(),true,details.visualDescription(),details.usageDescription(),details.category(),details.tags(),old.quality(),"管理员修正用途与类别"));}
-                    case REFRESH -> {existing(e);if(!library.allows(Objects.requireNonNull(fixedSource))){throw new IllegalStateException("重新分析来源已失效。");}
-                        if(state.getJobs().values().stream().filter(j->pending(j)||j.isRefresh()&&!j.isCleanup()).count()>=s.settings().maxPending()||state.getJobs().size()>=384){throw new IllegalStateException("素材后台作业已满。");}
-                        if(state.getJobs().values().stream().anyMatch(j->pending(j)&&j.getBlob()!=null&&j.getBlob().hash().equals(e.getHash()))){throw new IllegalStateException("该素材已有在途任务。");}
-                        var job=new Stickers.Job();job.setSource(fixedSource);job.setCreated(now);job.setNextAttempt(now);job.setRefresh(true);job.setBlob(e.getBlob());job.setExpectedEntryRevision(e.getRevision()+1);job.setActivateAfterRefresh(e.getState()==Stickers.EntryStatus.ACTIVE);
-                        e.getReaders().put(job.getId(),now.plus(Duration.ofHours(24)).plusSeconds(300));state.getJobs().put(job.getId(),job);jobId=job.getId();e.setState(Stickers.EntryStatus.DISABLED);
+                    case UNPIN -> e.setPinned(false);
+                    case DISABLE -> {
+                        existing(e);
+                        e.setState(Stickers.EntryStatus.DISABLED);
+                    }
+                    case ENABLE -> {
+                        if (e.getState() != Stickers.EntryStatus.DISABLED) {
+                            throw new IllegalStateException("只可启用已人工停用的素材。");
+                        }
+                        eligible(e, s.settings());
+                        capacity(state, e, s.settings());
+                        e.setState(Stickers.EntryStatus.ACTIVE);
+                        e.setActivatedAt(now);
+                    }
+                    case DELETE -> {
+                        e.setState(Stickers.EntryStatus.DELETED);
+                        e.setPinned(false);
+                    }
+                    case RESTORE -> {
+                        if (e.getState() != Stickers.EntryStatus.DELETED) {
+                            throw new IllegalStateException("只有删除墓碑可以显式恢复。");
+                        }
+                        if (e.getBlob() == null && StickerLibrary.cacheSize(state) >= 2048) {
+                            throw new IllegalStateException("素材缓存已满，请先释放容量再恢复。");
+                        }
+                        transaction.restoreDeleted(e);
+                        e.setState(e.getBlob() == null ? Stickers.EntryStatus.CACHED : Stickers.EntryStatus.DISABLED);
+                        e.setCachedUntil(now);
+                    }
+                    case PATCH -> {
+                        existing(e);
+                        var old = Objects.requireNonNull(e.getAnalysis());
+                        var details = Objects.requireNonNull(request.details());
+                        if (old.kind() != Stickers.Kind.STICKER || !s.settings().categories().containsKey(details.category())) {
+                            throw new IllegalArgumentException("只能修正表情包的受控类别和描述。");
+                        }
+                        if (e.getState() == Stickers.EntryStatus.ACTIVE) {
+                            capacityForCategory(state, e, details.category(), s.settings());
+                        }
+                        e.setAnalysis(new Stickers.Analysis(old.kind(), old.confidence(), true, details.visualDescription(), details.usageDescription(), details.category(), details.tags(), old.quality(), "管理员修正用途与类别"));
+                    }
+                    case REFRESH -> {
+                        existing(e);
+                        if (!library.allows(Objects.requireNonNull(fixedSource))) {
+                            throw new IllegalStateException("重新分析来源已失效。");
+                        }
+                        if (state.getJobs().values().stream().filter(j -> pending(j) || j.isRefresh() && !j.isCleanup()).count() >= s.settings().maxPending() || state.getJobs().size() >= 384) {
+                            throw new IllegalStateException("素材后台作业已满。");
+                        }
+                        if (state.getJobs().values().stream().anyMatch(j -> pending(j) && j.getBlob() != null && j.getBlob().hash().equals(e.getHash()))) {
+                            throw new IllegalStateException("该素材已有在途任务。");
+                        }
+                        var job = new Stickers.Job();
+                        job.setSource(fixedSource);
+                        job.setCreated(now);
+                        job.setNextAttempt(now);
+                        job.setRefresh(true);
+                        job.setBlob(e.getBlob());
+                        job.setExpectedEntryRevision(e.getRevision() + 1);
+                        job.setActivateAfterRefresh(e.getState() == Stickers.EntryStatus.ACTIVE);
+                        e.getReaders().put(job.getId(), now.plus(Duration.ofHours(24)).plusSeconds(300));
+                        state.getJobs().put(job.getId(), job);
+                        jobId = job.getId();
+                        e.setState(Stickers.EntryStatus.DISABLED);
                     }
                 }
-                e.setRevision(e.getRevision()+1);state.setRevision(state.getRevision()+1);
-                var result=new StickerManagement.ChangeResult(request.operationId(),e.getId(),e.getRevision(),e.getState(),state.getRevision(),jobId,false);
-                state.getOperations().put(request.operationId(),new StickerManagement.Operation(subject(context),digest,now,result));return result;
-            })).thenApply(result->{
-                if(!result.replayed()){notifyCommitted(new IStickerLifecycle.Notice(s.settings().catalogId(),"MANAGEMENT",result.operationId(),result.id(),result.catalogRevision(),Instant.now(),request.action().name()));}return result;
-            }).thenCompose(result->finish(context,s,StickerManagementResources.CHANGE,CompletableFuture.completedStage(result)));
-        },executor),executor);
+                e.setRevision(e.getRevision() + 1);
+                state.setRevision(state.getRevision() + 1);
+                var result = new StickerManagement.ChangeResult(request.operationId(), e.getId(), e.getRevision(), e.getState(), state.getRevision(), jobId, false);
+                state.getOperations().put(request.operationId(), new StickerManagement.Operation(subject(context), digest, now, result));
+                return result;
+            })).thenApply(result -> {
+                if (!result.replayed()) {
+                    notifyCommitted(new IStickerLifecycle.Notice(s.settings().catalogId(), "MANAGEMENT", result.operationId(), result.id(), result.catalogRevision(), Instant.now(), request.action().name()));
+                }
+                return result;
+            }).thenCompose(result -> finish(context, s, StickerManagementResources.CHANGE, CompletableFuture.completedStage(result)));
+        }, executor), executor);
     }
     /**
      * 持占用读取一幅合成 PNG，文件/版本或权限变化后不返回原图数据。
@@ -181,24 +273,53 @@ public final class StickerManagementService {
      * @param query 原条目版本
      * @return 有界预览
      */
-    public CompletionStage<StickerManagement.PreviewView> preview(ManagementContext context,StickerManagement.Preview query){
-        return begin(context,StickerManagementResources.PREVIEW).thenComposeAsync(s->{
+    public CompletionStage<StickerManagement.PreviewView> preview(ManagementContext context, StickerManagement.Preview query) {
+        return begin(context, StickerManagementResources.PREVIEW).thenComposeAsync(s -> {
             acquirePreview(context);
             CompletionStage<StickerManagement.PreviewView> work;
-            try{String volume=verifyVolume(s);work=s.storage().catalog().change(s.settings(),state->{
-                verify(context,s);var e=entry(state,query.id(),query.expectedRevision());existing(e);if(e.isDeleting()||!state.getStorageIdentity().equals(volume)){throw new IllegalStateException("素材卷或文件状态无效。");}
-                e.getReaders().values().removeIf(t->!t.isAfter(Instant.now()));if(e.getReaders().size()>=32){throw new IllegalStateException("素材预览占用已满。");}var token=UUID.randomUUID();e.getReaders().put(token,Instant.now().plusSeconds(600));return new PreviewLease(s,token,Objects.requireNonNull(e.getBlob()));
-            }).thenCompose(lease->{
-                CompletionStage<StickerManagement.PreviewView> reading;
-                try{reading=CompletableFuture.supplyAsync(()->{
-                    verify(context,s);var prepared=s.storage().assets().preview(lease.blob(),s.settings(),context.control());var image=prepared.previews().getFirst();if(!image.startsWith("data:image/png;base64,")||image.length()>1572864){throw new IllegalStateException("素材预览超过公开预算。");}
-                    return new StickerManagement.PreviewView(query.id(),query.expectedRevision(),image,prepared.note());
-                },executor).thenCompose(value->authorize(context,StickerManagementResources.PREVIEW).thenCompose(ignored->s.storage().catalog().change(s.settings(),state->{verify(context,s);var e=entry(state,query.id(),query.expectedRevision());existing(e);return value;})));}
-                catch(RuntimeException failure){reading=CompletableFuture.failedStage(failure);}
-                return releasePreview(lease,reading);
-            });}catch(RuntimeException failure){work=CompletableFuture.failedStage(failure);}
-            return work.whenComplete((ignored,failure)->previews.release());
-        },executor);
+            try {
+                String volume = verifyVolume(s);
+                work = s.storage().catalog().change(s.settings(), state -> {
+                    verify(context, s);
+                    var e = entry(state, query.id(), query.expectedRevision());
+                    existing(e);
+                    if (e.isDeleting() || !state.getStorageIdentity().equals(volume)) {
+                        throw new IllegalStateException("素材卷或文件状态无效。");
+                    }
+                    e.getReaders().values().removeIf(t -> !t.isAfter(Instant.now()));
+                    if (e.getReaders().size() >= 32) {
+                        throw new IllegalStateException("素材预览占用已满。");
+                    }
+                    var token = UUID.randomUUID();
+                    e.getReaders().put(token, Instant.now().plusSeconds(600));
+                    return new PreviewLease(s, token, Objects.requireNonNull(e.getBlob()));
+                }).thenCompose(lease -> {
+                    CompletionStage<StickerManagement.PreviewView> reading;
+                    try {
+                        reading = CompletableFuture.supplyAsync(() -> {
+                            verify(context, s);
+                            var prepared = s.storage().assets().preview(lease.blob(), s.settings(), context.control());
+                            var image = prepared.previews().getFirst();
+                            if (!image.startsWith("data:image/png;base64,") || image.length() > 1572864) {
+                                throw new IllegalStateException("素材预览超过公开预算。");
+                            }
+                            return new StickerManagement.PreviewView(query.id(), query.expectedRevision(), image, prepared.note());
+                        }, executor).thenCompose(value -> authorize(context, StickerManagementResources.PREVIEW).thenCompose(ignored -> s.storage().catalog().change(s.settings(), state -> {
+                            verify(context, s);
+                            var e = entry(state, query.id(), query.expectedRevision());
+                            existing(e);
+                            return value;
+                        })));
+                    } catch (RuntimeException failure) {
+                        reading = CompletableFuture.failedStage(failure);
+                    }
+                    return releasePreview(lease, reading);
+                });
+            } catch (RuntimeException failure) {
+                work = CompletableFuture.failedStage(failure);
+            }
+            return work.whenComplete((ignored, failure) -> previews.release());
+        }, executor);
     }
     /**
      * @param lease 原文件占用
@@ -206,9 +327,27 @@ public final class StickerManagementService {
      * @param <T> 输出
      * @return 实际读取及无条件释放
      */
-    private <T> CompletionStage<T> releasePreview(PreviewLease lease,CompletionStage<T> physical){
-        return physical.handle(PreviewOutcome::new).thenCompose(outcome->lease.session().storage().catalog().change(lease.session().settings(), state->{var e=state.getEntries().get(lease.blob().hash());if(e!=null){e.getReaders().remove(lease.token());}return true;})
-                .handle((ignored,cleanup)->{var failure=outcome.failure();if(failure!=null){if(cleanup!=null){failure.addSuppressed(cleanup);}throw new CompletionException(failure);}if(cleanup!=null){throw new CompletionException(cleanup);}return outcome.value();}));
+    private <T> CompletionStage<T> releasePreview(PreviewLease lease, CompletionStage<T> physical) {
+        return physical.handle(PreviewOutcome::new).thenCompose(outcome -> lease.session().storage().catalog().change(lease.session().settings(), state -> {
+                var e = state.getEntries().get(lease.blob().hash());
+                if (e != null) {
+                    e.getReaders().remove(lease.token());
+                }
+                return true;
+            })
+            .handle((ignored, cleanup) -> {
+                var failure = outcome.failure();
+                if (failure != null) {
+                    if (cleanup != null) {
+                        failure.addSuppressed(cleanup);
+                    }
+                    throw new CompletionException(failure);
+                }
+                if (cleanup != null) {
+                    throw new CompletionException(cleanup);
+                }
+                return outcome.value();
+            }));
     }
     /** @param context 原控制 */
     private void acquirePreview(ManagementContext context){try{while(true){context.control().checkActive();if(previews.tryAcquire(100,TimeUnit.MILLISECONDS)){try{context.control().checkActive();return;}catch(RuntimeException failure){previews.release();throw failure;}}}}catch(InterruptedException failure){Thread.currentThread().interrupt();throw new IllegalStateException("管理预览等待已中断。");}}
@@ -347,9 +486,7 @@ public final class StickerManagementService {
     /**
      * 临时管理选择，不导出服务或权限能力。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param settings 原设置
@@ -364,9 +501,7 @@ public final class StickerManagementService {
     /**
      * 写入前观察，不提前返回未提交结果。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param previous 已提交幂等回执
@@ -380,9 +515,7 @@ public final class StickerManagementService {
     /**
      * 预览真实占用，仅由宿主释放。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param session 原端口
@@ -397,9 +530,7 @@ public final class StickerManagementService {
     /**
      * 保留物理阶段结果以完成资源清理。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param value 实际值

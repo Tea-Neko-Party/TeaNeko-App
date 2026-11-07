@@ -1,9 +1,5 @@
 package org.zexnocs.teanekoagent.component.memory.namespace;
 
-import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
@@ -21,7 +17,13 @@ import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMImage
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.component.sticker.*;
+import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonTestSupport;
+import org.zexnocs.teanekoagent.component.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoagent.component.sticker.IStickerAssetStore;
+import org.zexnocs.teanekoagent.component.sticker.LLMStickerAnalyzer;
+import org.zexnocs.teanekoagent.component.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoagent.component.sticker.Stickers;
+import org.zexnocs.teanekoagent.component.sticker.WeightedStickerAdmission;
 import org.zexnocs.teanekoagent.component.sticker.configuration.AgentStickerConfig;
 import org.zexnocs.teanekoagent.component.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
@@ -38,34 +40,55 @@ import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
-import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
+import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
-import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Instant;
-import java.util.*;
+import java.util.Base64;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证有界动画处理、受信地址和真实受限模型适配器，不连接外部服务。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04����֤�Ӿ�������������ģ�����õ������ȡ�
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：验证视觉分析请求采用模型配置的输出额度。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：原业务夹具显式使用历史装配，继续回归旧行为。
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
@@ -74,14 +97,59 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：复用视觉调用夹具验证模型状态、HTTP 诊断传递和错误正文脱敏。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：注入原子移动和读取权限失败，验证安全诊断与资源保留。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.3-l
+ * @version 4.8.7-l
  */
 @Timeout(15)
 class StickerAssetsAndModelTest {
     @TempDir Path directory;
+
+    /**
+     * 2026/11/07：注入 I/O 边界失败，保留分类与位置且不泄漏文件路径或原异常文本。
+     * @throws Exception 当本地图片夹具创建失败时
+     */
+    @Test
+    void preservesSafeIoDiagnosticsForMoveAndRead() throws Exception {
+        var config = new AgentStickerFileConfig();
+        config.setStorageRoot(directory.toString());
+        var settings = config.snapshot();
+        var assets = new LocalStickerAssets();
+        try (var control = ExecutionControl.create()) {
+            assets.identity(settings);
+            var job = job(gif(2));
+            var prepared = assets.prepare(job, settings, control);
+            job.setBlob(prepared.blob());
+            try (var files = mockStatic(java.nio.file.Files.class, CALLS_REAL_METHODS)) {
+                files.when(() -> java.nio.file.Files.move(any(Path.class), any(Path.class),
+                        eq(java.nio.file.StandardCopyOption.ATOMIC_MOVE)))
+                    .thenThrow(new java.nio.file.AtomicMoveNotSupportedException("private-source", "private-target", "token=hidden"));
+                var failure = assertThrows(org.zexnocs.teanekocore.logger.DiagnosticException.class,
+                    () -> assets.publish(job, settings, control));
+                assertTrue(FailureDiagnostic.from(failure).types().contains(java.nio.file.AtomicMoveNotSupportedException.class.getName()));
+                assertNull(failure.getCause());
+                assertFalse(failure.failureReason().contains("private-source"));
+                assertFalse(failure.failureReason().contains("hidden"));
+            }
+            var blob = assets.publish(job, settings, control);
+            try (var files = mockStatic(java.nio.file.Files.class, CALLS_REAL_METHODS)) {
+                files.when(() -> java.nio.file.Files.readAllBytes(any(Path.class)))
+                    .thenThrow(new java.nio.file.AccessDeniedException("private-asset", null, "token=hidden"));
+                var failure = assertThrows(org.zexnocs.teanekocore.logger.DiagnosticException.class,
+                    () -> assets.read(blob, settings, control));
+                var diagnostic = FailureDiagnostic.from(failure);
+                assertTrue(diagnostic.types().contains(java.nio.file.AccessDeniedException.class.getName()));
+                assertTrue(diagnostic.description().contains("拒绝"));
+                assertFalse(diagnostic.toString().contains("private-asset"));
+                assertFalse(diagnostic.toString().contains("hidden"));
+            }
+            assertTrue(assets.exists(blob, settings));
+        }
+    }
     /**
      * 保留原动画、合成预览并执行预算、地址及取消约束。
      * 2026/11/05：小子帧长动画可以采集，超出帧数硬限制时报告具体数字。

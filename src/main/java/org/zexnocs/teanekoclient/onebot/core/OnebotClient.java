@@ -24,7 +24,11 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
 /**
  * OneBot 连接管理与异步消息收发，停机时先关闭连接并释放自有执行器。
@@ -32,13 +36,13 @@ import java.util.concurrent.*;
  * <br>2026/11/03：为 Web 只读观测提供真实开放连接数，不导出连接句柄。
  * <br>2026/11/03：按原连接绑定自身账号和连接代次，旧缓存不参与平台联系人查询许可。
  * <br>2026/11/03：指令台发送锁定原唯一连接，实际写入前重新校验，不回退广播。
- *
  * <br>2026/11/06：诊断仅记录安全标识、帧长度与异常定位，不复制消息正文。
+ * <br>2026/11/07：分别限制消息、API 回执和出站写入的实际在途工作。
  *
  * @author zExNocs
  * @date 2026/02/28
  * @since 4.0.12
- * @version 4.8.4-l
+ * @version 4.8.7-l
  */
 @Component
 public class OnebotClient extends AbstractWebsocketClient implements IClient, SmartLifecycle, DisposableBean {
@@ -82,12 +86,18 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
         }
         var session = sessions.values().stream().filter(WebSocketSession::isOpen).findFirst().orElseThrow();
         guard.run();
+        if (!outbound.tryAcquire()) {
+            throw new org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException("OneBot 写入容量已满。");
+        }
         try {
+            guard.run();
             session.sendMessage(new TextMessage(message));
         } catch (IOException failure) {
             reportTransportFailure(session, failure);
             removeSession(session);
             throw new IllegalStateException("OneBot 固定连接写入未确认，不会自动重发。");
+        } finally {
+            outbound.release();
         }
     }
 
@@ -120,6 +130,20 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
 
     // 2026/11/03：停机状态在关闭任何会话和执行器之前发布，回调不能误报正常断连。
     private volatile boolean stopping;
+    // 2026/11/06：消息、平台回执和出站分开准入，回执不被等待 Agent 的消息占满。
+    private final Semaphore inbound = new Semaphore(64);
+    private final Semaphore responses = new Semaphore(32);
+    private final Semaphore outbound = new Semaphore(64);
+
+    /** @return 已准入但尚未实际结束的消息业务数量 */
+    public int getInboundCount() {
+        return 64 - inbound.availablePermits();
+    }
+
+    /** @return 已准入但尚未结束的传输写入数量 */
+    public int getOutboundCount() {
+        return 64 - outbound.availablePermits();
+    }
 
     /**
      * 2026/11/03：注入原事件服务和消息解析资源，自有执行器由本客户端生命周期释放。
@@ -174,13 +198,42 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
         String payload = message.getPayload();
         logger.debug(TAG, "收到会话 %s 的文本帧，字符数=%d".formatted(session.getId(), payload.length()));
 
-        // 异步处理接收到的消息，防止阻塞 WebSocket 的 IO 接收线程
-        // 2026/11/03：原帧中的自身账号必须固定在此连接，换号不能复用旧查询。
-        executeAsync(() -> {
-            if (observeIdentity(session, payload)) {
-                _handle(payload);
+        if (stopping) {
+            return;
+        }
+        // 解析最多一 MiB 的原帧以选择回执保留通道，未准入前不分发业务事件。
+        var root = onebotEventShareComponent.objectMapper.readTree(payload);
+        boolean response = !root.has("post_type") && !root.has("message_type")
+            && root.has("status") && root.has("echo");
+        var slots = response ? responses : inbound;
+        if (!slots.tryAcquire()) {
+            try {
+                session.close(new CloseStatus(1013, "处理容量已满，请稍后重连"));
+            } catch (IOException failure) {
+                reportTransportFailure(session, failure);
             }
-        });
+            return;
+        }
+        try {
+            CompletableFuture.supplyAsync(() -> {
+                if (stopping || !observeIdentity(session, payload)) {
+                    return CompletableFuture.<Void>completedStage(null);
+                }
+                var event = handle(payload);
+                return event == null ? CompletableFuture.<Void>completedStage(null)
+                    : eventService.pushEventWithCompletion(event);
+            }, sendExecutor).thenCompose(stage -> stage).whenComplete((ignored, failure) -> {
+                slots.release();
+                if (failure != null) {
+                    logger.error(TAG, "消息完整处理未完成，已开始的动作不会自动重发。", failure);
+                }
+            });
+        } catch (RuntimeException failure) {
+            slots.release();
+            if (!stopping) {
+                logger.error(TAG, "消息准入后的提交失败。", failure);
+            }
+        }
     }
 
     /**
@@ -303,13 +356,22 @@ public class OnebotClient extends AbstractWebsocketClient implements IClient, Sm
      * @param action 本客户端拥有的异步工作
      */
     private void executeAsync(Runnable action) {
-        if (stopping) { return; }
+        if (stopping) {
+            return;
+        }
+        if (!outbound.tryAcquire()) {
+            throw new org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException("OneBot 写入容量已满。");
+        }
         try {
-            CompletableFuture.runAsync(action, sendExecutor).exceptionally(failure -> {
-                logger.error(TAG, "消息处理异常。", failure); return null;
+            CompletableFuture.runAsync(action, sendExecutor).whenComplete((ignored, failure) -> {
+                outbound.release();
+                if (failure != null) {
+                    logger.error(TAG, "消息传输失败，不自动重发。", failure);
+                }
             });
-        } catch (RejectedExecutionException failure) {
-            if (!stopping) { logger.error(TAG, "消息任务提交失败。", failure); }
+        } catch (RuntimeException failure) {
+            outbound.release();
+            throw failure;
         }
     }
 

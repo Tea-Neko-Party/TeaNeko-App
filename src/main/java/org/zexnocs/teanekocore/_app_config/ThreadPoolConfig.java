@@ -14,16 +14,18 @@ import java.util.concurrent.ScheduledThreadPoolExecutor;
 /**
  * 线程池配置类，负责配置应用程序中使用的线程池。
  *
+ * <br>2026/11/07：明确调度队列边界，准入限制由业务入口负责。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.8.7-l
  */
 @Configuration
 public class ThreadPoolConfig {
     /**
      * 任务执行线程池，用于执行任务。
-     * 核心线程数为 CPU 核心数，最大线程数为 CPU 核心数的两倍，队列大小为 CPU 核心数的 200 倍。
+     * 2026/11/06：调度器延迟队列本身无界；业务入口必须自行准入，任务服务限制真实在途数。
      *
      * @return 任务线程池
      */
@@ -35,8 +37,7 @@ public class ThreadPoolConfig {
         // 创建 ScheduledThreadPoolExecutor，核心线程数为 cpu 核心数
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(cpu);
 
-        // 设置最大线程数为 cpu 核心数的两倍
-        executor.setMaximumPoolSize(cpu * 2);
+        // ScheduledThreadPoolExecutor 按核心线程运行，maximumPoolSize 不限制延迟队列。
 
         // 取消任务时会从队列中移除任务
         executor.setRemoveOnCancelPolicy(true);

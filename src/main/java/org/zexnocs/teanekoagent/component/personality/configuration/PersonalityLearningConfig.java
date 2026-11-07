@@ -10,7 +10,11 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.personality.*;
+import org.zexnocs.teanekoagent.component.personality.IAgentPersonalityLearning;
+import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.component.personality.PersonalityLearningService;
+import org.zexnocs.teanekoagent.component.personality.PersonalityLearningSettings;
+import org.zexnocs.teanekoagent.component.personality.StyleObservationService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
@@ -25,12 +29,13 @@ import java.util.concurrent.ScheduledExecutorService;
  *
  * <br>2026/11/03：观察式人格已装配时停止旧逐轮模型分析，关闭观察后保留回退入口。
  * <br>2026/11/04：校正 @since 为首次引入版本。
- * <br>2026/11/04��ȡ���˸�ѧϰĬ���� token ��ֻ��ȡ��ʽԤ�㡣
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
+ * <br>2026/11/04：取消人格学习默认 token 限额，只读取显式预算。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/05：按聊天实际历史与压缩通路选择独立人格采样。
  * <br>2026/11/06：装配统一类型化 JSON 生成服务。
  * <br>2026/11/06：后台学习的附加进度降为 DEBUG，避免重复输出请求 INFO。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * @author zExNocs
  * @date 2026/11/01

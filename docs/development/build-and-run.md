@@ -15,7 +15,7 @@ Linux / macOS 首次使用先执行 `chmod +x gradlew`，再调用 Wrapper。
 ## 首次准备
 
 1. 默认使用 `prod`，在 `src/main/resources/application-prod.properties` 配置数据库；也可通过下文环境变量提供。测试时复制为同目录的 `application-dev.properties` 并使用独立数据库，该开发文件已被 Git 忽略。
-2. 为当前数据库账号准备可用的数据库；首次建表使用 `spring.jpa.hibernate.ddl-auto=update`。
+2. 按[数据库安装与升级](database-upgrades.md)显式建表、补齐索引，再使用仅有读写权限的运行账号。`prod` 默认 `ddl-auto=validate`，不会自动改表。
 3. 执行 `./gradlew copyTemplatesToConfig`，生成缺少的本地配置，不覆盖已有文件。
 
 数据库配置可使用环境变量：
@@ -68,7 +68,7 @@ Gradle 的 `-PspringProfile` 仅在提供时设置 JVM 的活动环境；未提�
 
 ```shell
 ./gradlew bootJar
-java -jar build/libs/TeaNeko-App-4.8.2-l.jar --spring.profiles.active=prod
+java -jar build/libs/TeaNeko-App-4.8.7-l.jar --spring.profiles.active=prod
 ```
 
 JAR 文件名以本次生成结果为准。也可使用 `./gradlew bootRun -PspringProfile=prod` 从源码运行；此方式仍需构建环境。生产数据库参数可通过 `SPRING_DATASOURCE_URL`、`SPRING_DATASOURCE_USERNAME` 和 `SPRING_DATASOURCE_PASSWORD` 提供。

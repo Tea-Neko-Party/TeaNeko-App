@@ -5,7 +5,6 @@ package org.zexnocs.teanekoagent.component.llm.framework.model;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.env.MockEnvironment;
-// 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
 import org.zexnocs.teanekoagent.component.llm.configuration.FileLLMCredentialResolver;
 import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
 import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfigParameter;
@@ -22,23 +21,30 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
 
 /**
  * 验证 Core YAML 环境解析、统一文件凭据、连接校验与认证信息不外泄。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
- * <br>2026/11/04����֤�о���ʽ����ģ�������ĺ����������
- *
- * <br>2026/11/04��У������ʵ�ֵİ汾����Ϊ v4.7.2-l��
- *
+ * <br>2026/11/04：凭据夹具显式提供模型上下文和输入比例。
+ * <br>2026/11/04：校正当前实现的版本归属为 v4.7.2-l。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/05：适配模型专属 configuration 包，保留原凭据隔离验证。
- *
  * <br>2026/11/05：使用两节点引用环验证元数据边界，保留循环输入覆盖。
+ * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l

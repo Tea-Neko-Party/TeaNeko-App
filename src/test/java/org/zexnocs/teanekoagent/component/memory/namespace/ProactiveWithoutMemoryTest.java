@@ -15,7 +15,13 @@ import org.zexnocs.teanekoagent.integration.command.EasyDataCommandAttemptStore;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunExecution;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
@@ -31,7 +37,6 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.time.Clock;
 import java.util.Optional;
@@ -41,7 +46,17 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 无记忆装配的主动活动组合验收，仅替换模型结果和平台网络，保留真实发送与持久防重。
@@ -69,8 +84,10 @@ class ProactiveWithoutMemoryTest {
             config.setComponents("{\"version\":1,\"components\":{\"llm\":{},\"proactive\":{}}}");
             when(configs.getConfigData(eq(manager), eq(AgentScopeConfigData.class), anyString())).thenReturn(Optional.of(config));
             var client = mock(ITeaNekoClient.class);
-            var clients = new TeaNekoClientScanner(mock(IBeanScanner.class));
-            clients.getHandlerMap().put("offline", IndependentPair.of(mock(TeaNekoClient.class), client));
+            var clients = mock(TeaNekoClientScanner.class);
+            // 2026/11/06：目录查询夹具提供不可变快照，不绕过正式扫描器修改注册表。
+            doReturn(java.util.Map.of("offline", IndependentPair.of(mock(TeaNekoClient.class), client))).when(clients).getHandlerMap();
+            doAnswer(call -> clients.getHandlerMap().get(call.getArgument(0))).when(clients).getPair(anyString());
             when(client.getClientId()).thenReturn("offline");
             var toolbox = mock(ITeaNekoToolbox.class);
             when(client.getTeaNekoToolbox()).thenReturn(toolbox);
@@ -82,7 +99,7 @@ class ProactiveWithoutMemoryTest {
             var response = mock(IMessageSendResponseData.class);
             when(response.getMessageId()).thenReturn("确认消息ID");
             when(sender.sendWithFuture()).thenAnswer(ignored ->
-                    new TaskFuture<>(logger, "离线发送", CompletableFuture.completedFuture(response)));
+                new TaskFuture<>(logger, "离线发送", CompletableFuture.completedFuture(response)));
             var targets = new ProactiveTargets(clients, new TeaNekoScopeService(clients), mock(ITeaUserService.class));
             var target = targets.group("offline-group@42");
             var references = mock(IAgentMemoryReferences.class);
@@ -99,7 +116,7 @@ class ProactiveWithoutMemoryTest {
                 var result = mock(AgentRunResult.class);
                 when(result.status()).thenReturn(AgentRunResult.Status.SUCCESS);
                 when(result.answer()).thenReturn(Optional.of(LLMAssistantMessage.builder().contents(new LLMContentListBuilder()
-                        .addText("{\"speak\":true,\"text\":\"我们一起看看吧\"}").build()).build()));
+                    .addText("{\"speak\":true,\"text\":\"我们一起看看吧\"}").build()).build()));
                 var completed = new CompletableFuture<AgentRunResult>();
                 return new AgentRunExecution(completed, () -> completed.complete(result), () -> completed.cancel(false), control -> false);
             });
@@ -107,15 +124,15 @@ class ProactiveWithoutMemoryTest {
             for (int restart = 0; restart < 3; restart++) {
                 var triggers = new AgentTriggerGate(ignored -> new AgentTriggerGate.Settings(config.toPolicy(), "UTC", 1, 0, 0), Clock.systemUTC());
                 try (var service = new ProactiveService(configs, manager, targets, references, personality, history,
-                        new EasyDataCommandAttemptStore(db.data, db.mapper), turns, new AgentFactory(registry), registry,
-                        new AgentAutomaticAccess(triggers), triggers, mock(AgentRuntimeMonitor.class), scheduler,
-                        Runnable::run, logger, db.mapper, LLMJsonTestSupport.create(
-                                mock(org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService.class), db.mapper))) {
+                    new EasyDataCommandAttemptStore(db.data, db.mapper), turns, new AgentFactory(registry), registry,
+                    new AgentAutomaticAccess(triggers), triggers, mock(AgentRuntimeMonitor.class), scheduler,
+                    Runnable::run, logger, db.mapper, LLMJsonTestSupport.create(
+                    mock(org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService.class), db.mapper))) {
                     var outcome = service.candidate(target, AgentTriggerGate.Kind.INTERJECTION,
                             restart < 2 ? "同一发生" : "空资料发生", restart < 2 ? "大家一起看这个问题" : "")
-                            .toCompletableFuture().get(4, TimeUnit.SECONDS);
+                        .toCompletableFuture().get(4, TimeUnit.SECONDS);
                     assertEquals(restart == 0 ? AgentRuntimeMonitor.Delivery.SENT : restart == 1
-                            ? AgentRuntimeMonitor.Delivery.SKIPPED : AgentRuntimeMonitor.Delivery.ABSTAINED, outcome);
+                        ? AgentRuntimeMonitor.Delivery.SKIPPED : AgentRuntimeMonitor.Delivery.ABSTAINED, outcome);
                 }
             }
             verify(turns, times(1)).prepare(any(), any(), any());

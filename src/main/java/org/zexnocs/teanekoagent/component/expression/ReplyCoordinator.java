@@ -11,8 +11,16 @@ import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -20,15 +28,14 @@ import java.util.function.Supplier;
 /**
  * 按原 client/scope/机器人账号串行安排轮次和发送，独立拥有等待控制。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：展开排队、实际完成和观察完成的回调边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.8.0-l
+ * @version 4.8.7-l
  */
 public final class ReplyCoordinator implements AutoCloseable {
     private final Executor executor;
@@ -58,34 +65,69 @@ public final class ReplyCoordinator implements AutoCloseable {
      * @param <T> 结果类型
      * @return 可停止的观察阶段
      */
-    public <T> CompletionStage<T> execute(String owner, AgentActorContext actor, UUID requestId, String self, Function<ExecutionControl,CompletionStage<T>> action) {
-        var limits=settings.get(); var key=new BotScope(actor.scope(),self); final Pending<T> pending; final CompletableFuture<?> before;
-        synchronized(this) {
-            if(closed || entries.size()>=256 || entries.containsKey(requestId) || entries.values().stream().filter(p->p.key.equals(key)).count()>=limits.maxQueued()) {
+    public <T> CompletionStage<T> execute(String owner, AgentActorContext actor, UUID requestId, String self, Function<ExecutionControl, CompletionStage<T>> action) {
+        var limits = settings.get();
+        var key = new BotScope(actor.scope(), self);
+        final Pending<T> pending;
+        final CompletableFuture<?> before;
+        synchronized (this) {
+            if (closed || entries.size() >= 256 || entries.containsKey(requestId) || entries.values().stream().filter(p -> p.key.equals(key)).count() >= limits.maxQueued()) {
                 return CompletableFuture.failedStage(new IllegalStateException("Agent 入口已关闭、请求重复或队列已满。"));
             }
-            var control=ExecutionControl.withDeadline(new ResourceBudget(Map.of()),clock.instant().plusSeconds(limits.timeoutSeconds()),clock,scheduler);
-            pending=new Pending<>(owner,actor,key,control); before=tails.getOrDefault(key,CompletableFuture.completedFuture(null));
-            entries.put(requestId,pending); tails.put(key,pending.actual);
+            var control = ExecutionControl.withDeadline(new ResourceBudget(Map.of()), clock.instant().plusSeconds(limits.timeoutSeconds()), clock, scheduler);
+            pending = new Pending<>(owner, actor, key, control);
+            before = tails.getOrDefault(key, CompletableFuture.completedFuture(null));
+            entries.put(requestId, pending);
+            tails.put(key, pending.actual);
         }
-        var registration=pending.control.onTermination(reason->{
-            if(!pending.actual.isDone()){pending.observed.completeExceptionally(new ExecutionStoppedException(reason));}
+        var registration = pending.control.onTermination(reason -> {
+            if (!pending.actual.isDone()) {
+                pending.observed.completeExceptionally(new ExecutionStoppedException(reason));
+            }
             // 已取消的队列项仍等待前项结束再跳过，防止后项越过仍在发送的消息。
         });
-        pending.actual.whenComplete((result,failure)->{
-            if(failure==null){pending.observed.complete(result);}else{pending.observed.completeExceptionally(failure);}
-            synchronized(this){entries.remove(requestId,pending);tails.remove(key,pending.actual);}
-            registration.close(); pending.control.close();
+        pending.actual.whenComplete((result, failure) -> {
+            if (failure == null) {
+                pending.observed.complete(result);
+            } else {
+                pending.observed.completeExceptionally(failure);
+            }
+            synchronized (this) {
+                entries.remove(requestId, pending);
+                tails.remove(key, pending.actual);
+            }
+            registration.close();
+            pending.control.close();
         });
         try {
-            before.handle((ignored,failure)->null).thenRunAsync(()->{
-                synchronized(this){if(pending.actual.isDone()){return;}pending.started=true;}
+            before.handle((ignored, failure) -> null).thenRunAsync(() -> {
+                synchronized (this) {
+                    if (pending.actual.isDone()) {
+                        return;
+                    }
+                    pending.started = true;
+                }
                 CompletionStage<T> work;
-                try{pending.control.checkActive();work=Objects.requireNonNull(action.apply(pending.control));}
-                catch(RuntimeException failure){work=CompletableFuture.failedStage(failure);}
-                work.whenComplete((result,failure)->{if(failure==null){pending.actual.complete(result);}else{pending.actual.completeExceptionally(failure);}});
-            },executor).exceptionally(failure->{pending.actual.completeExceptionally(failure);return null;});
-        }catch(RuntimeException failure){pending.actual.completeExceptionally(failure);}
+                try {
+                    pending.control.checkActive();
+                    work = Objects.requireNonNull(action.apply(pending.control));
+                } catch (RuntimeException failure) {
+                    work = CompletableFuture.failedStage(failure);
+                }
+                work.whenComplete((result, failure) -> {
+                    if (failure == null) {
+                        pending.actual.complete(result);
+                    } else {
+                        pending.actual.completeExceptionally(failure);
+                    }
+                });
+            }, executor).exceptionally(failure -> {
+                pending.actual.completeExceptionally(failure);
+                return null;
+            });
+        } catch (RuntimeException failure) {
+            pending.actual.completeExceptionally(failure);
+        }
         return pending.observed.minimalCompletionStage();
     }
     /**
@@ -166,9 +208,7 @@ public final class ReplyCoordinator implements AutoCloseable {
     /**
      * 原真实目标键。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param scope 作用域
@@ -182,9 +222,7 @@ private record BotScope(AgentScope scope,String self){}
     /**
      * 在途拥有关系，不进入 ECS 或数据库。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
-     *
      * <br>2026/11/04：校正 @since 为首次引入版本。
-     *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param <T> 结果类型

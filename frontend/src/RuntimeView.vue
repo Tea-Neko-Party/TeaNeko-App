@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AccessibleTabs from './AccessibleTabs.vue'
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from './RefreshButton.vue'
 // 2026/11/05：详细操作回执只在高级模式展示。
@@ -20,6 +21,7 @@ import {ApiError, request} from './api'
 import DetailPanel from './DetailPanel.vue'
 import {usePageDraft} from './pages/page-guards'
 import {useActivePolling} from './pages/active-polling'
+import {timerReceipt, type TimerReceipt as Receipt} from './operation-receipts'
 
 const {advanced} = useConsolePreferences()
 
@@ -27,9 +29,9 @@ interface Timer { id: string; name: string; state: string; revision: number; rul
 interface TimerPage { items: Timer[]; next: string; more: boolean; limited: boolean; categories: {id: string; name: string}[] }
 interface Run { id: string; name: string; state: string; stage: string; createdAt: string; startedAt?: string; finishedAt?: string }
 interface RunPage { instance: string; startedAt: string; items: Run[]; next: number; reset: boolean; more: boolean; dropped: number }
+interface ManagementCall { requestId: string; resource: string; ageMillis: number; waitingEnded: boolean }
 interface Log { sequence: number; at: string; level: string; namespace: string; message: string; requestId: string; scope: string; plugin: string }
 interface LogPage { instance: string; items: Log[]; next: number; more: boolean; reset: boolean; gap: boolean; dropped: number; policy: { maxLogs: number; retentionMinutes: number; captureMessages: boolean } }
-interface Receipt { operationId: string; timer: string; revision: number; paused: boolean; at: string; note: string }
 interface Pending { id: string; change: { operationId: string; revision: number; paused: boolean } }
 const props = defineProps<{ active: boolean }>()
 const emit = defineEmits<{ expired: [] }>()
@@ -40,6 +42,7 @@ const notice = ref('')
 const auto = ref(false)
 const timers = ref<TimerPage>()
 const runs = ref<RunPage>()
+const managementCalls = ref<ManagementCall[]>([])
 const logs = ref<LogPage>()
 const displayedLogs = ref<Log[]>([])
 const runState = ref('')
@@ -93,7 +96,13 @@ async function applyTimerFilters(category = timerFilters.category) {
 }
 
 async function loadRuns(more = false) {
-  runs.value = await call<RunPage>('runtime', query('RUNS', { before: more ? runs.value?.next ?? 0 : 0, instance: runs.value?.instance ?? '', state: runState.value, search: runSearch.value }))
+  // 2026/11/07：管理调用的真实占用可独立查看；逻辑超时后仍显示正在收尾的工作。
+  const [tasks, calls] = await Promise.all([
+    call<RunPage>('runtime', query('RUNS', { before: more ? runs.value?.next ?? 0 : 0, instance: runs.value?.instance ?? '', state: runState.value, search: runSearch.value })),
+    request<ManagementCall[]>('management-calls')
+  ])
+  runs.value = tasks
+  managementCalls.value = calls
   if (runs.value.reset) notice.value = '进程已更换，任务窗口已重置。'
 }
 
@@ -119,8 +128,10 @@ async function select(value: string) {
   await run(refresh)
 }
 
-async function receive(result: Receipt) {
-  receipt.value = result
+// 2026/11/06：仅匹配原编号和目标的确定回执可以结束恢复状态。
+async function receive(result: unknown) {
+  receipt.value = timerReceipt(result, pending.value?.change.operationId ?? receipt.value!.operationId,
+    pending.value?.id ?? receipt.value!.timer, pending.value)
   pending.value = undefined
   await loadTimers()
 }
@@ -169,7 +180,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 <template>
   <!-- 2026/11/04：日志详细筛选按需展开，已应用条件保留可见提示。 -->
   <div class="runtime-view">
-    <div class="agent-tabs" role="tablist" aria-label="运行管理分区"><button v-for="item in [{ id: 'timers', name: '定时规则' }, { id: 'runs', name: 'Core 任务' }, { id: 'logs', name: '运行日志' }]" :key="item.id" role="tab" :aria-selected="panel === item.id" :class="{ selected: panel === item.id }" :disabled="busy" @click="select(item.id)">{{ item.name }}</button></div>
+    <!-- 2026/11/06：共享键盘页签，页面切换仍经过原草稿守卫。 -->
+    <AccessibleTabs :model-value="panel" :items="[{id: 'timers', name: '定时规则'}, {id: 'runs', name: 'Core 任务'}, {id: 'logs', name: '运行日志'}]" label="运行管理分区" :disabled="busy" @update:model-value="select">
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElAlert v-if="notice" :title="notice" type="info" :closable="false" />
     <div class="editor-actions"><RefreshButton :disabled="busy" @click="run(refresh)" label="刷新当前页" /><label class="small muted">每 5 秒刷新 <ElSwitch v-model="auto" :disabled="!!pending" /></label></div>
@@ -197,6 +209,11 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <ElEmpty v-if="timers && !timers.items.length" description="当前筛选没有匹配的定时规则" /><ElButton v-if="timers?.more" :disabled="busy" @click="auto = false; run(() => loadTimers(true))">下一页规则</ElButton>
     </template>
     <template v-else-if="panel === 'runs'">
+      <ElCard v-for="item in managementCalls" :key="item.requestId" shadow="never" class="runtime-card">
+        <div class="editor-heading"><h3>{{ item.resource }}</h3><ElTag :type="item.waitingEnded ? 'warning' : 'info'">{{ item.waitingEnded ? '等待结束，工作仍在收尾' : '管理调用进行中' }}</ElTag></div>
+        <p class="small muted">已占用 {{ (item.ageMillis / 1000).toFixed(1) }} 秒</p>
+        <p v-if="advanced" class="small revision">{{ item.requestId }}</p>
+      </ElCard>
       <DetailPanel title="任务状态说明"><p>这里只跟踪 Core 任务。完整模型交互与消息发送进度请查看 Agent 活动时间线。</p></DetailPanel>
       <div class="agent-toolbar"><label>任务状态<ElSelect v-model="runState" aria-label="任务状态"><ElOption label="全部状态" value="" /><ElOption v-for="state in ['QUEUED', 'RUNNING', 'WAITING_RESULT', 'SUCCESS', 'FAILED']" :key="state" :label="stateNames[state]" :value="state" /></ElSelect></label><label>任务名称<ElInput v-model="runSearch" maxlength="256" aria-label="任务名称筛选" /></label><ElButton :disabled="busy" @click="run(() => loadRuns())">筛选任务</ElButton></div>
       <p v-if="runs" class="small muted">进程窗口始于 {{ date(runs.startedAt) }} · 已淘汰 {{ runs.dropped }} 项；窗口不保存到数据库。</p>
@@ -218,5 +235,6 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <ElEmpty v-if="logs && !displayedLogs.length" description="当前扫描页没有匹配日志" /><ElButton v-if="logs?.more" :disabled="busy" @click="run(() => loadLogs())">继续读取日志</ElButton><RefreshButton v-else :disabled="busy" label="刷新最新日志" @click="run(() => loadLogs())" />
     </template>
     <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>定时器门禁已确认</h3><p>{{ receipt.note }}</p><p>原操作：{{ receipt.operationId }} · 版本 {{ receipt.revision }}</p><p>原提交时间：{{ date(receipt.at) }}；历史回执不代表现在仍是同一状态。</p><ElButton :disabled="busy" @click="operation">查询此回执</ElButton></ElCard>
+    </AccessibleTabs>
   </div>
 </template>

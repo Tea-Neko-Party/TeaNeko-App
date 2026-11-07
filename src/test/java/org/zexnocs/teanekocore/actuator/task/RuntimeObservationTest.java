@@ -11,7 +11,15 @@ import org.zexnocs.teanekocore.actuator.runtime.RuntimeMonitor;
 import org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
-import org.zexnocs.teanekocore.actuator.timer.*;
+import org.zexnocs.teanekocore.actuator.timer.FixedDelayTimer;
+import org.zexnocs.teanekocore.actuator.timer.FixedRateTimer;
+import org.zexnocs.teanekocore.actuator.timer.SpringTimerViewSource;
+import org.zexnocs.teanekocore.actuator.timer.TimerDirectory;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
+import org.zexnocs.teanekocore.actuator.timer.TimerPresentation;
+import org.zexnocs.teanekocore.actuator.timer.TimerService;
+import org.zexnocs.teanekocore.actuator.timer.TimerSourceScanner;
+import org.zexnocs.teanekocore.actuator.timer.TimerTaskConfig;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerViewSource;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
@@ -19,14 +27,28 @@ import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ConcurrentModificationException;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 复用真实执行器、计时器和完成阶段验证观测边界，不启动应用或外部服务。
@@ -178,8 +200,9 @@ class RuntimeObservationTest {
         var config = TaskConfig.<Void>builder().name("外部结果").taskStages(List.of()).callable(() -> null).build();
         var task = new Task<>(id, config, future, Void.class);
         monitor.observe(task);
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var service = new TaskExecuteService(executor, logger, mock(TaskStageScanner.class), mock(ITaskService.class));
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor();
+             var scheduler = Executors.newSingleThreadScheduledExecutor()) {
+            var service = new TaskExecuteService(executor, logger, mock(TaskStageScanner.class), mock(ITaskService.class), scheduler);
             service.installMonitor(monitor);
             service.__executeTask(task);
             Objects.requireNonNull(task.getExecutingFuture()).join();

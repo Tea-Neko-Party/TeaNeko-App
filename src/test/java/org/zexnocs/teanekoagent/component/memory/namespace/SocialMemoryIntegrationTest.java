@@ -20,7 +20,12 @@ import org.zexnocs.teanekoagent.component.social.SocialState;
 import org.zexnocs.teanekoagent.component.social.SocialStateService;
 import org.zexnocs.teanekoagent.component.social.adapter.EasyDataSocialStateStore;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolContext;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentUserText;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
@@ -29,22 +34,65 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 用真实事务入口验证共享索引、关系并发、防重和空间换代，不访问实际数据库。
  * <br>2026/11/06：共享索引和原文同事务；关系行及事件账本不能因重复或清理而重新加分。
+ * <br>2026/11/07：验证临时共享索引清理后的分区重建、新消息防重与退役隔离。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
- * @version 4.8.6-l
+ * @version 4.8.7-l
  */
 @Timeout(20)
 class SocialMemoryIntegrationTest {
+    /**
+     * 2026/11/07：原维护页遍历多个分区并补建临时指针；新消息不重复，过期和退役消息不复活。
+     */
+    @Test
+    void rebuildsClearedSharedPointersAcrossBoundedMaintenancePages() {
+        try (var db = database()) {
+            var layers = new EasyDataLayeredMemoryStore(db.data, db.store, db.mapper);
+            var history = new EasyDataHistoryStore(db.data, db.mapper, layers);
+            var other = new MemoryNamespaceReference(new AgentScope("test", "test-group@2"), MemoryNamespaceId.SHARED, 0, 0);
+            for (int i = 0; i < 20; i++) {
+                append(history, i % 2 == 0 ? group : other, alice, "existing-" + i, "保留的原始消息" + i, now);
+            }
+            append(history, other, alice, "expired", "已经到期的消息", now.minus(Duration.ofDays(10)));
+            db.clearTemporary();
+            assertTrue(layers.related(direct, alice, now).toCompletableFuture().join().isEmpty());
+            for (int i = 0; i < 12; i++) {
+                layers.maintain(now).toCompletableFuture().join();
+                if (i == 1) {
+                    append(history, group, alice, "new-during-rebuild", "清理期间的新消息", now);
+                }
+            }
+            var restored = layers.related(direct, alice, now).toCompletableFuture().join();
+            assertEquals(21, restored.size());
+            assertEquals(21, restored.stream().map(entry -> entry.message().message().messageId()).distinct().count());
+            assertTrue(restored.stream().noneMatch(entry -> entry.message().message().messageId().equals("expired")));
+            db.store.advanceGeneration(MemoryNamespaceId.SHARED, 0, UUID.randomUUID()).toCompletableFuture().join();
+            db.clearTemporary();
+            for (int i = 0; i < 12; i++) {
+                layers.maintain(now).toCompletableFuture().join();
+            }
+            var current = new MemoryNamespaceReference(direct.scope(), direct.namespaceId(), 0, 1);
+            assertTrue(layers.related(current, alice, now).toCompletableFuture().join().isEmpty());
+        }
+    }
     private final Instant now = Instant.parse("2026-11-06T00:00:00Z");
     private final UUID alice = UUID.randomUUID();
     private final MemoryNamespaceReference group = new MemoryNamespaceReference(new AgentScope("test", "test-group@1"), MemoryNamespaceId.SHARED, 0, 0);

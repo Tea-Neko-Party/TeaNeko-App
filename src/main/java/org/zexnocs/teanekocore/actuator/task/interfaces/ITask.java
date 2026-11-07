@@ -15,11 +15,15 @@ import java.util.concurrent.CompletableFuture;
  * 创建 → 提交/执行中 → 执行完毕 → 提交成功
  * 若重试会重回创建状态
  *
+ * <br>2026/11/07：暴露任务执行控制与实际完成合同。
+ *
  * @author zExNocs
  * @date 2026/02/10
  * @since 4.0.0
  */
 public interface ITask<T> extends IStateMachine<ITaskState> {
+    /** @return 2026/11/06：任务唯一的协作控制和真实物理完成状态 */
+    org.zexnocs.teanekocore.actuator.task.TaskExecution getExecution();
     /**
      * 获取任务的唯一标识符
      * @return 任务的唯一标识符
