@@ -11,6 +11,7 @@ import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -38,6 +40,7 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/04：验证主指令默认规则和方法有效权限组的独立投影。
  * <br>2026/11/05：验证重复目录查询不调用底层 Bean 扫描器，类型说明仍正确投影。
  * <br>2026/11/07：停用安装说明与实时调用目录分离，静态方法元数据保持同一已编译对象。
+ * <br>2026/11/08：使用真实插件归属端口验证系统命令可进入安装说明及运行目录。
  *
  * @author zExNocs
  * @date 2026/11/04
@@ -45,6 +48,30 @@ import static org.mockito.Mockito.when;
  * @version 4.9.0-l
  */
 class CommandCatalogTest {
+    /** 已登记为无插件归属的系统命令正常投影，查询不重新扫描或伪造插件身份。 */
+    @Test
+    void registeredHostCommandsRemainVisibleWithoutPluginOwnership() {
+        var bean = new Example();
+        var beans = mock(IBeanScanner.class);
+        when(beans.getBeansWithAnnotation(Command.class)).thenReturn(Map.of("example",
+                new IndependentPair<>(Example.class.getAnnotation(Command.class), bean)));
+        doReturn(Example.class).when(beans).getBeanClass(bean);
+        var plugins = new PluginAccess(new PluginRegistry(List.of()));
+        var scanner = new CommandScanner(mock(ILogger.class), beans);
+        scanner.installPlugins(plugins);
+        scanner.init();
+        clearInvocations(beans);
+        var catalog = new CommandCatalog(scanner, mock(ICommandPermissionManager.class),
+                mock(ICommandScopeManager.class), plugins);
+        var installed = catalog.installedDescription();
+        assertEquals(3, installed.size());
+        installed.forEach(command -> assertNull(command.pluginId()));
+        var visible = catalog.list(null, () -> {});
+        assertEquals(3, visible.size());
+        visible.forEach(command -> assertNull(command.pluginId()));
+        verifyNoInteractions(beans);
+    }
+
     /**
      * 2026/11/04：作用域、权限、原始数据类型与管理来源共同限定补全目录。
      * 2026/11/05：初始化后禁止目录读取重新发现 Bean，保留原类型说明及实时授权。

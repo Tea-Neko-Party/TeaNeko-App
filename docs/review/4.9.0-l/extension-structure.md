@@ -35,6 +35,18 @@
 - SHA-256：`48f9406288588ce39b6aeb48a4f8faf7495c33bf9dc8f0f4c8c4332b07ab1710`。
 - 最终构建：`temp/4.9-structure-artifact-final.log`；核对结果：`temp/verification/4.9.0-l/artifact-result.json`。
 
+## 2026/11/08 启动归属反馈修正
+
+实际日志在 `PluginAccess.owner` 抛出异常，调用链为命令安装说明、宿主贡献来源和插件贡献总目录。根因是归属缓存以 `Optional.empty()` 表示“已经登记且无业务插件归属”，读取却把空 Optional 判作未登记；同一目标的其他未登记方法还可能触发空指针异常。
+
+现仅在缓存记录缺失时明确拒绝，已登记宿主方法返回空插件标识，并将 `owner` 返回值更正为 `@Nullable`。没有改变插件声明、登记阶段、目录初始化顺序、权限或代次复核，也没有在查询时补充扫描。
+
+- 新增的两项回归在修复前均复现原异常，修复后通过。6 个测试类、22 项定向测试全部通过，覆盖真实命令扫描与归属、完整生产插件贡献装配、停用后的资格和未登记目标/方法的拒绝。日志为 `temp/4.9-host-ownership-before.log`、`temp/4.9-host-ownership-after.log`，统计为 `temp/verification/4.9.0-l/host-ownership-result.json`。
+- 测试补充意外创建占用时的资源释放后，3 项归属回归再次通过。JavaDoc、修改范围的 Java 格式检查及差异检查通过；JavaDoc 输出位于 `temp/javadoc/4.9.0-l/host-ownership/`。
+- 更新 `bootJar` 与普通 `jar`，核对 `PluginAccess.class` 与启动目录逐字节一致，生产类型均进入主 JAR，48 个前端文件与现有构建一致。最新主 JAR SHA-256 为 `aa2a7d19e73f36c34e510cfed7980d417bd0692f278576366342cbf6f7817110`，构建日志及核对记录为 `temp/4.9-host-ownership-artifact.log`、`temp/verification/4.9.0-l/host-ownership-artifact-result.json`。
+
+本次没有重跑完整隔离回归或连接生产数据库启动，上文完整回归保持原执行时间及范围。
+
 ## 未执行事项
 
 真实 MySQL 升级、完整生产配置启动、真实模型与 OneBot、跨会话生产环境及运行负荷验收仍按[环境清单](next-steps.md)执行。没有把隔离夹具结果当成这些环境通过证据。用户原有 `gradle.properties` 改动保留；未执行提交、标签、推送或部署。

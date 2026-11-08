@@ -1,10 +1,10 @@
 package org.zexnocs.teanekocore.plugin;
 
-import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
-import org.jspecify.annotations.Nullable;
+
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
@@ -18,6 +18,8 @@ import java.util.Optional;
  * <br>2026/11/07：允许已冻结归属直接捕获有效代次，任务执行不重复发现注解。
  * <br>2026/11/07：原业务目录显式登记方法归属，运行读取未登记目标时明确拒绝。
  * <br>2026/11/07：登记时校验业务包与插件身份，缺失归属诊断包含安全方法定位。
+ * <br>2026/11/08：区分已登记的宿主无归属与尚未登记的方法，按真实契约返回可空插件标识。
+ * <br>2026/11/08：查询用外层 Optional 表示登记是否存在，避免向 Optional 局部变量赋 null。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -64,19 +66,19 @@ public final class PluginAccess {
 
     /**
      * 读取已经编译的归属，不在请求、权限复核或页面查询时发现注解。
+     * <br>2026/11/08：空 Optional 表示已登记的宿主方法，只有缓存记录缺失才拒绝调用。
+     * <br>2026/11/08：外层查询缺失时抛出异常，保留内层空 Optional 的宿主归属语义。
      * @param target 已登记的容器对象
      * @param method 已登记的方法
      * @return 插件标识，显式登记为无归属时为空
      * @throws IllegalStateException 当调用方法尚未经过初始化登记时
      */
-    public synchronized @NonNull String owner(Object target, Method method) {
-        var methods = owners.get(target);
-        var compiled = methods == null ? Optional.<String>empty() : methods.get(method);
-        if (compiled.isEmpty()) {
-            // 2026/11/07：仅记录静态目标和方法名，禁止带入调用参数或敏感内容。
-            throw new IllegalStateException("插件调用归属尚未登记，请完成对应目录的初始化："
-                    + target.getClass().getName() + "#" + method.getName());
-        }
+    public synchronized @Nullable String owner(Object target, Method method) {
+        // 2026/11/07：仅记录静态目标和方法名，禁止带入调用参数或敏感内容。
+        var compiled = Optional.ofNullable(owners.get(target))
+                .map(methods -> methods.get(method))
+                .orElseThrow(() -> new IllegalStateException("插件调用归属尚未登记，请完成对应目录的初始化："
+                        + target.getClass().getName() + "#" + method.getName()));
         return compiled.orElse(null);
     }
     /**

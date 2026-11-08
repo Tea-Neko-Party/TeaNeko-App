@@ -23,12 +23,21 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证早期目录初始化与插件端口晚注入的顺序差异不遗漏归属。
  * <br>2026/11/07：晚注入复用已发布快照，不重新发现 Bean 或事件类型。
+ * <br>2026/11/08：区分宿主方法已登记为无归属与目标、方法尚未登记的拒绝状态。
  *
  * @author zExNocs
  * @date 2026/11/07
@@ -36,6 +45,32 @@ import static org.mockito.Mockito.*;
  * @version 4.9.0-l
  */
 class PluginOwnershipInitializationTest {
+    /**
+     * 已登记的宿主方法无需插件令牌，未登记目标和方法仍明确拒绝。
+     * @throws NoSuchMethodException 当标准对象方法定位失败时
+     */
+    @Test
+    void registeredUnownedMethodsRemainUsableAndUnknownMethodsStayRejected() throws NoSuchMethodException {
+        var plugins = registry();
+        var access = new PluginAccess(plugins);
+        var target = new Object();
+        var method = Object.class.getMethod("toString");
+        var unknown = Object.class.getMethod("hashCode");
+        assertThrows(IllegalStateException.class, () -> access.owner(target, method));
+        assertNull(access.register(target, method));
+        assertNull(access.owner(target, method));
+        assertNull(access.capture(target, method));
+        try (var call = access.open(target, method)) {
+            assertNull(call);
+        }
+        assertTrue(access.enabled(target, method));
+        plugins.setEnabled("test.ownership", false);
+        assertTrue(access.enabled(target, method));
+        assertThrows(IllegalStateException.class, () -> access.owner(new Object(), method));
+        var failure = assertThrows(IllegalStateException.class, () -> access.owner(target, unknown));
+        assertTrue(failure.getMessage().contains("java.lang.Object#hashCode"));
+    }
+
     /**
      * 命令扫描先完成时，注入归属端口仍登记原目标，停用马上生效。
      * @throws Exception 当夹具入口定位失败时
