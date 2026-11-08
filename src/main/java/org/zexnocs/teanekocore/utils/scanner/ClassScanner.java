@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.utils.scanner;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.boot.autoconfigure.AutoConfigurationPackages;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
@@ -12,7 +14,12 @@ import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Modifier;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /**
  * 类扫描器，扫描不用定义为 bean 的类与其注解。
@@ -101,7 +108,7 @@ public class ClassScanner implements IClassScanner {
      *
      * @param annotationType 需要扫描的注解类型
      * @param interfaceType  需要扫描的接口类型
-     * @return 一个包含所有带有指定注解的 classes 的 Map，键为 classes 的名称，值为一个 Pair 对象，包含注解实例和 classes 实例
+     * @return 一个包含所有带有指定注解的 classes 的 Map，键为 classes 的名称，值为一个 IPair 对象，包含注解实例和 classes 实例
      */
     @Override
     public <A extends Annotation, T>

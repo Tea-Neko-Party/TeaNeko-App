@@ -10,8 +10,8 @@
 
 ## 页面扩展收尾
 
-- V484-D02：原先导航类型、分组、标题、打开状态与模板分支分别维护在中央组件。现由 [page-registry.ts](../../../frontend/src/pages/page-registry.ts) 统一声明，宿主按需加载；新增页面不改外壳分支。目标选择留在所属页面，未引入远端脚本、Router 或第二套状态库。
-- [页面宿主](../../../frontend/src/pages/ConsolePageHost.vue) 保留编辑实例，隐藏时停止轮询，退出前检查所有页面及嵌套草稿。坏回执仍保留原编号；注销失败不释放状态，认证失效与迟到加载不会重建旧会话。
+- V484-D02：原先导航类型、分组、标题、打开状态与模板分支分别维护在中央组件。现由 [page-registry.ts](../../../frontend/src/app/pages/page-registry.ts) 统一声明，宿主按需加载；新增页面不改外壳分支。目标选择留在所属页面，未引入远端脚本、Router 或第二套状态库。
+- [页面宿主](../../../frontend/src/app/pages/ConsolePageHost.vue) 保留编辑实例，隐藏时停止轮询，退出前检查所有页面及嵌套草稿。坏回执仍保留原编号；注销失败不释放状态，认证失效与迟到加载不会重建旧会话。
 - V484-D01：普通资源继续通过原类型化网关、白名单及精确安全路由；当前没有需要新 HTTP 协议的功能，不增加假设性授权框架。按用户追加要求，核对页面所需全部 13 项管理资源和 9 项文件配置，并为本地配置补齐缺失的 5 项空间资源及 `agent.observability` 文件入口；默认模板已经完整，不自动改写其他部署的显式白名单。
 - 产物检查发现 `processResources` 的复制留下旧哈希分包，已改为对生成控制台目录执行有边界的同步。清理只涉及构建输出，可重新构建，不删除源码、配置或数据。
 - 验证：前端类型检查和生产构建通过；既有 7 组、追加 11 组真实浏览器交互通过，追加组同时核查源码与生产分包。3 个既有安全／空间测试类共 17 项通过，无失败或错误；不重算上一批 1038 项结果。
@@ -99,8 +99,8 @@ node temp/verification/4.8.4-l/review-1/web-receipt-contract.mjs
 
 管理操作已持有 `pending`，服务端或中间层返回 HTTP 200，但正文不是 JSON、为 `null`，或缺少必要回执字段：
 
-1. [api.ts:45](../../../frontend/src/api.ts#L45) 将 JSON 解析失败转成 `null`，HTTP 成功后直接 `as T` 返回。泛型断言不做运行时验证。
-2. [AgentWorkspaceView.finish:178](../../../frontend/src/AgentWorkspaceView.vue#L178) 在读取 `result.status` 前就执行 `pending.value = undefined`，也未关联原操作编号。
+1. [api.ts:45](../../../frontend/src/shared/api/client.ts#L45) 将 JSON 解析失败转成 `null`，HTTP 成功后直接 `as T` 返回。泛型断言不做运行时验证。
+2. [AgentWorkspaceView.finish:178](../../../frontend/src/features/agent/AgentWorkspaceView.vue#L178) 在读取 `result.status` 前就执行 `pending.value = undefined`，也未关联原操作编号。
 3. 非 JSON 输入随后发生 `TypeError`，空对象则显示“本次没有提交新修改：undefined。”；两种情况下原待确认状态已经丢失。
 
 受影响的是调用该 `finish` 的记忆、分层记忆、人格和计划管理回执。结果未知时，界面失去原编号查询／同编号重试入口；若用户因此创建新操作，可能失去原幂等恢复路径。**本轮没有证明服务端发生重复提交或越权，也没有证明线上已经出现坏响应。**

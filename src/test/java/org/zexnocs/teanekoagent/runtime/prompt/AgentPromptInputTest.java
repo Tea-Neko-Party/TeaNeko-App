@@ -1,19 +1,34 @@
 package org.zexnocs.teanekoagent.runtime.prompt;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.message.*;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMToolMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证临时资料布局、完整协议字节预算和不可伪造的历史投影，不通过位置删除绕过前缀校验。

@@ -1,10 +1,12 @@
 package org.zexnocs.teanekoagent.integration.monitor;
 
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction;
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenUsage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonInstruction;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -91,7 +93,7 @@ final class InteractionLogFormatter {
             if (settings.isIncludeUser()) {
                 result.attempts().stream().flatMap(attempt -> attempt.input().stream()).findFirst().flatMap(input -> input.messages().reversed().stream()
                         .filter(message -> message.getRole()
-                                == org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole.USER)
+                                == org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole.USER)
                         .findFirst()).ifPresent(message -> out.message("本轮用户输入", message));
             }
             if (settings.isIncludeFinalOutput()) {
@@ -117,7 +119,7 @@ final class InteractionLogFormatter {
                                 out.add("结构说明", schema);
                             }
                         } else if (settings.isIncludeSystem() && message.getRole()
-                                == org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole.SYSTEM) {
+                                == org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole.SYSTEM) {
                             var text = content(message);
                             if (systems.add(text)) {
                                 out.message("系统输入", message);

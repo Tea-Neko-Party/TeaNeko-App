@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.easydata.core;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -9,12 +11,12 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.base.DatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.IBaseEasyDataRepository;
 import org.zexnocs.teanekocore.database.easydata.api.IEasyData;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Map;
@@ -36,7 +38,7 @@ public class EasyDataService implements IEasyDataService {
     private final IDatabaseService databaseService;
 
     /// EasyData 缓存; (entity name, namespace) → EasyDataCache
-    private final ConcurrentMapCacheContainer<Pair<String, String>, EasyDataCache> easyDataCache;
+    private final ConcurrentMapCacheContainer<IPair<String, String>, EasyDataCache> easyDataCache;
 
     /// EasyData 的 task stage chain 执行缓存
     private final Map<Class<? extends BaseEasyDataObject>, String> taskStageNamespaceCache = new ConcurrentHashMap<>();
@@ -96,7 +98,7 @@ public class EasyDataService implements IEasyDataService {
         private final Map<String, IEasyDataDto> data = new ConcurrentHashMap<>();
 
         /// 数据库引用
-        private final BaseEasyDataRepository<?> repository;
+        private final IBaseEasyDataRepository<?> repository;
 
         /// 任务阶段链命名空间
         private final String taskStageNamespace;
@@ -107,7 +109,7 @@ public class EasyDataService implements IEasyDataService {
         /**
          * 构造函数。
          */
-        private EasyDataCache(BaseEasyDataRepository<?> repository,
+        private EasyDataCache(IBaseEasyDataRepository<?> repository,
                               String taskStageNamespace,
                               String namespace) {
             this.repository = repository;

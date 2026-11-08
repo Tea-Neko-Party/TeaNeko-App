@@ -1,11 +1,13 @@
 package org.zexnocs.teanekocore.database.easydata.core;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.Nullable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.IBaseEasyDataRepository;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
 
 import java.util.List;
@@ -23,7 +25,7 @@ import java.util.Objects;
  * @version 4.6.1-l
  */
 public final class EasyDataTransactionDto<T extends BaseEasyDataObject> implements IEasyDataTransactionDto {
-    private final BaseEasyDataRepository<T> repository;
+    private final IBaseEasyDataRepository<T> repository;
     private final String namespace;
     private final String target;
     private final Runnable invalidate;
@@ -35,7 +37,7 @@ public final class EasyDataTransactionDto<T extends BaseEasyDataObject> implemen
      * @param target 目标
      * @param invalidate 提交后缓存失效动作
      */
-    EasyDataTransactionDto(BaseEasyDataRepository<T> repository, String namespace, String target, Runnable invalidate) {
+    EasyDataTransactionDto(IBaseEasyDataRepository<T> repository, String namespace, String target, Runnable invalidate) {
         this.repository = Objects.requireNonNull(repository); this.namespace = namespace; this.target = target; this.invalidate = invalidate;
     }
     /**

@@ -1,19 +1,22 @@
 package org.zexnocs.teanekoapp.web;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.ManagementTargets;
+import org.zexnocs.teanekoapp.web.error.LocalResourceNotAllowedException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
-import org.zexnocs.teanekocore.plugin.management.GlobalManagementResource;
-import org.zexnocs.teanekocore.plugin.management.ManagementAuthority;
+import org.zexnocs.teanekocore.plugin.management.IGlobalManagementResource;
+import org.zexnocs.teanekocore.plugin.management.IManagementAuthority;
 import org.zexnocs.teanekocore.plugin.management.ManagementContext;
 import org.zexnocs.teanekocore.plugin.management.ManagementGateway;
-import org.zexnocs.teanekocore.plugin.management.ManagementResource;
+import org.zexnocs.teanekocore.plugin.management.IManagementResource;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -32,26 +35,27 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 
 /**
- * 将真实 Web 会话映射到原管理网关，只授权本次服务器持有的上下文与本地白名单。
+ * 将真实 Web 会话映射到原管理网关，只授权本次服务器持有的上下文与当前本地管理策略。
  * 在途能力随物理阶段释放，浏览器断开不被当作事务已回滚。
  * <br>2026/11/03：实例级资源使用独立入口，继续复用原管理网关与在途授权。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/06：限制每资源在途并分离等待截止和物理回收，关闭时撤销执行资格。
  * <br>2026/11/07：同步阻塞也受等待期限约束，实际阶段和逻辑结果都结束后回收。
+ * <br>2026/11/07：默认开放已注册资源，显式限制的在途撤权保留独立错误类型。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 @Service
-public final class WebManagementCalls implements ManagementAuthority, AutoCloseable {
+public final class WebManagementCalls implements IManagementAuthority, AutoCloseable {
     private final ManagementGateway gateway;
     private final ClientManagementDirectory clients;
     private final PluginRegistry plugins;
     private final IFileConfigService files;
     private final ObjectMapper mapper;
-    private final Map<String, ManagementResource<?, ?>> resources;
+    private final Map<String, IManagementResource<?, ?>> resources;
     private final Map<UUID, ManagementContext> active = new ConcurrentHashMap<>();
     // 2026/11/06：物理占用包含目标解析及资源阶段，逻辑超时不提前归还。
     private final Map<UUID, Work> physical = new HashMap<>();
@@ -71,7 +75,7 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
      */
     public WebManagementCalls(ManagementGateway gateway, ClientManagementDirectory clients, PluginRegistry plugins,
                               IFileConfigService files, ObjectMapper mapper,
-                              List<ManagementResource<?, ?>> contributions,
+                              List<IManagementResource<?, ?>> contributions,
                               @Qualifier("taskExecutor") ScheduledExecutorService scheduler,
                               @Qualifier("virtualExecutor") ExecutorService workers) {
         this.scheduler = scheduler;
@@ -81,7 +85,7 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
         this.plugins = plugins;
         this.files = files;
         this.mapper = mapper;
-        var registered = new HashMap<String, ManagementResource<?, ?>>();
+        var registered = new HashMap<String, IManagementResource<?, ?>>();
         for (var resource : contributions) {
             if (registered.putIfAbsent(resource.descriptor().key(), resource) != null) {
                 throw new IllegalArgumentException("Web 管理资源标识重复。");
@@ -102,8 +106,12 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
     public CompletionStage<?> invoke(String client, String account, String target, String key,
                                      JsonNode body, Runnable session) {
         var resource = resources.get(key);
-        if (resource == null || resource instanceof GlobalManagementResource<?, ?> || !allowed(key)) {
-            throw new SecurityException("该管理资源未在本地明确开放。");
+        // 2026/11/07：区分未注册资源与显式白名单拒绝，默认开放不放行未知入口。
+        if (resource == null || resource instanceof IGlobalManagementResource<?, ?>) {
+            throw new SecurityException("该管理资源未注册或不属于聊天范围。");
+        }
+        if (!allowed(key)) {
+            throw new LocalResourceNotAllowedException();
         }
         if (!body.isObject() || mapper.writeValueAsString(body).length() > 65536) {
             throw new IllegalArgumentException("管理请求必须是有界对象。");
@@ -125,8 +133,12 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
     public CompletionStage<?> invokeGlobal(String key, JsonNode body, Runnable session) {
         session.run();
         var resource = resources.get(key);
-        if (!(resource instanceof GlobalManagementResource<?, ?>) || !allowed(key)) {
-            throw new SecurityException("该实例级资源未在本地明确开放。");
+        // 2026/11/07：默认开放已注册实例资源，显式限制使用独立诊断。
+        if (!(resource instanceof IGlobalManagementResource<?, ?>)) {
+            throw new SecurityException("该实例级资源未注册。");
+        }
+        if (!allowed(key)) {
+            throw new LocalResourceNotAllowedException();
         }
         if (!body.isObject() || mapper.writeValueAsString(body).length() > 65536) {
             throw new IllegalArgumentException("管理请求必须是有界对象。");
@@ -142,7 +154,7 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
      * @param platform 当前会话及可选平台守卫
      * @return 有界等待；物理阶段实际结束后才释放容量
      */
-    private CompletionStage<?> execute(ManagementResource<?, ?> resource, Object request,
+    private CompletionStage<?> execute(IManagementResource<?, ?> resource, Object request,
                                        Supplier<CompletionStage<String>> scope, Runnable platform) {
         String key = resource.descriptor().key();
         var policy = files.requireCurrent(WebManagementFileConfig.class).snapshot();
@@ -170,7 +182,7 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
                     platform.run();
                     plugins.check(token);
                     if (!allowed(key)) {
-                        throw new SecurityException("管理资源授权已经撤销。");
+                        throw new LocalResourceNotAllowedException();
                     }
                 };
                 checked.run();
@@ -248,10 +260,14 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
      * @return 明确通过或拒绝，不根据字符串主体自动授予权限
      */
     @Override
-    public CompletionStage<Void> authorize(ManagementContext context, ManagementResource.Descriptor resource) {
+    public CompletionStage<Void> authorize(ManagementContext context, IManagementResource.Descriptor resource) {
         try {
-            if (active.get(context.requestId()) != context || !allowed(resource.key())) {
+            // 2026/11/07：区分伪造上下文与本地策略收紧，返回阶段也保持准确错误码。
+            if (active.get(context.requestId()) != context) {
                 throw new SecurityException("未持有当前管理调用授权。");
+            }
+            if (!allowed(resource.key())) {
+                throw new LocalResourceNotAllowedException();
             }
             context.checkActive();
             return CompletableFuture.completedStage(null);
@@ -265,6 +281,7 @@ public final class WebManagementCalls implements ManagementAuthority, AutoClosea
      * @return 当前本地明确允许
      */
     private boolean allowed(String key) {
-        return files.requireCurrent(WebSecurityFileConfig.class).snapshot().managementResources().contains(key);
+        // 2026/11/07：管理员默认开放注册资源，显式白名单仍支持运行期撤销。
+        return files.requireCurrent(WebSecurityFileConfig.class).snapshot().allowsManagementResource(key);
     }
 }

@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.command;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -9,11 +11,23 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
-import org.zexnocs.teanekocore.command.api.*;
+import org.zexnocs.teanekocore.command.api.Command;
+import org.zexnocs.teanekocore.command.api.CommandOrigin;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.command.api.CommandScope;
+import org.zexnocs.teanekocore.command.api.DefaultCommand;
+import org.zexnocs.teanekocore.command.api.DefaultValue;
+import org.zexnocs.teanekocore.command.api.ManagementCommand;
+import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.command.easydata.CommandEasyData;
 import org.zexnocs.teanekocore.command.event.CommandDispatchEvent;
 import org.zexnocs.teanekocore.command.event.CommandExecuteEvent;
-import org.zexnocs.teanekocore.command.interfaces.*;
+import org.zexnocs.teanekocore.command.interfaces.ICommandClient;
+import org.zexnocs.teanekocore.command.interfaces.ICommandErrorHandler;
+import org.zexnocs.teanekocore.command.interfaces.ICommandPermissionManager;
+import org.zexnocs.teanekocore.command.interfaces.ICommandScopeManager;
+import org.zexnocs.teanekocore.command.interfaces.IHelpSubCommandHandler;
+import org.zexnocs.teanekocore.command.interfaces.IManagedCommandSource;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.event.EventService;
 import org.zexnocs.teanekocore.event.core.EventHandler;
@@ -23,16 +37,46 @@ import org.zexnocs.teanekocore.framework.pair.HashPair;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Queue;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
-import static org.zexnocs.teanekocore.command.CommandResult.Status.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.CANCELLED;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.COMPLETED;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.DATA_TYPE_MISMATCH;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.DISABLED;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.HELP;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.INVALID_ARGUMENTS;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.METHOD_NOT_FOUND;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.NOT_MATCHED;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.OUT_OF_SCOPE;
+import static org.zexnocs.teanekocore.command.CommandResult.Status.PERMISSION_DENIED;
 
 /**
  * 使用真实参数处理、扫描、分发、执行和事件服务；仅替换任务调度与外部权限存储。
@@ -321,7 +365,7 @@ public class CommandAsyncTest {
         @SuppressWarnings({"unchecked"})
         Fixture() throws Exception {
             var beans = mock(IBeanScanner.class);
-            var registry = new HashMap<String, org.zexnocs.teanekocore.framework.pair.Pair<Command, Object>>();
+            var registry = new HashMap<String, org.zexnocs.teanekocore.framework.pair.IPair<Command, Object>>();
             for (Object bean : List.of(handler, new RegexHandler(), new ClosedHandler(), new SubOnly())) {
                 registry.put(bean.getClass().getName(), HashPair.of(bean.getClass().getAnnotation(Command.class), bean));
             }

@@ -1,30 +1,43 @@
 package org.zexnocs.teanekoagent.runtime;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.AgentComponents;
 import org.zexnocs.teanekoagent.component.AgentPipelineStep;
-import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
-import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionGuard;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
-import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationCompression;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContext;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContexts;
+import org.zexnocs.teanekoagent.runtime.context.IAgentTranscriptRecorder;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
-import org.zexnocs.teanekocore.framework.composition.*;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+import org.zexnocs.teanekocore.framework.composition.IEntitySystem;
+import org.zexnocs.teanekocore.framework.composition.SystemContext;
+import org.zexnocs.teanekocore.framework.composition.SystemDescriptor;
+import org.zexnocs.teanekocore.framework.composition.SystemPipeline;
+import org.zexnocs.teanekocore.framework.composition.SystemResult;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -34,6 +47,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 预编译准入、临时输入、交互和交付步骤；业务检查及投影校验统一切入借用执行器。
@@ -51,18 +66,20 @@ import java.util.function.Function;
  * <br>2026/11/05：客户端和插件过滤后复核技能依赖，不触发未装配工具。
  * <br>2026/11/05：工具整体禁用时仍验证已提供资料的依赖，避免残留不可执行的查询提示。
  * <br>2026/11/06：显式传递汇总归属，保持模型调用和工具执行的原控制边界。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.5-l
+ * @version 4.9.0-l
  */
 final class AgentTurnPipeline {
     SystemPipeline pipeline;
     // 2026/11/03：观察器只消费固定定位，不进入 ECS 组件或插件可写数据。
     org.zexnocs.teanekoagent.runtime.monitor.@Nullable AgentActivityTimeline timeline;
     // 2026/11/03：只允许宿主在服务启动前安装，不把服务写入 ECS。
-    org.zexnocs.teanekoagent.component.expression.@Nullable ExpressionRuntime expressions;
+    org.zexnocs.teanekoagent.runtime.delivery.@Nullable IAgentReplyCompiler expressions;
     // 2026/11/02：插件仅在服务开始接受轮次前安装，运行期目录及步骤不再变化。
     private org.zexnocs.teanekoagent.plugin.AgentPluginRuntime plugins;
     private final Function<EntityId, AgentTurn> turns;
@@ -71,12 +88,12 @@ final class AgentTurnPipeline {
     private final IAgentToolSource tools;
     private final ObjectMapper mapper;
     private final Executor executor;
-    private final @Nullable IAgentMemoryReferences references;
+    private final @Nullable IAgentContextReferences references;
     private final IAgentPromptSource prompts;
-    private final @Nullable IAgentPersonalitySource personalities;
+    private final @Nullable IAgentPromptContexts personalities;
     private final LLMMessageCodec codec;
-    private final @Nullable IAgentHistoryRecorder history;
-    private final @Nullable IAgentConversationSummaries summaries;
+    private final @Nullable IAgentTranscriptRecorder history;
+    private final @Nullable IAgentConversationCompression summaries;
 
     /**
      * 装配并校验稳定顺序，不在每条请求中重新编译或扫描 System。
@@ -94,8 +111,8 @@ final class AgentTurnPipeline {
      */
     AgentTurnPipeline(Function<EntityId, AgentTurn> turns, AgentAccessGate gate,
             ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities,
-            @Nullable IAgentHistoryRecorder history, @Nullable IAgentConversationSummaries summaries) {
+            @Nullable IAgentContextReferences references, IAgentPromptSource prompts, @Nullable IAgentPromptContexts personalities,
+            @Nullable IAgentTranscriptRecorder history, @Nullable IAgentConversationCompression summaries) {
         this.turns = turns; this.gate = gate; this.interactions = interactions;
         this.tools = tools; this.mapper = mapper; this.executor = executor;
         this.references = references;
@@ -122,16 +139,16 @@ final class AgentTurnPipeline {
         if (plugins != null) {
             var writes = new java.util.HashSet<>(plugins.componentKeys()); writes.add(org.zexnocs.teanekoagent.plugin.AgentPluginRuntime.SELECTION);
             steps.add(step(new SystemDescriptor("agent.plugins.prepare", Set.of(AgentComponents.REQUEST, AgentComponents.RUNTIME),
-                    writes, Set.of("agent.admit")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_PROMPT)));
+                    writes, Set.of("agent.admit")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase.BEFORE_PROMPT)));
             steps.add(step(new SystemDescriptor("agent.plugins.review", Set.of(AgentComponents.INTERACTION),
-                    writes, Set.of("agent.interact")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.AFTER_INTERACTION)));
+                    writes, Set.of("agent.interact")), context -> pluginStep(context, org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase.AFTER_INTERACTION)));
             // 2026/11/04：持久化与其他组件系统按明确阶段执行，不嵌入模型调用实现。
             steps.add(step(new SystemDescriptor("agent.plugins.input", Set.of(AgentComponents.PROMPT_INPUT),
                     writes, Set.of("agent.prompt")), context -> pluginStep(context,
-                    org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_INTERACTION)));
+                    org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase.BEFORE_INTERACTION)));
             steps.add(step(new SystemDescriptor("agent.plugins.delivery", Set.of(AgentComponents.INTERACTION),
                     writes, Set.of("agent.project")), context -> pluginStep(context,
-                    org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_DELIVERY)));
+                    org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase.BEFORE_DELIVERY)));
             steps.add(step(new SystemDescriptor("agent.project", Set.of(AgentComponents.INTERACTION,
                     AgentComponents.PROMPT_INPUT), Set.of(AgentComponents.PROMPT_TRANSCRIPT),
                     Set.of("agent.plugins.review")), this::projectComponents));
@@ -181,9 +198,9 @@ final class AgentTurnPipeline {
      * @param phase 明确插件阶段
      * @return 允许继续的组件补丁，拒绝通过原上下文终止路径传播
      */
-    private CompletionStage<SystemResult> pluginStep(SystemContext context, org.zexnocs.teanekoagent.plugin.AgentFeature.Phase phase) {
+    private CompletionStage<SystemResult> pluginStep(SystemContext context, org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase phase) {
         var turn = turns.apply(context.snapshot().id());
-        return guard(turn, false).thenComposeAsync(ignored -> phase == org.zexnocs.teanekoagent.plugin.AgentFeature.Phase.BEFORE_PROMPT
+        return guard(turn, false).thenComposeAsync(ignored -> phase == org.zexnocs.teanekoagent.plugin.IAgentFeature.Phase.BEFORE_PROMPT
                 ? plugins.prepare(context) : plugins.runSystems(phase, context), executor).thenComposeAsync(result -> {
             if (result.outcome() == SystemResult.Outcome.STOP) { return turn.rejectContext(new AgentPromptException(AgentPromptException.Reason.DISABLED)); }
             return guard(turn, false).thenApply(ignored -> result);
@@ -217,17 +234,11 @@ final class AgentTurnPipeline {
                 turn.guard(gate, false);
                 // 2026/11/04：纯 LLM 轮次不访问人格；独立记忆可使用显式无人格分区。
                 var assembly = context.snapshot().require(AgentComponents.DEFINITION).assembly();
-                if (!assembly.legacy() && plugins != null) {
-                    var personality = context.snapshot().find(
-                            org.zexnocs.teanekoagent.component.personality.PersonalityResolveSystem.SNAPSHOT).orElse(null);
-                    if (personality == null && assembly.has("memory")) {
-                        personality = AgentPersonalitySnapshot.absent(turn.request.actor().scope());
-                    }
-                    return CompletableFuture.completedStage(personality);
-                }
-                return personalities == null || !assembly.has("personality") && !assembly.has("memory")
-                        ? CompletableFuture.<AgentPersonalitySnapshot>completedStage(null)
-                        : context.control().guard(personalities.resolve(turn.request.actor().scope(), context.control()));
+                // 2026/11/08：上下文只从类型化提供者解析一次，不借插件系统写入宿主保留键。
+                return personalities == null || !personalities.supports(assembly)
+                        ? CompletableFuture.<IAgentPromptContext>completedStage(null)
+                        : context.control().guard(personalities.resolve(assembly, turn.request.actor().scope(), context.control()))
+                                .<IAgentPromptContext>thenApply(personality -> personality);
             }, executor).thenCompose(Function.identity()).thenComposeAsync(personality -> {
                 context.control().checkActive(); turn.guard(gate, false); var request = fixedRequest(context.snapshot());
                 var expected = request.personalityIdentity();
@@ -262,7 +273,7 @@ final class AgentTurnPipeline {
      */
     private static AgentRunRequest fixedRequest(EntitySnapshot snapshot) {
         var request = snapshot.require(AgentComponents.REQUEST);
-        var reference = snapshot.find(AgentComponents.MEMORY_REFERENCE).orElse(null);
+        var reference = snapshot.find(AgentComponents.CONTEXT_REFERENCE).orElse(null);
         // 2026/11/02：与插件上下文复用同一固定引用派生逻辑。
         return request.withMemoryReference(reference);
     }
@@ -277,7 +288,7 @@ final class AgentTurnPipeline {
             var turn = turns.apply(context.snapshot().id());
             // 2026/11/04：显式装配由记忆系统保存；旧宿主保留原端口路径。
             var assembly = context.snapshot().require(AgentComponents.DEFINITION).assembly();
-            return history == null || !assembly.has("memory") || !assembly.legacy() && plugins != null
+            return history == null || !history.supports(assembly) || !assembly.legacy() && plugins != null
                     ? CompletableFuture.<Void>completedStage(null)
                     : history.record(fixedRequest(context.snapshot()), context.snapshot().require(AgentComponents.PROMPT_INPUT), null, turn.control()).exceptionallyCompose(turn::rejectContext);
         }, executor).thenCompose(Function.identity()).thenComposeAsync(ignored -> startInteraction(context), executor);
@@ -364,8 +375,8 @@ final class AgentTurnPipeline {
                             return CompletableFuture.completedStage(SystemResult.continueWith(
                                     ComponentPatch.builder().put(AgentComponents.INTERACTION, result).build()));
                         }
-                        var compilation = expressions == null || !context.snapshot().require(AgentComponents.DEFINITION).assembly().has("expression")
-                                ? CompletableFuture.<org.zexnocs.teanekoagent.component.expression.ReplyPlans.Approved>completedStage(null)
+                        var compilation = expressions == null || !expressions.supports(context.snapshot().require(AgentComponents.DEFINITION).assembly())
+                                ? CompletableFuture.<org.zexnocs.teanekoagent.runtime.delivery.IAgentReplyPlan>completedStage(null)
                                 : expressions.compile(fixedRequest(context.snapshot()), input, result, context.control());
                         return compilation.thenApplyAsync(plan -> {
                         var patch = ComponentPatch.builder().put(AgentComponents.INTERACTION, result);
@@ -400,7 +411,9 @@ final class AgentTurnPipeline {
             return CompletableFuture.completedStage(SystemResult.continueWith(ComponentPatch.empty()));
         }
         var input = snapshot.require(AgentComponents.PROMPT_INPUT);
-        var plan = snapshot.find(org.zexnocs.teanekoagent.component.expression.ExpressionCompileSystem.PLAN).orElse(null);
+        // 2026/11/08：由编译端口读取自有组件数据，避免相同键名不同 Java 类型丢失计划。
+        var plan = expressions == null || !expressions.supports(snapshot.require(AgentComponents.DEFINITION).assembly())
+                ? null : expressions.prepared(snapshot);
         var projection = plan == null ? AgentPromptTranscript.create(input, result, codec)
                 : AgentPromptTranscript.createExpression(input, result, codec, plan);
         turns.apply(snapshot.id()).observe(result, projection);
@@ -422,7 +435,7 @@ final class AgentTurnPipeline {
                 var answer = turn.result(null).answer().orElse(null);
                 // 2026/11/04：未装配记忆时不调用持久历史端口。
                 var assembly = context.snapshot().require(AgentComponents.DEFINITION).assembly();
-                return history == null || answer == null || !assembly.has("memory") || !assembly.legacy() && plugins != null
+                return history == null || answer == null || !history.supports(assembly) || !assembly.legacy() && plugins != null
                         ? CompletableFuture.completedStage(null)
                         : history.record(fixedRequest(context.snapshot()), context.snapshot().require(AgentComponents.PROMPT_INPUT), answer, turn.control())
                                 .exceptionallyCompose(turn::rejectContext).thenComposeAsync(saved -> guard(turn, false), executor);

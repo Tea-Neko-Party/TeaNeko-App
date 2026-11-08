@@ -19,14 +19,35 @@ import java.util.concurrent.CompletionStage;
 
 /**
  * TeaNeko 的帮助子指令处理器，
+ * <br>2026/11/07：接入插件归属与独立贡献，保留原权限及执行契约。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.9.0-l
  */
 @Service
 public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
+    private org.zexnocs.teanekocore.plugin.PluginAccess plugins;
+
+    /**
+     * 2026/11/07：帮助与执行共享真实子命令目标的插件状态。
+     * @param plugins 当前插件资格端口
+     */
+    @Autowired
+    public void installPlugins(org.zexnocs.teanekocore.plugin.PluginAccess plugins) {
+        this.plugins = plugins;
+    }
+
+    /**
+     * @param map 已发布的根目录
+     * @param name 已注册子命令
+     * @return 真实贡献者当前是否可用
+     */
+    private boolean enabled(CommandMapData map, String name) {
+        var declaration = map.getSubCommand(name);
+        return declaration != null && plugins.enabled(map.target(declaration.getSecond()), declaration.getSecond());
+    }
     /// 日志记录器
     private final ILogger logger;
 
@@ -128,6 +149,8 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
         // 添加默认指令介绍
         var defaultCommandAnnotation = mapData.getDefaultCommandAnnotation();
         if(descriptionData.getDefaultCommandDescription() != null
+                && (plugins == null || plugins.enabled(mapData.target(mapData.getDefaultCommandMethod()),
+                        mapData.getDefaultCommandMethod()))
                 && iCommandPermissionManager.hasPermission(commandAnnotation, defaultCommandAnnotation, commandData)
                 && iCommandScopeManager.inScope(commandAnnotation, defaultCommandAnnotation, commandData)) {
             builder.addBotText("==>默认指令介绍：" + descriptionData.getDefaultCommandDescription().value());
@@ -139,6 +162,7 @@ public class TeaNekoHelpSubCommandHandler implements IHelpSubCommandHandler {
                 .entrySet().stream()
                 .filter(entry ->
                         entry.getValue() != null && entry.getKey() != null &&
+                        (plugins == null || enabled(mapData, entry.getKey().value()[0])) &&
                         iCommandPermissionManager.hasPermission(commandAnnotation, entry.getKey(), commandData) &&
                         iCommandScopeManager.inScope(commandAnnotation, entry.getKey(), commandData)
                 )

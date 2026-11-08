@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.base;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.Getter;
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
@@ -12,7 +14,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseTaskRepeatedSubmissionException;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 
 import java.time.Duration;
 import java.util.Collection;
@@ -41,10 +43,10 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
     private final AtomicBoolean isPushed = new AtomicBoolean(false);
 
     /// 事务任务队列。
-    private final Queue<VoidCallable> transactionQueue = new ConcurrentLinkedQueue<>();
+    private final Queue<IVoidCallable> transactionQueue = new ConcurrentLinkedQueue<>();
 
     /// 缓存任务队列。
-    private final Queue<VoidCallable> cacheQueue = new ConcurrentLinkedQueue<>();
+    private final Queue<IVoidCallable> cacheQueue = new ConcurrentLinkedQueue<>();
 
     /**
      * 使用默认的任务阶段链创建数据库任务配置。
@@ -98,7 +100,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public IDatabaseTaskConfig addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
+    public IDatabaseTaskConfig addTransactionTask(@NonNull IVoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -117,7 +119,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
     @Override
-    public IDatabaseTaskConfig addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
+    public IDatabaseTaskConfig addCacheTask(@NonNull IVoidCallable task) throws DatabaseTaskRepeatedSubmissionException {
         if (isPushed.get()) {
             // 任务已经提交，不应该再添加任务。
             throw new DatabaseTaskRepeatedSubmissionException("""
@@ -174,7 +176,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @return 事务任务集合
      */
     @Override
-    public Collection<VoidCallable> __getTasksWithTransaction() {
+    public Collection<IVoidCallable> __getTasksWithTransaction() {
         return transactionQueue;
     }
 
@@ -184,7 +186,7 @@ public class DatabaseTaskConfig implements IDatabaseTaskConfig {
      * @return 缓存任务集合
      */
     @Override
-    public Collection<VoidCallable> __getTasksWithCache() {
+    public Collection<IVoidCallable> __getTasksWithCache() {
         return cacheQueue;
     }
 

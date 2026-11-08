@@ -1,17 +1,22 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.context.AgentContextException;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextFailure;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
@@ -25,7 +30,12 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -43,11 +53,14 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：将表达解析与 LLM 交互失败保留到轮次结果。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ * <br>2026/11/08：上下文拒绝分类使用独立局部名称，避免遮蔽首次失败记录字段。
+ *
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 final class AgentTurn implements AutoCloseable {
     final AgentHandle handle;
@@ -64,7 +77,7 @@ final class AgentTurn implements AutoCloseable {
     private volatile @Nullable ExecutionControl execution;
     private volatile @Nullable AgentAccessDecision access;
     private volatile @Nullable LLMInteractionResult observed;
-    private volatile @Nullable MemoryNamespaceReference memoryReference;
+    private volatile @Nullable IAgentContextReference memoryReference;
     private final AtomicReference<AgentRunResult.Status> contextRejected = new AtomicReference<>();
     // 2026/11/04：上下文拒绝转换为业务状态前保留首条原因，只供宿主生成脱敏诊断。
     private final AtomicReference<Throwable> contextFailure = new AtomicReference<>();
@@ -148,22 +161,22 @@ final class AgentTurn implements AutoCloseable {
      * @return 引用已固定或原始终止原因；失效不刷新成另一个空间
      */
     @SuppressWarnings("resource")
-    CompletionStage<Void> resolveMemory(@Nullable IAgentMemoryReferences references) {
+    CompletionStage<Void> resolveMemory(@Nullable IAgentContextReferences references) {
         // 2026/11/04：未安装记忆的轮次没有 namespace，不创建默认空间。
-        if (references == null || !entity.snapshot().require(AgentComponents.DEFINITION).assembly().has("memory")) {
+        if (references == null || !references.supports(entity.snapshot().require(AgentComponents.DEFINITION).assembly())) {
             return CompletableFuture.completedStage(null);
         }
         try {
             var expected = request.memoryReference();
-            CompletionStage<MemoryNamespaceReference> source = expected == null ? references.resolve(request.actor().scope())
+            CompletionStage<? extends IAgentContextReference> source = expected == null ? references.resolve(request.actor().scope())
                     : references.verify(expected).thenApply(ignored -> expected);
             return control().guard(Objects.requireNonNull(source, "空间引用解析阶段不能为空。"))
                     .thenAccept(value -> {
                         if (value == null || !value.scope().equals(request.actor().scope())) {
-                            throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE);
+                            throw new AgentContextException(AgentContextException.Reason.UNAVAILABLE);
                         }
                         lifetime.whileActive(() -> {
-                            entity.commit(entity.snapshot().revision(), ComponentPatch.builder().put(AgentComponents.MEMORY_REFERENCE, value).build());
+                            entity.commit(entity.snapshot().revision(), ComponentPatch.builder().put(AgentComponents.CONTEXT_REFERENCE, value).build());
                             memoryReference = value;
                             return null;
                         });
@@ -177,13 +190,15 @@ final class AgentTurn implements AutoCloseable {
      * @return 一致时完成，失效通过交互专用拒绝终止后继动作
      */
     @SuppressWarnings("resource")
-    CompletionStage<Void> verifyMemory(@Nullable IAgentMemoryReferences references) {
+    CompletionStage<Void> verifyMemory(@Nullable IAgentContextReferences references) {
         // 2026/11/04：只有实际安装记忆的轮次才要求固定空间引用。
-        if (references == null || !entity.snapshot().require(AgentComponents.DEFINITION).assembly().has("memory")) {
+        if (references == null || !references.supports(entity.snapshot().require(AgentComponents.DEFINITION).assembly())) {
             return CompletableFuture.completedStage(null);
         }
         var fixed = memoryReference;
-        if (fixed == null) { return rejectContext(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE)); }
+        if (fixed == null) {
+            return rejectContext(new AgentContextException(AgentContextException.Reason.UNAVAILABLE));
+        }
         try {
             return control().guard(Objects.requireNonNull(references.verify(fixed), "空间引用复核阶段不能为空。"))
                     .exceptionallyCompose(this::rejectContext);
@@ -192,6 +207,7 @@ final class AgentTurn implements AutoCloseable {
 
     /**
      * 保存首次引用或资料拒绝，保留取消/超时类别，不把来源故障当成可恢复的普通工具文本。
+     * <br>2026/11/08：模式变量命名为 rejection，与保存原始异常的 contextFailure 字段区分。
      * @param failure 原始阶段失败，仅用于类型分类
      * @param <T> 被拒绝阶段的结果类型
      * @return 原始停止或交互专用拒绝的异常阶段
@@ -201,11 +217,8 @@ final class AgentTurn implements AutoCloseable {
             var cause = failure.getCause(); if (cause == null || cause == failure) { break; } failure = cause;
         }
         if (failure instanceof ExecutionStoppedException) { return CompletableFuture.failedStage(failure); }
-        var status = failure instanceof AgentMemoryReferenceException memory ? switch (memory.reason()) {
-            case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
-            case DISABLED -> AgentRunResult.Status.SKIPPED;
-            case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
-        } : failure instanceof AgentPromptException prompt ? switch (prompt.reason()) {
+        var status = failure instanceof IAgentContextFailure rejection ? rejection.rejectionStatus()
+                : failure instanceof AgentPromptException prompt ? switch (prompt.reason()) {
             case DISABLED -> AgentRunResult.Status.SKIPPED;
             case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
             case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;

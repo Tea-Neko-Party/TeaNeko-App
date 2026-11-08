@@ -1,8 +1,10 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -107,7 +109,7 @@ public final class TaskExecution {
      * @param action 包含提交或回滚的同步工作，不得把资源收尾转交给未等待的异步任务
      * @throws Exception 原工作或执行控制失败时
      */
-    public static void withDeferredInterrupt(VoidCallable action) throws Exception {
+    public static void withDeferredInterrupt(IVoidCallable action) throws Exception {
         if (CURRENT.isBound()) {
             CURRENT.get().withDeferredInterrupt(action);
         } else {
@@ -214,7 +216,7 @@ public final class TaskExecution {
          * @param action 包含完整资源收尾的工作
          * @throws Exception 取消或原工作失败时
          */
-        private void withDeferredInterrupt(VoidCallable action) throws Exception {
+        private void withDeferredInterrupt(IVoidCallable action) throws Exception {
             synchronized (TaskExecution.this) {
                 control.checkActive();
                 interruptDeferrals++;

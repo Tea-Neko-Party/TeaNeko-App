@@ -1,10 +1,12 @@
 package org.zexnocs.teanekoagent.integration.config;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.component.llm.file_config.interfaces.ILLMFileConfigService;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditService;
@@ -72,8 +74,8 @@ public final class AgentModelSelection {
             throw new IllegalArgumentException("请选择已经添加并应用的模型路由。");
         }
         if (!route.isEmpty()) {
-            org.zexnocs.teanekoagent.component.llm.framework.model.LLMOptionBoundary.validate(
-                    models.getDefaultOptions(org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId.of(route)));
+            org.zexnocs.teanekoagent.llm.framework.model.LLMOptionBoundary.validate(
+                    models.getDefaultOptions(org.zexnocs.teanekoagent.llm.framework.model.LLMModelId.of(route)));
         }
     }
 

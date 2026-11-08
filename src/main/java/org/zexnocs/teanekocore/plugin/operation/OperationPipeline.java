@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.plugin.operation;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 
@@ -51,7 +53,7 @@ public final class OperationPipeline<I, O> {
      * @param terminal 宿主实际操作
      * @return 完整环绕及终端结果
      */
-    public CompletionStage<O> execute(I input, ExecutionControl control, AsyncOperation<I, O> terminal) {
+    public CompletionStage<O> execute(I input, ExecutionControl control, IAsyncOperation<I, O> terminal) {
         try {
             control.checkActive();
             var selected = bindings.stream().filter(binding -> plugins.isEnabled(binding.pluginId())).toList();
@@ -71,7 +73,7 @@ public final class OperationPipeline<I, O> {
      * @return 当前子链结果
      */
     private CompletionStage<O> invoke(int index, List<Binding<I, O>> selected, I input,
-            ExecutionControl control, AsyncOperation<I, O> terminal) {
+            ExecutionControl control, IAsyncOperation<I, O> terminal) {
         try {
             control.checkActive();
             if (index == selected.size()) { return Objects.requireNonNull(terminal.execute(input), "实际操作不能返回空阶段。"); }
@@ -90,7 +92,7 @@ public final class OperationPipeline<I, O> {
      * @param <O> 输出类型
      * @return 完整节点阶段
      */
-    public static <I, O> CompletionStage<O> around(I input, boolean shortCircuit, AsyncInterceptor<I, O> interceptor, AsyncOperation<I, O> next) {
+    public static <I, O> CompletionStage<O> around(I input, boolean shortCircuit, IAsyncInterceptor<I, O> interceptor, IAsyncOperation<I, O> next) {
         var lock = new Object(); var called = new AtomicBoolean(); var completed = new AtomicBoolean(); var violation = new AtomicBoolean();
         var downstream = new CompletableFuture<O>();
         CompletionStage<O> pending;
@@ -136,7 +138,7 @@ public final class OperationPipeline<I, O> {
      * @since 4.6.0-l
      * @version 4.6.0-l
      */
-    public record Binding<I, O>(String pluginId, String id, int order, AsyncInterceptor<I, O> interceptor) {
+    public record Binding<I, O>(String pluginId, String id, int order, IAsyncInterceptor<I, O> interceptor) {
         /**
          * 验证节点身份及实现。
          * @param pluginId 所属插件

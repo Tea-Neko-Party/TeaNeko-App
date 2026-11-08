@@ -115,7 +115,7 @@ Spring 默认邮箱与独立轮次共用必需的 `IAgentMemoryReferences`。队
 
 默认键为 Agent 实例 ID + 原始 client/scope，不含用户 UUID；同群不同用户进入一个邮箱，不同客户端、scope 或实例可以并行。入队顺序在轻量锁中确定，后续按该顺序获得运行槽，不合并不同消息。锁内只维护拥有关系和状态，不读取配置、不调用业务、不取消资源或完成用户 Future。
 
-成功轮次在锁外交接 `IAgentPersonalityLearning`，固定实际原文、来源及结果依据；前台不等待后台生成。默认自动补正及旧 delta/conflict 显式迁移见 [人格说明](../component/personality/README.md)。LEARNING 活动直接复用独立 LLM 交互，不作为普通轮次入口，避免后台递归学习和权限继承。
+成功轮次在锁外交接 `IAgentPersonalityLearning`，固定实际原文、来源及结果依据；前台不等待后台生成。默认自动补正及旧 delta/conflict 显式迁移见 [人格说明](../../teanekoplugin/agent/cognition/personality/README.md)。LEARNING 活动直接复用独立 LLM 交互，不作为普通轮次入口，避免后台递归学习和权限继承。
 
 默认最多等待 5 条，不包含当前已占运行槽的请求；零表示忙碌时不排队。等待上限默认 30 秒，也覆盖已选中但仍在执行器等待启动的阶段。实际开始后关闭排队计时，改由轮次时限管理；出队会重新检查截止时间，迟到排队计时回调不能结束已运行的轮次。
 
@@ -182,9 +182,9 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 ## 本轮临时 Prompt 资料
 
-默认完整装配已接入 [基础人格与独立补正](../component/personality/README.md)。邮箱在历史装配前解析人格、协调身份并预留输入字节；独立轮次使用实际人格源复核提示。基础人格位于原前导 SYSTEM 规则之后，补正仅作为 USER 数据，均从正常历史投影中移除。基础内容或补正 key 切换会重建短期会话，其他 scope 的共享补正与长期记忆保留；补正 revision 的普通更新从下一轮生效。
+默认完整装配已接入 [基础人格与独立补正](../../teanekoplugin/agent/cognition/personality/README.md)。邮箱在历史装配前解析人格、协调身份并预留输入字节；独立轮次使用实际人格源复核提示。基础人格位于原前导 SYSTEM 规则之后，补正仅作为 USER 数据，均从正常历史投影中移除。基础内容或补正 key 切换会重建短期会话，其他 scope 的共享补正与长期记忆保留；补正 revision 的普通更新从下一轮生效。
 
-`IAgentPromptSource` 是异步资料端口。v4.6.0-l 完整 Spring 装配通过 builtin-memory 能力接入 `AgentMemoryPromptSource`，插件通过 AgentFeature 追加，旧总来源作为宿主额外资料，不再令内置源退让；直接构造的独立服务仍可显式使用空策略。解析在业务执行域、初始门控及实际空间引用固定之后开始，等待属于原整轮时限，不另开模型预算或线程池。各来源仅复核自己拥有的片段，原布局保留插件版本。端口借用控制和执行器，不拥有它们。
+`IAgentPromptSource` 是异步资料端口。v4.6.0-l 完整 Spring 装配通过 builtin-memory 能力接入 `AgentMemoryPromptSource`，插件通过 IAgentFeature 追加，旧总来源作为宿主额外资料，不再令内置源退让；直接构造的独立服务仍可显式使用空策略。解析在业务执行域、初始门控及实际空间引用固定之后开始，等待属于原整轮时限，不另开模型预算或线程池。各来源仅复核自己拥有的片段，原布局保留插件版本。端口借用控制和执行器，不拥有它们。
 
 默认源先通过 `MemoryAccessService` 按当前真实用户 UUID 读取本人画像，再使用剩余预算检索共享空间中其他主体的相关事实。相关性目前为当前独立原文（去首尾空白后 1–128 字符）的完整字面匹配，不做分词或语义检索；没有该短原文时只提供本人画像，不从历史猜问题。系统任务、无实际引用及初始关闭读取时不自动读用户资料；模型仍可在原授权下显式查询工具。
 
@@ -202,9 +202,9 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 ## 工具与动态门控
 
-`IAgentToolSource` 为本轮选择冻结绑定，不回退到全局全部工具；没有 TOOL 活动的定义不读取工具源。默认装配组合[记忆工具](../component/memory/access/README.md)、[原权限命令](../integration/command/README.md)、[任务](../component/schedule/README.md)、[Skill](../component/skill/README.md)与显式启用的扩展；各能力保留独立开关、来源与预算。v4.6.0-l 的旧总工具源作为额外来源，插件由 AgentFeature 按实例选择追加；组合不能扩大权限，同名绑定明确拒绝。详见 [插件指南](../../../../../../../docs/development/plugins/agent.md)。
+`IAgentToolSource` 为本轮选择冻结绑定，不回退到全局全部工具；没有 TOOL 活动的定义不读取工具源。默认装配组合[记忆工具](../../teanekoplugin/agent/cognition/memory/access/README.md)、[原权限命令](../integration/command/README.md)、[任务](../../teanekoplugin/agent/automation/schedule/README.md)、[Skill](../../teanekoplugin/agent/automation/skill/README.md)与显式启用的扩展；各能力保留独立开关、来源与预算。v4.6.0-l 的旧总工具源作为额外来源，插件由 IAgentFeature 按实例选择追加；组合不能扩大权限，同名绑定明确拒绝。详见 [插件指南](../../../../../../../docs/development/plugins/agent.md)。
 
-`AgentRunRequest` 的可选 `AgentUserText` 独立承载当前真实用户消息原文，sourceId 必须与 actor 一致，不能用于系统任务。邮箱装配、引用交接与工具选择保留它，原文指纹参与 run/retry 冲突判断；缺失时不能从历史或模型消息中的“记住”前缀补授权。memory_query、memory_profile 和 memory_add 的参数、预算、明确格式及回执说明见 [记忆工具](../component/memory/access/README.md)。模型只能为新增选择事实/偏好类别，正文、主体、空间和原调用 ID 均由可信流程固定。
+`AgentRunRequest` 的可选 `AgentUserText` 独立承载当前真实用户消息原文，sourceId 必须与 actor 一致，不能用于系统任务。邮箱装配、引用交接与工具选择保留它，原文指纹参与 run/retry 冲突判断；缺失时不能从历史或模型消息中的“记住”前缀补授权。memory_query、memory_profile 和 memory_add 的参数、预算、明确格式及回执说明见 [记忆工具](../../teanekoplugin/agent/cognition/memory/access/README.md)。模型只能为新增选择事实/偏好类别，正文、主体、空间和原调用 ID 均由可信流程固定。
 
 选入绑定通过 `guarded` 保留冻结定义和原执行器，在 schema 校验后、实际执行器之前复核源活动及 TOOL 门控。上下文的 requestId 和组件来自宿主轮次；工具只能从可信绑定取得发起者与固定目标。该检查不授予命令或数据库权限，具体执行器仍须走原业务权限链。
 
@@ -216,9 +216,9 @@ scope 的 historyMaxMessages / inputMaxBytes 默认 -1，继承本地设置；�
 
 `AgentRunResult` 区分成功、跳过、配置不可用、取消、超时、预算不足、空/截断/拒绝/非法响应及失败。拒绝时仍可保留 `interaction` 诊断和已观察用量/动作；不推断尚未完成动作是否已产生外部副作用，也不声称回滚。总 `budgetUsage` 是交付时的宿主共享读数，具体轮次的模型/工具记录使用 interaction 的局部数据，不能跨轮重复汇总父总额。
 
-默认装配已接入[文本历史及 history_query](../component/memory/history/README.md)、[原生旁观采集和图文输出](../integration/message/README.md)。历史只记录当前有效边界的原文与正式内容，不保存临时 Prompt 或工具诊断；系统自主候选的控制 JSON 不写入历史。
+默认装配已接入[文本历史及 history_query](../../teanekoplugin/agent/cognition/memory/history/README.md)、[原生旁观采集和图文输出](../integration/message/README.md)。历史只记录当前有效边界的原文与正式内容，不保存临时 Prompt 或工具诊断；系统自主候选的控制 JSON 不写入历史。
 
-默认完整装配已接入 [后台自动摘要](../component/memory/summary/README.md)，已登记 scope 默认开启 autoSummaryEnabled。后台只处理已验证成功的完整轮次，独立限额且不阻塞当前回答；下一队首核对完整覆盖指纹和当前边界后才压缩旧窗口，最近轮次保留。摘要以独立 USER 数据进入实际输入，在投影中移除，不生成个人事实。
+默认完整装配已接入 [后台自动摘要](../../teanekoplugin/agent/cognition/memory/summary/README.md)，已登记 scope 默认开启 autoSummaryEnabled。后台只处理已验证成功的完整轮次，独立限额且不阻塞当前回答；下一队首核对完整覆盖指纹和当前边界后才压缩旧窗口，最近轮次保留。摘要以独立 USER 数据进入实际输入，在投影中移除，不生成个人事实。
 
 六、七、八参数的结果重载构造方法直接接收可空的 `AgentAccessDecision` 和 `LLMInteractionResult`，缺失传 `null`；`access()` 和 `interaction()` 仍返回 `Optional`，记录的规范构造与现有快照读取语义保持一致。
 

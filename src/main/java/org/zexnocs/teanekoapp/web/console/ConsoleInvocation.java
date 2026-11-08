@@ -2,7 +2,7 @@ package org.zexnocs.teanekoapp.web.console;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekocore.command.api.ManagementCommand;
+import org.zexnocs.teanekocore.command.CommandMethodContract;
 import org.zexnocs.teanekocore.command.interfaces.IManagedCommandSource;
 
 import java.lang.reflect.Method;
@@ -17,11 +17,12 @@ import java.util.concurrent.CompletionStage;
  * 插件必须等待返回阶段，并在自己的其他副作用前调用 checkActive。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/07：复核已编译管理声明，不在消息发送及权限检查中解析注解。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 @JsonIgnoreType
 public final class ConsoleInvocation implements IManagedCommandSource {
@@ -68,7 +69,8 @@ public final class ConsoleInvocation implements IManagedCommandSource {
      * @throws SecurityException 当来源关闭、声明缺失或当前能力失效时
      */
     public synchronized void checkActive() {
-        if (closed || method == null || commandGuard == null || !method.isAnnotationPresent(ManagementCommand.class)) {
+        if (closed || method == null || commandGuard == null
+                || !CommandMethodContract.metadata(method).managementDeclared()) {
             throw new SecurityException("指令台调用来源已经失效。");
         }
         guard.run();
@@ -104,7 +106,7 @@ public final class ConsoleInvocation implements IManagedCommandSource {
      */
     public synchronized CompletionStage<Void> send(String text) {
         checkActive();
-        var declaration = Objects.requireNonNull(method).getAnnotation(ManagementCommand.class);
+        var declaration = CommandMethodContract.metadata(Objects.requireNonNull(method)).management();
         if (declaration == null || !declaration.sendsMessages()) {
             throw new SecurityException("该管理命令没有声明真实消息发送能力。");
         }

@@ -6,7 +6,7 @@
 
 1. 准备 MySQL 与 Java 25。按实际环境配置 Spring datasource、账号及连接地址；默认驱动为 MySQL Connector/J，不把 JDBC URL 类型与其他数据库混用。
 2. 首次安装执行 `./gradlew copyTemplatesToConfig`，根据模板创建本地 config。已有部署先备份配置，核对复制任务的覆盖范围，不用模板覆盖真实凭据。
-3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、max-tokens、真实 context-window-tokens、api-key、连接与 metadata；context-input-ratio 默认 0.8，可使用 `${环境变量:默认值}`。已有模型条目须补充容量声明，缺失时选定模型拒绝就绪。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
+3. 根据[模型配置](../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/README.md)在 config/agent/model.yml 统一填写 default-model-id、模型名、max-tokens、真实 context-window-tokens、api-key、连接与 metadata；context-input-ratio 默认 0.8，可使用 `${环境变量:默认值}`。已有模型条目须补充容量声明，缺失时选定模型拒绝就绪。Core YAML 展开占位符，main-config.yml 只保留 Agent 总开关；不再配置 application 的另一份供应商项，凭据不进入聊天或普通 metadata。
 4. 核对活动 Profile。当前 application 与 `./gradlew bootRun` 默认使用 prod；本机开发显式选择 `dev,web-dev`。按实际部署配置数据库及网络边界，启动问题读取完整首条根因与最深 Caused by，并检查实际 Profile、JDBC URL 和驱动。
 5. 执行 `./gradlew bootJar`，以 `java -jar build/libs/TeaNeko-App-<实际版本>.jar --spring.profiles.active=prod` 启动。普通 plain.jar 不是可执行部署包。Spring 及客户端启动日志不得泄漏凭据。
 6. 在真实作用域执行 `/cfg reg agent`，再用 `/agent status` 检查登记；默认最低被动模式。先验证 `/agent chat 你好`，再按[平台说明](../../src/main/java/org/zexnocs/teanekoagent/integration/message/README.md)启用自动图文或 ACTIVE 候选。命令工具保持默认关闭，确需启用时由 OWNER 操作。
@@ -25,7 +25,7 @@ DeepSeek 的 `reasoning_effort` 位于请求顶层，不能放进 `thinking`；�
 
 用户已明确 Agent 尚未上线，新版直接使用新表，不迁移、读取或删除旧 general_data/llm_related/历史表中的 Agent 数据；需要登记的 scope 在新版重新注册。不要为本次升级清理共用业务表。旧 Java 包及其专属测试已删除，内部 Client ID 保留，外部 Java 调用改用[新版三类 Sender/直接服务](../../src/main/java/org/zexnocs/teanekoclient/agent/README.md)。
 
-主配置只使用 enabled；default-model-id 已统一移入 model.yml。旧 thinking-enabled/max-thinking-steps/max-thought-summary-length/include-thoughts-in-output 不再代表实际执行能力；轮次、工具预算和时限仍是独立运行策略，使用 tea-neko.llm.interaction，见[交互配置](../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/README.md)。旧 application 供应商 api-key/base-url/api-path 应移到同一 model.yml 条目；敏感加载错误脱敏，读取不写回，显式保存会写入当前已解析值。旧 token-monitor.yml 模板已退役，监控使用 tea-neko.agent.monitor，见[监控说明](../../src/main/java/org/zexnocs/teanekoagent/runtime/monitor/README.md)。
+主配置只使用 enabled；default-model-id 已统一移入 model.yml。旧 thinking-enabled/max-thinking-steps/max-thought-summary-length/include-thoughts-in-output 不再代表实际执行能力；轮次、工具预算和时限仍是独立运行策略，使用 tea-neko.llm.interaction，见[交互配置](../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/README.md)。旧 application 供应商 api-key/base-url/api-path 应移到同一 model.yml 条目；敏感加载错误脱敏，读取不写回，显式保存会写入当前已解析值。旧 token-monitor.yml 模板已退役，监控使用 tea-neko.agent.monitor，见[监控说明](../../src/main/java/org/zexnocs/teanekoagent/runtime/monitor/README.md)。
 
 人格、记忆、历史、摘要、Skill、任务各自的当前配置只在[模块索引](../../src/main/java/org/zexnocs/teanekoagent/README.md)指向的文档维护。密钥错误或路由缺失应只让 Agent 不可执行，不阻止其他机器人功能；固定配置后按现有文件重载流程恢复。
 
@@ -55,7 +55,7 @@ git diff --check
 | 拟人表达 | expression.yml 与 scope 开关生效；一次最终答案按原顺序分条，间隔体感合适；stop/关闭终止未发尾部；同目标多请求不交错，其他群继续运行，机器人账号变化不改投；控制符不进入实际聊天和普通历史 |
 | 表情包素材 | 补齐 stickers.yml；已登记区域默认收集真实图片，独立开关及实例/scope 下载和分析额度生效；真实视觉样本区分画作与表情包，GIF 采样和原动画保留正确；重启/停用回收暂存，缺失文件撤销有效状态。多副本同时共享数据库、素材卷及身份文件；实测磁盘、网络和长期运行负载 |
 | 表情选图与发送 | 补齐 media-replies.yml；核对实际 OneBot face ID/描述。模型先选类别再查询完整列表，最终 STICKER 独立发送且只可附 reply，原生 FACE 不入图库；实测动画/base64 上限、关闭区域/换号/目录换代/文件缺失/断网及取消中的占用，未知回执不补发，跨群共享素材且回避记录独立 |
-| 图库管理及事件 | 接入真实已认证 ManagementAuthority 后核验全局 inspect/preview/manage 映射及撤权；实测预览大小、并发修改、删除/恢复和后台刷新。event-plugins 默认空，启用指定插件后检查同步拒绝、低信任提示与提交后只读观察；通知不是可靠审计，不直接映射 Web 推送；本期没有新增 HTTP 或前端 |
+| 图库管理及事件 | 接入真实已认证 IManagementAuthority 后核验全局 inspect/preview/manage 映射及撤权；实测预览大小、并发修改、删除/恢复和后台刷新。event-plugins 默认空，启用指定插件后检查同步拒绝、低信任提示与提交后只读观察；通知不是可靠审计，不直接映射 Web 推送；本期没有新增 HTTP 或前端 |
 | 记忆与人格 | namespace reset/clear、共享绑定、人格备份/切换和迟到后台任务按代次拒绝；新空间不沿用旧画像 |
 | 自动三层与明确保存 | 跨 scope 共用 namespace 的长期画像可读，近期原文仍按 scope 隔离；短中期压缩、观察式人格和维护索引/回收速率符合配置；关闭自动学习或历史采集后，明确“请记住我喜欢花茶”仍按新增权限提交且无工具依赖 |
 | 定时、重启与取消 | 持久化提醒恢复；自主定时重启后等未来间隔、不补跑；静默、冷却、退避和当前配置撤销生效 |
@@ -65,7 +65,7 @@ git diff --check
 | v4.8.3-l 主动索取表情包 | 确认有启用且未处于冷却的素材后，要求发送指定情绪图片；观察真实 sticker_list 回执与独立图片消息。DSML 不作为正文发送；原预算内纠正失败时有明确原因，模型自述不代替工具日志。空图库、工具被过滤和配置失效须可区分 |
 | v4.8.3-l 长期恢复 | 实际错误应有证据原因、候选域与脱敏定位；同输入三次无效后暂停，重启保留；工作区版本化恢复、撤权和旧租约拒绝有效，不跳过证据或成功水位 |
 | v4.8.3-l 读取失败退避 | 升级后旧作业可读取；仍有格式错误时应显示记录类型与受控字段，领取前故障从 30 秒起退避，冷却内不重复读取或告警，其他分区可继续。修复原格式后恢复；进程内退避重启重置，不宣称三次模型无效暂停 |
-| v4.8.3-l 结构化输出 | 用实际模型核对表情包分类、中期压缩、长期事实/风格、独立人格和主动发言；原生 JSON/Schema 与适配器声明一致，不支持时有警告。格式失败可定位字段或行列，普通日志不含原文；需要原文时临时启用[受限诊断](../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/structured/README.md#诊断)，排查后关闭。图片超限应报告具体约束，不泄漏地址 |
+| v4.8.3-l 结构化输出 | 用实际模型核对表情包分类、中期压缩、长期事实/风格、独立人格和主动发言；原生 JSON/Schema 与适配器声明一致，不支持时有警告。格式失败可定位字段或行列，普通日志不含原文；需要原文时临时启用[受限诊断](../../src/main/java/org/zexnocs/teanekoagent/llm/framework/structured/README.md#诊断)，排查后关闭。图片超限应报告具体约束，不泄漏地址 |
 | v4.8.3-l 图库迁移 | 备份并停旧实例后验证首次迁移耗时、独立删除索引/计数、重复采集拒绝、分页及显式恢复；迁移失败整体回滚，不混跑旧二进制；回退使用配套数据备份 |
 | v4.8.3-l 容量 | 大量终态任务下核对到期索引查询、启动补建耗时和四槽饱和；图库根锁下核对选图/采集/发送竞争、独立删除行增长、主目录容量及吞吐，离线夹具不代替 MySQL 测量 |
 | v4.8.6-l 观测 | 应用观测配置后核对 INFO、DEBUG、NONE 及独立内容开关；一次 Agent 链只汇总一次，默认仅摘要、本轮输入与最终回复；Schema/工具跨轮不重印，历史助手和凭据不出现 |

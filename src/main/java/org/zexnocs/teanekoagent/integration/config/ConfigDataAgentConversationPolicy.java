@@ -8,9 +8,11 @@ import org.zexnocs.teanekoagent.runtime.AgentHandle;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationOptions;
 import org.zexnocs.teanekoagent.runtime.conversation.IAgentConversationPolicy;
+import org.zexnocs.teanekoagent.runtime.conversation.IAgentConversationWindowPolicy;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 懒读本地默认值并应用已登记 scope 的窗口覆盖，不创建配置或承担读取之外的业务。
@@ -19,13 +21,16 @@ import java.util.Objects;
  *
  * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
  *
+ * <br>2026/11/08：窗口策略交给类型化提供者，宿主不读取插件字段或固定标识。
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 @Service
 public final class ConfigDataAgentConversationPolicy implements IAgentConversationPolicy {
+    private final Optional<IAgentConversationWindowPolicy> windows;
     private final Environment environment;
     private final IConfigDataService configs;
     private final AgentScopeConfigManager manager;
@@ -35,9 +40,12 @@ public final class ConfigDataAgentConversationPolicy implements IAgentConversati
      * @param environment Spring 本地配置
      * @param configs 既有配置服务
      * @param manager Agent 配置声明
+     * @param windows 可选上下文窗口策略，多个实现由容器拒绝歧义
      * @throws NullPointerException 当环境、配置服务或配置声明为空时
      */
-    public ConfigDataAgentConversationPolicy(Environment environment, IConfigDataService configs, AgentScopeConfigManager manager) {
+    public ConfigDataAgentConversationPolicy(Environment environment, IConfigDataService configs, AgentScopeConfigManager manager,
+                                             Optional<IAgentConversationWindowPolicy> windows) {
+        this.windows = windows;
         this.environment = Objects.requireNonNull(environment, "会话配置环境不能为空。");
         this.configs = Objects.requireNonNull(configs, "作用域配置服务不能为空。");
         this.manager = Objects.requireNonNull(manager, "Agent 配置声明不能为空。");
@@ -66,7 +74,10 @@ public final class ConfigDataAgentConversationPolicy implements IAgentConversati
                 if (data.getHistoryMaxMessages() >= 0) { messages = data.getHistoryMaxMessages(); }
                 if (data.getInputMaxBytes() >= 1) { input = data.getInputMaxBytes(); }
             }
-            return new AgentConversationOptions(messages, input, local.maxCompletedRequests(), local.maxReplayBytes());
+            int configuredMessages = messages;
+            int activeMessages = windows.map(policy -> policy.maxMessages(request.actor().scope(), configuredMessages))
+                    .orElse(0);
+            return new AgentConversationOptions(activeMessages, input, local.maxCompletedRequests(), local.maxReplayBytes());
         } catch (RuntimeException failure) { throw new org.zexnocs.teanekocore.logger.DiagnosticException("Agent 历史窗口或重放配置不可用。", failure); }
     }
 }

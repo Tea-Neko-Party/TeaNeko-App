@@ -1,16 +1,17 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.runtime.AgentHandle;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -22,7 +23,13 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -32,14 +39,16 @@ import java.util.function.Supplier;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 final class AgentMemoryBoundary implements AutoCloseable {
-    private final @Nullable IAgentMemoryReferences references;
+    private final @Nullable IAgentContextReferences references;
     private final IAgentTurnService turns;
     private final Executor executor;
     private final ScheduledExecutorService scheduler;
@@ -55,7 +64,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @param scheduler 计时器
      * @param clock 可信时钟
      */
-    AgentMemoryBoundary(@Nullable IAgentMemoryReferences references, IAgentTurnService turns, Executor executor,
+    AgentMemoryBoundary(@Nullable IAgentContextReferences references, IAgentTurnService turns, Executor executor,
             ScheduledExecutorService scheduler, Clock clock) {
         this.references = references;
         this.turns = turns; this.executor = executor; this.scheduler = scheduler; this.clock = clock;
@@ -66,7 +75,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @return 当前引用端口
      * @throws IllegalStateException 当显式无持久化模式误调用引用路径时
      */
-    IAgentMemoryReferences references() {
+    IAgentContextReferences references() {
         if (references == null) { throw new IllegalStateException("当前观察边界未装配持久化引用。"); }
         return references;
     }
@@ -77,8 +86,9 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @param request 可信请求
      * @return 当前权威引用
      */
-    CompletionStage<MemoryNamespaceReference> resolve(AgentHandle handle, AgentRunRequest request) {
-        return access(handle, request).thenComposeAsync(ignored -> references().resolve(request.actor().scope()), executor);
+    CompletionStage<IAgentContextReference> resolve(AgentHandle handle, AgentRunRequest request) {
+        return access(handle, request).thenComposeAsync(ignored -> references().resolve(request.actor().scope())
+                .thenApply(reference -> reference), executor);
     }
 
     /**
@@ -88,7 +98,7 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * @param expected 已固定引用
      * @return 当前边界均成立时完成
      */
-    CompletionStage<Void> verify(AgentHandle handle, AgentRunRequest request, MemoryNamespaceReference expected) {
+    CompletionStage<Void> verify(AgentHandle handle, AgentRunRequest request, IAgentContextReference expected) {
         return access(handle, request).thenComposeAsync(ignored -> references().verify(expected), executor)
                 .thenComposeAsync(ignored -> access(handle, request), executor);
     }
@@ -181,12 +191,8 @@ final class AgentMemoryBoundary implements AutoCloseable {
         if (failure instanceof ExecutionStoppedException stopped) {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED ? AgentRunResult.Status.TIMED_OUT : AgentRunResult.Status.CANCELLED;
         }
-        if (failure instanceof AgentMemoryReferenceException memory) {
-            return switch (memory.reason()) {
-                case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
-                case DISABLED -> AgentRunResult.Status.SKIPPED;
-                case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
-            };
+        if (failure instanceof org.zexnocs.teanekoagent.runtime.context.IAgentContextFailure contextFailure) {
+            return contextFailure.rejectionStatus();
         }
         return AgentRunResult.Status.CONFIGURATION_ERROR;
     }
@@ -212,11 +218,13 @@ final class AgentMemoryBoundary implements AutoCloseable {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private static final class Rejected extends RuntimeException {
         @Serial

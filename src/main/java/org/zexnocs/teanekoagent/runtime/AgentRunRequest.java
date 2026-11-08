@@ -1,12 +1,16 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.memory.AgentSummarySnapshot;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationAttachment;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationStamp;
 
 import java.util.List;
@@ -21,6 +25,7 @@ import java.util.UUID;
  * <br>2026/11/04：组件数据引用迁入 component，保持原业务流程。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
  *
  * @param requestId 宿主生成的请求标识，不自动提供跨请求幂等
  * @param actor 可信发起者、来源和目标
@@ -32,21 +37,22 @@ import java.util.UUID;
  * @param inputMaxBytes 宿主完整模型输入协议字节上限；默认邮箱覆盖为本轮窗口策略，旧独立入口保持不额外限额
  * @param personalityIdentity 邮箱固定的人格身份提示，不携带人格正文，实际源仍须重新解析
  * @param summary 邮箱固定的已生成摘要；普通入口覆盖调用者提示，实际使用仍须复核
+ *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity,
                               List<ILLMMessage> messages, @Nullable AgentConversationStamp conversation,
-                              @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes,
-                              @Nullable String personalityIdentity, @Nullable AgentSummarySnapshot summary) {
+                              @Nullable IAgentContextReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes,
+                              @Nullable String personalityIdentity, @Nullable IAgentConversationAttachment summary) {
     /**
      * 2026/11/02：仅替换宿主已经解析的空间引用，完整保留身份和其余输入；此方法不授予空间访问权。
      * @param reference 实际固定引用，独立无记忆模式为空
      * @return 引用相同时返回原对象，否则返回重新冻结的请求
      */
-    public AgentRunRequest withMemoryReference(@Nullable MemoryNamespaceReference reference) {
+    public AgentRunRequest withMemoryReference(@Nullable IAgentContextReference reference) {
         return Objects.equals(memoryReference, reference) ? this : new AgentRunRequest(requestId, actor, activity, messages,
                 conversation, reference, userText, inputMaxBytes, personalityIdentity, summary);
     }
@@ -63,7 +69,7 @@ public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActi
      * @param personalityIdentity 实际人格提示
      */
     public AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity, List<ILLMMessage> messages,
-            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText,
+            @Nullable AgentConversationStamp conversation, @Nullable IAgentContextReference memoryReference, @Nullable AgentUserText userText,
             long inputMaxBytes, @Nullable String personalityIdentity) {
         this(requestId, actor, activity, messages, conversation, memoryReference, userText, inputMaxBytes, personalityIdentity, null);
     }
@@ -79,7 +85,7 @@ public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActi
      * @param inputMaxBytes 完整输入预算
      */
     public AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity, List<ILLMMessage> messages,
-            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes) {
+            @Nullable AgentConversationStamp conversation, @Nullable IAgentContextReference memoryReference, @Nullable AgentUserText userText, long inputMaxBytes) {
         this(requestId, actor, activity, messages, conversation, memoryReference, userText, inputMaxBytes, null);
     }
     /**
@@ -95,7 +101,7 @@ public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActi
      * @throws IllegalArgumentException 当身份或消息合同非法时
      */
     public AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity, List<ILLMMessage> messages,
-            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentUserText userText) {
+            @Nullable AgentConversationStamp conversation, @Nullable IAgentContextReference memoryReference, @Nullable AgentUserText userText) {
         this(requestId, actor, activity, messages, conversation, memoryReference, userText, Long.MAX_VALUE);
     }
     /**
@@ -110,7 +116,7 @@ public record AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActi
      * @throws IllegalArgumentException 当身份或消息协议非法时
      */
     public AgentRunRequest(UUID requestId, AgentActorContext actor, AgentActivity activity, List<ILLMMessage> messages,
-            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference) {
+            @Nullable AgentConversationStamp conversation, @Nullable IAgentContextReference memoryReference) {
         this(requestId, actor, activity, messages, conversation, memoryReference, null);
     }
     /**

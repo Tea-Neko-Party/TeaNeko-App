@@ -3,8 +3,9 @@ package org.zexnocs.teanekoclient.agent.response;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.expression.AgentReplyPlan;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan;
+import org.zexnocs.teanekoclient.agent.service.AgentOperationProtocol;
 
 import java.util.List;
 import java.util.UUID;
@@ -12,6 +13,7 @@ import java.util.UUID;
 /**
  * 只返回正式图文与回复形式，不包含交互诊断、工具参数或供应商透明状态。
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：声明类型化传输协议，客户端统一分发而不选择业务分支。
  *
  * @param requestId 原请求
  * @param status 业务终态；SUCCESS 不代表已发送平台
@@ -19,9 +21,14 @@ import java.util.UUID;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.4.1
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 public record AgentConversationResponse(@Nullable UUID requestId, String status, List<Content> parts) {
+    // 2026/11/07：保留原操作身份、响应字段及业务成功含义。
+    public static final AgentOperationProtocol<AgentConversationResponse> PROTOCOL = new AgentOperationProtocol<>(
+            "conversation", "CONVERSATION", AgentConversationResponse.class,
+            (id, status) -> new AgentConversationResponse(id, status, List.of()),
+            response -> response.status().equals("SUCCESS"));
     /**
      * 固定输出集合，不能把运行服务放入响应。
      * @param requestId 原请求

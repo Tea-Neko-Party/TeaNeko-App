@@ -1,5 +1,15 @@
 package org.zexnocs.teanekoagent.component.tool;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMFunctionParameterSchemaFactory;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolOutput;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
@@ -7,13 +17,13 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.util.ReflectionUtils;
-import org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.ImageLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMImageDetail;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMFunctionParameter;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMImageDetail;
+import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMFunctionParameter;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolParam;
@@ -48,10 +58,11 @@ import java.util.concurrent.Executor;
  * <br>2026/11/05：初始化时编译类依赖和代理方法，选择及调用只读目录并复核动态资格。
  * <br>2026/11/05：独立宿主按 Bean 弱身份绑定真实声明，隔离共享 JDK 代理类的不同提供者。
  * <br>2026/11/06：继承方法的调用候选编入各提供者规格，条件和业务方法不共享代理接口目录。
+ * <br>2026/11/08：回收队列通过类型模式取得提供者键，按缓存键类型删除已释放绑定。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.9.0-l
  */
 public final class TeaNekoAgentToolMethods {
     /** 禁止实例化无状态编译入口。 */
@@ -68,12 +79,13 @@ public final class TeaNekoAgentToolMethods {
     /**
      * 初始化独立宿主的提供者；必须在构造、装配或低频显式重扫中调用。
      * 2026/11/05：完整编译后才发布身份绑定，清理已释放提供者的弱键。
+     * 2026/11/08：队列中的引用收窄为实际 ProviderKey 后删除，避免以引用父类型访问缓存。
      * @param bean 已创建的实际提供者或代理
      */
     public static void prepare(Object bean) {
         var type = AopUtils.getTargetClass(bean);
         prepare(type);
-        for (var released = RELEASED_PROVIDERS.poll(); released != null; released = RELEASED_PROVIDERS.poll()) {
+        while (RELEASED_PROVIDERS.poll() instanceof ProviderKey released) {
             PROVIDERS.remove(released);
         }
         PROVIDERS.put(new ProviderKey(bean, RELEASED_PROVIDERS), type);
@@ -138,7 +150,7 @@ public final class TeaNekoAgentToolMethods {
      * @author zExNocs
      * @date 2026/11/05
      * @since 4.8.3-l
-     * @version 4.8.3-l
+     * @version 4.9.0-l
      */
     private static final class ProviderKey extends WeakReference<Object> {
         private final int identity;
@@ -246,13 +258,28 @@ public final class TeaNekoAgentToolMethods {
      * @param clients 可用客户端，空表示所有
      * @param parameters 实际参数结构
      * @param conditional 是否有独立业务条件
+     * @param pluginId 宿主确认的插件归属；类型级独立说明尚未归属时为空
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.8.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public record Documentation(String name, String description, Set<String> clients,
-                                ILLMFunctionParameter parameters, boolean conditional) {}
+                                ILLMFunctionParameter parameters, boolean conditional,
+                                @Nullable String pluginId) {
+        /**
+         * 2026/11/07：保留类型级独立说明，实际插件归属由注册目录投影。
+         * @param name 工具名称
+         * @param description 用途
+         * @param clients 适用客户端
+         * @param parameters 参数结构
+         * @param conditional 是否需要动态条件
+         */
+        public Documentation(String name, String description, Set<String> clients,
+                ILLMFunctionParameter parameters, boolean conditional) {
+            this(name, description, clients, parameters, conditional, null);
+        }
+    }
 
     /**
      * 编译公开实例方法、参数 schema、client 和可选条件，错误在装配阶段明确拒绝。
@@ -503,7 +530,7 @@ public final class TeaNekoAgentToolMethods {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.6.1-l
-     * @version 4.8.3-l
+     * @version 4.9.0-l
      */
     private record MethodSpec(List<Method> invocable, List<Method> condition, LLMTool tool, Set<String> clients, boolean media,
                               Set<String> requires, List<ParameterSpec> parameters, boolean asynchronous) { }
@@ -519,7 +546,7 @@ public final class TeaNekoAgentToolMethods {
      * @author zExNocs
      * @date 2026/11/05
      * @since 4.8.3-l
-     * @version 4.8.3-l
+     * @version 4.9.0-l
      */
     private record ParameterSpec(Class<?> type, Type genericType, String name, boolean flatten,
                                  @Nullable String defaultValue) { }

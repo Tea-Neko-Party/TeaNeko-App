@@ -1,0 +1,359 @@
+package org.zexnocs.teanekoplugin.general.group_management.activity;
+
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import org.zexnocs.teanekoplugin.support.PluginTaskScope;
+
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
+
+import org.jspecify.annotations.Nullable;
+
+// 2026/11/07：迁入所属业务插件，稳定业务标识和存储键保持不变。
+
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
+import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
+import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.task.TaskStages;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
+import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
+import org.zexnocs.teanekocore.framework.pair.IPair;
+import org.zexnocs.teanekoplugin.general.group_management.servant.GroupSeniorServantRule;
+
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * 惩罚地活跃度的服务。
+ *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ * <br>2026/11/07：异步副作用前复核固定插件代次，停用后拒绝迟到业务。
+ *
+ * @author zExNocs
+ * @date 2026/10/28
+ * @since 4.3.4
+ * @version 4.9.0-l
+ */
+@Service
+@RequiredArgsConstructor
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "活跃度惩罚缓存清理",
+        description = "定期清理群活跃度处理过程中的临时投票和惩罚缓存。"
+        + "移除已经处理完成、用户不再属于低活跃名单或所属群已没有低活跃成员的条目。"
+        + "清理本身不踢人、不发送提醒，也不替代原处理命令；这是只读维护任务。", controllable = false)
+@PluginOwned("general.group-management")
+public class GroupActivityPunishService implements IPluginLifecycle {
+    // 2026/11/07：异步业务固定入口代次，停用后不启动后续副作用。
+    private final PluginAccess plugins;
+    // 2026/11/07：每次启用单独登记定时器和在途工作，旧代次不可恢复。
+    private @Nullable PluginTaskScope lifecycle;
+
+    /// 惩罚的豁免时间。
+    private final static Duration EXEMPTION_TIME = Duration.ofDays(7);
+
+    /// 惩罚的 cache，scopeID → (userID → punish value)
+    @Getter
+    private final Map<String, Map<String, PunishValue>> punishCache = new ConcurrentHashMap<>();
+
+    /// 高级公务员
+    private final GroupSeniorServantRule groupSeniorServantRule;
+    private final ITimerService iTimerService;
+    private final GroupActivityService groupActivityService;
+    private final GroupActivityExemptionService groupActivityExemptionService;
+
+    /**
+     * 注册群活跃度处理所需的定时任务，运行时继续使用原配置与业务校验。
+     * <br>2026/11/07：由插件启用触发，每次启用使用独立定时器代次。
+     * @return 定时器已完成登记的阶段
+     */
+    @Override
+    public synchronized CompletionStage<Void> start() {
+        if (lifecycle != null) {
+            return CompletableFuture.completedStage(null);
+        }
+        var scope = new PluginTaskScope();
+        lifecycle = scope;
+
+        scope.own(iTimerService.registerByRate("清理惩罚缓存",
+                "group-activity-punish-service-cleaner",
+                () -> scope.execute(() -> {
+                    punishCache.entrySet().removeIf(entry -> {
+                        // 如果该 scope 没有任何低活跃度成员，则删除
+                        var map = groupActivityService.getActivityDataMap().get(entry.getKey());
+                        if(map == null || map.isEmpty()) {
+                            return true;
+                        }
+                        entry.getValue().entrySet().removeIf(subEntry -> {
+                            // 如果该用户不在地活跃度名单中，或者已经处理过了，则删除
+                            var subValue = subEntry.getValue();
+                            var subKey =  subEntry.getKey();
+                            return subValue.isProcessed.get() || !map.containsKey(subKey);
+                        });
+                        return false;
+                    });
+                    return EmptyTaskResult.INSTANCE;
+                }),
+                Duration.ofHours(1),
+                EmptyTaskResult.getResultType()));
+        return CompletableFuture.completedStage(null);
+    }
+
+    /** @return 2026/11/07：所属业务插件的稳定标识。 */
+    @Override
+    public String pluginId() {
+        return "general.group-management";
+    }
+
+    /** @return 2026/11/07：插件内部唯一的后台任务标识。 */
+    @Override
+    public String id() {
+        return "activity-cleanup";
+    }
+
+    /**
+     * 2026/11/07：关闭本代定时入口并等待正在执行的回调，不销毁借用资源。
+     * @return 本代后台工作已结束的阶段
+     */
+    @Override
+    public synchronized CompletionStage<Void> stop() {
+        var scope = lifecycle;
+        lifecycle = null;
+        return scope == null ? CompletableFuture.completedStage(null) : scope.stop();
+    }
+
+
+    /**
+     * 尝试踢出惩罚用户
+     *
+     * @param activityConfigData   被惩罚用户所属 scope 的 activity config data
+     * @param activityDataRulePair 被惩罚用户所触发的活跃度规则
+     * @param client               用于获取操作器的 client
+     * @param opScopeId            操作人的 scope id
+     * @param opId                 操作人 id
+     * @param scopeId              被惩罚用户的 scope id
+     * @param groupId              被惩罚用户的 group id
+     * @param userId               被惩罚用户的平台 id
+     * @return 承载本次异步处理实际结果的可组合完成阶段
+     */
+    public CompletionStage<List<ITeaNekoContent>> kick(
+            GroupActivityConfigData activityConfigData, IPair<GroupActivityData, GroupActivityRule> activityDataRulePair,
+            ITeaNekoClient client, String opScopeId, String opId, String scopeId, String groupId, String userId) {
+        // 2026/11/07：固定本次业务代次，异步恢复时必须复核。
+        var pluginToken = plugins.captureOwner("general.group-management");
+        var rule = activityDataRulePair.second();
+        var punishMap = punishCache.computeIfAbsent(scopeId, ignored -> new ConcurrentHashMap<>());
+        var punishValue = punishMap.computeIfAbsent(userId, ignored -> new PunishValue(rule.getExpressionString(),
+                activityConfigData.getKick(), activityConfigData.getRemind()));
+        var tools = client.getTeaNekoToolbox();
+        var builder = tools.getMessageSenderTools().getMsgListBuilder();
+        if (punishValue.isOped(opId)) {
+            return CompletableFuture.completedStage(builder.addText("您已经处理过该用户了喵!").build());
+        }
+        if (punishValue.kick(opScopeId, opId)) {
+            plugins.check(pluginToken);
+            return tools.getGroupKickSender().kickAsync(groupId, userId).thenApply(ignored -> {
+                // 2026/11/07：保留已确认平台动作的收尾；调用命令在后续反馈前单独守卫。
+                groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (key, values) -> {
+                    values.remove(userId);
+                    return values;
+                });
+                punishMap.remove(userId);
+                return builder.addText("将用户" + userId + "踢出群聊" + groupId + "成功喵").build();
+            });
+        }
+        return CompletableFuture.completedStage(builder.addText("""
+                处理用户 %s 在群聊 %s 成功喵！
+                还需要 %d 人选择踢出该用户喵
+                还需要 %d 人选择提醒该用户喵""".formatted(userId, groupId,
+                        punishValue.getKickCount(), punishValue.getRemindCount())).build());
+    }
+
+    /**
+     * 根据活跃度规则发送提醒，并返回可等待的真实发送链，不把排队提交作为通知完成。
+     *
+     * @param activityConfigData 用于本次处理的 {@code activityConfigData} 数据
+     * @param activityDataRulePair 用于本次处理的 {@code activityDataRulePair} 数据
+     * @param client 用于本次处理的 {@code client} 数据
+     * @param opScopeId 用于本次处理的 {@code opScopeId} 数据
+     * @param opId 用于本次处理的 {@code opId} 数据
+     * @param scopeId 本次操作所属作用域
+     * @param groupId 目标群组标识
+     * @param userId 原业务边界中的目标用户标识
+     * @return 承载本次异步处理实际结果的可组合完成阶段
+     */
+    public CompletionStage<List<ITeaNekoContent>> remind(
+            GroupActivityConfigData activityConfigData, IPair<GroupActivityData, GroupActivityRule> activityDataRulePair,
+            ITeaNekoClient client, String opScopeId, String opId, String scopeId, String groupId, String userId) {
+        // 2026/11/07：固定本次业务代次，异步恢复时必须复核。
+        var pluginToken = plugins.captureOwner("general.group-management");
+        var rule = activityDataRulePair.second();
+        var punishMap = punishCache.computeIfAbsent(scopeId, ignored -> new ConcurrentHashMap<>());
+        var punishValue = punishMap.computeIfAbsent(userId, ignored -> new PunishValue(rule.getExpressionString(),
+                activityConfigData.getKick(), activityConfigData.getRemind()));
+        var tools = client.getTeaNekoToolbox();
+        var builder = tools.getMessageSenderTools().getMsgListBuilder();
+        if (punishValue.isOped(opId)) {
+            return CompletableFuture.completedStage(builder.addText("您已经处理过该用户了喵!").build());
+        }
+        if (punishValue.remind(opScopeId, opId)) {
+            return TaskStages.successful(groupActivityExemptionService.addWithFuture(scopeId, userId, EXEMPTION_TIME),
+                    "群活跃度豁免").thenCompose(ignored -> {
+                groupActivityService.getActivityDataMap().computeIfPresent(scopeId, (key, values) -> {
+                    values.remove(userId);
+                    return values;
+                });
+                punishMap.remove(userId);
+                plugins.check(pluginToken);
+                return tools.getMessageSenderTools().getGroupBuilder(groupId).addAtMessage(userId).addTextMessage("""
+                        检测到你在群内活跃度过低，经过管理群决定对你进行提醒，并在一周后重新审核。
+                        被检测低活跃度原因：%s
+                        请在一周内多发言，避免被踢出群聊。""".formatted(punishValue.reason)).sendAsync();
+            }).thenApply(ignored -> builder.addText("将用户" + userId + "提醒成功喵").build());
+        }
+        return CompletableFuture.completedStage(builder.addText("""
+                处理用户 %s 在群聊 %s 成功喵！
+                还需要 %d 人选择踢出该用户喵
+                还需要 %d 人选择提醒该用户喵""".formatted(userId, groupId,
+                        punishValue.getKickCount(), punishValue.getRemindCount())).build());
+    }
+
+    /**
+     * 群活跃度处理所需的业务数据，在原惩罚流程内使用。
+     *
+     * @author zExNocs
+     * @date 2026/10/28
+     * @since 4.0.0
+     * @version 4.5.0-l
+     */
+    @RequiredArgsConstructor
+    public class PunishValue {
+        /// 原因
+        private final String reason;
+
+        /// 最大 kick 人数
+        private final int maxKickCount;
+
+        /// 最大 remind 人数
+        private final int maxRemindCount;
+
+        /// 选择 kick 的人数
+        private final AtomicInteger kickCount = new AtomicInteger(0);
+
+        /// 选择 remind 的人数
+        private final AtomicInteger remindCount = new AtomicInteger(0);
+
+        /// 是否正在处理
+        private final AtomicBoolean isProcessed = new AtomicBoolean(false);
+
+        /// 操作人员
+        private final Set<String> opMap = ConcurrentHashMap.newKeySet();
+
+        /**
+         * 判断是否已经操作过。
+         *
+         * @param opId 操作人 id
+         * @return 是否操作过
+         */
+        public boolean isOped(String opId) {
+            return opMap.contains(opId);
+        }
+
+        /**
+         * 获取还剩下多少人同意踢出。
+         *
+         * @return 剩下多少人同意踢出
+         */
+        public int getKickCount() {
+            return maxKickCount - kickCount.get();
+        }
+
+        /**
+         * 获取还剩下多少人同意提醒。
+         *
+         * @return 剩下多少人同意提醒
+         */
+        public int getRemindCount() {
+            return maxRemindCount - remindCount.get();
+        }
+
+        /**
+         * 同意踢出群聊。
+         *
+         * @param scopeId 操作人所属的 scope ID
+         * @param opId    操作人 id
+         * @return 是否踢出达到条件
+         */
+        public boolean kick(String scopeId, String opId) {
+            // 已经结束了
+            if(isProcessed.get()) {
+                return false;
+            }
+
+            // 已经操作过了
+            if(!opMap.add(opId)) {
+                // 已经操作过了
+                return false;
+            }
+
+            // 如果是管理员
+            if(groupSeniorServantRule.isAdmin(scopeId, opId)) {
+                return isProcessed.compareAndSet(false, true);
+            }
+
+            // 如果达到踢出条件
+            if(kickCount.incrementAndGet() == maxKickCount) {
+                return isProcessed.compareAndSet(false, true);
+            }
+
+            return false;
+        }
+
+        /**
+         * 同意提醒用户。
+         *
+         * @param scopeId 操作人所属的 scope ID
+         * @param opId    操作人 id
+         * @return 是否提醒达到条件
+         */
+        public boolean remind(String scopeId, String opId) {
+            // 已经结束了
+            if(isProcessed.get()) {
+                return false;
+            }
+
+            // 已经操作过了
+            if(!opMap.add(opId)) {
+                // 已经操作过了
+                return false;
+            }
+
+            // 如果是管理员
+            if(groupSeniorServantRule.isAdmin(scopeId, opId)) {
+                return isProcessed.compareAndSet(false, true);
+            }
+
+            // 如果达到提醒条件
+            if(remindCount.incrementAndGet() == maxRemindCount) {
+                return isProcessed.compareAndSet(false, true);
+            }
+
+            return false;
+        }
+    }
+}

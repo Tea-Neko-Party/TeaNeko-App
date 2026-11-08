@@ -1,39 +1,44 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.InteractionRuntime;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageHistory;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.IContextualToolExecutor;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationState;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
-import org.zexnocs.teanekoagent.component.memory.AgentRequestJournal;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentService;
+import org.zexnocs.teanekoagent.runtime.IAgentService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
@@ -41,16 +46,38 @@ import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.AgentMemoryReferenceException;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 从默认会话服务经过真实轮次和交互管线验证完成等待、防重入及诊断保留。
@@ -59,6 +86,8 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -109,14 +138,16 @@ class AgentConversationIntegrationTest {
     @Test void persistentReferenceFlowsThroughRealPipelineAndQueuedSuccessor() {
         var input = request(); var scope = input.actor().scope();
         var fixed = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);
-        var current = new AtomicReference<>(fixed); var references = mock(IAgentMemoryReferences.class);
+        var current = new AtomicReference<>(fixed);
+        var references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         when(references.resolve(scope)).thenAnswer(ignored -> CompletableFuture.completedStage(current.get()));
         when(references.verify(any())).thenAnswer(call -> current.get().equals(call.getArgument(0)) ? CompletableFuture.completedStage(null)
                 : CompletableFuture.failedStage(new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED)));
         var seen = new AtomicReference<MemoryNamespaceReference>();
         try (var raw = new AgentService(gate, new LLMInteractionService(models, LLMInteractionSettings::defaults, runtime, runtime.scheduler),
                 (definition, request, config) -> List.of(new LLMToolBinding(LLMTool.builder().name("work").build(), (call, context) -> {
-                    seen.set(context.bindings().require(AgentComponents.MEMORY_REFERENCE));
+                    seen.set(org.zexnocs.teanekoplugin.agent.cognition.CognitionContext.reference(
+                            context.bindings().require(AgentComponents.CONTEXT_REFERENCE)));
                     current.set(new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 1));
                     return CompletableFuture.completedStage("实际工具已完成");
                 })), new ObjectMapper(), runtime, runtime.scheduler, runtime.clock, logger, references);

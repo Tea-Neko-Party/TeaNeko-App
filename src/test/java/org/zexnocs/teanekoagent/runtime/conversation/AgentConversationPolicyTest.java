@@ -1,16 +1,23 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeFieldChecker;
 import org.zexnocs.teanekoagent.integration.config.ConfigDataAgentConversationPolicy;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -19,8 +26,18 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证窗口配置优先级、旧记录兼容和非法配置恢复，不访问实际数据库。
@@ -31,6 +48,8 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
  *
  * @author zExNocs
  * @date 2026/10/29
@@ -43,7 +62,7 @@ class AgentConversationPolicyTest {
     private final MockEnvironment environment = new MockEnvironment();
     private final IConfigDataService configs = mock(IConfigDataService.class);
     private final AgentScopeConfigManager manager = new AgentScopeConfigManager();
-    private final ConfigDataAgentConversationPolicy policy = new ConfigDataAgentConversationPolicy(environment, configs, manager);
+    private final ConfigDataAgentConversationPolicy policy = new ConfigDataAgentConversationPolicy(environment, configs, manager, Optional.of((scope, messages) -> messages));
     private final AgentRunRequest request = new AgentRunRequest(UUID.randomUUID(), new AgentActorContext(new AgentScope("客户端", "群"),
             AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "用户", "来源", "目标"), AgentActivity.SERVICE, List.of());
 

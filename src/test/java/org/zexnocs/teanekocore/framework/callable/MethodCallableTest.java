@@ -1,19 +1,21 @@
 package org.zexnocs.teanekocore.framework.callable;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekocore.framework.description.Description;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
 public class MethodCallableTest {
     /**
-     * 测试是否可以从 MethodCallable 中提取到正确的 Method 注解。
+     * 测试是否可以从 IMethodCallable 中提取到正确的 Method 注解。
      */
     @Test
     public void test() {
-        // 测试从 MethodCallable 中提取到正确的 Method 注解。
-        MethodCallable<Void> callable = this::method;
+        // 测试从 IMethodCallable 中提取到正确的 Method 注解。
+        IMethodCallable<Void> callable = this::method;
         var description = MethodCallableUtils.INSTANCE.getAnnotation(callable, Description.class);
         Assertions.assertNotNull(description);
         Assertions.assertEquals("test", description.value());

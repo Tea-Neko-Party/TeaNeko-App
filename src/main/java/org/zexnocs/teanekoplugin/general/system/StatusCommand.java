@@ -1,7 +1,18 @@
 package org.zexnocs.teanekoplugin.general.system;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import java.util.concurrent.CompletableFuture;
+
+import org.zexnocs.teanekoplugin.support.PluginTaskScope;
+
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
+
+import org.jspecify.annotations.Nullable;
+
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+
 import com.sun.management.OperatingSystemMXBean;
-import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.utils.VersionUtil;
@@ -32,10 +43,12 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
  *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.6-l
+ * @version 4.9.0-l
  */
 @Description("获取当前系统状态信息，包括 CPU 使用率、内存使用情况和磁盘使用情况。")
 // 2026/11/04：显示名与稳定指令前缀分别维护。
@@ -48,7 +61,11 @@ import java.util.concurrent.CompletionStage;
         description = "定期读取系统 CPU 与内存使用情况，超过既有阈值时通过原日志报告通道发送负载告警。"
         + "这里只做状态采样和告警，不执行重启、进程终止或资源释放；网页概览的即时采样独立运行。"
         + "该监测任务只读，具体执行周期与最近运行情况见本卡片的规则和任务记录。", controllable = false)
-public class StatusCommand {
+@PluginOwned("general.system")
+public class StatusCommand implements IPluginLifecycle {
+    // 2026/11/07：每次启用单独登记定时器和在途工作，旧代次不可恢复。
+    private @Nullable PluginTaskScope lifecycle;
+
     /// CPU 使用率阈值
     private final static int CPU_THRESHOLD = 80;
 
@@ -90,11 +107,19 @@ public class StatusCommand {
 
     /**
      * 初始化方法，在命令类实例化后自动调用，注册定时任务监控 CPU 和内存使用率，并在超过阈值时发送警告消息给管理员。
+     * <br>2026/11/07：由插件启用触发，每次启用使用独立定时器代次。
+     * @return 定时器已完成登记的阶段
      */
-    @PostConstruct
-    public void init() {
+    @Override
+    public synchronized CompletionStage<Void> start() {
+        if (lifecycle != null) {
+            return CompletableFuture.completedStage(null);
+        }
+        var scope = new PluginTaskScope();
+        lifecycle = scope;
+
         // cpu 和 内存使用率监控。自动报警给管理员
-        iTimerService.registerByDelay("cpu/内存监控", "status-monitor", () -> {
+        scope.own(iTimerService.registerByDelay("cpu/内存监控", "status-monitor", () -> scope.execute(() -> {
             // 检测 CPU 使用率是否超过阈值
             // 获取系统的 CPU 使用率
             double systemCpuLoad = osBean.getCpuLoad() * 100;
@@ -111,7 +136,31 @@ public class StatusCommand {
                         内存使用率过高警告: %.2f%%""".formatted(memoryUsagePercentage));
             }
             return EmptyTaskResult.INSTANCE;
-        }, Duration.ofMinutes(30), EmptyTaskResult.getResultType());
+        }), Duration.ofMinutes(30), EmptyTaskResult.getResultType()));
+        return CompletableFuture.completedStage(null);
+    }
+
+    /** @return 2026/11/07：所属业务插件的稳定标识。 */
+    @Override
+    public String pluginId() {
+        return "general.system";
+    }
+
+    /** @return 2026/11/07：插件内部唯一的后台任务标识。 */
+    @Override
+    public String id() {
+        return "status-monitor";
+    }
+
+    /**
+     * 2026/11/07：关闭本代定时入口并等待正在执行的回调，不销毁借用资源。
+     * @return 本代后台工作已结束的阶段
+     */
+    @Override
+    public synchronized CompletionStage<Void> stop() {
+        var scope = lifecycle;
+        lifecycle = null;
+        return scope == null ? CompletableFuture.completedStage(null) : scope.stop();
     }
 
     /**

@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoagent.runtime.access;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
 
 import java.util.Objects;
 

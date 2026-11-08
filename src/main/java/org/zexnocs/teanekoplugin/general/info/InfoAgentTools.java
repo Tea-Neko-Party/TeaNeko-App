@@ -1,14 +1,18 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolContext;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
-import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
@@ -34,18 +38,21 @@ import java.util.concurrent.Executor;
  * <br>2026/11/05：留言工具独立声明，仍复用原生来源权限和有界投影。
  *
  * <br>2026/11/05：在宿主初始化或能力装配时编译工具目录，运行选择只读缓存。
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.9.0-l
  */
 @TeaNekoAgentToolClass(value = "user-info", pluginId = InfoAgentPlugin.ID, toolPackage = "general.info", managedByFeature = true)
+@PluginOwned("general.info")
 public final class InfoAgentTools implements IAgentToolSource {
     public static final String INFO = "teaneko_user_info";
     public static final String MESSAGES = "teaneko_user_messages";
     private final InfoService info;
     private final MessageBoardInfoService messages;
-    private final NativeCommandBridge sources;
+    private final NativeMessageSources sources;
     private final ObjectMapper mapper;
     private final Executor executor;
 
@@ -57,7 +64,7 @@ public final class InfoAgentTools implements IAgentToolSource {
      * @param mapper 项目 JSON 转换器
      * @param executor 借用业务执行器
      */
-    public InfoAgentTools(InfoService info, MessageBoardInfoService messages, NativeCommandBridge sources, ObjectMapper mapper, Executor executor) {
+    public InfoAgentTools(InfoService info, MessageBoardInfoService messages, NativeMessageSources sources, ObjectMapper mapper, Executor executor) {
         // 2026/11/05：单例创建时编译工具目录，高频选择只读缓存。
         TeaNekoAgentToolMethods.prepare(this);
         this.info = Objects.requireNonNull(info); this.messages = Objects.requireNonNull(messages); this.sources = Objects.requireNonNull(sources);
@@ -166,7 +173,7 @@ public final class InfoAgentTools implements IAgentToolSource {
      */
     private boolean debug(AgentRunRequest request) {
         return request.actor().origin() == AgentActorContext.Origin.USER && sources.source(request)
-                .filter(data -> NativeCommandBridge.actor(data).equals(request.actor()))
+                .filter(data -> NativeMessageSources.actor(data).equals(request.actor()))
                 .map(data -> data.getUserData().getRole() == CommandPermission.DEBUG).orElse(false);
     }
 

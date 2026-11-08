@@ -1,6 +1,6 @@
 # 第四批图库管理与受限事件交付记录
 
-日期：2026/11/03。本批完成拟人表达与表情包计划，约定代码和离线验收范围达到 100%。当前版本保持 4.6.1-l，未执行 Git 提交、打标或发布。主入口、规格及前三批记录已一起归档，见[实施入口](agent-expression-stickers.md)；当前操作以[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md)为准。
+日期：2026/11/03。本批完成拟人表达与表情包计划，约定代码和离线验收范围达到 100%。当前版本保持 4.6.1-l，未执行 Git 提交、打标或发布。主入口、规格及前三批记录已一起归档，见[实施入口](agent-expression-stickers.md)；当前操作以[素材模块](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md)为准。
 
 版本归属补充（2026/11/03）：表达与表情包正式归入 4.6.2-l，见[版本日志](../../changelog/4.6.2-l.md)。上文及以下构建编号保留批次结束时的历史事实，不作为当前发布版本；后续 Web 功能归入 4.7.0-l。
 

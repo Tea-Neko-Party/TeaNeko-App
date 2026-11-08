@@ -1,13 +1,15 @@
 package org.zexnocs.teanekoagent.component.tool;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;

@@ -1,18 +1,20 @@
 package org.zexnocs.teanekoapp.web.settings;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.client.IClientManagementAdapter;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditService;
 import org.zexnocs.teanekocore.database.configdata.ConfigEdits;
-import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
@@ -24,10 +26,11 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/04：管理员直接管理已启用配置，取消本地配置分组白名单，保留业务边界复核。
  * <br>2026/11/04：目录按当前聊天的真实登记状态排序，查询前后复核会话、插件及客户端范围。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.4-l
+ * @version 4.9.0-l
  */
 @Service
 public final class ChatSettingsService {
@@ -90,7 +93,7 @@ public final class ChatSettingsService {
                             current.run();
                             var metadata = describe(entry);
                             return new ChatSettings.Section(metadata.id(), metadata.name(), metadata.group(),
-                                    metadata.description(), registered);
+                                    metadata.description(), registered, metadata.pluginId());
                         }).toCompletableFuture());
             }
             return CompletableFuture.allOf(queries.toArray(CompletableFuture<?>[]::new)).thenApply(ignored -> {
@@ -187,8 +190,9 @@ public final class ChatSettingsService {
         if (entry == null) {
             return false;
         }
-        var owner = AnnotatedElementUtils.findMergedAnnotation(entry.owner(), PluginOwned.class);
-        return owner == null || plugins.isEnabled(owner.value());
+        // 2026/11/07：归属来自初始化目录，启停资格仍实时复核。
+        var owner = entry.pluginId();
+        return owner == null || plugins.isEnabled(owner);
     }
 
     /**
@@ -202,8 +206,8 @@ public final class ChatSettingsService {
             throw new SecurityException("该聊天设置区尚未在本地允许或插件已关闭。");
         }
         var entry = sections.entries().get(id);
-        var owner = AnnotatedElementUtils.findMergedAnnotation(entry.owner(), PluginOwned.class);
-        var token = owner == null ? null : plugins.capture(owner.value());
+        var owner = entry.pluginId();
+        var token = owner == null ? null : plugins.capture(owner);
         Runnable checked = () -> {
             guard.run();
             if (!allowed(id)) {
@@ -240,7 +244,7 @@ public final class ChatSettingsService {
      */
     private static ChatSettings.Section describe(ChatSettingsDirectory.Entry entry) {
         return new ChatSettings.Section(entry.id(), entry.section().name(), entry.group(),
-                entry.section().manager().description());
+                entry.section().manager().description(), null, entry.pluginId());
     }
 
     /**

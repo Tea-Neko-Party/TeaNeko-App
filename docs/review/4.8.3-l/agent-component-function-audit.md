@@ -36,10 +36,10 @@ P2 表示有明确触发条件的功能、扩展或可靠性缺陷；不表示�
 
 源码链路：
 
-1. [StyleObservationService.java:61](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/StyleObservationService.java#L61) 在没有可学习字段或合格证据时允许返回 null。[观察存储:84](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/adapter/EasyDataStyleObservationStore.java#L84) 仅接受当前人格、尚未过期且原文一致的证据。因此，切换人格后积压旧人格消息、证据过期等都可能自然产生这个结果。
-2. [LayeredMemoryProcessor.java:284](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LayeredMemoryProcessor.java#L284) 已明确为“无观察目标且事实学习关闭”返回空 Analysis，避免无效模型调用；这不是异常输入。
-3. 同文件 [306–313 行的 guard](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LayeredMemoryProcessor.java#L306) 将 `!factsAllowed && !styleAllowed` 判为 ACCESS_REVOKED。此时人格观察开关仍可为 true，但 `styleAllowed` 因目标为空变为 false。
-4. 异常走 `retry`。[EasyDataLongTermMemoryStore.java:262](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L262) 保留旧 through，仅增加退避；[claim:160](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L160) 下次仍从该水位领取最多四个片段。
+1. [StyleObservationService.java:61](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/StyleObservationService.java#L61) 在没有可学习字段或合格证据时允许返回 null。[观察存储:84](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/adapter/EasyDataStyleObservationStore.java#L84) 仅接受当前人格、尚未过期且原文一致的证据。因此，切换人格后积压旧人格消息、证据过期等都可能自然产生这个结果。
+2. [LayeredMemoryProcessor.java:284](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LayeredMemoryProcessor.java#L284) 已明确为“无观察目标且事实学习关闭”返回空 Analysis，避免无效模型调用；这不是异常输入。
+3. 同文件 [306–313 行的 guard](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LayeredMemoryProcessor.java#L306) 将 `!factsAllowed && !styleAllowed` 判为 ACCESS_REVOKED。此时人格观察开关仍可为 true，但 `styleAllowed` 因目标为空变为 false。
+4. 异常走 `retry`。[EasyDataLongTermMemoryStore.java:262](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L262) 保留旧 through，仅增加退避；[claim:160](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L160) 下次仍从该水位领取最多四个片段。
 
 实际复现：事实学习=false、观察 enabled=true、prepare=null，用模拟存储执行真实传入的事务 guard。预期一次空提交，实际提交计数为 0，测试失败。整个用例没有调用模型。
 
@@ -77,9 +77,9 @@ METHODS.put(bean.getClass(), specs);
 
 ### F09：计数分离尚未解决永久墓碑的持久容量
 
-[StickerLibrary.java:453](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L453) 已从 cacheSize 排除 `DELETED && blob == null`；管理接口也新增 cacheEntries/deletedDecisions。原 2048 条问题应确认修复，不能继续按旧描述报错。
+[StickerLibrary.java:453](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L453) 已从 cacheSize 排除 `DELETED && blob == null`；管理接口也新增 cacheEntries/deletedDecisions。原 2048 条问题应确认修复，不能继续按旧描述报错。
 
-但[文件回收:299](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L299) 仅清除 blob，不清除完整 Entry 及 analysis；prune 也保留删除决定。[EasyDataStickerCatalog.java:41](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/EasyDataStickerCatalog.java#L41) 仍对同一 state 行完整解码、编码，并拒绝超过 `8*1024*1024` 的 `json.length()`。
+但[文件回收:299](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L299) 仅清除 blob，不清除完整 Entry 及 analysis；prune 也保留删除决定。[EasyDataStickerCatalog.java:41](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/EasyDataStickerCatalog.java#L41) 仍对同一 state 行完整解码、编码，并拒绝超过 `8*1024*1024` 的 `json.length()`。
 
 本轮复用现有 NamespaceDatabaseFixture 和真实 EasyDataStickerCatalog，构造 12,000 个不同指纹、文件已回收且分析字段长度合法的删除条目：
 
@@ -113,7 +113,7 @@ METHODS.put(bean.getClass(), specs);
 处理：本批不会以失败候选推进整理进度，将按持久状态重试
 ```
 
-当前[validate:517](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L517) 的 529 行实际抛出“长期原话不支持当前主体或来源已失效”。此前已经检查候选片段属于本批，并找到对应 evidenceId；这一行进一步拒绝原话与主体、片段或当前持久状态不匹配的候选。
+当前[validate:517](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L517) 的 529 行实际抛出“长期原话不支持当前主体或来源已失效”。此前已经检查候选片段属于本批，并找到对应 evidenceId；这一行进一步拒绝原话与主体、片段或当前持久状态不匹配的候选。
 
 | 同一异常分支中的条件 | 可触发的情况 | 建议安全原因码（尚未实现） |
 | --- | --- | --- |
@@ -129,11 +129,11 @@ METHODS.put(bean.getClass(), specs);
 
 #### 调用链与实际影响
 
-1. [LLMLongTermMemoryConsolidator.decode:184](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LLMLongTermMemoryConsolidator.java#L184) 要求模型 SUCCESS，再解析 JSON、字段及候选结构；但没有在此阶段核对候选与固定批次的证据关系。在默认生成路径中，走到本次 validate 说明已经通过结构解析，不表示生成内容真实可靠。
-2. [commit:234](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L234) 验证事实候选，245 行的人格观察也复用同一个 validate。只凭“Agent 长期记忆”标签无法判断出错的是 memories 还是 styles。任一校验失败都会阻止该事务提交事实、风格、索引和整理水位，不应改为无提示的部分提交。
+1. [LLMLongTermMemoryConsolidator.decode:184](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LLMLongTermMemoryConsolidator.java#L184) 要求模型 SUCCESS，再解析 JSON、字段及候选结构；但没有在此阶段核对候选与固定批次的证据关系。在默认生成路径中，走到本次 validate 说明已经通过结构解析，不表示生成内容真实可靠。
+2. [commit:234](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L234) 验证事实候选，245 行的人格观察也复用同一个 validate。只凭“Agent 长期记忆”标签无法判断出错的是 memories 还是 styles。任一校验失败都会阻止该事务提交事实、风格、索引和整理水位，不应改为无提示的部分提交。
 3. [数据库任务包装:74](../../../src/main/java/org/zexnocs/teanekocore/database/base/stage/DatabaseRetryHandlingTaskStage.java#L74) 将这类异常包装成 TaskNoRetryRuntimeException，表示数据库任务层不立即重试原事务，不等于上层停止整理。
-4. [LayeredMemoryProcessor.reportFailure:387](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LayeredMemoryProcessor.java#L387) 未找到专用 MemoryProcessingException 时使用 PROCESSING_FAILED；[FailureDiagnostic:70](../../../src/main/java/org/zexnocs/teanekocore/logger/FailureDiagnostic.java#L70) 只接收显式安全原因，不读取任意 Throwable 消息。普通 IllegalArgumentException 没有提供原因接口，故日志退化为“未识别异常”。模型／准入状态“未取得”是本处没有携带结果，不证明此前未调用模型或未通过准入。
-5. [retry:262](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L262) 保留 through 并持久化退避，约 30 秒、60 秒、120 秒起递增，单次间隔最多一小时。次数字段封顶不等于存在终止重试次数；后续会重新领取输入并生成，而不是简单重复提交同一个候选对象。若同一前缀持续产生错误，会消耗模型调用并拖延后续整理；来源、资格或保留期变化可能改变结果，不能据此宣称永久死锁。
+4. [LayeredMemoryProcessor.reportFailure:387](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LayeredMemoryProcessor.java#L387) 未找到专用 MemoryProcessingException 时使用 PROCESSING_FAILED；[FailureDiagnostic:70](../../../src/main/java/org/zexnocs/teanekocore/logger/FailureDiagnostic.java#L70) 只接收显式安全原因，不读取任意 Throwable 消息。普通 IllegalArgumentException 没有提供原因接口，故日志退化为“未识别异常”。模型／准入状态“未取得”是本处没有携带结果，不证明此前未调用模型或未通过准入。
+5. [retry:262](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L262) 保留 through 并持久化退避，约 30 秒、60 秒、120 秒起递增，单次间隔最多一小时。次数字段封顶不等于存在终止重试次数；后续会重新领取输入并生成，而不是简单重复提交同一个候选对象。若同一前缀持续产生错误，会消耗模型调用并拖延后续整理；来源、资格或保留期变化可能改变结果，不能据此宣称永久死锁。
 
 #### 建议实现范围与顺序
 
@@ -144,7 +144,7 @@ METHODS.put(bean.getClass(), specs);
 | 3. LLMLongTermMemoryConsolidator.analyze/decode 与领域校验入口 | 解析后按固定 batch 预校验引用、作者及片段关系，向模型明确每条 quote 必须落在所选 segments 范围内。提供清晰的证据—作者—片段映射，减少模型自行关联 UUID；纯关系校验复用一份实现 | 不盲目替换 subjectId 或改写引用来通过验证；事务内仍重新检查权威原文、有效期、generation、租约和输入指纹，不以预校验代替最终校验 |
 | 4. LayeredMemoryProcessor 与持久作业状态 | 区分模型候选关联错误、来源失效、租约变化、撤权和可恢复基础设施故障。若采用模型纠错，仅在原控制、时限和剩余调用预算内做有限次数，并给出结构化错误反馈；来源失效走重新领取有效输入。为同一输入指纹持续失败保留可观察状态及受控重放入口 | 不在数据库事务内调用模型，不另开无限重试或额外预算；达到明确失败阈值后不静默跳过该批，不伪造成功水位。新增持久状态须说明旧作业兼容、解除条件及重启行为 |
 
-最小优先补丁是前两项诊断分类和第三项证据预校验；第四项需要明确有界次数、持久状态与恢复入口后实施，不能只加一句“失败再试”。重试策略改变须同步[分层记忆合同](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/README.md)，不把尚未实现的恢复写成当前行为。
+最小优先补丁是前两项诊断分类和第三项证据预校验；第四项需要明确有界次数、持久状态与恢复入口后实施，不能只加一句“失败再试”。重试策略改变须同步[分层记忆合同](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/README.md)，不把尚未实现的恢复写成当前行为。
 
 修复不得将错误候选删掉或替换为空列表后推进水位，也不得删除逐字引用、作者归属、有效期或片段范围校验。空候选只有在生成结果本来合法且当前仍获准时才可提交，须与 G01 的合法空批次修复保持区分。延长超时、重启或清空记忆不是证据错配的通用修复；本项不授权任何数据清理。
 
@@ -169,28 +169,28 @@ METHODS.put(bean.getClass(), specs);
 
 | 编号／原问题 | 补丁与核对依据 | 复评状态 |
 | --- | --- | --- |
-| F01／事务排队后不执行资格守卫 | [长期存储:221](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L221)、252 在事务入口及返回前执行 guard，Processor 分域复核；新增可控事务队列撤权测试 | 原 P1 可关闭；另处理 G01 空批次回归 |
-| F02／人格学习隐藏依赖记忆输入 | [PersonalityLearningConfig:75](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/configuration/PersonalityLearningConfig.java#L75) 按 scope 的实际引用、观察、分层及历史/摘要开关选择逐轮学习，服务不再强制 memoryReference | 原问题可关闭；无记忆使用逐轮学习，不等同于独立持久观察样本通路 |
-| F03／expression 独立装配缺原生表情资料 | [ExpressionFeature](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/ExpressionFeature.java) 贡献独立原生目录；[NativeFaceService](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/NativeFaceService.java) 处理资料、版本及发送许可，FaceReplyHandler 使用它 | 原问题可关闭；真实 Feature 选择测试覆盖 expression、加 tool、加 sticker 三种组合 |
-| F04／插件任务动作被 remind 策略拒绝 | [AgentScheduleConfig:84](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/configuration/AgentScheduleConfig.java#L84) 组合公共身份检查与每动作 Policy；读取/取消不要求动作插件继续启用 | 原问题可关闭；默认工厂用例覆盖自定义动作、插件停用和重名 |
+| F01／事务排队后不执行资格守卫 | [长期存储:221](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L221)、252 在事务入口及返回前执行 guard，Processor 分域复核；新增可控事务队列撤权测试 | 原 P1 可关闭；另处理 G01 空批次回归 |
+| F02／人格学习隐藏依赖记忆输入 | [PersonalityLearningConfig:75](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/configuration/PersonalityLearningConfig.java#L75) 按 scope 的实际引用、观察、分层及历史/摘要开关选择逐轮学习，服务不再强制 memoryReference | 原问题可关闭；无记忆使用逐轮学习，不等同于独立持久观察样本通路 |
+| F03／expression 独立装配缺原生表情资料 | [ExpressionFeature](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/ExpressionFeature.java) 贡献独立原生目录；[NativeFaceService](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/NativeFaceService.java) 处理资料、版本及发送许可，FaceReplyHandler 使用它 | 原问题可关闭；真实 Feature 选择测试覆盖 expression、加 tool、加 sticker 三种组合 |
+| F04／插件任务动作被 remind 策略拒绝 | [AgentScheduleConfig:84](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/configuration/AgentScheduleConfig.java#L84) 组合公共身份检查与每动作 Policy；读取/取消不要求动作插件继续启用 | 原问题可关闭；默认工厂用例覆盖自定义动作、插件停用和重名 |
 | F05／Skill 依赖复核早于最终过滤 | [AgentTurnPipeline:344](../../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L344) 在最终集合调用 verifySelection，CombinedTools 转交实际来源，AgentSkills 检查 loader/依赖 | 原问题可关闭；白名单删除依赖或 loader 均有拒绝用例，未自动扩权补工具 |
-| F06／单字查询被当成空查询 | [长期检索:290](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java#L290)、307 对非空无索引词使用规范化字面过滤 | 原问题可关闭；仍是有界筛选，保留 limited 语义，不是全库语义检索 |
-| F07／重扫暴露空或半成品目录 | [LLMModelService:373](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelService.java#L373) 完整校验后一次发布不可变 Map，单次查询固定快照；旧 LLMToolService 同步处理 | 原问题可关闭；发现阻塞及冲突失败时保留旧目录的测试已补 |
-| F08／主动候选固定偏序饥饿 | [ProactiveCoordinator:166](../../../src/main/java/org/zexnocs/teanekoagent/component/proactive/adapter/ProactiveCoordinator.java#L166) 每批轮换起点；BUSY 不消耗整轮到期机会，区别于已尝试/弃言 | 原问题可关闭；四目标双槽、受控阶段测试覆盖原条件 |
+| F06／单字查询被当成空查询 | [长期检索:290](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java#L290)、307 对非空无索引词使用规范化字面过滤 | 原问题可关闭；仍是有界筛选，保留 limited 语义，不是全库语义检索 |
+| F07／重扫暴露空或半成品目录 | [LLMModelService:373](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/model/LLMModelService.java#L373) 完整校验后一次发布不可变 Map，单次查询固定快照；旧 LLMToolService 同步处理 | 原问题可关闭；发现阻塞及冲突失败时保留旧目录的测试已补 |
+| F08／主动候选固定偏序饥饿 | [ProactiveCoordinator:166](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/proactive/adapter/ProactiveCoordinator.java#L166) 每批轮换起点；BUSY 不消耗整轮到期机会，区别于已尝试/弃言 | 原问题可关闭；四目标双槽、受控阶段测试覆盖原条件 |
 | F09／墓碑挤占缓存名额 | 新增独立 cacheSize 与管理计数，不再把已回收墓碑算入 2048 条缓存 | 部分修复；整行 JSON 持久容量仍需处理，见第二节 |
-| F10／无插件目录的空事件配置失败 | [StickerEvents:83](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerEvents.java#L83) 空 names 直接返回空集合 | 原问题可关闭；有总线、无目录、空名单用例已补 |
+| F10／无插件目录的空事件配置失败 | [StickerEvents:83](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerEvents.java#L83) 空 names 直接返回空集合 | 原问题可关闭；有总线、无目录、空名单用例已补 |
 | F11／每轮发现类声明 | 类 requires、方法/参数和代理调用目录改为初始化编译，未初始化明确拒绝 | 原高频发现已修；因 G02 代理隔离回归，整项待收尾 |
 
-关键补丁测试入口：[LongTermMemoryIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/LongTermMemoryIntegrationTest.java)、[PersonalityIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/PersonalityIntegrationTest.java)、[MediaReplyIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/MediaReplyIntegrationTest.java)、[AgentComponentReliabilityTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/AgentComponentReliabilityTest.java)、[AgentPromptIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/runtime/prompt/AgentPromptIntegrationTest.java)、[LLMModelServiceRegistrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelServiceRegistrationTest.java)。它们属于补丁已有资产，本轮没有修改这些文件。
+关键补丁测试入口：[LongTermMemoryIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/LongTermMemoryIntegrationTest.java)、[PersonalityIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/PersonalityIntegrationTest.java)、[MediaReplyIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/MediaReplyIntegrationTest.java)、[AgentComponentReliabilityTest](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/AgentComponentReliabilityTest.java)、[AgentPromptIntegrationTest](../../../src/test/java/org/zexnocs/teanekoagent/runtime/prompt/AgentPromptIntegrationTest.java)、[LLMModelServiceRegistrationTest](../../../src/test/java/org/zexnocs/teanekoagent/llm/framework/model/LLMModelServiceRegistrationTest.java)。它们属于补丁已有资产，本轮没有修改这些文件。
 
 ## 四、R01–R04 边界复评
 
 | 编号 | 当前实现与判断 | 仍需验证或保留的限制 |
 | --- | --- | --- |
-| R01／主动活动与 namespace 耦合 | [ProactiveService:181](../../../src/main/java/org/zexnocs/teanekoagent/component/proactive/adapter/ProactiveService.java#L181) 仅安装 memory 时解析/复核引用；PROACTIVE_ENTRY 允许无记忆引用，仍保留持久防重身份。原主路径耦合已解除 | 新测试证明无引用的 Attempt 可跨存储重建保留身份，但没有覆盖完整无 memory 的主动生成、发送和重启流程；建议补组合验收，不列为已证实的新缺陷 |
-| R02／扫描历史与串行慢动作 | [EasyDataScheduleStore:201](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/EasyDataScheduleStore.java#L201) 使用到期索引；状态同事务维护索引，启动恢复可补旧记录；[AgentScheduleService](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/AgentScheduleService.java) 分离发现与四槽执行 | 原全历史扫描和逐任务串行等待已处理；四槽仍可饱和，迟到超过 30 秒不补跑。真实数据库规模、耗时与准入容量仍需验收，不能写成不限量异步 |
+| R01／主动活动与 namespace 耦合 | [ProactiveService:181](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/proactive/adapter/ProactiveService.java#L181) 仅安装 memory 时解析/复核引用；PROACTIVE_ENTRY 允许无记忆引用，仍保留持久防重身份。原主路径耦合已解除 | 新测试证明无引用的 Attempt 可跨存储重建保留身份，但没有覆盖完整无 memory 的主动生成、发送和重启流程；建议补组合验收，不列为已证实的新缺陷 |
+| R02／扫描历史与串行慢动作 | [EasyDataScheduleStore:201](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/EasyDataScheduleStore.java#L201) 使用到期索引；状态同事务维护索引，启动恢复可补旧记录；[AgentScheduleService](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/AgentScheduleService.java) 分离发现与四槽执行 | 原全历史扫描和逐任务串行等待已处理；四槽仍可饱和，迟到超过 30 秒不补跑。真实数据库规模、耗时与准入容量仍需验收，不能写成不限量异步 |
 | R03／原生表情依赖图库事务 | NativeFaceService 不依赖图库存储，expression 只用原生表情不再借图库 WRITE 事务 | 原生部分可关闭；sticker 的选图、冷却、预约和读占用仍锁整行目录并完整编码，吞吐未测。保留原子仲裁，按测得竞争再决定拆分 |
-| R04／异常回执误记送达 | [NativeScheduleAdapter:119](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/adapter/NativeScheduleAdapter.java#L119) 使用 AgentReplySender.confirm，要求有效消息 ID | 原问题可关闭；缺消息 ID 的测试确认进入 INDETERMINATE、不自动重发；真实平台回执仍属实机验收 |
+| R04／异常回执误记送达 | [NativeScheduleAdapter:119](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/adapter/NativeScheduleAdapter.java#L119) 使用 AgentReplySender.confirm，要求有效消息 ID | 原问题可关闭；缺消息 ID 的测试确认进入 INDETERMINATE、不自动重发；真实平台回执仍属实机验收 |
 
 调度证据见 [AgentScheduleIntegrationTest:156](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/AgentScheduleIntegrationTest.java#L156) 及发现失败恢复用例；回执证据见 [NativeScheduleIntegrationTest:176](../../../src/test/java/org/zexnocs/teanekoagent/component/memory/namespace/NativeScheduleIntegrationTest.java#L176)。实机事项继续使用[部署验收清单](../../development/agent-deployment.md#实机验收清单)，不改写历史计划的原始验收记录。
 
@@ -287,9 +287,9 @@ METHODS.put(bean.getClass(), specs);
 
 ### 升级及未执行项
 
-无须改表，但图库首次访问会自动迁移旧删除决定。先备份数据库和素材卷，停止旧实例后统一升级；旧版本不能读取新拒绝索引，不可混跑或直接降级。回退使用配套版本的数据备份，详见[图库迁移说明](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#删除记录迁移与回退)。
+无须改表，但图库首次访问会自动迁移旧删除决定。先备份数据库和素材卷，停止旧实例后统一升级；旧版本不能读取新拒绝索引，不可混跑或直接降级。回退使用配套版本的数据备份，详见[图库迁移说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#删除记录迁移与回退)。
 
-长期暂停的原因与恢复合同见[分层记忆说明](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/README.md#长期整理失败与恢复)。未连接真实数据库、模型或客户端，未启动应用；首次迁移耗时、四槽容量及图库行锁吞吐继续按[部署验收清单](../../development/agent-deployment.md#实机验收清单)执行。约定离线范围已完成，见[实施归档](../../plan/old/4.8.3-component-review-followup.md)。
+长期暂停的原因与恢复合同见[分层记忆说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/README.md#长期整理失败与恢复)。未连接真实数据库、模型或客户端，未启动应用；首次迁移耗时、四槽容量及图库行锁吞吐继续按[部署验收清单](../../development/agent-deployment.md#实机验收清单)执行。约定离线范围已完成，见[实施归档](../../plan/old/4.8.3-component-review-followup.md)。
 
 ## 九、2026/11/06 更新后独立复评
 
@@ -308,7 +308,7 @@ METHODS.put(bean.getClass(), specs);
 | R01／无记忆主动活动 | 新组合测试经过真实宿主、目标发送及存储入口，用网络替身验证有效平台消息 ID、重建防重和空文本弃言，不读取历史或记忆引用 | 上轮指出的组合测试缺口已补，不再写成“仅证明 Attempt 可持久化” |
 | R02／调度；R03／图库竞争 | 四槽饱和后继续调度及双宿主根锁下状态、计数仲裁已有离线覆盖；没有为通过测试删除锁或放宽容量 | 离线功能与原子性改善有效；真实 MySQL 吞吐、首次迁移耗时、平台回执仍待实机验收 |
 
-主要核对入口：[长期处理器](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LayeredMemoryProcessor.java)、[生成器预校验](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/LLMLongTermMemoryConsolidator.java)、[长期事务存储](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLongTermMemoryStore.java)、[管理服务](../../../src/main/java/org/zexnocs/teanekoagent/integration/web/AgentLayersConsoleService.java)、[工作区界面](../../../frontend/src/AgentWorkspaceView.vue)、[图库事务](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/EasyDataStickerCatalog.java)、[采集拒绝检查](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java)。
+主要核对入口：[长期处理器](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LayeredMemoryProcessor.java)、[生成器预校验](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/LLMLongTermMemoryConsolidator.java)、[长期事务存储](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLongTermMemoryStore.java)、[管理服务](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/integration/web/AgentLayersConsoleService.java)、[工作区界面](../../../frontend/src/features/agent/AgentWorkspaceView.vue)、[图库事务](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/EasyDataStickerCatalog.java)、[采集拒绝检查](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java)。
 
 ### 9.2 新确认 G03：共享继承方法的代理调用目录未按提供者隔离
 
@@ -347,7 +347,7 @@ METHODS.put(bean.getClass(), specs);
 | `MEMORY_STORAGE_FORMAT` | 核对部署版本、受控记录类型和字段；仅缺 revision 的旧格式已有兼容，其他损坏保持原样。工作区“恢复整理”不是 JSON 修复器 |
 | `PAUSED` | 表示后台已停止对相同输入继续无效生成，不是服务失效或整理完成。授权恢复或固定输入指纹变化可解除；只追加前缀之外的新消息未必改变当前输入 |
 
-操作与完整原因表以[分层记忆失败恢复说明](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/README.md#长期整理失败与恢复)为准。未知模型/准入状态仍应标为未知；不应为消除“未取得”而硬填成功，或记录聊天原文、完整模型响应来换取诊断。
+操作与完整原因表以[分层记忆失败恢复说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/README.md#长期整理失败与恢复)为准。未知模型/准入状态仍应标为未知；不应为消除“未取得”而硬填成功，或记录聊天原文、完整模型响应来换取诊断。
 
 ### 9.4 可扩展性、可维护性与异步能力
 
@@ -379,4 +379,4 @@ $env:PATH="$env:JAVA_HOME\bin;$env:PATH"
 
 复现与核对入口：[独立任务配置](../../../temp/verification/4.8.3-l/review-2/review.init.gradle)、[G03 诊断源码](../../../temp/verification/4.8.3-l/review-2/src/org/zexnocs/teanekoagent/review/InheritedProxyConditionReviewTest.java)、[运行日志](../../../temp/verification/4.8.3-l/review-2/run.log)、[63 项回归报告](../../../temp/verification/4.8.3-l/review-2/regression-report/index.html)、[失败诊断报告](../../../temp/verification/4.8.3-l/review-2/diagnostic-report/index.html)。
 
-就本次组件复评范围，建议下一批修 G03 并补入正式回归；真实容量按[部署验收清单](../../development/agent-deployment.md#实机验收清单)单独安排。F09 升级仍须备份、停旧实例后统一升级，禁止新旧存储语义混跑或直接降级，见[迁移与回退合同](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#删除记录迁移与回退)。本次审查不授权清理真实记忆、删除拒绝决定或发布升级。
+就本次组件复评范围，建议下一批修 G03 并补入正式回归；真实容量按[部署验收清单](../../development/agent-deployment.md#实机验收清单)单独安排。F09 升级仍须备份、停旧实例后统一升级，禁止新旧存储语义混跑或直接降级，见[迁移与回退合同](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#删除记录迁移与回退)。本次审查不授权清理真实记忆、删除拒绝决定或发布升级。

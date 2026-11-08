@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.integration.web;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -8,9 +10,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.zexnocs.teanekoagent.component.AgentComponentRegistry;
-import org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry;
 import org.zexnocs.teanekoagent.integration.config.AgentModelSelection;
+import org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory;
 import org.zexnocs.teanekoapp.web.WebSessionGuard;
 import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
@@ -73,7 +75,7 @@ public final class AgentComponentController {
         String modelError = "";
         try {
             systemRoutes = selections.choices();
-        } catch (org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException | IllegalArgumentException failure) {
+        } catch (org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException | IllegalArgumentException failure) {
             systemRoutes = Map.of("", "系统模型配置尚不可用");
             modelError = "请修复系统模型文件，或选择聊天私有模型。";
         }

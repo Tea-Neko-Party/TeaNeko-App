@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.utils.scanner.inerfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import java.lang.annotation.Annotation;
 import java.util.Map;
 import java.util.Set;
@@ -36,7 +38,7 @@ public interface IClassScanner {
      *
      * @param annotationType 需要扫描的注解类型
      * @param interfaceType 需要扫描的接口类型
-     * @return 一个包含所有带有指定注解的 classes 的 Map，键为 classes 的名称，值为一个 Pair 对象，包含注解实例和 classes 实例
+     * @return 一个包含所有带有指定注解的 classes 的 Map，键为 classes 的名称，值为一个 IPair 对象，包含注解实例和 classes 实例
      */
     <A extends Annotation, T> Map<Class<? extends T>, A> getClassesWithAnnotationAndInterface(
             Class<A> annotationType, Class<T> interfaceType);

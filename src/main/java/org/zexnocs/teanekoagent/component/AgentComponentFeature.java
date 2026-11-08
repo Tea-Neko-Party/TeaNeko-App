@@ -1,11 +1,14 @@
 package org.zexnocs.teanekoagent.component;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
-import org.zexnocs.teanekoagent.plugin.AgentFeature;
 import org.zexnocs.teanekoagent.plugin.AgentPluginContext;
+import org.zexnocs.teanekoagent.plugin.IAgentFeature;
 import org.zexnocs.teanekocore.framework.composition.ComponentKey;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+
 import java.util.List;
 import java.util.Set;
 
@@ -22,7 +25,7 @@ import java.util.Set;
  * @since 4.8.0-l
  * @version 4.8.0-l
  */
-public record AgentComponentFeature(String pluginId, String componentId, IAgentComponent component) implements AgentFeature {
+public record AgentComponentFeature(String pluginId, String componentId, IAgentComponent component) implements IAgentFeature {
     /** @return 与旧能力不冲突的内部稳定 ID。 */
     @Override
     public String id() {

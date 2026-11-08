@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.itemdata;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
@@ -21,13 +23,13 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class ItemDataConfigService implements IItemDataConfigService {
     private final IDatabaseService iDatabaseService;
-    private final ItemDataRepository itemDataRepository;
+    private final IItemDataRepository itemDataRepository;
     private final ObjectMapper objectMapper;
     private final IItemDataCreateService iItemDataCreateService;
 
     @Autowired
     public ItemDataConfigService(IDatabaseService iDatabaseService,
-                                 ItemDataRepository itemDataRepository,
+                                 IItemDataRepository itemDataRepository,
                                  IItemDataCreateService iItemDataCreateService) {
         this.iDatabaseService = iDatabaseService;
         this.itemDataRepository = itemDataRepository;

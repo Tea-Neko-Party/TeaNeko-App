@@ -3,8 +3,8 @@ package org.zexnocs.teanekoplugin.general;
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoData;
 import org.zexnocs.teanekoplugin.general.info.personal.PersonalInfoData;
-import org.zexnocs.teanekoplugin.general.signin.data.SignInChunkData;
-import org.zexnocs.teanekoplugin.general.signin.data.SignInData;
+import org.zexnocs.teanekoplugin.general.engagement.signin.data.SignInChunkData;
+import org.zexnocs.teanekoplugin.general.engagement.signin.data.SignInData;
 import tools.jackson.databind.DeserializationFeature;
 import tools.jackson.databind.json.JsonMapper;
 

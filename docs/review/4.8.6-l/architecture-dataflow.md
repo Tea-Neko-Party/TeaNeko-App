@@ -74,9 +74,9 @@ flowchart TB
 | --- | --- | --- |
 | ECS 组件/系统 | [AgentComponentRegistry](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java)→[AgentComponentFeature](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentFeature.java)→[AgentPluginRuntime](../../../src/main/java/org/zexnocs/teanekoagent/plugin/AgentPluginRuntime.java) | 既有四阶段和字段内 `M_core=0, M_ui=0`；声明进入真实系统管线。人格 SNAPSHOT 和表达 PLAN 仍由宿主显式消费，替换内建语义不承诺零修改 |
 | 注解工具 | [TeaNekoAgentToolRegistry](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolRegistry.java) 与 [TeaNekoAgentToolMethods](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolMethods.java) | 既有参数/可信上下文内 `M_core=0`；重名拒绝、真实代理和动态资格仍在。G03 历史关闭保持 |
-| 模型/配置适配 | [LLMModelService](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelService.java)、[LLMConfigurationDirectory](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/form/LLMConfigurationDirectory.java) | 注解/接口发现并原子发布；普通模型字段可复用表单。新增协议仍须履行凭据、容量和规范化响应合同 |
+| 模型/配置适配 | [LLMModelService](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/model/LLMModelService.java)、[LLMConfigurationDirectory](../../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/form/LLMConfigurationDirectory.java) | 注解/接口发现并原子发布；普通模型字段可复用表单。新增协议仍须履行凭据、容量和规范化响应合同 |
 | 管理能力 | [ManagementGateway](../../../src/main/java/org/zexnocs/teanekocore/plugin/management/ManagementGateway.java)、[WebManagementCalls](../../../src/main/java/org/zexnocs/teanekoapp/web/WebManagementCalls.java) | 普通资源 `M_core=0`，类型化 DTO 和原路由复用；仍需宿主白名单和真实授权，注册不等于启用 |
-| 顶层页面 | [page-registry.ts](../../../frontend/src/pages/page-registry.ts)、[ConsolePageHost.vue](../../../frontend/src/pages/ConsolePageHost.vue) | 新页面及一条声明即可，原宿主 `M_ui=0`；构建期装配适合首发，不等于远程 UI 热插拔 |
+| 顶层页面 | [page-registry.ts](../../../frontend/src/app/pages/page-registry.ts)、[ConsolePageHost.vue](../../../frontend/src/app/pages/ConsolePageHost.vue) | 新页面及一条声明即可，原宿主 `M_ui=0`；构建期装配适合首发，不等于远程 UI 热插拔 |
 | 旧 Client/内容/命令目录 | 现有 Bean/注解扫描 | 新实现容易加入，但 E1 冲突及重扫仍不统一，不能宣布所有扩展目录已满足 AGENTS |
 | 全新协议/可信类型/控件/阶段 | 新合同与实际消费方 | 允许有依据的一次性修改；不把所有变化包装成“只加注解”，也不新增中央业务 ID 分支 |
 
@@ -153,8 +153,8 @@ flowchart LR
 
 | 观察 | 事实、风险与建议 |
 | --- | --- |
-| V486-P01：社交来信重复观察 | [SocialComponent.resolve](../../../src/main/java/org/zexnocs/teanekoagent/component/social/SocialComponent.java) 在 affinity/mood 各调用一次 `SocialStateService.observe()`；[EasyDataSocialStateStore](../../../src/main/java/org/zexnocs/teanekoagent/component/social/adapter/EasyDataSocialStateStore.java#L69) 先锁关系再用事件去重。不会重复计分，但重复事务存在。收尾装配已改为按类型延迟取得容器服务及显式资料归属，该重复工作仍在。可在单轮拥有者内共享观察结果，各能力继续复核资格；没有实测瓶颈，不提前大改 |
-| V486-E02：主动来源的扩展合同 | [ProactiveContexts](../../../src/main/java/org/zexnocs/teanekoagent/component/proactive/ProactiveContexts.java) 直接使用来源列表；没有来源 ID/owner 目录。内置 Care 有自己的插件/组件门控，所以不能宣称当前可被任意用户绕过；但新增第三方来源不会自动取得常规 Feature 的归属、冲突、停用守卫。开放前复用现有基础设施 |
+| V486-P01：社交来信重复观察 | [SocialComponent.resolve](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/social/SocialComponent.java) 在 affinity/mood 各调用一次 `SocialStateService.observe()`；[EasyDataSocialStateStore](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/social/adapter/EasyDataSocialStateStore.java#L69) 先锁关系再用事件去重。不会重复计分，但重复事务存在。收尾装配已改为按类型延迟取得容器服务及显式资料归属，该重复工作仍在。可在单轮拥有者内共享观察结果，各能力继续复核资格；没有实测瓶颈，不提前大改 |
+| V486-E02：主动来源的扩展合同 | [ProactiveContexts](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/proactive/ProactiveContexts.java) 直接使用来源列表；没有来源 ID/owner 目录。内置 Care 有自己的插件/组件门控，所以不能宣称当前可被任意用户绕过；但新增第三方来源不会自动取得常规 Feature 的归属、冲突、停用守卫。开放前复用现有基础设施 |
 | 主动来源是交集 | `prepare()` 中任何适用来源返回空都会拒绝整个候选；不是多个理由竞争的并集。目前唯一内置 Care 用于收紧资格，行为明确。新需求若要独立候选须另定义合同，不能为了触发更多发言直接把 AND 改 OR |
 | 前端恢复规则重复 | 多页面各自维护 pending/确认/刷新，已造成 F01 与旧修复范围漂移。抽取生命周期和展示，保留各端点 decoder，不做一个接受任意响应的万能成功函数 |
 | 大服务与紧凑写法 | 会话服务约 1670 行、长期 Store 约 1190 行，复杂锁和状态分散；具体方法见 Java 专题。先展开、命名和明确所有者，再提取协作者，不能只按行数拆文件 |

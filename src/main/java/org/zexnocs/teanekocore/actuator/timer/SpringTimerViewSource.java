@@ -5,7 +5,10 @@ import org.springframework.scheduling.config.*;
 import org.springframework.scheduling.support.ScheduledMethodRunnable;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ReflectionUtils;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerViewSource;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
@@ -15,16 +18,19 @@ import java.util.*;
  * 读取 Spring 实际注册任务，按原方法声明展示；不创建调度器，不接管暂停或取消。
  * 弱键仅维持同一活任务的观测标识，不延长已移除任务及其业务对象的生命周期。
  * <br>2026/11/05：复用任务持有者发现缓存，观测时不遍历 Spring Bean 目录。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Component
-public final class SpringTimerViewSource implements ITimerViewSource {
+public final class SpringTimerViewSource implements ITimerViewSource, IScanner {
     private final TimerSourceScanner scanner;
     private final Map<ScheduledTask, UUID> ids = new WeakHashMap<>();
+    private final Map<ScheduledTask, TimerPresentation> metadata = new WeakHashMap<>();
+    private boolean initialized;
 
     /**
      * 2026/11/05：查询只读取已发现的任务持有者，构造不扫描容器。
@@ -32,6 +38,43 @@ public final class SpringTimerViewSource implements ITimerViewSource {
      */
     public SpringTimerViewSource(TimerSourceScanner scanner) {
         this.scanner = scanner;
+    }
+
+    /** @return 2026/11/07：先完成持有者目录初始化，再发现实际任务的方法声明。 */
+    @Override
+    public int getPriority() {
+        return -10;
+    }
+
+    /** 2026/11/07：仅初始化时发现一次任务方法，查询不懒扫描。 */
+    @Override
+    public synchronized void init() {
+        if (!initialized) {
+            reload();
+        }
+    }
+
+    /**
+     * 2026/11/07：在 Spring 完成静态调度注册后显式发布完整目录。
+     * @param event 应用就绪通知
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void onReady(ApplicationReadyEvent event) {
+        reload();
+    }
+
+    /** 2026/11/07：完整发现成功后原子更新缓存，失败保留上一份完整声明。 */
+    @Override
+    public synchronized void reload() {
+        var discovered = new IdentityHashMap<ScheduledTask, TimerPresentation>();
+        for (var holder : scanner.holders()) {
+            for (var scheduled : holder.getScheduledTasks()) {
+                discovered.put(scheduled, TimerPresentation.from(method(scheduled.getTask())));
+            }
+        }
+        metadata.clear();
+        metadata.putAll(discovered);
+        initialized = true;
     }
 
     /** @return 原 Spring 调度来源 */
@@ -47,6 +90,9 @@ public final class SpringTimerViewSource implements ITimerViewSource {
      */
     @Override
     public synchronized List<TimerDirectory.View> snapshot(int limit) {
+        if (!initialized) {
+            throw new IllegalStateException("Spring 定时任务目录尚未初始化。");
+        }
         var seen = Collections.newSetFromMap(new IdentityHashMap<ScheduledTask, Boolean>());
         var result = new ArrayList<TimerDirectory.View>();
         for (var holder : scanner.holders()) {
@@ -55,17 +101,17 @@ public final class SpringTimerViewSource implements ITimerViewSource {
                     continue;
                 }
                 var task = scheduled.getTask();
-                var metadata = TimerPresentation.from(method(task));
-                if (!metadata.visible()) {
+                var declaration = metadata.get(scheduled);
+                if (declaration == null || !declaration.visible()) {
                     continue;
                 }
                 var next = scheduled.nextExecution();
                 String state = task.getLastExecutionOutcome().status() == TaskExecutionOutcome.Status.STARTED
                         ? "RUNNING" : next == null ? "UNKNOWN" : "ACTIVE";
                 result.add(new TimerDirectory.View(ids.computeIfAbsent(scheduled, ignored -> UUID.randomUUID()),
-                        metadata.name().isEmpty() ? "Spring 定时任务" : metadata.name(), state, 0,
-                        observation(task, next), List.of(), metadata.category(), metadata.categoryName(),
-                        metadata.description(), source()));
+                        declaration.name().isEmpty() ? "Spring 定时任务" : declaration.name(), state, 0,
+                        observation(task, next), List.of(), declaration.category(), declaration.categoryName(),
+                        declaration.description(), source(), declaration.pluginId()));
                 if (result.size() == limit) {
                     return List.copyOf(result);
                 }

@@ -57,7 +57,7 @@
 ## 必须保留的边界
 
 - D01 关闭表示诊断与恢复能力已接通，不证明用户旧批次已经成功。旧 `validate:529` 日志没有对应候选与权威证据，具体失败分支仍不能倒推。
-- [分层记忆合同](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/README.md#长期整理失败与恢复)保留逐字证据、主体归属、有效期、租约和事务复核；坏候选不能删掉后伪造空成功。生成器未新增自动纠错调用。
+- [分层记忆合同](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/README.md#长期整理失败与恢复)保留逐字证据、主体归属、有效期、租约和事务复核；坏候选不能删掉后伪造空成功。生成器未新增自动纠错调用。
 - 领取前退避为进程内状态、重启重置；同输入无效生成暂停为持久状态，二者不互相替代。恢复整理不是修复损坏 JSON。
-- [图库存储与迁移合同](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#删除记录迁移与回退)保留人工拒绝、版本、权限和原子仲裁；活动目录仍有容量上限，12,000 条墓碑的离线测试不是无限容量证明。
+- [图库存储与迁移合同](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#删除记录迁移与回退)保留人工拒绝、版本、权限和原子仲裁；活动目录仍有容量上限，12,000 条墓碑的离线测试不是无限容量证明。
 - 动态权限、插件启停、客户端范围、预算及真实异步完成仍须复核，缓存发现结果不能替代这些边界。

@@ -1,6 +1,12 @@
 # Web 控制台部署与开发
 
-当前开发版本：4.8.4-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，模型与聊天补丁见[实施记录](../plan/old/4.8.2-web-model-chat.md)。
+当前开发版本：4.9.0-l。已提供登录/注销、会话管理、概览、客户端目录、聊天配置、[Agent 工作区](web-console-agent.md)、[本地文件配置](web-console-files.md)、[模型配置](web-console-models.md)、[任务与日志](web-console-runtime.md)、[客户端指令台](web-console-commands.md)、指令一览及[独立网页聊天](web-console-chat.md)。基础功能见[归档记录](../plan/old/4.7.0-web-console.md)，模型与聊天补丁见[实施记录](../plan/old/4.8.2-web-model-chat.md)。
+
+## 插件管理
+
+左栏“插件管理”集中展示已装配插件的功能、ID、版本、依赖、客户端要求及当前状态。可跳转插件的本地配置、聊天配置或独立页面；“插件配置”二级菜单只列当前启用且有权限访问的专页。配置、组件、工具、命令、客户端和任务目录展示所属 pluginId 并支持筛选。
+
+开关作用于整个实例，确认前展示受影响插件及阻塞原因。热启停完成后立即撤销相关页面与编辑器，插件总管理保留关闭项；历史数据和文件配置不删除。明确需要重启的插件才提示重启。网络中断时保存原操作编号并查询回执，不重新生成编号猜测结果。启用意愿保存在 `config/plugins.yml`。登录后默认开放全部已注册管理资源，旧配置无需补齐插件管理键。需要限制时设置 `local-allowlist-enabled: true`，此时下列三个白名单按精确键生效。迁移与扩展契约见[插件管理指南](plugins/management.md#插件总管理与升级)。
 
 ## 界面与模式
 
@@ -29,9 +35,9 @@ JSON 和长文本字段可打开独立编辑弹窗，支持查找、撤销和确
 | 配置列表 | 追加内容 |
 | --- | --- |
 | `file-sections` | `agent.observability` |
-| `management-resources` | `teaneko.agent:library`、`teaneko.agent:memory-space`、`teaneko.agent:personality-space`、`teaneko.agent:profile-space`、`teaneko.agent:layers-space` |
+| `management-resources` | `teaneko.agent:library`、`agent.cognition:memory-space`、`agent.cognition:personality-space`、`agent.cognition:profile-space`、`agent.cognition:layers-space` |
 
-指令台沿用 `console-prefixes`：未声明时默认 `['/console']`，显式 `[]` 仍禁用。不要把旧列表整个替换为示例；保留本机已经开放的其他资源。
+默认模式不限制指令台前缀，只展示并执行已声明管理来源的方法。启用 `local-allowlist-enabled` 后才按 `console-prefixes` 收窄，显式空列表禁用指令台。
 
 ## 构建与入口
 
@@ -47,7 +53,7 @@ processResources 依赖 webBuild，后者按锁文件 npm ci、类型检查和�
 
 4.7.1-l 起，Gradle 同时通过 `generateVersionInfo` 生成运行版本资源；JAR 优先读取清单，普通类路径读取生成资源。IntelliJ 使用 Gradle 构建即可；若使用 IDE 直接编译，先执行 `.\gradlew.bat generateVersionInfo` 并同步 Gradle。界面显示实际构建版本，修改源码的版本文件后需重新构建；`app.version` 或 `-Dversion` 不再覆盖它。实际部署版本切换仍未提供。
 
-入口为 `https://你的域名/console/`。静态登录页面可公开，但 API、日志/配置猜测路径及未知入口默认拒绝。ManagementGateway 仅公开本地白名单中的聊天与实例资源，仍保持原显式授权要求。
+入口为 `https://你的域名/console/`。静态登录页面可公开，但 API、日志/配置猜测路径及未知入口默认拒绝。ManagementGateway 向已登录管理员默认开放已注册的聊天与实例资源；可选本地白名单用于进一步收窄。请求仍验证真实会话、CSRF、目标范围及插件资格。
 
 ## 首次启用
 
@@ -65,15 +71,22 @@ trusted-proxies:
   - '127.0.0.1'
 machine-tokens:
   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
+# 默认开放已注册能力；设为 true 后下面三个列表才生效。
+local-allowlist-enabled: false
 console-prefixes: ['/console']
 file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'onebot.main', 'web.chat', 'core.runtime']
 management-resources:
+  - 'teaneko.core:plugins.catalog'
+  - 'teaneko.core:plugins.preview'
+  - 'teaneko.core:plugins.change'
+  - 'teaneko.core:plugins.operation'
+  - 'teaneko.core:plugins.pages'
   - 'teaneko.agent:activity'
-  - 'teaneko.agent:layers'
-  - 'teaneko.agent:memory'
-  - 'teaneko.agent:profiles'
-  - 'teaneko.agent:personality'
-  - 'teaneko.agent:schedules'
+  - 'agent.cognition:layers'
+  - 'agent.cognition:memory'
+  - 'agent.cognition:profiles'
+  - 'agent.cognition:personality'
+  - 'agent.automation:schedules'
   - 'teaneko.core:runtime'
   - 'teaneko.core:logs'
 ```

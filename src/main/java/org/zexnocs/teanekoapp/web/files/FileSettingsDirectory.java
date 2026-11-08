@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.web.files;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
+import org.zexnocs.teanekoapp.web.plugins.PluginOwners;
 import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileTypeScanner;
 import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
@@ -24,17 +25,18 @@ import java.util.Map;
  * <br>2026/11/05：文件类型复用专用扫描器缓存，管理目录不另行扫描类路径。
  * <br>2026/11/05：查询不触发初始化或失败重试，发现仅由扫描生命周期执行。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Service
 public final class FileSettingsDirectory implements IScanner {
     private final IBeanScanner scanner;
     private final FileConfigScanner classes;
     private final FileTypeScanner parsers;
-    private volatile @Nullable Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries;
+    private volatile @Nullable Catalog catalog;
 
     /**
      * 2026/11/05：类型发现由可重扫的 Core 目录提供。
@@ -54,17 +56,17 @@ public final class FileSettingsDirectory implements IScanner {
      * @throws IllegalStateException 当目录尚未成功初始化时
      */
     public Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries() {
-        var current = entries;
+        var current = catalog;
         if (current == null) {
             throw new IllegalStateException("文件配置目录尚未成功初始化，请检查初始化日志并显式重扫。");
         }
-        return current;
+        return current.entries();
     }
 
     /** 2026/11/05：首次初始化目录，已初始化的页面查询只读取缓存。 */
     @Override
     public synchronized void init() {
-        if (entries == null) {
+        if (catalog == null) {
             reload();
         }
     }
@@ -72,7 +74,16 @@ public final class FileSettingsDirectory implements IScanner {
     /** 2026/11/05：显式重建全部管理声明，校验完成后发布，失败保留旧目录。 */
     @Override
     public synchronized void reload() {
-        entries = discover();
+        var found = discover();
+        var owners = new LinkedHashMap<String, String>();
+        found.forEach((id, entry) -> {
+            var owner = PluginOwners.resolve(entry.type(), entry.bean().type());
+            if (owner != null) {
+                owners.put(id, owner);
+            }
+        });
+        // 2026/11/07：实现与插件归属作为同一不可变快照发布。
+        catalog = new Catalog(found, Map.copyOf(owners));
     }
 
     /**
@@ -146,4 +157,25 @@ public final class FileSettingsDirectory implements IScanner {
         }
         return value;
     }
+
+    /**
+     * @param id 文件配置区标识
+     * @return 初始化时确定的插件归属，宿主配置为空
+     */
+    public @Nullable String pluginId(String id) {
+        entries();
+        return java.util.Objects.requireNonNull(catalog).owners().get(id);
+    }
+
+    /**
+     * 文件贡献与插件归属的原子快照。
+     * @param entries 原贡献目录
+     * @param owners 已明确声明的插件归属
+     * @author zExNocs
+     * @date 2026/11/07
+     * @since 4.9.0-l
+     * @version 4.9.0-l
+     */
+    private record Catalog(Map<String, AnnotatedBeanRegistry.Entry<IFileSettingsAdapter>> entries,
+                           Map<String, String> owners) {}
 }

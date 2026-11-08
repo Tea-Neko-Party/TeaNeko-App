@@ -38,7 +38,7 @@
 
 ## V486-J01：事务重试与进程预算混用
 
-位置：[StickerReplyService.java:232](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L232)。
+位置：[StickerReplyService.java:232](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L232)。
 
 `list()` 先把本请求与类别的 `CompletableFuture` 登记到进程缓存，再调用 `catalog.change`。其事务回调不只修改图库状态，还在 `synchronized (queries)` 中修改 `Query.bytes`。后者是进程内可变对象，不属于数据库事务。
 
@@ -60,23 +60,23 @@
 
 | 文件／方法 | 具体问题 | 改写要求 |
 | --- | --- | --- |
-| [StickerReplyService.list:213](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L213) | 紧凑方法混合输入校验、缓存过期、去重、两次锁、事务、页预算、签名和 future 完成；`a/s/original` 难以识别职责 | 先等价展开，再拆缓存领取、事务取页、提交后结算；J01 独立修复 |
-| [StickerReplyService.sticker:245](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L245) | 多层循环、回执验证、冲突判断与条目授权压缩在一行 | 分开“验证本轮完整回执”和“当前条目复核”；保留工具失败／截断过滤及当前版本校验 |
-| [StickerReplyService.sendSticker:283](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L283) | 容量取得、同步抛错和异步结束两条释放路径不易辨认 | 分行标出资源拥有关系与释放点，不把异步资源放进提前结束的 try-with-resources |
-| [StickerReplyService.acquireTransfer:294](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L294) | 循环内两次取消检查、关闭检查和许可归还嵌套压缩 | 每个分支完整成块；保留取得许可之后的二次检查与中断标志恢复 |
-| [StickerLibrary.offer:71](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L71) | 两层异步回调内部缩进不反映层级；一次表达式混合多个容量上限；连续修改配额、作业和来源回执 | 提取可命名的容量判定，事务写入分行；事件等待仍在事务外 |
-| [StickerLibrary.claim:102](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L102) | 租约过期收束、配置停用、清理优先、选择新任务和领取混写 | 明确“收束旧作业→优先清理→领取”顺序，不改变后台单租约与清理优先语义 |
-| [StickerLibrary.defer:131](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L131)、[cleaned:264](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerLibrary.java#L264) | 一行事务里改变作业状态、预约和占用；回调结束位置难以追踪 | 显式写出事务边界与每一步状态变化；提交后通知保持在事务外 |
-| [StickerManagementService.change:124](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerManagementService.java#L124) | 预读取、物理文件复核、第二次事务和管理 action switch 交错；单 case 内多个修改 | 将准备、外部 I/O、版本化提交、通知分段；所有 case 展开，保留二次授权与版本仲裁 |
-| [StickerManagementService.preview:184](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerManagementService.java#L184)、[releasePreview:209](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerManagementService.java#L209) | 嵌套 try/catch/lambda 混合许可、文件读者租约和失败合并 | 独立展示两种资源所有权；保留原失败为主原因及清理失败的 suppressed 关系 |
-| [LocalStickerAssets.identity:58](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LocalStickerAssets.java#L58)、[publish:93](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LocalStickerAssets.java#L93) | 多层目录资源、身份检查及原子移动被压成很长的语句 | 展开文件 Stream 的 try-with-resources、校验和移动分支；不要放宽符号链接或目录接管限制 |
-| [LocalStickerAssets.deleteFile:479](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LocalStickerAssets.java#L479) | 文件存在、类型检查、删除、异常映射都在一个方法行里 | 使用常规方法块，同时修复 J03 的诊断链丢失 |
-| [StickerCollectionService.run:98](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerCollectionService.java#L98)、[cleanup:133](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerCollectionService.java#L133) | 后台领取、下载、分析、发布与清理紧密挤在一起；同步等待隐藏在短 helper 中 | 分阶段命名并解释 `await` 只运行在借用的后台执行域；不要仅因返回 Stage 就声称全链无阻塞 |
-| [ReplyCoordinator:61](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/ReplyCoordinator.java#L61) 的排队及完成回调 | 观察完成与物理完成、队尾移除、资源关闭紧贴，容易误把取消当作实际完成 | 显式保留两个 future 的职责，展开所有完成分支及锁内状态变化 |
-| [AgentConversationSummaryService.offer:150](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/summary/AgentConversationSummaryService.java#L150)、[begin:161](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/summary/AgentConversationSummaryService.java#L161) | 单行双重 try；候选裁剪、槽位、执行控制和后台完成逻辑同处 | 区分执行器拒绝与运行失败；每种失败说明是否可恢复、何时释放槽位 |
+| [StickerReplyService.list:213](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L213) | 紧凑方法混合输入校验、缓存过期、去重、两次锁、事务、页预算、签名和 future 完成；`a/s/original` 难以识别职责 | 先等价展开，再拆缓存领取、事务取页、提交后结算；J01 独立修复 |
+| [StickerReplyService.sticker:245](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L245) | 多层循环、回执验证、冲突判断与条目授权压缩在一行 | 分开“验证本轮完整回执”和“当前条目复核”；保留工具失败／截断过滤及当前版本校验 |
+| [StickerReplyService.sendSticker:283](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L283) | 容量取得、同步抛错和异步结束两条释放路径不易辨认 | 分行标出资源拥有关系与释放点，不把异步资源放进提前结束的 try-with-resources |
+| [StickerReplyService.acquireTransfer:294](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L294) | 循环内两次取消检查、关闭检查和许可归还嵌套压缩 | 每个分支完整成块；保留取得许可之后的二次检查与中断标志恢复 |
+| [StickerLibrary.offer:71](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L71) | 两层异步回调内部缩进不反映层级；一次表达式混合多个容量上限；连续修改配额、作业和来源回执 | 提取可命名的容量判定，事务写入分行；事件等待仍在事务外 |
+| [StickerLibrary.claim:102](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L102) | 租约过期收束、配置停用、清理优先、选择新任务和领取混写 | 明确“收束旧作业→优先清理→领取”顺序，不改变后台单租约与清理优先语义 |
+| [StickerLibrary.defer:131](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L131)、[cleaned:264](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerLibrary.java#L264) | 一行事务里改变作业状态、预约和占用；回调结束位置难以追踪 | 显式写出事务边界与每一步状态变化；提交后通知保持在事务外 |
+| [StickerManagementService.change:124](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerManagementService.java#L124) | 预读取、物理文件复核、第二次事务和管理 action switch 交错；单 case 内多个修改 | 将准备、外部 I/O、版本化提交、通知分段；所有 case 展开，保留二次授权与版本仲裁 |
+| [StickerManagementService.preview:184](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerManagementService.java#L184)、[releasePreview:209](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerManagementService.java#L209) | 嵌套 try/catch/lambda 混合许可、文件读者租约和失败合并 | 独立展示两种资源所有权；保留原失败为主原因及清理失败的 suppressed 关系 |
+| [LocalStickerAssets.identity:58](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/LocalStickerAssets.java#L58)、[publish:93](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/LocalStickerAssets.java#L93) | 多层目录资源、身份检查及原子移动被压成很长的语句 | 展开文件 Stream 的 try-with-resources、校验和移动分支；不要放宽符号链接或目录接管限制 |
+| [LocalStickerAssets.deleteFile:479](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/LocalStickerAssets.java#L479) | 文件存在、类型检查、删除、异常映射都在一个方法行里 | 使用常规方法块，同时修复 J03 的诊断链丢失 |
+| [StickerCollectionService.run:98](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerCollectionService.java#L98)、[cleanup:133](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerCollectionService.java#L133) | 后台领取、下载、分析、发布与清理紧密挤在一起；同步等待隐藏在短 helper 中 | 分阶段命名并解释 `await` 只运行在借用的后台执行域；不要仅因返回 Stage 就声称全链无阻塞 |
+| [ReplyCoordinator:61](../../../src/main/java/org/zexnocs/teanekoagent/runtime/delivery/ReplyCoordinator.java#L61) 的排队及完成回调 | 观察完成与物理完成、队尾移除、资源关闭紧贴，容易误把取消当作实际完成 | 显式保留两个 future 的职责，展开所有完成分支及锁内状态变化 |
+| [AgentConversationSummaryService.offer:150](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/summary/AgentConversationSummaryService.java#L150)、[begin:161](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/summary/AgentConversationSummaryService.java#L161) | 单行双重 try；候选裁剪、槽位、执行控制和后台完成逻辑同处 | 区分执行器拒绝与运行失败；每种失败说明是否可恢复、何时释放槽位 |
 | [AgentConversationService.submit:555](../../../src/main/java/org/zexnocs/teanekoagent/runtime/conversation/AgentConversationService.java#L555)、[startPrepared:1096](../../../src/main/java/org/zexnocs/teanekoagent/runtime/conversation/AgentConversationService.java#L1096) | 长协调器内大量单行早退与成组字段赋值，追踪队列、memory/personality 准备和取消需跨很大范围 | 先展开状态转换与锁边界；后续按 J06 提取职责，不能直接搬锁内逻辑到外部 |
 | [AgentOperations.execute:178](../../../src/main/java/org/zexnocs/teanekoclient/agent/service/AgentOperations.java#L178) | 许可、控制创建、登记和失败释放连续混排，泛型异步链过长 | 以资源取得、业务执行、终态释放划段，保留父控制借用语义 |
-| [StickerReplyTools.list:48](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyTools.java#L48) | 工具适配器也把取上下文、空值断言和业务调用挤在一行，并直接使用全限定 `Objects` | 采用普通参数换行与 import；工具类继续只声明一个工具，不把领域逻辑搬进注解方法 |
+| [StickerReplyTools.list:48](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyTools.java#L48) | 工具适配器也把取上下文、空值断言和业务调用挤在一行，并直接使用全限定 `Objects` | 采用普通参数换行与 import；工具类继续只声明一个工具，不把领域逻辑搬进注解方法 |
 
 此外，`EasyDataLayeredMemoryStore`、`EasyDataLongTermMemoryStore`、`EasyDataPersonalityStore`、`ProactiveService`、`AgentPluginRuntime` 均进入候选前列。按逐行清单结合相关业务改动整理，不因本轮扫描而同时格式化所有 Store。
 
@@ -199,7 +199,7 @@ public CompletionStage<MediaReplies.Page> list(
 
 ## V486-J03：保留安全根因
 
-[LocalStickerAssets.java:73](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LocalStickerAssets.java#L73)、85、100、133、448、459、479 等位置，捕获 I/O 异常后只抛固定 `IllegalStateException`。例如原子移动不受支持、目录权限拒绝和文件读取错误会失去原异常类型、代码位置及原因链，最后的 [StickerCollectionService.warn](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerCollectionService.java#L146) 无法还原已丢弃的信息。
+[LocalStickerAssets.java:73](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/LocalStickerAssets.java#L73)、85、100、133、448、459、479 等位置，捕获 I/O 异常后只抛固定 `IllegalStateException`。例如原子移动不受支持、目录权限拒绝和文件读取错误会失去原异常类型、代码位置及原因链，最后的 [StickerCollectionService.warn](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerCollectionService.java#L146) 无法还原已丢弃的信息。
 
 固定中文消息和隐藏文件路径是合理边界，但不必牺牲安全诊断。可复用 [DiagnosticException](../../../src/main/java/org/zexnocs/teanekocore/logger/DiagnosticException.java#L14) 或等价的领域安全诊断字段，仅保留类型、位置和安全分类。原始绝对路径、URL、请求头和异常消息仍不能出现在公开结果。
 
@@ -209,11 +209,11 @@ public CompletionStage<MediaReplies.Page> list(
 
 ## V486-J04：JavaDoc、类型及空值
 
-21:00 扫描快照中，38 个生产／测试 Java 文件的 64 行包含真实 `U+FFFD` 替换字符。例：[LLMInteractionExecution.java:38](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/LLMInteractionExecution.java#L38)、[AgentConversationSummaryService.java:55](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/summary/AgentConversationSummaryService.java#L55)、[LLMStickerAnalyzer.java:48](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/LLMStickerAnalyzer.java#L48)。收尾重读确认这三个示例仍在；这是文件内容已经损坏，不是本次终端显示字体问题。应根据 Git 中未损坏文本或相应提交事实恢复；无法确认的历史文字重新写清含义，但不要伪造原日期或重置 `@since`。
+21:00 扫描快照中，38 个生产／测试 Java 文件的 64 行包含真实 `U+FFFD` 替换字符。例：[LLMInteractionExecution.java:38](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/LLMInteractionExecution.java#L38)、[AgentConversationSummaryService.java:55](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/summary/AgentConversationSummaryService.java#L55)、[LLMStickerAnalyzer.java:48](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/LLMStickerAnalyzer.java#L48)。收尾重读确认这三个示例仍在；这是文件内容已经损坏，不是本次终端显示字体问题。应根据 Git 中未损坏文本或相应提交事实恢复；无法确认的历史文字重新写清含义，但不要伪造原日期或重置 `@since`。
 
-同一快照另有 584 个文件的 1313 处修改记录之间空白行候选，与 AGENTS 要求“逐行追加、条目之间不插入空行”不一致。[StickerReplyService 类注释](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/StickerReplyService.java#L44)就是可直接检查的例子。按本次修改范围整理，保留真实历史条目；未修改类型不机械更新 `@version`。
+同一快照另有 584 个文件的 1313 处修改记录之间空白行候选，与 AGENTS 要求“逐行追加、条目之间不插入空行”不一致。[StickerReplyService 类注释](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/StickerReplyService.java#L44)就是可直接检查的例子。按本次修改范围整理，保留真实历史条目；未修改类型不机械更新 `@version`。
 
-[LLMProtocolSnapshots.metadata:173](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/message/LLMProtocolSnapshots.java#L173) 将已知 Map 输入交给返回 `Object` 的递归入口，再转回 `Map<String, Object>` 并压制 unchecked。该文件 21:49 的更新没有移除这段写法，收尾已重新读取确认。内部实现已经验证 Map 键，因此本轮没有证据表明发生类型污染；更清楚的写法是将 Map 分支提为返回 `Map<String, Object>` 的辅助方法，递归 JSON 入口复用它，保留深度、循环、null、凭据及不可变合同。
+[LLMProtocolSnapshots.metadata:173](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/message/LLMProtocolSnapshots.java#L173) 将已知 Map 输入交给返回 `Object` 的递归入口，再转回 `Map<String, Object>` 并压制 unchecked。该文件 21:49 的更新没有移除这段写法，收尾已重新读取确认。内部实现已经验证 Map 键，因此本轮没有证据表明发生类型污染；更清楚的写法是将 Map 分支提为返回 `Map<String, Object>` 的辅助方法，递归 JSON 入口复用它，保留深度、循环、null、凭据及不可变合同。
 
 该扫描快照未发现声明的 `serialVersionUID` 缺少 `@Serial` 的候选，不将该项列为待修。空值与 Lombok 必须逐合同核查，本轮不以字段默认 `null` 或存在 `@Nullable` 本身判断错误。`AgentTurn` 对借用控制的资源提示抑制有明确生命周期背景，不能靠提前关闭控制来消除 IDE 告警。
 

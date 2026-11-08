@@ -1,29 +1,54 @@
 package org.zexnocs.teanekoagent.component;
 
+// 2026/11/07：隔离目录复用生产插件注解，不创建业务入口实例。
+import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
+
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.IMemoryNamespaceBindingStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.IMemoryNamespaceDefaults;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.IMemoryNamespaceStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialAccess;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentService;
+import org.zexnocs.teanekoplugin.agent.social.social.ISocialStateStore;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialComponent;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialState;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialStateService;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
-import org.zexnocs.teanekoagent.component.affinity.AffinityComponent;
+import org.zexnocs.teanekoplugin.agent.social.affinity.AffinityComponent;
 import org.zexnocs.teanekoagent.component.llm.LLMComponent;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.memory.MemoryComponent;
-import org.zexnocs.teanekoagent.component.memory.MemoryInputSystem;
-import org.zexnocs.teanekoagent.component.memory.MemoryOutputSystem;
-import org.zexnocs.teanekoagent.component.memory.adapter.StoreAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.configuration.MemoryNamespaceConfig;
-import org.zexnocs.teanekoagent.component.memory.history.IAgentDeliveryStore;
-import org.zexnocs.teanekoagent.component.memory.namespace.*;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.shared.ISharedConversationStore;
-import org.zexnocs.teanekoagent.component.memory.shared.SharedMemoryComponent;
-import org.zexnocs.teanekoagent.component.memory.shared.SharedMemoryPromptSource;
-import org.zexnocs.teanekoagent.component.mood.MoodComponent;
-import org.zexnocs.teanekoagent.component.social.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryComponent;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryInputSystem;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryOutputSystem;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.StoreAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.configuration.MemoryNamespaceConfig;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.configuration.MemoryReadAccess;
+import org.zexnocs.teanekoagent.integration.config.AgentComponentAccess;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentDeliveryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.*;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.AgentMemoryReferenceException;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.shared.ISharedConversationStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.shared.SharedMemoryPromptSource;
+import org.zexnocs.teanekoplugin.agent.social.mood.MoodComponent;
+import org.zexnocs.teanekoplugin.agent.social.social.*;
 import org.zexnocs.teanekoagent.component.tool.ToolComponent;
 import org.zexnocs.teanekoagent.configuration.AgentExecutionConfig;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
@@ -63,16 +88,17 @@ import static org.mockito.Mockito.*;
  * 使用真实组件扫描、作用域策略和空间引用链验证 Spring 初始化及运行阶段复核。
  * <br>2026/11/06：覆盖不同 Bean 创建顺序，禁止以循环引用开关或模拟目录掩盖启动环。
  * <br>2026/11/06：加入实际轮次服务工厂，捕捉组件资料误入宿主全局来源的装配冲突。
+ * <br>2026/11/07：装配通用组件资格与认知读取服务，验证社交组合不反向依赖。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 class SocialComponentWiringTest {
     private static final String ASSEMBLY = """
-            {"version":1,"components":{"llm":{},"tool":{},"memory":{},
-            "affinity":{},"mood":{},"shared-memory":{}}}
+            {"version":1,"components":{"llm":{},"tool":{},"memory":{"crossChatRecallEnabled":true},
+            "affinity":{},"mood":{}}}
             """;
 
     /** 2026/11/06：排除组件来源后，多个真正的宿主来源仍须明确组合，诊断列出冲突类型。 */
@@ -95,18 +121,18 @@ class SocialComponentWiringTest {
      * @param first 首先登记的生产 Bean 类型
      */
     @ParameterizedTest
-    @ValueSource(classes = {AffinityComponent.class, MoodComponent.class, SharedMemoryComponent.class,
+    @ValueSource(classes = {AffinityComponent.class, MoodComponent.class, MemoryComponent.class,
             AgentComponentRegistry.class, AgentPluginRuntime.class, AgentExecutionConfig.class})
     void initializesWithoutCircularReferences(Class<?> first) {
         try (var context = context(first)) {
             context.refresh();
             var registry = context.getBean(AgentComponentRegistry.class);
-            assertEquals(Set.of("llm", "tool", "memory", "affinity", "mood", "shared-memory"),
+            assertEquals(Set.of("llm", "tool", "memory", "affinity", "mood"),
                     registry.entries().keySet());
             assertNotNull(context.getBean(AgentPluginRuntime.class));
             assertNotNull(context.getBean(AgentService.class));
-            assertSame(context.getBean(SharedMemoryPromptSource.class),
-                    context.getBean(SharedMemoryComponent.class).prompts());
+            assertInstanceOf(org.zexnocs.teanekoagent.runtime.prompt.DeferredAgentPromptSource.class,
+                    context.getBean(MemoryComponent.class).prompts());
             verifyNoInteractions(context.getBean(IConfigDataService.class), context.getBean(ISocialStateStore.class),
                     context.getBean(IMemoryNamespaceStore.class), context.getBean(IMemoryNamespaceBindingStore.class),
                     context.getBean(ISharedConversationStore.class));
@@ -114,8 +140,8 @@ class SocialComponentWiringTest {
             var scanner = context.getBean(BeanScanner.class);
             clearInvocations(scanner);
             for (int i = 0; i < 2; i++) {
-                assertEquals(6, registry.describe().size());
-                assertEquals(6, registry.validate(ASSEMBLY).parameters().size());
+                assertEquals(5, registry.describe().size());
+                assertEquals(5, registry.validate(ASSEMBLY).parameters().size());
             }
             verifyNoInteractions(scanner);
         }
@@ -135,7 +161,8 @@ class SocialComponentWiringTest {
             var scope = new AgentScope("test", "group-1");
             var user = UUID.randomUUID();
             var reference = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);
-            var config = new AgentScopeConfigData(ASSEMBLY);
+            var config = new AgentScopeConfigData(ASSEMBLY.replace("\"crossChatRecallEnabled\":true",
+                    "\"crossChatRecallEnabled\":false"));
             var configs = context.getBean(IConfigDataService.class);
             when(configs.getConfigData(context.getBean(AgentScopeConfigManager.class),
                     AgentScopeConfigData.class, scope.scopeId())).thenReturn(Optional.of(config));
@@ -194,7 +221,9 @@ class SocialComponentWiringTest {
         context.registerBean(ILogger.class, () -> mock(ILogger.class));
         context.registerBean(BeanScanner.class, () -> spy(new BeanScanner(context, context.getBean(ILogger.class))));
         context.registerBean(PluginRegistry.class, () -> new PluginRegistry(
-                List.of(() -> new PluginDescriptor("teaneko.agent", "1", 1, Set.of()))));
+                List.of(() -> new PluginDescriptor("teaneko.agent", "1", 1, Set.of()),
+                        PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.cognition.CognitionPlugin.class)::descriptor,
+                        PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.social.SocialPlugin.class)::descriptor)));
         context.registerBean(IConfigDataService.class, () -> mock(IConfigDataService.class));
         context.registerBean(ISocialStateStore.class, () -> mock(ISocialStateStore.class));
         context.registerBean(IMemoryNamespaceStore.class, () -> mock(IMemoryNamespaceStore.class));
@@ -218,15 +247,17 @@ class SocialComponentWiringTest {
         context.registerBean(ILLMInteractionService.class, () -> mock(ILLMInteractionService.class));
         context.registerBean(ObjectMapper.class, () -> new ObjectMapper());
         // 2026/11/06：满足原记忆和工具组件的能力声明，不连接旧资料与工具的外部基础设施。
-        for (String id : List.of("builtin-memory", "long-memory", "layered-memory", "builtin-tools")) {
-            context.registerBean(id, SourceAgentFeature.class, () -> new SourceAgentFeature("teaneko.agent", id,
+        for (String id : List.of("builtin-memory", "long-memory", "layered-memory", "memory-tools")) {
+            context.registerBean(id, SourceAgentFeature.class, () -> new SourceAgentFeature("agent.cognition", id,
                     true, (definition, request, runtime) -> List.of(), IAgentPromptSource.empty()));
         }
         context.register(PluginAccess.class, YAMLFileTypeParser.class, AgentScopeConfigManager.class,
                 ConfigDataAgentScopePolicy.class, StoreAgentMemoryReferences.class, MemoryNamespaceConfig.class,
+                // 2026/11/07：读取规则归认知插件，社交能力仅组合既有资格。
+                AgentComponentAccess.class, MemoryReadAccess.class,
                 SocialAccess.class, SocialStateService.class, SharedMemoryPromptSource.class,
                 LLMComponent.class, ToolComponent.class, MemoryInputSystem.class, MemoryOutputSystem.class,
-                MemoryComponent.class, AffinityComponent.class, MoodComponent.class, SharedMemoryComponent.class,
+                MemoryComponent.class, AffinityComponent.class, MoodComponent.class, MemoryComponent.class,
                 AgentComponentRegistry.class, AgentPluginRuntime.class, AgentExecutionConfig.class);
         return context;
     }

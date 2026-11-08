@@ -1,6 +1,8 @@
 package org.zexnocs.teanekocore.utils.scanner.inerfaces;
 
-import org.zexnocs.teanekocore.framework.pair.Pair;
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
 
 import java.lang.annotation.Annotation;
@@ -44,18 +46,18 @@ public interface IBeanScanner {
     /**
      * 获取所有带有指定注解的 Bean
      * @param annotationType 需要扫描的注解类型
-     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为一个 Pair 对象，包含注解实例和 Bean 实例
+     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为一个 IPair 对象，包含注解实例和 Bean 实例
      */
-    <A extends Annotation> Map<String, Pair<A, Object>> getBeansWithAnnotation(Class<A> annotationType);
+    <A extends Annotation> Map<String, IPair<A, Object>> getBeansWithAnnotation(Class<A> annotationType);
 
     /**
      * 获取所有带有指定注解的 Bean，并且要求带有该注解的 Bean 都实现了指定接口
      * @param annotationType 需要扫描的注解类型
      * @param interfaceType 需要扫描的接口类型
-     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为一个 Pair 对象，包含注解实例和 Bean 实例
+     * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为一个 IPair 对象，包含注解实例和 Bean 实例
      * @throws InterfaceAndAnnotationInconsistencyException 当带有指定注解的 Bean 中存在不实现指定接口的 Bean 时抛出此异常
      */
-    <A extends Annotation, T> Map<String, Pair<A, T>> getBeansWithAnnotationAndInterface(
+    <A extends Annotation, T> Map<String, IPair<A, T>> getBeansWithAnnotationAndInterface(
             Class<A> annotationType, Class<T> interfaceType)
         throws InterfaceAndAnnotationInconsistencyException;
 }

@@ -14,23 +14,36 @@ import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyList;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证旧 Agent 空目录游标不会掩盖迁移后的通用群聊和私聊配置。
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
+ * <br>2026/11/07：隔离容器与夹具按插件迁移后的真实装配契约更新。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.6-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 class ConfigTargetImporterTest {
     /** 2026/11/04：原管理器各自读其存储，目录不猜测机器人账号，不重复导入已完成分页。 */
@@ -62,8 +75,10 @@ class ConfigTargetImporterTest {
         var agentSection = mock(IChatSettingsSection.class);
         when(generalSection.manager()).thenReturn(general);
         when(agentSection.manager()).thenReturn(agent);
-        when(directory.entries()).thenReturn(Map.of("legacy", new ChatSettingsDirectory.Entry("legacy", "general", Legacy.class, generalSection),
-                "agent", new ChatSettingsDirectory.Entry("agent", "agent", AgentScopeConfigManager.class, agentSection)));
+        // 2026/11/07：归属在条目创建时解析，先完成夹具构造再开启 Mockito 存根录制。
+        var entries = Map.of("legacy", new ChatSettingsDirectory.Entry("legacy", "general", Legacy.class, generalSection),
+                "agent", new ChatSettingsDirectory.Entry("agent", "agent", AgentScopeConfigManager.class, agentSection));
+        when(directory.entries()).thenReturn(entries);
         when(configs.keys(eq(general), eq(""), eq(100))).thenReturn(CompletableFuture.completedStage(
                 new ConfigEdits.Keys(List.of("onebot-group@100", "private@" + uuid), "onebot-group@100")));
         when(configs.keys(eq(general), eq("onebot-group@100"), eq(100)))

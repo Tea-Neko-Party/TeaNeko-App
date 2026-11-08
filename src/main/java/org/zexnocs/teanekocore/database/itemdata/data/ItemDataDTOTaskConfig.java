@@ -1,8 +1,10 @@
 package org.zexnocs.teanekocore.database.itemdata.data;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
-import org.zexnocs.teanekocore.database.itemdata.ItemDataRepository;
+import org.zexnocs.teanekocore.database.itemdata.IItemDataRepository;
 import org.zexnocs.teanekocore.database.itemdata.exception.InsufficientItemCountException;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataCreateService;
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDtoTaskConfig;
@@ -27,7 +29,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
     private final ItemDataDTO<T> itemDataDTO;
 
     /// 物品数据仓库，用于执行数据库操作。
-    private final ItemDataRepository itemDataRepository;
+    private final IItemDataRepository itemDataRepository;
 
     /// 对象映射器，用于将元数据对象转换为 JSON 字符串存储到数据库中。
     private final ObjectMapper objectMapper;
@@ -45,7 +47,7 @@ public class ItemDataDTOTaskConfig<T extends IItemMetadata>
      * @param taskName        任务名称
      */
     public ItemDataDTOTaskConfig(IDatabaseService databaseService,
-                                 ItemDataRepository itemDataRepository,
+                                 IItemDataRepository itemDataRepository,
                                  ObjectMapper objectMapper,
                                  ItemDataDTO<T> itemDataDTO,
                                  IItemDataCreateService itemDataCreateService,

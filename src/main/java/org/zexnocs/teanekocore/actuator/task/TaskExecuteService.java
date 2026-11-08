@@ -3,7 +3,6 @@ package org.zexnocs.teanekocore.actuator.task;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekocore.actuator.task.api.SetTaskStage;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskExecuteService;
@@ -12,10 +11,8 @@ import org.zexnocs.teanekocore.actuator.task.state.TaskCreatedState;
 import org.zexnocs.teanekocore.actuator.task.state.TaskExecutedState;
 import org.zexnocs.teanekocore.actuator.task.state.TaskSubmittedState;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 
 import java.time.Duration;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
@@ -27,14 +24,25 @@ import java.util.concurrent.TimeUnit;
  * <br>2026/11/02：同步任务阶段接入插件启停检查，原调用栈保持单线程。
  * <br>2026/11/03：观测排队、同步阶段和外部结果等待，不改变阶段推进线程。
  * <br>2026/11/07：使用可撤销的排队调度，运行尝试实际退出后才归还占用。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/02/11
  * @since 4.0.0
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 @Service
 public class TaskExecuteService implements ITaskExecuteService {
+    private @org.jspecify.annotations.Nullable TaskPluginBindings pluginBindings;
+
+    /**
+     * 2026/11/07：安装注册时形成的任务归属缓存，执行路径不发现回调注解。
+     * @param bindings 任务插件归属与固定代次
+     */
+    @Autowired
+    public void installPluginBindings(TaskPluginBindings bindings) {
+        this.pluginBindings = bindings;
+    }
     private org.zexnocs.teanekocore.actuator.runtime.@org.jspecify.annotations.Nullable RuntimeMonitor monitor;
 
     /**
@@ -68,19 +76,38 @@ public class TaskExecuteService implements ITaskExecuteService {
 
     /**
      * 包装插件阶段，禁用时继续下一阶段，宿主阶段沿用原对象。
+     * 2026/11/07：只读取初始化或配置创建时冻结的归属，不在执行路径解析方法。
      * @param stage 原同步阶段
      * @return 当前任务独立的调用适配
      */
-    private org.zexnocs.teanekocore.actuator.task.api.ITaskStage guardedStage(org.zexnocs.teanekocore.actuator.task.api.ITaskStage stage) {
-        if (pluginAccess == null) { return stage; }
+    private org.zexnocs.teanekocore.actuator.task.api.ITaskStage guardedStage(
+            org.zexnocs.teanekocore.actuator.task.api.ITaskStage stage) {
+        if (pluginAccess == null) {
+            return stage;
+        }
+        if (!(stage instanceof TaskStageBinding binding)) {
+            throw new IllegalStateException("手动任务阶段必须在配置创建或显式注册时冻结归属。");
+        }
+        String owner = binding.pluginId();
+        if (owner == null) {
+            return stage;
+        }
         return chain -> {
             try {
-                var method = stage.getClass().getMethod("process", TaskStageChain.class);
-                if (!pluginAccess.enabled(stage, method)) { return chain.next(); }
-                var token = pluginAccess.capture(stage, method);
-                var result = stage.process(chain); pluginAccess.check(token); return result;
-            } catch (RuntimeException failure) { throw failure; }
-            catch (Exception failure) { throw new IllegalStateException("插件任务阶段执行失败。", failure); }
+                if (!pluginAccess.enabledOwner(owner)) {
+                    return chain.next();
+                }
+                // 2026/11/07：阶段可附着在宿主任务上，占用须覆盖该任务的实际外部工作终态。
+                var call = pluginAccess.openOwner(owner);
+                call.track(chain.getTask().getExecution().completion());
+                var result = binding.process(chain);
+                call.check();
+                return result;
+            } catch (RuntimeException failure) {
+                throw failure;
+            } catch (Exception failure) {
+                throw new IllegalStateException("插件任务阶段执行失败。", failure);
+            }
         };
     }
     /// 虚拟线程池
@@ -178,6 +205,10 @@ public class TaskExecuteService implements ITaskExecuteService {
      * @param delay 延迟时长
      */
     private void schedule(ITask<?> task, Duration delay) {
+        // 2026/11/07：排队之前固定代次，重新启用不能恢复旧排队任务或旧重试。
+        if (pluginBindings != null) {
+            pluginBindings.capture(task);
+        }
         var attempt = task.getExecution().prepare();
         var execution = new CompletableFuture<Void>();
         task.setExecutingFuture(execution);
@@ -223,12 +254,8 @@ public class TaskExecuteService implements ITaskExecuteService {
         var taskStages = config.getTaskStages();
         // 如果列表为 null，则尝试从命名空间中获取。
         if (taskStages == null) {
-            String namespace = Optional
-                    .ofNullable(MethodCallableUtils.INSTANCE.getAnnotation(config.getCallable(), SetTaskStage.class))
-                    .map(SetTaskStage::value)
-                    .orElseGet(config::getTaskStageNamespace);
-            taskStages = taskStageScanner.getTaskStages(namespace);
-            config.setTaskStages(taskStages);
+            // 2026/11/07：命名空间在配置创建时固定，此处只查询业务扫描器发布的快照。
+            taskStages = taskStageScanner.getTaskStages(config.getTaskStageNamespace());
         }
         // 2026/11/02：每次任务使用独立包装，不把启停快照写回共享配置。
         // 2026/11/03：观测仅同步通知，不改变阶段链单线程游标。
@@ -245,9 +272,25 @@ public class TaskExecuteService implements ITaskExecuteService {
         observed(task, "RUNNING", "进入同步阶段链");
         try {
             task.getExecution().control().checkActive();
+            // 2026/11/07：实际线程进入及同步回调完成时复核原插件代次。
+            if (pluginBindings != null) {
+                pluginBindings.check(task);
+            }
             var result = taskStageChain.next();
             if (result == null) {
                 task.getExecution().waitingExternal();
+            }
+            if (pluginBindings != null) {
+                try {
+                    pluginBindings.check(task);
+                } catch (org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException failure) {
+                    // 2026/11/07：已启动的外部工作仍占用资源，撤销结果资格不能伪造物理结束。
+                    if (result == null) {
+                        iTaskService.forceCompleteExceptionally(task.getKey(), failure);
+                        return;
+                    }
+                    throw failure;
+                }
             }
             if (task.getExecution().stopped()) {
                 if (result != null) {

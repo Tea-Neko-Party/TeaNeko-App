@@ -1,6 +1,7 @@
 package org.zexnocs.teanekoclient.general.agent;
 
 import org.junit.jupiter.api.Test;
+import org.zexnocs.teanekoplugin.agent.social.contact.adapter.PrivateContactTransport;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
@@ -39,6 +40,8 @@ import static org.mockito.Mockito.when;
 /**
  * 使用原客户端注册表验证私聊目标定位、账号切换拒绝与实际发送器选项。
  * <br>2026/11/06：只模拟平台传输，不创建用户或执行高频发现扫描。
+ * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l

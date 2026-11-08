@@ -1,12 +1,14 @@
 package org.zexnocs.teanekocore.framework.pair;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 /**
- * Pair 测试类，用于测试 Pair 相关的功能。
+ * IPair 测试类，用于测试 IPair 相关的功能。
  *
  * @author zExNocs
  * @date 2026/02/16

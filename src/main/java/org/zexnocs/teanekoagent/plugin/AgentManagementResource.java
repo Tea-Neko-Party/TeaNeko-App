@@ -1,13 +1,15 @@
 package org.zexnocs.teanekoagent.plugin;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekoagent.component.AgentComponents;
 import org.zexnocs.teanekoagent.runtime.IAgentRegistry;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.plugin.management.IManagementResource;
 import org.zexnocs.teanekocore.plugin.management.ManagementContext;
-import org.zexnocs.teanekocore.plugin.management.ManagementResource;
 
 import java.util.Comparator;
 import java.util.List;
@@ -30,7 +32,7 @@ import java.util.concurrent.CompletionStage;
  * @version 4.8.0-l
  */
 @Component
-public final class AgentManagementResource implements ManagementResource<AgentManagementResource.Query, List<AgentManagementResource.View>> {
+public final class AgentManagementResource implements IManagementResource<AgentManagementResource.Query, List<AgentManagementResource.View>> {
     private final IAgentRegistry registry;
     private final AgentPluginRuntime plugins;
     /**

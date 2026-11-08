@@ -1,12 +1,14 @@
 package org.zexnocs.teanekocore.actuator.task.interfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskDuplicateKeyException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException;
 import org.zexnocs.teanekocore.actuator.task.exception.TaskNotFoundException;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.util.UUID;
 
@@ -73,7 +75,7 @@ public interface ITaskService {
             UUID key,
             String name,
             String taskStage,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         var config = TaskConfig.<T>builder()
                 .name(name)
@@ -100,7 +102,7 @@ public interface ITaskService {
     default <T> TaskFuture<ITaskResult<T>> subscribeWithFuture(
             String name,
             String taskStage,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         return subscribeWithFuture(UUID.randomUUID(), name, taskStage, callable, clazz);
     }
@@ -121,7 +123,7 @@ public interface ITaskService {
      */
     default <T> TaskFuture<ITaskResult<T>> subscribeWithFuture(
             String name,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         return subscribeWithFuture(UUID.randomUUID(), name, "default", callable, clazz);
     }
@@ -144,7 +146,7 @@ public interface ITaskService {
     default <T> TaskFuture<ITaskResult<T>> subscribeWithFuture(
             UUID key,
             String name,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         return subscribeWithFuture(key, name, "default", callable, clazz);
     }
@@ -192,7 +194,7 @@ public interface ITaskService {
             UUID key,
             String name,
             String taskStage,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         var config = TaskConfig.<T>builder()
                 .name(name)
@@ -218,7 +220,7 @@ public interface ITaskService {
     default <T> void subscribe(
             String name,
             String taskStage,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         subscribe(UUID.randomUUID(), name, taskStage, callable, clazz);
     }
@@ -238,7 +240,7 @@ public interface ITaskService {
      */
     default <T> void subscribe(
             String name,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         subscribe(UUID.randomUUID(), name, "default", callable, clazz);
     }
@@ -260,7 +262,7 @@ public interface ITaskService {
     default <T> void subscribe(
             UUID key,
             String name,
-            MethodCallable<ITaskResult<T>> callable,
+            IMethodCallable<ITaskResult<T>> callable,
             Class<T> clazz) throws TaskDuplicateKeyException {
         subscribe(key, name, "default", callable, clazz);
     }

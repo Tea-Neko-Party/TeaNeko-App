@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.plugin.management;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import java.util.Objects;
@@ -39,7 +41,7 @@ public record ManagementContext(String subject, String scopeRef, UUID requestId,
         Objects.requireNonNull(authorization);
     }
     /**
-     * 保留原传输无关构造，具体资源权限继续由 ManagementAuthority 校验。
+     * 保留原传输无关构造，具体资源权限继续由 IManagementAuthority 校验。
      * @param subject 原主体
      * @param scopeRef 原目标
      * @param requestId 原请求

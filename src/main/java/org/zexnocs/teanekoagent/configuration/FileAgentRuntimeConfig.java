@@ -1,12 +1,14 @@
 package org.zexnocs.teanekoagent.configuration;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionDefaults;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionDefaults;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentMainFileConfig;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeConfig;
 import org.zexnocs.teanekoagent.runtime.access.IAgentRuntimeConfigPort;

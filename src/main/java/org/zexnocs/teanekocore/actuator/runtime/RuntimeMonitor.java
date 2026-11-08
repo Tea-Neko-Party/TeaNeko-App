@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITask;
+import org.zexnocs.teanekocore.actuator.task.TaskPluginBindings;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 
 import java.time.Clock;
@@ -19,11 +20,12 @@ import java.util.stream.Stream;
  * 日志写入不等待查询锁；观测故障不会改变原业务结果。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 @Component
 public final class RuntimeMonitor {
@@ -38,6 +40,25 @@ public final class RuntimeMonitor {
     private long runSequence;
     private long logSequence;
     private long droppedRuns;
+    private @Nullable TaskPluginBindings pluginBindings;
+
+    /**
+     * 2026/11/07：观测读取已注册插件归属，并按当前状态控制可见性。
+     * @param bindings 原任务插件门禁
+     */
+    @Autowired
+    public void installPluginBindings(TaskPluginBindings bindings) {
+        this.pluginBindings = bindings;
+    }
+
+    /**
+     * 2026/11/07：按缓存标识复核当前资格，宿主观测不依赖业务插件。
+     * @param pluginId 原任务归属
+     * @return 当前可以显示时为真
+     */
+    private boolean enabled(@Nullable String pluginId) {
+        return pluginId == null || pluginId.isEmpty() || pluginBindings != null && pluginBindings.enabled(pluginId);
+    }
 
     /**
      * @param files 原本地配置入口
@@ -73,7 +94,7 @@ public final class RuntimeMonitor {
      */
     public void observe(ITask<?> task) {
         try {
-            begin(task.getKey(), task.getConfig().getName());
+            begin(task.getKey(), task.getConfig().getName(), pluginBindings == null ? null : pluginBindings.owner(task.getConfig()));
             task.getFuture().asStage().whenComplete((result, failure) -> {
                 String state = failure == null && result != null && result.isSuccess() ? "SUCCESS" : "FAILED";
                 finish(task.getKey(), state);
@@ -88,8 +109,18 @@ public final class RuntimeMonitor {
      * @param name 原业务任务名，不包含结果正文
      */
     public synchronized void begin(UUID id, String name) {
+        begin(id, name, null);
+    }
+
+    /**
+     * 2026/11/07：登记任务的安全归属快照，不持有业务配置或对象。
+     * @param id 原任务标识
+     * @param name 安全任务名
+     * @param pluginId 已缓存归属，宿主任务为空
+     */
+    public synchronized void begin(UUID id, String name, @Nullable String pluginId) {
         trimRuns();
-        runs.put(id, new Run(++runSequence, id, safe(name, 128), "QUEUED", "等待执行", clock.instant(), null, null));
+        runs.put(id, new Run(++runSequence, id, safe(name, 128), "QUEUED", "等待执行", clock.instant(), null, null, pluginId));
         trimRuns();
     }
 
@@ -102,7 +133,7 @@ public final class RuntimeMonitor {
         var old = runs.get(id);
         if (old != null && old.finishedAt() == null) {
             runs.put(id, new Run(old.sequence(), id, old.name(), state, safe(stage, 128), old.createdAt(),
-                    old.startedAt() == null && state.equals("RUNNING") ? clock.instant() : old.startedAt(), null));
+                    old.startedAt() == null && state.equals("RUNNING") ? clock.instant() : old.startedAt(), null, old.pluginId()));
         }
     }
 
@@ -113,7 +144,7 @@ public final class RuntimeMonitor {
     public synchronized void finish(UUID id, String state) {
         var old = runs.get(id);
         if (old != null) {
-            runs.put(id, new Run(old.sequence(), id, old.name(), state, "原任务回执已结束", old.createdAt(), old.startedAt(), clock.instant()));
+            runs.put(id, new Run(old.sequence(), id, old.name(), state, "原任务回执已结束", old.createdAt(), old.startedAt(), clock.instant(), old.pluginId()));
         }
         trimRuns();
     }
@@ -141,11 +172,31 @@ public final class RuntimeMonitor {
      * @return 当前进程窗口，窗口重置和丢弃数量明确报告
      */
     public synchronized RunPage runs(String original, long before, int limit, String state, String search) {
+        return runs(original, before, limit, state, search, null);
+    }
+
+    /**
+     * 2026/11/07：在分页前过滤插件状态与稳定标识，避免仅筛选当前页。
+     * @param original 上次实例标识
+     * @param before 更早游标
+     * @param limit 页大小
+     * @param state 状态筛选
+     * @param search 名称搜索
+     * @param pluginId 插件筛选，空值不限
+     * @return 当前可见任务分页
+     */
+    public synchronized RunPage runs(String original, long before, int limit, String state, String search,
+                                     @Nullable String pluginId) {
+        if (pluginId != null && !pluginId.isEmpty()) {
+            org.zexnocs.teanekocore.plugin.PluginDescriptor.requireId(pluginId);
+        }
         validate(limit, state, search);
         trimRuns();
         boolean reset = !original.isEmpty() && !original.equals(instance.toString());
         long cursor = reset ? 0 : before;
         var matched = runs.values().stream().filter(run -> cursor == 0 || run.sequence() < cursor)
+                .filter(run -> enabled(run.pluginId()))
+                .filter(run -> pluginId == null || pluginId.isEmpty() || pluginId.equals(run.pluginId()))
                 .filter(run -> state.isEmpty() || run.state().equals(state))
                 .filter(run -> run.name().toLowerCase(Locale.ROOT).contains(search.toLowerCase(Locale.ROOT)))
                 .sorted(Comparator.comparingLong(Run::sequence).reversed()).limit(limit + 1L).toList();
@@ -160,7 +211,8 @@ public final class RuntimeMonitor {
      */
     public synchronized Run detail(UUID id) {
         trimRuns();
-        return Optional.ofNullable(runs.get(id)).orElseThrow(() -> new NoSuchElementException("任务不在当前观测窗口。"));
+        return Optional.ofNullable(runs.get(id)).filter(run -> enabled(run.pluginId()))
+                .orElseThrow(() -> new NoSuchElementException("任务不在当前可见观测窗口。"));
     }
 
     /**
@@ -225,7 +277,8 @@ public final class RuntimeMonitor {
                     break;
                 }
                 next = log.sequence();
-                if ((query.level().isEmpty() || query.level().equals(log.level()))
+                // 2026/11/07：扫描游标仍连续推进，已停用插件的日志不进入可见结果。
+                if (enabled(log.plugin()) && (query.level().isEmpty() || query.level().equals(log.level()))
                         && log.namespace().contains(query.namespace()) && log.message().contains(query.text())
                         && (query.requestId().isEmpty() || log.requestId().equals(query.requestId()))
                         && (query.scope().isEmpty() || log.scope().equals(query.scope()))
@@ -283,6 +336,7 @@ public final class RuntimeMonitor {
     /**
      * 原 Core 任务的观测，不代表外层业务链。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/07：增加插件归属与有效状态约束。
      *
      * @param sequence 创建游标
      * @param id 原任务号
@@ -292,13 +346,30 @@ public final class RuntimeMonitor {
      * @param createdAt 注册时间
      * @param startedAt 实际开始时间
      * @param finishedAt 原回执结束时间
+     * @param pluginId 所属插件标识，宿主任务或未筛选请求为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.9.0-l
      */
     public record Run(long sequence, UUID id, String name, String state, String stage, Instant createdAt,
-                      @Nullable Instant startedAt, @Nullable Instant finishedAt) {}
+                      @Nullable Instant startedAt, @Nullable Instant finishedAt, @Nullable String pluginId) {
+        /**
+         * 2026/11/07：兼容不归属业务插件的宿主观测。
+         * @param sequence 创建游标
+         * @param id 原任务号
+         * @param name 任务名
+         * @param state 状态
+         * @param stage 同步阶段
+         * @param createdAt 创建时间
+         * @param startedAt 开始时间
+         * @param finishedAt 完成时间
+         */
+        public Run(long sequence, UUID id, String name, String state, String stage, Instant createdAt,
+                   @Nullable Instant startedAt, @Nullable Instant finishedAt) {
+            this(sequence, id, name, state, stage, createdAt, startedAt, finishedAt, null);
+        }
+    }
 
     /**
      * 任务窗口与重置语义。

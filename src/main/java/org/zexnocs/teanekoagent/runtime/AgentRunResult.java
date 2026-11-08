@@ -1,13 +1,17 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationStamp;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
 import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
@@ -15,7 +19,11 @@ import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 一轮已结束的只读结果。被拒绝或终止时仍保留已观察交互，不自动提交历史或发送平台消息。
@@ -24,6 +32,7 @@ import java.util.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
  *
  * @param agentId 实际执行的实例标识
  * @param requestId 宿主请求标识
@@ -38,15 +47,16 @@ import java.util.*;
  * <br>2026/11/03：公开已验证语义答案及固定表达计划，不改变原构造入口。
  * <br>2026/11/05：轮次结果传递安全失败诊断与中文原因。
  *
+ *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
                              Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
                              Map<BudgetKey, ResourceBudget.Usage> budgetUsage, @Nullable AgentConversationStamp conversation,
-                             @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript,
+                             @Nullable IAgentContextReference memoryReference, @Nullable AgentPromptTranscript promptTranscript,
                              @Nullable FailureDiagnostic failure) {
     /**
      * 2026/11/05：保持原结果构造签名，自动继承 LLM 已知的安全失败原因。
@@ -63,7 +73,7 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
     public AgentRunResult(EntityId agentId, UUID requestId, Status status,
             Optional<AgentAccessDecision> access, Optional<LLMInteractionResult> interaction,
             Map<BudgetKey, ResourceBudget.Usage> budgetUsage, @Nullable AgentConversationStamp conversation,
-            @Nullable MemoryNamespaceReference memoryReference, @Nullable AgentPromptTranscript promptTranscript) {
+            @Nullable IAgentContextReference memoryReference, @Nullable AgentPromptTranscript promptTranscript) {
         this(agentId, requestId, status, access, interaction, budgetUsage, conversation, memoryReference,
                 promptTranscript, interaction.map(LLMInteractionResult::failure).orElse(null));
     }
@@ -112,7 +122,7 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      */
     public AgentRunResult(EntityId agentId, UUID requestId, Status status, @Nullable AgentAccessDecision access,
             @Nullable LLMInteractionResult interaction, Map<BudgetKey, ResourceBudget.Usage> budgetUsage,
-            @Nullable AgentConversationStamp conversation, @Nullable MemoryNamespaceReference memoryReference) {
+            @Nullable AgentConversationStamp conversation, @Nullable IAgentContextReference memoryReference) {
         this(agentId, requestId, status, Optional.ofNullable(access), Optional.ofNullable(interaction), budgetUsage, conversation, memoryReference, null);
     }
     /**
@@ -206,7 +216,7 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
     }
 
     /** @return 2026/11/03：成功轮次冻结的表达计划；旧宿主为空 */
-    public org.zexnocs.teanekoagent.component.expression.ReplyPlans.@Nullable Approved replyPlan() {
+    public org.zexnocs.teanekoagent.runtime.delivery.@Nullable IAgentReplyPlan replyPlan() {
         return status == Status.SUCCESS && promptTranscript != null ? promptTranscript.replyPlan() : null;
     }
     /**
@@ -214,11 +224,13 @@ public record AgentRunResult(EntityId agentId, UUID requestId, Status status,
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public enum Status { SUCCESS, SKIPPED, CONFIGURATION_ERROR, CANCELLED, TIMED_OUT, BUDGET_EXCEEDED,
         EMPTY_OUTPUT, TRUNCATED, REFUSED, INVALID_INPUT, INVALID_RESPONSE, FAILED,

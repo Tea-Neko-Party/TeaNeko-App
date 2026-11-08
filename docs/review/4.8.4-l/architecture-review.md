@@ -75,15 +75,15 @@
 
 | 模块 | 实际职责及接入 | 功能／冗余判断 | 维护建议或未覆盖边界 |
 | --- | --- | --- | --- |
-| [llm](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/README.md) | 路由、模型选项、消息／工具交互及预算；类型化输出复用原调用链 | 是执行基础，不是只包装请求；结构化输出与工具参数协议不同 | 保留适配器能力声明；不要将 JSON 合法等同于事实正确或可提交 |
-| [memory](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/MemoryComponent.java) | 输入／输出 System、短中长期整理、明确事实、画像、空间及管理恢复 | 有真实读取和提交；不同层次／来源不应仅因均叫“记忆”而合并 | 继续保留证据、租约、代次、持久暂停和事务复核；真实召回收益未测 |
-| [personality](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/README.md) | 人格解析进入提示，观察／独立学习进入持久补正和管理 | 独立学习已有实际入口；与事实记忆的目标和所有权不同 | 不再强制依赖记忆存在；共享人格修改仍需会话协调与版本保护 |
+| [llm](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/README.md) | 路由、模型选项、消息／工具交互及预算；类型化输出复用原调用链 | 是执行基础，不是只包装请求；结构化输出与工具参数协议不同 | 保留适配器能力声明；不要将 JSON 合法等同于事实正确或可提交 |
+| [memory](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/MemoryComponent.java) | 输入／输出 System、短中长期整理、明确事实、画像、空间及管理恢复 | 有真实读取和提交；不同层次／来源不应仅因均叫“记忆”而合并 | 继续保留证据、租约、代次、持久暂停和事务复核；真实召回收益未测 |
+| [personality](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/README.md) | 人格解析进入提示，观察／独立学习进入持久补正和管理 | 独立学习已有实际入口；与事实记忆的目标和所有权不同 | 不再强制依赖记忆存在；共享人格修改仍需会话协调与版本保护 |
 | [tool](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolMethods.java) | 注解编译、schema、可信参数、提供者选择和真实执行 | G03 修复有效，不是只展示工具目录；代理与条件实际被调用 | 保留 Bean 身份、每提供者规格和动态资格，不改回全局 Method 候选缓存 |
-| [skill](../../../src/main/java/org/zexnocs/teanekoagent/component/skill/README.md) | 本地目录、显式选择、按需 skill_load、工具依赖与来源复核 | 是按需资料能力，不是独立 Agent 执行器或权限授予器 | 不为让 Skill “发挥作用”自动补回禁用工具；观察未选／不兼容原因即可 |
-| [expression](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/README.md) | 编译回复计划、原生表情、分段及交付协议 | 脱离 sticker 仍有功能，F03 已修复其原生资料接入 | 保留真实平台回执，不将编译成功当送达；不要把图库事务移入原生表情 |
-| [sticker](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md) | 采集、分析、共享图库、管理删除／迁移、选取与发送 | 是表达使用的素材生命周期，不是 expression 的重复实现 | 整行锁、活动容量与首次迁移继续实机验收；不得用已通过原子性证明吞吐 |
-| [schedule](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/README.md) | 动作 Policy、持久计划、到期领取、有限槽位和结果状态 | 新动作能够参与执行；不是只写一条计划记录 | 观察取消不等于已运行副作用停止；四槽容量不等于全系统限流 |
-| [proactive](../../../src/main/java/org/zexnocs/teanekoagent/component/proactive/ProactiveComponent.java) | 主动活动准入、公平选择、原 Agent 执行和平台发送 | 有真实活动链；合法空文本表示弃言，不是固定成功或无效服务 | 无 memory 的独立路径已有历史回归；评估收益需结合候选、拒绝和实际送达 |
+| [skill](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/skill/README.md) | 本地目录、显式选择、按需 skill_load、工具依赖与来源复核 | 是按需资料能力，不是独立 Agent 执行器或权限授予器 | 不为让 Skill “发挥作用”自动补回禁用工具；观察未选／不兼容原因即可 |
+| [expression](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/README.md) | 编译回复计划、原生表情、分段及交付协议 | 脱离 sticker 仍有功能，F03 已修复其原生资料接入 | 保留真实平台回执，不将编译成功当送达；不要把图库事务移入原生表情 |
+| [sticker](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md) | 采集、分析、共享图库、管理删除／迁移、选取与发送 | 是表达使用的素材生命周期，不是 expression 的重复实现 | 整行锁、活动容量与首次迁移继续实机验收；不得用已通过原子性证明吞吐 |
+| [schedule](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/README.md) | 动作 Policy、持久计划、到期领取、有限槽位和结果状态 | 新动作能够参与执行；不是只写一条计划记录 | 观察取消不等于已运行副作用停止；四槽容量不等于全系统限流 |
+| [proactive](../../../src/main/java/org/zexnocs/teanekoplugin/agent/social/proactive/ProactiveComponent.java) | 主动活动准入、公平选择、原 Agent 执行和平台发送 | 有真实活动链；合法空文本表示弃言，不是固定成功或无效服务 | 无 memory 的独立路径已有历史回归；评估收益需结合候选、拒绝和实际送达 |
 | [runtime / plugin](../../../src/main/java/org/zexnocs/teanekoagent/runtime/README.md) | 实例、轮次、共享控制、四阶段及生命周期 | 多组件共用一条执行链，避免九套独立模型循环 | 管线缓存上限为 256 条；未发现无界缓存证据，超限重编译的实际成本未压测 |
 | [workflow](../../../src/main/java/org/zexnocs/teanekoagent/runtime/workflow/README.md) | 可信宿主显式发起、最多八步的顺序多实例协作，共享父预算和身份 | 可运行扩展服务，有离线集成验证；默认聊天不自动调用 | 不具持久化恢复，也未向模型自动开放分派工具；不能宣传为默认自主多 Agent |
 | [文件／代码／知识扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/extension/README.md) | 真实工具绑定、参数／输出／权限适配，加宿主端口 | 适配器有效，但默认无实际文件／代码／完整知识后端 | 没有后端不算实现了沙箱或 RAG；无宿主需求时保留端口，不伪造成功 |
@@ -93,7 +93,7 @@
 
 | 看似重复的组合 | 实际区别 | 本轮建议 |
 | --- | --- | --- |
-| 旧会话摘要与分层记忆压缩 | [AgentSummaryConfig:69](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/configuration/AgentSummaryConfig.java#L69) 在实际分层 Store 存在且总开关启用时关闭旧摘要；独立宿主保留旧路径 | 没有确认默认双重摘要调用；保留兼容路径，删除前确认宿主和回退需求结束 |
+| 旧会话摘要与分层记忆压缩 | [AgentSummaryConfig:69](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/configuration/AgentSummaryConfig.java#L69) 在实际分层 Store 存在且总开关启用时关闭旧摘要；独立宿主保留旧路径 | 没有确认默认双重摘要调用；保留兼容路径，删除前确认宿主和回退需求结束 |
 | 显式事实／画像与自动长期条目 | 前者保留明确事实及来源管理，后者经过历史片段和生成整理；作用域、代次和更新策略不同 | 通过来源标识和召回去重改善阅读，不合并写入状态、权限或事务 |
 | 人格学习与长期记忆中的风格观察 | 一个是人格领域的持久补正，另一个是学习输入来源；无记忆时还有独立路径 | 保留人格独立性；关注输入是否实际产生有效观察，不以空批次数量判定无用 |
 | expression 与 sticker | 前者决定表达协议与交付；后者维护素材和选择 | 保持解耦；原生表情无需图库，图片交付仍遵守表达合同 |

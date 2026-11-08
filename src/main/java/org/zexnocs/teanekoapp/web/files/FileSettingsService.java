@@ -1,12 +1,12 @@
 package org.zexnocs.teanekoapp.web.files;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
-import org.zexnocs.teanekocore.plugin.PluginOwned;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
@@ -29,10 +29,11 @@ import java.util.concurrent.Semaphore;
  *
  * <br>2026/11/05：模块可在原授权及磁盘版本内读取私有检测快照。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Service
 public final class FileSettingsService {
@@ -87,7 +88,7 @@ public final class FileSettingsService {
         guard.run();
         return adapters.entries().keySet().stream().sorted().filter(this::allowed).map(id -> {
             var value = adapters.require(id).bean();
-            return new FileSettings.Section(id, value.name(), value.application());
+            return new FileSettings.Section(id, value.name(), value.application(), adapters.pluginId(id));
         }).toList();
     }
 
@@ -114,7 +115,8 @@ public final class FileSettingsService {
             // 2026/11/04：类型与字段解释直接传给网页，不导出原始注释或秘密文件内容。
             return new FileSettings.View(id, lease.adapter().name(), lease.adapter().description(), snapshot.revision(), snapshot.exists(),
                     lease.adapter().application(), document.runtime(),
-                    FileSettingsPolicy.fields(tree, lease.adapter(), snapshot.exists(), document.schema()), lease.adapter().collections(), sizes);
+                    FileSettingsPolicy.fields(tree, lease.adapter(), snapshot.exists(), document.schema()),
+                    lease.adapter().collections(), sizes, adapters.pluginId(id));
         });
     }
 
@@ -329,11 +331,13 @@ public final class FileSettingsService {
      * @return 本地明确允许且插件启用
      */
     private boolean allowed(String id) {
-        if (!files.requireCurrent(WebSecurityFileConfig.class).snapshot().fileSections().contains(id)) {
+        // 2026/11/07：注册文件表单默认开放，显式限制和插件启停仍实时复核。
+        if (!files.requireCurrent(WebSecurityFileConfig.class).snapshot().allowsFileSection(id)) {
             return false;
         }
-        var owner = AnnotatedElementUtils.findMergedAnnotation(adapters.require(id).type(), PluginOwned.class);
-        return owner == null || plugins.isEnabled(owner.value());
+        // 2026/11/07：查询复用缓存归属，同时保留实际插件资格复核。
+        var owner = adapters.pluginId(id);
+        return owner == null || plugins.isEnabled(owner);
     }
 
     /**
@@ -343,14 +347,14 @@ public final class FileSettingsService {
      * @param <T> 结果类型
      * @return 在真实工作结束后完成的阶段
      */
-    private <T> CompletionStage<T> run(String id, Runnable session, Work<T> action) {
+    private <T> CompletionStage<T> run(String id, Runnable session, IWork<T> action) {
         session.run();
         if (!allowed(id)) {
             throw new SecurityException("该文件配置未在本地开放或所属插件已关闭。");
         }
         var entry = adapters.require(id);
-        var owner = AnnotatedElementUtils.findMergedAnnotation(entry.type(), PluginOwned.class);
-        var token = owner == null ? null : plugins.capture(owner.value());
+        var owner = adapters.pluginId(id);
+        var token = owner == null ? null : plugins.capture(owner);
         Runnable checked = () -> {
             session.run();
             if (!allowed(id)) {
@@ -400,7 +404,7 @@ public final class FileSettingsService {
      * @version 4.7.0-l
      */
     @FunctionalInterface
-    private interface Work<T> {
+    private interface IWork<T> {
         /**
          * @param lease 当前实现和能力
          * @param document 原文件能力

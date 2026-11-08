@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.itemdata;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO;
@@ -18,10 +20,10 @@ import org.zexnocs.teanekocore.database.itemdata.metadata.ItemMetadataScanner;
  */
 @Service
 public class ItemDataCreateService implements IItemDataCreateService {
-    private final ItemDataRepository itemDataRepository;
+    private final IItemDataRepository itemDataRepository;
     private final ItemMetadataScanner itemMetadataScanner;
 
-    public ItemDataCreateService(ItemDataRepository itemDataRepository,
+    public ItemDataCreateService(IItemDataRepository itemDataRepository,
                                  ItemMetadataScanner itemMetadataScanner) {
         this.itemDataRepository = itemDataRepository;
         this.itemMetadataScanner = itemMetadataScanner;

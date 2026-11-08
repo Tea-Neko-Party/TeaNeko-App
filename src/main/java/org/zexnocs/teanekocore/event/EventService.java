@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.event;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,28 +11,31 @@ import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
-import org.zexnocs.teanekocore.event.core.Event;
 import org.zexnocs.teanekocore.event.core.EventHandlerScanner;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.event.interfaces.IEventService;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.Queue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * 事件服务，负责处理事件的推送和分发。
  * 当前事件服务是一旦有任何监听器出现异常就会停止处理事件，并将异常抛出到命名空间或者 TaskFuture 中处理。
  * <br>2026/11/02：按插件归属过滤监听器，决策事件拒绝异步监听并复核调用版本。
  * <br>2026/11/07：完整事件入口跟踪通知、异步监听和各级业务的实际完成。
+ * <br>2026/11/07：所有通知结束后统一封闭业务登记，插件调用占用保持到真实业务终态。
  *
  * @author zExNocs
  * @date 2026/02/17
  * @since 4.0.8
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 @Service
 public class EventService implements IEventService {
@@ -54,20 +59,28 @@ public class EventService implements IEventService {
         if (pluginAccess == null) { return true; }
         if (!pluginAccess.enabled(patch.getTarget(), patch.getMethod())) { return false; }
         var owner = pluginAccess.owner(patch.getTarget(), patch.getMethod());
-        return owner == null || !(event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped) || scoped.acceptsPlugin(owner);
+        return owner == null || !(event instanceof org.zexnocs.teanekocore.plugin.IPluginScopedEvent scoped) || scoped.acceptsPlugin(owner);
     }
 
     /**
      * 在实际运行线程捕获和复核归属版本。
      * @param event 当前事件
      * @param patch 监听器
+     * @param calls 本事件实际开启的调用，通知结束后统一跟随业务完成
      * @throws Exception 当监听器或插件守卫失败时
      */
-    private void invokeListener(IEvent<?> event, EventHandlerScanner.EventHandlerPatch<?> patch) throws Exception {
+    private void invokeListener(IEvent<?> event, EventHandlerScanner.EventHandlerPatch<?> patch,
+            Queue<PluginRegistry.Call> calls) throws Exception {
         if (!accepts(event, patch)) { return; }
-        var token = pluginAccess == null ? null : pluginAccess.capture(patch.getTarget(), patch.getMethod());
+        // 2026/11/07：即使监听器登记工作后同步抛错，其占用也须等已登记业务真实收尾。
+        var call = pluginAccess == null ? null : pluginAccess.open(patch.getTarget(), patch.getMethod());
+        if (call != null) {
+            calls.add(call);
+        }
         patch.invoke(event);
-        if (pluginAccess != null) { pluginAccess.check(token); }
+        if (call != null) {
+            call.check();
+        }
     }
     /// 处理的最大迭代次数
     private static final int MAX_ITERATION = 10;
@@ -108,8 +121,8 @@ public class EventService implements IEventService {
      */
     @Override
     public TaskFuture<ITaskResult<Void>> pushEventWithFuture(@NonNull IEvent<?> event) {
-        String eventProcessNamespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
-            .map(Event::namespace)
+        // 2026/11/07：运行入口只读取扫描阶段发布的命名空间。
+        String eventProcessNamespace = Optional.ofNullable(eventHandlerScanner.namespace(event.getClass()))
             .filter(s -> !s.isEmpty())
             .orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
         return iTaskService.subscribeWithFuture(
@@ -130,8 +143,9 @@ public class EventService implements IEventService {
     @Override
     public CompletionStage<Void> pushEventWithCompletion(@NonNull IEvent<?> event) {
         var work = new ArrayList<CompletionStage<?>>();
-        String namespace = Optional.ofNullable(event.getClass().getAnnotation(Event.class))
-            .map(Event::namespace).filter(value -> !value.isEmpty()).orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
+        // 2026/11/07：与普通通知共用静态声明，不因完整等待入口而重复解析事件注解。
+        String namespace = Optional.ofNullable(eventHandlerScanner.namespace(event.getClass()))
+            .filter(value -> !value.isEmpty()).orElse(EVENT_PROCESS_DEFAULT_NAMESPACE);
         var notification = iTaskService.subscribeWithFuture("完整事件处理", namespace, () -> {
             _processEvent(event, work);
             return EmptyTaskResult.INSTANCE;
@@ -148,12 +162,16 @@ public class EventService implements IEventService {
      * 一旦有任何监听器出现异常就会停止处理事件，并将异常抛出到阶段链或者 TaskFuture 中处理。
      *
      * @param event 事件
+     * @param work 可选完整完成阶段收集器，普通通知入口为空
      * @throws RuntimeException 当监听、决策异步约束或生命周期回调失败时
      */
     private void _processEvent(IEvent<?> event, @Nullable List<CompletionStage<?>> work) throws RuntimeException {
         int iteration = 0;
         while (event != null) {
             var currentEvent = event;
+            // 2026/11/07：异步监听也在本轮封闭登记之前完成，普通通知入口同样保留插件占用。
+            var notifications = new ArrayList<CompletionStage<?>>();
+            Queue<PluginRegistry.Call> calls = new ConcurrentLinkedQueue<>();
             try {
                 String TAG = "事件{%s}".formatted(event.getClass().getName());
 
@@ -195,16 +213,14 @@ public class EventService implements IEventService {
                         }
                         // 判断监听器是否异步
                         if (annotation.async()) {
-                            if (event instanceof org.zexnocs.teanekocore.plugin.PluginScopedEvent scoped && !scoped.allowsAsyncListeners()) {
+                            if (event instanceof org.zexnocs.teanekocore.plugin.IPluginScopedEvent scoped && !scoped.allowsAsyncListeners()) {
                                 throw new IllegalArgumentException("可修改决策事件不允许异步监听器。");
                             }
-                            var listener = _asyncProcessListener(TAG, event, patch);
-                            if (work != null) {
-                                work.add(listener.physicalCompletion().thenCompose(ignored -> listener.asStage()));
-                            }
+                            var listener = _asyncProcessListener(TAG, event, patch, calls);
+                            notifications.add(listener.physicalCompletion().thenCompose(ignored -> listener.asStage()));
                         } else {
                             // 如果不异步执行，则在当前线程中运行
-                            invokeListener(event, patch);
+                            invokeListener(event, patch, calls);
                         }
                     }
                 } catch (Exception e) {
@@ -235,11 +251,40 @@ public class EventService implements IEventService {
                 // 同一线程处理下一个事件
                 event = event._getNextEvent();
             } finally {
+                var completion = finishEvent(currentEvent, notifications, calls);
                 if (work != null) {
-                    work.add(currentEvent.processingCompletion());
+                    work.add(completion);
                 }
             }
         }
+    }
+
+    /**
+     * 2026/11/07：所有实际监听返回后才封闭事件，失败通知同样等待已登记业务并释放调用占用。
+     * @param event 本级事件，不能在通知仍执行时提前读取完成合同
+     * @param notifications 本级异步通知的物理完成及结果阶段
+     * @param calls 实际运行过的插件监听调用
+     * @return 通知、登记业务与版本复核全部结束的阶段
+     */
+    private CompletionStage<Void> finishEvent(IEvent<?> event, List<CompletionStage<?>> notifications,
+            Queue<PluginRegistry.Call> calls) {
+        var notified = CompletableFuture.allOf(notifications.stream().map(CompletionStage::toCompletableFuture)
+                .toArray(CompletableFuture<?>[]::new));
+        return notified.handle((ignored, failure) -> (Void) null).thenCompose(ignored -> {
+            CompletionStage<Void> processing;
+            try {
+                processing = java.util.Objects.requireNonNull(event.processingCompletion(), "事件业务完成阶段不能为空。");
+            } catch (RuntimeException | Error failure) {
+                processing = CompletableFuture.failedStage(failure);
+            }
+            var completed = new ArrayList<CompletableFuture<?>>();
+            completed.add(notified);
+            completed.add(processing.toCompletableFuture());
+            for (var call : calls) {
+                completed.add(call.track(processing).toCompletableFuture());
+            }
+            return CompletableFuture.allOf(completed.toArray(CompletableFuture<?>[]::new));
+        }).minimalCompletionStage();
     }
 
     /**
@@ -248,10 +293,13 @@ public class EventService implements IEventService {
      * @param TAG 日志标签
      * @param event 事件
      * @param patch 监听器补丁
+     * @param calls 本事件的实际插件调用占用
+     * @return 原任务执行器管理的监听通知结果
      */
     private TaskFuture<ITaskResult<Void>> _asyncProcessListener(String TAG,
                                                                 IEvent<?> event,
-                                                                EventHandlerScanner.EventHandlerPatch<?> patch) {
+                                                                EventHandlerScanner.EventHandlerPatch<?> patch,
+                                                                Queue<PluginRegistry.Call> calls) {
         var annotation = patch.getAnnotation();
         var listener = patch.getTarget();
         // 获取命名空间，如果没有则使用默认命名空间
@@ -265,7 +313,7 @@ public class EventService implements IEventService {
             taskChainNamespace,
             () -> {
                 // 2026/11/02：排队期间禁用的插件不再执行。
-                invokeListener(event, patch);
+                invokeListener(event, patch, calls);
                 return EmptyTaskResult.INSTANCE;
             }, EmptyTaskResult.getResultType());
         result.finish();

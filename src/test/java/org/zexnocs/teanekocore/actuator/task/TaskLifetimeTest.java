@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionBusyException;
@@ -10,7 +12,7 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Duration;
@@ -73,7 +75,7 @@ class TaskLifetimeTest {
                 TaskExecution.checkCurrent();
             });
             doAnswer(call -> {
-                Collection<VoidCallable> actions = call.getArgument(0);
+                Collection<IVoidCallable> actions = call.getArgument(0);
                 try {
                     for (var action : actions) {
                         action.call();

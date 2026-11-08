@@ -1,10 +1,13 @@
 package org.zexnocs.teanekocore.command;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.data.util.Pair;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.command.api.Command;
+import org.zexnocs.teanekocore.command.api.CommandExtension;
 import org.zexnocs.teanekocore.command.api.DefaultCommand;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.framework.description.Description;
@@ -22,7 +25,6 @@ import java.util.Map;
 /**
  * 指令扫描器
  * 扫描指令、默认指令和子指令
- *
  * <br>2026/11/05：扫描时保存合并的类型说明，完整前缀和正则目录一次发布，失败重扫保留旧缓存。
  * <br>2026/11/06：重复命令、子命令和默认入口拒绝发布，并报告双方来源。
  * <br>2026/11/07：拒绝主命令、子命令和默认方法冲突，不保留部分目录。
@@ -30,7 +32,7 @@ import java.util.Map;
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.8.7-l
+ * @version 4.9.0-l
  * @see Command
  * @see DefaultCommand
  * @see SubCommand
@@ -44,6 +46,19 @@ public class CommandScanner implements IScanner {
     private volatile Commands commands = new Commands(Map.of(), Map.of());
     private volatile boolean initialized;
     private final IBeanScanner iBeanScanner;
+    private org.zexnocs.teanekocore.plugin.PluginAccess plugins;
+
+    /**
+     * 2026/11/07：命令扫描同时编译实际目标的插件归属，调用路径只读缓存。
+     * @param plugins 统一插件归属目录
+     */
+    @Autowired
+    public synchronized void installPlugins(org.zexnocs.teanekocore.plugin.PluginAccess plugins) {
+        // 2026/11/07：早期初始化可能先发布命令目录，注入时补登记既有快照而不重新扫描。
+        registerOwners(commands, plugins);
+        this.plugins = plugins;
+    }
+
 
     /**
      * 注入组件发现与日志服务，扫描时统一验证命令方法的公开性和异步契约。
@@ -80,6 +95,14 @@ public class CommandScanner implements IScanner {
         }
         // 2026/11/05：键查询只访问当前已发布快照。
         return snapshot().prefix().get(command);
+    }
+
+    /**
+     * 2026/11/08：从完整已发布快照读取前缀键，页面查询不发现命令或暴露可变目录。
+     * @return 不可变的已登记前缀集合
+     */
+    public Collection<String> getPrefixCommandKeys() {
+        return snapshot().prefix().keySet();
     }
 
     /**
@@ -160,6 +183,7 @@ public class CommandScanner implements IScanner {
             var subCommandMap = new LinkedHashMap<String, Pair<SubCommand, Method>>();
             for (var method : clazz.getDeclaredMethods()) {
                 if (method.isAnnotationPresent(DefaultCommand.class) || method.isAnnotationPresent(SubCommand.class)) {
+                    CommandMethodContract.register(method);
                     CommandMethodContract.requireAsync(method);
                 }
                 // 如果是默认指令方法
@@ -203,10 +227,59 @@ public class CommandScanner implements IScanner {
                 commandMap.put(command, commandMapData);
             }
         }
-        commands = new Commands(Map.copyOf(prefixCommandMap), Map.copyOf(regexpCommandMap));
+        // 2026/11/07：读取独立路由属性合并子命令，不将共享命令前缀作为 Spring Bean 名。
+        for (var pair : iBeanScanner.getBeansWithAnnotation(CommandExtension.class).values()) {
+            var root = prefixCommandMap.get(pair.first().prefix());
+            var bean = pair.second();
+            if (root == null) {
+                throw new IllegalArgumentException("子命令扩展引用未注册的前缀：" + pair.first().prefix());
+            }
+            var additions = new LinkedHashMap<String, Pair<SubCommand, Method>>();
+            var targets = new LinkedHashMap<Method, Object>();
+            for (var method : iBeanScanner.getBeanClass(bean).getDeclaredMethods()) {
+                if (method.isAnnotationPresent(DefaultCommand.class)) {
+                    throw new IllegalArgumentException("子命令扩展不能替换默认入口：" + method);
+                }
+                var declaration = method.getAnnotation(SubCommand.class);
+                if (declaration == null) {
+                    continue;
+                }
+                CommandMethodContract.register(method);
+                CommandMethodContract.requireAsync(method);
+                targets.put(method, bean);
+                for (var name : declaration.value()) {
+                    if (additions.putIfAbsent(name, Pair.of(declaration, method)) != null) {
+                        throw new IllegalArgumentException("扩展子命令标识重复：" + name);
+                    }
+                }
+            }
+            var extended = root.extend(additions, targets);
+            prefixCommandMap.replaceAll((name, registered) -> registered == root ? extended : registered);
+        }
+        // 2026/11/07：首次扫描与晚注入共用归属登记，校验完成才发布新目录。
+        var completed = new Commands(Map.copyOf(prefixCommandMap), Map.copyOf(regexpCommandMap));
+        if (plugins != null) {
+            registerOwners(completed, plugins);
+        }
+        commands = completed;
         initialized = true;
         logger.debug("CommandScanner", "命令目录已发布，前缀=" + prefixCommandMap.size()
             + "，正则=" + regexpCommandMap.size());
+    }
+
+    /**
+     * 2026/11/07：从已编译命令快照登记真实方法目标，不重新发现扩展。
+     * @param current 已完成的命令目录
+     * @param access 插件归属目录
+     */
+    private void registerOwners(Commands current, org.zexnocs.teanekocore.plugin.PluginAccess access) {
+        var entries = new LinkedHashSet<>(current.prefix().values());
+        entries.addAll(current.regexp().values());
+        for (var entry : entries) {
+            for (var method : entry.getRegisteredMethods()) {
+                access.register(entry.target(method), method);
+            }
+        }
     }
 
     /**

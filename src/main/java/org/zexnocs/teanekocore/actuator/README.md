@@ -18,7 +18,7 @@ ITimer.observation() 可由原计时器扩展提供规则和预计时间，未�
 
 | 类或接口 | 作用 |
 |:---:|---|
-| `TaskConfig<T>` / `ITaskConfig<T>` | 描述一次任务的执行配置，包括名称、`MethodCallable<ITaskResult<T>>`、延迟、重试、阶段链和过期时间。 |
+| `TaskConfig<T>` / `ITaskConfig<T>` | 描述一次任务的执行配置，包括名称、`IMethodCallable<ITaskResult<T>>`、延迟、重试、阶段链和过期时间。 |
 | `Task<T>` / `ITask<T>` | 单次任务实例，持有唯一 `UUID key`、执行状态、重试次数、执行线程 future 和用户可观察的 `TaskFuture`。 |
 | `TaskResult<T>` / `ITaskResult<T>` | 任务结果。`isSuccess()` 决定是否成功，`getResult()` 返回业务结果。 |
 | `EmptyTaskResult` | 无返回值任务的成功结果，结果类型是 `Void.class`。 |
@@ -94,7 +94,7 @@ ITimer.observation() 可由原计时器扩展提供规则和预计时间，未�
 |---|---|
 | `@TaskStage(value = "...", priority = n)` | 将类注册为任务阶段。`value` 是 namespace 列表，`priority` 越大越先进入。 |
 | `ITaskStage.process(TaskStageChain chain)` | 阶段处理方法。通常先做前置逻辑，再调用 `chain.next()`，最后做后置逻辑。 |
-| `@SetTaskStage("namespace")` | 标注在 `MethodCallable` 对应方法上，强制该任务使用指定阶段 namespace。 |
+| `@SetTaskStage("namespace")` | 标注在 `IMethodCallable` 对应方法上，强制该任务使用指定阶段 namespace。 |
 
 ```java
 @TaskStage(value = "audit", priority = 100)

@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.configuration;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.beans.factory.ObjectProvider;
@@ -7,8 +9,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
 import org.zexnocs.teanekoagent.runtime.workflow.AgentWorkflowService;
 import tools.jackson.databind.ObjectMapper;
 
@@ -37,7 +39,7 @@ public class AgentWorkflowConfig {
      */
     @Bean @ConditionalOnMissingBean(AgentWorkflowService.class)
     public AgentWorkflowService agentWorkflowService(@Qualifier("agentTurnService") IAgentTurnService turns,
-            ObjectProvider<IAgentMemoryReferences> references, @Qualifier("virtualExecutor") Executor executor, ObjectMapper mapper) {
+            ObjectProvider<IAgentContextReferences> references, @Qualifier("virtualExecutor") Executor executor, ObjectMapper mapper) {
         return new AgentWorkflowService(turns, references.getIfAvailable(), executor, mapper);
     }
 }

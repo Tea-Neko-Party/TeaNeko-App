@@ -8,11 +8,11 @@
 
 | 层次 | 当前职责与证据 | 评价 |
 | --- | --- | --- |
-| 应用外壳 | [App.vue](../../../frontend/src/App.vue) 管认证、布局与会话销毁，已避免旧会话迟到结果重新挂载 | 边界基本合理；不应继续塞入业务分支 |
-| 页面声明与宿主 | [page-registry.ts](../../../frontend/src/pages/page-registry.ts) 统一导航、标题、可见条件和异步加载；[ConsolePageHost.vue](../../../frontend/src/pages/ConsolePageHost.vue) 管保留策略、离开守卫及导航意图 | 已支持增加页面声明扩展；导航可见性不是服务端授权 |
+| 应用外壳 | [App.vue](../../../frontend/src/app/App.vue) 管认证、布局与会话销毁，已避免旧会话迟到结果重新挂载 | 边界基本合理；不应继续塞入业务分支 |
+| 页面声明与宿主 | [page-registry.ts](../../../frontend/src/app/pages/page-registry.ts) 统一导航、标题、可见条件和异步加载；[ConsolePageHost.vue](../../../frontend/src/app/pages/ConsolePageHost.vue) 管保留策略、离开守卫及导航意图 | 已支持增加页面声明扩展；导航可见性不是服务端授权 |
 | 业务页面 | 聊天、工作区、配置、运行管理各自拥有数据和操作状态 | 有隔离，但大页面同时承担 DTO、请求、状态、恢复和显示，改动影响面偏大 |
 | 共享编辑与展示 | `ValueEditor`、`FileFieldEditor`、`ModelNamePicker`、`RefreshButton`、`DetailPanel` 已复用 | 保留这些基础；重点补齐关联标签、描述与错误的统一合同 |
-| 请求与回执 | [api.ts](../../../frontend/src/api.ts) 统一同源、CSRF 和 JSON 错误；[management-receipts.ts](../../../frontend/src/management-receipts.ts) 已校验部分管理回执 | 运行时回执保护尚未覆盖全部有副作用入口，见 F01 |
+| 请求与回执 | [api.ts](../../../frontend/src/shared/api/client.ts) 统一同源、CSRF 和 JSON 错误；[management-receipts.ts](../../../frontend/src/shared/api/management-receipts.ts) 已校验部分管理回执 | 运行时回执保护尚未覆盖全部有副作用入口，见 F01 |
 | 生命周期与目录 | `usePageDraft`、`useActivePolling` 与 `useAgentLibrary` 管草稿、可见轮询、目录遍历和取消 | 已有合适复用点；应补查询规模和等待期限，避免每个页面重写 |
 
 `WebChatView.vue` 约 669 行、`AgentWorkspaceView.vue` 约 584 行、`ChatSettingsView.vue` 约 519 行。行数本身不构成缺陷；风险来自同一文件同时管理多类请求、DTO、业务恢复与视图，F01 就暴露了不同页面恢复规则漂移。首发不要求全量迁目录或引入路由／全局状态库。
@@ -21,9 +21,9 @@
 
 | 编号／优先级 | 故障、触发与影响 | 失效原理 | 建议及验收 |
 | --- | --- | --- | --- |
-| **V486-F01／P1** | 聊天发送或定时器修改返回 HTTP 200 的 `{}`／其他操作的回执时，原请求立即消失；聊天正文、附图、引用同时清空。结果不明时失去按原编号恢复的状态 | [WebChatView.receive:391](../../../frontend/src/WebChatView.vue#L391)、[RuntimeView.receive:122](../../../frontend/src/RuntimeView.vue#L122) 信任 TypeScript 泛型，未核对 `operationId`、状态或目标就清 `pending`。JSON 解析成功不代表业务确认 | 为各端点定义运行时 decoder，确认后才释放原请求。无效回执进入“结果未知”，保留原编号、参数与草稿，不自动新建编号重发。两页各验证空对象、错编号、错目标／字段类型和有效结果；确认后刷新失败不得降回“未提交” |
-| **V486-F02／P2** | 打开普通组件参数，浏览器可访问性树呈现无名开关、无名数值框和无名文本框，辅助技术缺少可靠的字段名称 | [AgentAssemblyEditor:167](../../../frontend/src/AgentAssemblyEditor.vue#L167) 的可见 `label` 与后面的 `ElSwitch`、`ElInputNumber`、`ElInput` 没有 `for/id` 或 `aria-labelledby` 关联；一般分支也未传 `aria-label` | 由字段容器生成实例唯一 ID，给实际可聚焦控件传名称、描述与错误关联；覆盖布尔、数字、字符串、密钥及编辑器。浏览器按字段名取得控件，并用读屏验证状态和错误。对应适用的 WCAG 2.2 1.3.1、3.3.2、4.1.2 |
-| **V486-F03／P2** | 运行管理页签宣称 `tablist/tab`，但方向键不移动焦点；没有 `tabpanel` 和控件关联。相似手写结构散布在聊天配置及 Agent 工作区 | [RuntimeView:172](../../../frontend/src/RuntimeView.vue#L172)、[AgentWorkspaceView:373](../../../frontend/src/AgentWorkspaceView.vue#L373)、[ChatSettingsView:415](../../../frontend/src/ChatSettingsView.vue#L415) 只设置选中属性，未实现完整页签交互 | 优先复用已有 `ElTabs`，或封装一套共同的手动激活页签；补焦点移动、单一 Tab 停靠点、面板关联和离开保护。浏览器验证方向键、Home/End、Enter/Space、禁用项和返回焦点。这里是页签模式缺口，不能表述成所有功能均无法用键盘操作 |
+| **V486-F01／P1** | 聊天发送或定时器修改返回 HTTP 200 的 `{}`／其他操作的回执时，原请求立即消失；聊天正文、附图、引用同时清空。结果不明时失去按原编号恢复的状态 | [WebChatView.receive:391](../../../frontend/src/features/chat/WebChatView.vue#L391)、[RuntimeView.receive:122](../../../frontend/src/features/runtime/RuntimeView.vue#L122) 信任 TypeScript 泛型，未核对 `operationId`、状态或目标就清 `pending`。JSON 解析成功不代表业务确认 | 为各端点定义运行时 decoder，确认后才释放原请求。无效回执进入“结果未知”，保留原编号、参数与草稿，不自动新建编号重发。两页各验证空对象、错编号、错目标／字段类型和有效结果；确认后刷新失败不得降回“未提交” |
+| **V486-F02／P2** | 打开普通组件参数，浏览器可访问性树呈现无名开关、无名数值框和无名文本框，辅助技术缺少可靠的字段名称 | [AgentAssemblyEditor:167](../../../frontend/src/features/agent/AgentAssemblyEditor.vue#L167) 的可见 `label` 与后面的 `ElSwitch`、`ElInputNumber`、`ElInput` 没有 `for/id` 或 `aria-labelledby` 关联；一般分支也未传 `aria-label` | 由字段容器生成实例唯一 ID，给实际可聚焦控件传名称、描述与错误关联；覆盖布尔、数字、字符串、密钥及编辑器。浏览器按字段名取得控件，并用读屏验证状态和错误。对应适用的 WCAG 2.2 1.3.1、3.3.2、4.1.2 |
+| **V486-F03／P2** | 运行管理页签宣称 `tablist/tab`，但方向键不移动焦点；没有 `tabpanel` 和控件关联。相似手写结构散布在聊天配置及 Agent 工作区 | [RuntimeView:172](../../../frontend/src/features/runtime/RuntimeView.vue#L172)、[AgentWorkspaceView:373](../../../frontend/src/features/agent/AgentWorkspaceView.vue#L373)、[ChatSettingsView:415](../../../frontend/src/features/settings/chat/ChatSettingsView.vue#L415) 只设置选中属性，未实现完整页签交互 | 优先复用已有 `ElTabs`，或封装一套共同的手动激活页签；补焦点移动、单一 Tab 停靠点、面板关联和离开保护。浏览器验证方向键、Home/End、Enter/Space、禁用项和返回焦点。这里是页签模式缺口，不能表述成所有功能均无法用键盘操作 |
 
 F01 是原 V484-W01 同类风险在**另外两个页面**的覆盖缺口；不重新打开已完成回执校验的 Agent 工作区和指令台。部署代理异常、版本不一致或后端回归可能返回可解析但不匹配的正文；前端不能把这些情况当作提交确认。本轮没有证据表明真实部署已经发送重复消息。
 
@@ -35,9 +35,9 @@ F03 按 [WAI-ARIA APG 页签模式](https://www.w3.org/WAI/ARIA/apg/patterns/tab
 
 | 风险 | 当前证据 | 首发及后续边界 |
 | --- | --- | --- |
-| 网络悬挂缺少统一有界等待 | [api.ts:51](../../../frontend/src/api.ts#L51) 使用 `fetch`，未定义产品级请求期限；部分读有 AbortController，写操作通常依赖请求自行结束 | 首发对读取和变更分别设可配置期限。读取超时可重试；写入超时必须转未知结果，保留操作编号，取消浏览器等待不等于取消服务端副作用。当前没有实测网络悬挂耗时，属于待验证的恢复风险 |
+| 网络悬挂缺少统一有界等待 | [api.ts:51](../../../frontend/src/shared/api/client.ts#L51) 使用 `fetch`，未定义产品级请求期限；部分读有 AbortController，写操作通常依赖请求自行结束 | 首发对读取和变更分别设可配置期限。读取超时可重试；写入超时必须转未知结果，保留操作编号，取消浏览器等待不等于取消服务端副作用。当前没有实测网络悬挂耗时，属于待验证的恢复风险 |
 | 加载／空状态规则不一致 | 目录选择器有 `role=status`，但装配目录初次加载缺少 `busy` 提示；部分页面仅禁用按钮或显示空数据区域 | 使用下方状态容器区分首次读取、已有数据刷新、空结果、权限错误及离线；不把未加载显示为“没有数据” |
-| 查询规模随全量目录增长 | [agent-library.ts](../../../frontend/src/agent-library.ts) 自动遍历全部游标页，每页复制并排序累计数组；每个已挂载选择器独立读取 | 小目录可接受，重复游标已有停止保护。扩容时先限制一次读取的页数／条数并提供明确“继续加载”，再按查询键共享只读结果或服务端搜索；不要用无限缓存替代当前授权复核 |
+| 查询规模随全量目录增长 | [agent-library.ts](../../../frontend/src/features/agent/agent-library.ts) 自动遍历全部游标页，每页复制并排序累计数组；每个已挂载选择器独立读取 | 小目录可接受，重复游标已有停止保护。扩容时先限制一次读取的页数／条数并提供明确“继续加载”，再按查询键共享只读结果或服务端搜索；不要用无限缓存替代当前授权复核 |
 | 页面保留带来的内存增长 | 页面宿主按会话保留页面；聊天还按房间保留嵌套配置与工作区实例 | 保留草稿有明确价值。测量访问大量房间后的 DOM、监听器和内存；仅淘汰无草稿、无在途及无未知结果的视图。不要为节省内存销毁未确认操作 |
 | DTO 与请求策略散落 | 页面中重复定义 DTO、`run`、错误分支、回执收束和加载函数 | 先把端点合同与业务 composable 按功能抽离，优先修复已出现的策略漂移。不要一次性生成“万能 CRUD 页面” |
 

@@ -1,18 +1,18 @@
 # 共享回忆与社交组件
 
-适用版本：v4.8.6-l。在聊天配置的 Agent 装配中启用所需组件；参数随 `components` 序列化保存到 cfg。新登记的 Agent 仍只有 LLM，已有装配也不会自动获得跨聊天读取或私聊发送能力。
+适用版本：v4.9.0-l。在聊天配置的 Agent 装配中启用所需组件；参数随 `components` 序列化保存到 cfg。记忆与跨聊天回忆属于 `agent.cognition`，社交组件属于 `agent.social`，可按插件 ID 筛选。新登记的 Agent 仍只有 LLM，已有装配也不会自动获得跨聊天读取或私聊发送能力。
 
 ## 装配与空间
 
 | 组件 | 标识 | 依赖 | 用途 |
 | --- | --- | --- | --- |
-| 跨聊天回忆 | `shared-memory` | `memory` | 关联当前真实用户在同空间其他群聊中的近期对话 |
+| 跨聊天回忆 | `memory.crossChatRecallEnabled` 参数 | `memory` | 默认关闭；开启后关联当前真实用户在同空间其他群聊中的近期对话 |
 | 受控私聊 | `private-contact` | `memory`、`tool` | 用户明确邀请后，向其已启用且同空间的私聊发送一条消息 |
 | 好感度 | `affinity` | `memory`、`tool` | 按实质互动积累亲近程度，影响人格表达 |
 | 心情 | `mood` | `memory`、`tool` | 短期情绪变化及自然恢复，可与好感度分别装配 |
 | 主动关怀 | `care` | `proactive`、`affinity` | 为原主动管道提供想念、等待回复等候选理由 |
 
-卡片直接显示中文依赖；选择组件时依赖一起加入草稿。人格组件可按需装配，它决定表达风格；社交状态不会改写基础人格、授予工具权限或改变用户权限。
+卡片直接显示中文依赖；选择组件时依赖一起加入草稿。旧显式 `shared-memory` 装配在启动升级时合并到记忆参数，保留原启用状态，冲突值不会静默覆盖。人格组件可按需装配，它决定表达风格；社交状态不会改写基础人格、授予工具权限或改变用户权限。
 
 工作区的记忆空间均从已存目录选择，不支持手填创建。这里的选择用于查看资料，**不会改变聊天绑定**。需要群聊和私聊共享空间时，分别在对应聊天由 OWNER 执行 `/agent setnamespace <已有空间ID>`，再通过 `/agent status` 核对；Web 浏览与修改绑定的授权边界保持独立。
 
@@ -68,6 +68,6 @@
 
 ## 扩展与验证
 
-跨聊天存储通过 `ISharedConversationStore` 扩展；自定义普通记忆存储只有在使用跨聊天组件时才需提供该端口。社交状态使用 `ISocialStateStore`，平台私聊使用 `IPrivateContactTransport`，适配位于 Client 层。主动组件实现 `IProactiveContextSource`，由容器一次性组合，不能自行绕开原候选入口。
+跨聊天存储通过 `ISharedConversationStore` 扩展；自定义普通记忆存储只有在开启跨聊天回忆参数时才需提供该端口。社交状态使用 `ISocialStateStore`，平台私聊使用 `IPrivateContactTransport`，适配位于 Client 层。主动组件实现 `IProactiveContextSource`，由容器一次性组合，不能自行绕开原候选入口。
 
 离线回归覆盖事务、重复投递、空间换代、权限撤回、发送未知和新来信取消。真实供应商的工具选择与人格表现、真实平台回执及 MySQL 并发效果仍需按[部署清单](agent-deployment.md#实机验收清单)验收。

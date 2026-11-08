@@ -1,0 +1,29 @@
+package org.zexnocs.teanekoplugin.agent.automation.skill;
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+/**
+ * 可替换的可信 Skill 目录来源，加载失败不发布部分候选或清空上一个完整快照。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
+ *
+ * @author zExNocs
+ * @date 2026/11/01
+ * @since 4.5.0-l
+ * @version 4.9.0-l
+ */
+public interface ISkillCatalog {
+    /** @return 当前完整快照，首次使用可惰性加载 */
+    SkillCatalogSnapshot snapshot();
+    /** @return 可信宿主主动重载后的完整快照，聊天管理须使用带 guard 的入口 */
+    default SkillCatalogSnapshot reload() { return reload(() -> {}); }
+    /**
+     * 全部校验成功后发布，授权或取消失败保留旧快照。
+     * @param guard 发布前的当前授权复核
+     * @return 原子替换的新快照
+     */
+    SkillCatalogSnapshot reload(Runnable guard);
+}

@@ -22,8 +22,8 @@
 | API | 说明 |
 |---|---|
 | `IDatabaseService.pushQuickTask(taskName, transactionCallback, cacheCallback)` | 快速提交一个事务任务和可选缓存任务。 |
-| `DatabaseTaskConfig.addTransactionTask(VoidCallable)` | 追加事务内任务。 |
-| `DatabaseTaskConfig.addCacheTask(VoidCallable)` | 追加事务成功后的缓存任务。 |
+| `DatabaseTaskConfig.addTransactionTask(IVoidCallable)` | 追加事务内任务。 |
+| `DatabaseTaskConfig.addCacheTask(IVoidCallable)` | 追加事务成功后的缓存任务。 |
 | `DatabaseTaskConfig.merge(IDatabaseTaskConfig)` | 合并两个尚未提交的数据库任务；被合并任务会被标记为已提交。 |
 | `DatabaseTaskConfig.push()` | 提交任务并自动 `finish()`。 |
 | `DatabaseTaskConfig.pushWithFuture()` | 提交任务并返回 `TaskFuture<ITaskResult<Void>>`。 |
@@ -62,12 +62,12 @@ table(entity class) + namespace + target + key -> value
 | 类或接口 | 作用 |
 |---|---|
 | `BaseEasyDataObject` | JPA `@MappedSuperclass`，定义 `id`、`namespace`、`target`、`key`、`value`、`version`。 |
-| `BaseEasyDataRepository<T>` | 通用 Repository，提供按 namespace/target/key 查询、删除和 upsert。 |
+| `IBaseEasyDataRepository<T>` | 通用 Repository，提供按 namespace/target/key 查询、删除和 upsert。 |
 | `IEasyData` / `BaseEasyData` | 面向业务的 EasyData 入口，指定 entity class 和 namespace。 |
 | `IEasyDataDto` / `EasyDataDto` | 某个 target 下的数据 DTO，懒加载数据库数据并提供 typed getter。 |
 | `IEasyDataTransactionDto` / `EasyDataRow` | 活动事务内的当前读、行锁、版本保存与有界分页；提交后失效缓存，不公开仓库或实体。 |
 | `IEasyDataDtoTaskConfig` | 修改 EasyData 的数据库任务，支持 `set`、`setBoolean`、`remove`。 |
-| `EasyDataRepositoryScanner` | 扫描 `BaseEasyDataRepository` 子类，并按实体类映射 Repository。 |
+| `EasyDataRepositoryScanner` | 扫描 `IBaseEasyDataRepository` 子类，并按实体类映射 Repository。 |
 | `EasyDataService` | 根据 `IEasyData` 和 target 获取缓存的 `EasyDataDto`。 |
 | `@EasyData` | 标注 EasyData 实现类的任务阶段 namespace；为空时使用数据库默认 namespace。 |
 

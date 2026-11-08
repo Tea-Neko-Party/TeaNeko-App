@@ -8,10 +8,11 @@ import vm from 'node:vm'
 const require = createRequire(resolve('frontend/package.json'))
 const ts = require('typescript')
 const compile = source => ts.transpileModule(source, {compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText
-const apiSource = readFileSync('frontend/src/api.ts','utf8')
+// 2026/11/07：共享请求与业务页面按职责目录读取，保持回执验证内容不变。
+const apiSource = readFileSync('frontend/src/shared/api/client.ts','utf8')
 const report = []
 const decoders = vm.createContext({exports:{}, Error, Date})
-vm.runInContext(compile(readFileSync('frontend/src/operation-receipts.ts', 'utf8')), decoders)
+vm.runInContext(compile(readFileSync('frontend/src/shared/api/operation-receipts.ts', 'utf8')), decoders)
 
 function componentFunctions(file, names) {
   const script = readFileSync(file,'utf8').match(/<script setup lang="ts">([\s\S]*?)<\/script>/)?.[1]
@@ -42,7 +43,7 @@ function fixture(kind, response, refreshFails = false) {
     query:(action,body)=>({action,...body}),
     call:(name,body)=>api.exports.request(`management/${name}`,{method:'POST',body:JSON.stringify(body)})}
   const view=vm.createContext(state)
-  const file=`frontend/src/${kind==='chat'?'WebChatView':'RuntimeView'}.vue`
+  const file=`frontend/src/features/${kind==='chat'?'chat/WebChatView':'runtime/RuntimeView'}.vue`
   // 2026/11/07：查询恢复也执行页面的真实入口，不能只证明首次提交路径。
   vm.runInContext(compile(componentFunctions(file,['receive','deliver','run',kind==='chat'?'query':'operation'])),view,{filename:file})
   return {state,view,requests,original}

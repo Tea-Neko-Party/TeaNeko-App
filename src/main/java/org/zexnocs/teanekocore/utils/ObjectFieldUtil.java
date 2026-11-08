@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.utils;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.springframework.data.util.Pair;
 import tools.jackson.databind.ObjectMapper;
@@ -81,7 +83,7 @@ public enum ObjectFieldUtil {
      * 根据 index 删除指定对象的 List 字段中的元素。
      * @param obj 目标对象
      * @param fieldName 字段名，必须是 List 类型的字段
-     * @index 索引位置
+     * @param index 索引位置
      * @return 修改后的对象
      * @throws IllegalAccessException 如果无法访问字段
      * @throws NoSuchFieldException 如果未找到指定字段

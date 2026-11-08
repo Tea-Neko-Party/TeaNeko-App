@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoclient.onebot.utils;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.zexnocs.teanekoapp.message.TeaNekoUserData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
@@ -9,7 +11,6 @@ import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotRawMessageDat
 import org.zexnocs.teanekoclient.onebot.data.receive.message.OnebotSenderData;
 import org.zexnocs.teanekoclient.onebot.event.OnebotEventShareComponent;
 import org.zexnocs.teanekocore.command.api.CommandPermission;
-import org.zexnocs.teanekocore.framework.pair.Pair;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -32,7 +33,7 @@ public enum OnebotMessageDataConvertUtils {
      * @param onebotData 原始的 onebot 消息数据
      * @param eventShareComponent 共享组件
      * @param uuid 发送事件的用户的 UUID
-     * @return {@link Pair }<{@link OnebotRawMessageData }, {@link OnebotMessageData }>
+     * @return 保留原生来源的 TeaNeko 消息数据
      */
     public OnebotMessageData parse(OnebotRawMessageData onebotData,
                                    OnebotEventShareComponent eventShareComponent,

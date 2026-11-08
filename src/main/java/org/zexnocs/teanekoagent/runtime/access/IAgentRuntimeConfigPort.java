@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.runtime.access;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
@@ -19,7 +21,7 @@ public interface IAgentRuntimeConfigPort {
     /**
      * 在检查或轮次准备时读取本地固定设置，不返回文件配置可变 Bean。
      * @return 运行设置快照
-     * @throws org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException 当本地配置无效时
+     * @throws org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException 当本地配置无效时
      */
     AgentRuntimeConfig read();
 }

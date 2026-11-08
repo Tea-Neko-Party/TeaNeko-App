@@ -1,0 +1,16 @@
+# 实例级插件启用意愿，实际状态由依赖、客户端要求和启动结果共同决定。
+# 2026/11/07：提供默认模板，保留首次启动导入旧禁用列表的行为。
+version: 1
+
+# 首次初始化后由宿主自动改为 true；正常使用时无需修改此标记。
+migrated: false
+
+# 仅保存明确设置的插件开关，未列出的普通插件默认具有启用意愿。
+# 默认保持空映射，避免覆盖旧 tea-neko.plugins.disabled 中的关闭设置。
+# 建议通过 Web 插件总管理操作，以完成影响预览和生命周期协调。
+enabled: {}
+
+# 手工配置示例（替换上面的 enabled 映射）：
+# enabled:
+#   agent.expression: false
+#   general.games: true

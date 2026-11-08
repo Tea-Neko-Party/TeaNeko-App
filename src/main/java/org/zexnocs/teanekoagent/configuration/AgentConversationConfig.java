@@ -1,16 +1,18 @@
 package org.zexnocs.teanekoagent.configuration;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalityLearning;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationCompression;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationObserver;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContexts;
 import org.zexnocs.teanekoagent.runtime.conversation.AgentConversationService;
 import org.zexnocs.teanekoagent.runtime.conversation.IAgentConversationDefaults;
 import org.zexnocs.teanekoagent.runtime.conversation.IAgentConversationPolicy;
@@ -53,7 +55,7 @@ public class AgentConversationConfig {
             IAgentConversationDefaults conversations,
             IAgentConversationPolicy policy, ObjectMapper mapper,
             @Qualifier("virtualExecutor") ExecutorService executor,
-            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references) {
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentContextReferences references) {
         return new AgentConversationService(turns, defaults, executor, scheduler, Clock.systemUTC(), logger, conversations, policy, mapper, references);
     }
 
@@ -77,8 +79,8 @@ public class AgentConversationConfig {
     public AgentConversationService agentServiceWithPersonality(IAgentTurnService turns, IAgentQueueDefaults defaults,
             IAgentConversationDefaults conversations, IAgentConversationPolicy policy, ObjectMapper mapper,
             @Qualifier("virtualExecutor") ExecutorService executor, @Qualifier("taskExecutor") ScheduledExecutorService scheduler,
-            ILogger logger, IAgentMemoryReferences references, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentConversationSummaries> summaries,
-            ObjectProvider<IAgentPersonalityLearning> learning) {
+            ILogger logger, IAgentContextReferences references, ObjectProvider<IAgentPromptContexts> personalities, ObjectProvider<IAgentConversationCompression> summaries,
+            ObjectProvider<IAgentConversationObserver> learning) {
         return new AgentConversationService(turns, defaults, executor, scheduler, Clock.systemUTC(), logger, conversations, policy, mapper, references,
                 personalities.getIfAvailable(), summaries.getIfAvailable(), learning.getIfAvailable());
     }

@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolContext;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
@@ -9,13 +11,16 @@ import org.zexnocs.teanekocore.framework.description.Description;
 /**
  * 用户留言板独立工具，沿用原资料插件归属和真实 DEBUG 权限。
  *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 @TeaNekoAgentToolClass(value = "user-info", pluginId = InfoAgentPlugin.ID,
         toolPackage = "general.info", managedByFeature = true)
+@PluginOwned("general.info")
 public final class InfoUserMessagesTool {
     private final InfoAgentTools source;
 

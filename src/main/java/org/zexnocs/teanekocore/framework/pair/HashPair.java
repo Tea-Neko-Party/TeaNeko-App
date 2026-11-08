@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.framework.pair;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 
 /**
@@ -11,7 +13,7 @@ import org.jspecify.annotations.NonNull;
  * @author zExNocs
  * @date 2026/02/11
  */
-public record HashPair<F, S>(F first, S second) implements Pair<F, S> {
+public record HashPair<F, S>(F first, S second) implements IPair<F, S> {
     public static <F, S> HashPair<F, S> of(F first, S second) {
         return new HashPair<>(first, second);
     }

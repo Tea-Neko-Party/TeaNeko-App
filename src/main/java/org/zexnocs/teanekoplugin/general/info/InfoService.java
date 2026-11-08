@@ -1,5 +1,8 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -16,14 +19,20 @@ import java.util.concurrent.CompletionStage;
 /**
  * 个人信息服务，提供获取用户信息的功能。
  * <br>2026/11/02：提取按 UUID 读取的纯资料快照，供原命令展示及 Agent 工具复用。
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
+ * <br>2026/11/07：异步副作用前复核固定插件代次，停用后拒绝迟到业务。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.6.0-l
+ * @version 4.9.0-l
  */
 @Service("infoService")
+@PluginOwned("general.info")
 public class InfoService {
+    // 2026/11/07：异步业务固定入口代次，停用后不启动后续副作用。
+    private final PluginAccess plugins;
     public static final String INFO_NAMESPACE = "info_service";
 
     private final PersonalInfoService personalInfoService;
@@ -38,11 +47,13 @@ public class InfoService {
      * @param personalInfoService 由装配方提供的 {@code PersonalInfoService} 协作依赖
      * @param messageBoardInfoService 由装配方提供的 {@code MessageBoardInfoService} 协作依赖
      * @param iTeaUserCoinService 本次装配使用的 {@code ITeaUserCoinService} 服务
+     * @param plugins 统一插件代次访问入口
      */
     @Autowired
     public InfoService(RandomUtil randomUtil,
                        PersonalInfoService personalInfoService,
-                       MessageBoardInfoService messageBoardInfoService, ITeaUserCoinService iTeaUserCoinService) {
+                       MessageBoardInfoService messageBoardInfoService, ITeaUserCoinService iTeaUserCoinService, PluginAccess plugins) {
+        this.plugins = plugins;
         this.personalInfoService = personalInfoService;
         this.messageBoardInfoService = messageBoardInfoService;
         this.randomUtil = randomUtil;
@@ -87,6 +98,8 @@ public class InfoService {
      * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
      */
     public CompletionStage<Void> sentGeneralInfo(ITeaNekoMessageData data, UUID target, String targetId) {
+        // 2026/11/07：固定本次业务代次，异步恢复时必须复核。
+        var pluginToken = plugins.captureOwner("general.info");
         // 2026/11/02：与只读工具共用资料读取，原平台查询和实际发送保持在此入口。
         var info = getGeneralInfo(target);
         var randomMessage = info.randomMessage() == null ? "暂无留言信息" : info.randomMessage();
@@ -97,6 +110,7 @@ public class InfoService {
             return data.getClient().getTeaNekoToolbox().getGroupMemberInfoSender()
                     .get(data.getUserData().getGroupId(), targetId)
                     .thenCompose(r -> {
+                        plugins.check(pluginToken);
                         if(r == null) {
                             return data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())
@@ -140,6 +154,7 @@ public class InfoService {
             return data.getClient().getTeaNekoToolbox().getPlatformUserGetSender()
                     .getPlatformUserInfo(targetId)
                     .thenCompose(r -> {
+                        plugins.check(pluginToken);
                         if(r == null) {
                             return data.getMessageSender()
                                     .addReplyMessage(data.getMessageId())

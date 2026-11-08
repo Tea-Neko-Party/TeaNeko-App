@@ -15,11 +15,12 @@ import java.util.List;
 /**
  * 注册客户端 WebSocket 与宿主连接授权策略。
  * <br>2026/11/03：增加握手证明和真实收发守卫，控制面启用后旧未认证连接不能沿用。
+ * <br>2026/11/07：按安装目录注册路由，插件重新启用时沿用原路由并实时复核资格。
  *
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 @Configuration
 @EnableWebSocket
@@ -45,7 +46,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
      */
     @Override
     public void registerWebSocketHandlers(@NonNull WebSocketHandlerRegistry registry) {
-        teaNekoClientScanner.getHandlerMap().forEach((k, v) -> {
+        // 2026/11/07：路由发现不等于启用，收发资格仍由连接守卫复核。
+        teaNekoClientScanner.getInstalledHandlerMap().forEach((k, v) -> {
             if (v.second().getClient() instanceof WebSocketHandler handler) {
                 registry.addHandler(new GuardedClientWebSocketHandler(handler, guards), "/ws/" + k)
                         .addInterceptors(guards.toArray(IClientConnectionGuard[]::new))

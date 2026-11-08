@@ -15,11 +15,12 @@ import java.util.concurrent.CompletionStage;
  * 在执行 command 方法之前推送的事件。
  * <br>注意，当推送该事件时说明发送者已符合发送条件
  * <br>如果取消该事件，则不会执行该命令
+ * <br>2026/11/07：接入插件归属与独立贡献，保留原权限及执行契约。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.3.1
- * @version 4.5.0-l
+ * @version 4.9.0-l
  */
 @Getter
 public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
@@ -74,7 +75,8 @@ public class CommandExecuteEvent extends AbstractEvent<CommandData<?>> {
         var parent = getData().getParentExecution();
         if (parent != null) { parent.checkActive(); }
         var commandAnnotation = mapData.getCommandAnnotation();
-        completion = parent == null ? executor.execute(mapData.getCommand(), method, args, commandAnnotation.taskNamespace())
-                : executor.execute(mapData.getCommand(), method, args, commandAnnotation.taskNamespace(), parent);
+        // 2026/11/07：执行和插件代次捕获都使用真实子命令贡献者。
+        completion = parent == null ? executor.execute(mapData.target(method), method, args, commandAnnotation.taskNamespace())
+                : executor.execute(mapData.target(method), method, args, commandAnnotation.taskNamespace(), parent);
     }
 }

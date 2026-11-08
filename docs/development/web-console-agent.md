@@ -1,6 +1,6 @@
 # Agent 网页工作区
 
-适用版本：4.8.6-l。先按[控制台部署说明](web-console.md)启用 HTTPS 与管理会话，然后直接进入“Agent 工作区”，在独立目录选择平台、机器人账号和聊天。该选择与“聊天配置”分别保留，点击左侧返回图标回到本页目录，不再跳转配置页；有草稿或未确认操作时仍先确认是否切换。从聊天配置或网页聊天的“活动与记忆”入口也可进入工作区。实际目标继续由服务端解析，不接受浏览器拼接 scope 或提交原生用户身份。
+适用版本：4.9.0-l。先按[控制台部署说明](web-console.md)启用 HTTPS 与管理会话，然后直接进入“Agent 工作区”，在独立目录选择平台、机器人账号和聊天。该选择与“聊天配置”分别保留，点击左侧返回图标回到本页目录，不再跳转配置页；有草稿或未确认操作时仍先确认是否切换。从聊天配置或网页聊天的“活动与记忆”入口也可进入工作区。实际目标继续由服务端解析，不接受浏览器拼接 scope 或提交原生用户身份。
 
 ## 独立空间
 
@@ -12,14 +12,16 @@ Agent 工作区上方可切换“聊天工作区”“记忆空间”“人格�
 
 空间编辑继续使用原事务、版本、备份与操作回执。独立空间没有聊天绑定版本，不能借此给任何聊天切换绑定。左侧返回会检查草稿及未确认操作。
 
-升级已有配置时，确认 `config/web/security.yml` 的 `management-resources` 包含下列资源。新模板已包含；已有显式白名单不会被程序自动扩大。修改后重载文件配置或重启后端，并重新登录。
+升级已有配置时，旧管理资源 ID 按[精确授权迁移规则](plugins/management.md)转换，不扩大已有权限。当前 `config/web/security.yml` 的 `management-resources` 使用下列 ID；新增授权需部署者明确配置。修改后重载文件配置或重启后端，并重新登录。
 
-| 页面能力 | 所需资源（完整 ID 均以 `teaneko.agent:` 开头） |
+| 页面能力 | 所需资源完整 ID |
 | --- | --- |
-| 空间和画像目录 | `library` |
-| 独立记忆空间、用户画像 | `memory-space`、`layers-space`、`profile-space` |
-| 独立人格空间 | `personality-space` |
-| 聊天工作区 | `activity`、`memory`、`profiles`、`personality`、`layers`、`schedules` |
+| 空间和画像目录 | `teaneko.agent:library` |
+| 独立记忆空间、用户画像 | `agent.cognition:memory-space`、`agent.cognition:layers-space`、`agent.cognition:profile-space` |
+| 独立人格空间 | `agent.cognition:personality-space` |
+| 聊天工作区 | `teaneko.agent:activity`、`agent.cognition:memory`、`agent.cognition:profiles`、`agent.cognition:personality`、`agent.cognition:layers`、`agent.automation:schedules` |
+
+关闭 `agent.cognition` 或 `agent.automation` 后，其工作区分区和操作入口隐藏；原数据保留，可在插件总管理重新开启。
 
 任务与日志另需 `teaneko.core:runtime`、`teaneko.core:logs`。这些是当前页面实际调用的全部管理资源；不需要开放通配符或额外 Controller。
 
@@ -100,20 +102,20 @@ POST /api/v1/clients/{client}/accounts/{account}/targets/{target}/management/{re
 | 资源 | 请求类型 | 能力 |
 | --- | --- | --- |
 | teaneko.agent:activity | AgentConsole.ActivityQuery | 有界脱敏活动查询 |
-| teaneko.agent:layers | AgentLayersConsole.Query | 三层读取、长期修正/遗忘、原回执查询 |
-| teaneko.agent:memory | AgentConsole.MemoryQuery | 证据事实分页、修正、克隆、换代清空、原回执查询 |
-| teaneko.agent:profiles | AgentConsole.ProfileQuery | 原事实画像投影 |
-| teaneko.agent:personality | AgentConsole.PersonalityQuery | 基础/补正查询、明确管理动作、原回执查询 |
+| agent.cognition:layers | AgentLayersConsole.Query | 三层读取、长期修正/遗忘、原回执查询 |
+| agent.cognition:memory | AgentConsole.MemoryQuery | 证据事实分页、修正、克隆、换代清空、原回执查询 |
+| agent.cognition:profiles | AgentConsole.ProfileQuery | 原事实画像投影 |
+| agent.cognition:personality | AgentConsole.PersonalityQuery | 基础/补正查询、明确管理动作、原回执查询 |
 
 例如首次活动请求为 `{"after":0,"limit":100}`；三层读取为 `{"action":"READ","namespace":"","generation":-1,"revision":-1,"topic":""}`。写入必须带原 operationId、明确目标及所需版本；请求类型由已注册资源固定，不允许选择 Java 类、方法、Bean 或存储类型。
 
-WebManagementCalls 将真实会话映射到原 ManagementGateway 和唯一 ManagementAuthority，仅授权本次入口持有的同一上下文对象、本地资源白名单与插件代次。相同主体字符串、原生 OWNER/DEBUG 或猜到资源 ID 都不构成授权。进程最多保留 32 个在途管理调用，资源与控制随物理阶段结束释放；页面断开不能证明事务回滚。
+WebManagementCalls 将真实会话映射到原 ManagementGateway 和唯一 IManagementAuthority，仅授权本次入口持有的同一上下文对象、本地资源白名单与插件代次。相同主体字符串、原生 OWNER/DEBUG 或猜到资源 ID 都不构成授权。进程最多保留 32 个在途管理调用，资源与控制随物理阶段结束释放；页面断开不能证明事务回滚。
 
 管理来源标记为 MANAGEMENT，使用宿主派生的独立主体 UUID，不注册平台用户，也不能进入 Agent 模型活动。事务内通过 ManagementContext.checkActive 复核会话、平台/资源插件及白名单；不是只在请求线程检查一次。普通学习端口继续只接受原用户来源，领域 Store 仍经 Agent 专用 EasyData。
 
 写入与原领域幂等回执同事务保存；失败或返回中断时页面保留原编号，可查原回执或原样重试，不能换编号猜测。冲突明确显示未提交新修改，不自动覆盖。回执沿用各领域的保留和旧代次回收规则，不承诺永久查询；未查到也不证明从未提交。回执只证明原操作结果，重新编辑前须读取当前状态。
 
-插件继续实现原 ManagementResource 并以 Spring Bean 贡献明确 descriptor、requestType 和实际异步结果；新增资源需本地白名单明确开放，专用页面另按职责扩展。新写资源必须在真实副作用处调用上下文复核，并自行落实领域版本、持久幂等、审计和容量约束，网关不替插件补这些保证。详见[管理扩展指南](plugins/management.md)。
+插件继续实现原 IManagementResource 并以 Spring Bean 贡献明确 descriptor、requestType 和实际异步结果；新增资源需本地白名单明确开放，专用页面另按职责扩展。新写资源必须在真实副作用处调用上下文复核，并自行落实领域版本、持久幂等、审计和容量约束，网关不替插件补这些保证。详见[管理扩展指南](plugins/management.md)。
 
 离线验证使用真实 MVC 安全链、原领域事务夹具与本机 Edge 的离线 API 契约夹具。真实数据库隔离、OneBot 交付、HTTPS/代理与公网仍按部署清单实机验证。
 

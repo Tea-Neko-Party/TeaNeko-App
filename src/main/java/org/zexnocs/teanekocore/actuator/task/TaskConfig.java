@@ -1,10 +1,15 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.*;
+import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekocore.actuator.task.api.SetTaskStage;
+import org.zexnocs.teanekocore.utils.MethodCallableUtils;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.time.Duration;
 import java.util.List;
@@ -34,11 +39,13 @@ import java.util.concurrent.atomic.AtomicLong;
  * 策略取决于 {@link TaskRetryStrategy}。
  * <p>
  * 注意：每一个 {@link TaskConfig} 默认等待时间为 10min (可以修改)，超过等待时间后将会报错并删除 {@link Task}。
+ * <br>2026/11/07：创建配置时固定回调阶段命名空间与手工阶段归属，执行线程只读取缓存。
  *
  * @param <T> 任务结果的类型
  * @author zExNocs
  * @date 2026/02/10
  * @since 4.0.0
+ * @version 4.9.0-l
  */
 @Getter
 @Builder
@@ -62,7 +69,7 @@ public class TaskConfig<T> implements ITaskConfig<T> {
      *    并且在堵塞的地方 {@code catch(InterruptedException)}，
      */
     @NonNull
-    private final MethodCallable<ITaskResult<T>> callable;
+    private final IMethodCallable<ITaskResult<T>> callable;
 
     /**
      * 任务执行的 delay 时间
@@ -110,13 +117,62 @@ public class TaskConfig<T> implements ITaskConfig<T> {
     private final String taskStageNamespace = "default";
 
     /**
-     * 任务阶段链的缓存/手动注入。
+     * 2026/11/07：手动阶段的不可变归属快照；扫描目录由任务执行器按命名空间读取。
      * 优先使用该字段，如果该字段不为 null，则会使用该字段作为任务阶段链，不再使用 taskStageNamespace 进行自动注入。
      * 如果为 null，则使用命名空间自动注入。
      */
-    @Setter
-    @Builder.Default
-    private List<ITaskStage> taskStages = null;
+    private @Nullable List<ITaskStage> taskStages;
+    /** 2026/11/07：回调方法声明的命名空间，仅在配置创建时发现。 */
+    private final @Nullable String callableNamespace;
+
+    /**
+     * 2026/11/07：显式修改配置时冻结手工阶段，执行器不进行懒发现。
+     * @param taskStages 已明确选择的阶段，空值表示读取命名空间缓存
+     */
+    @Override
+    public void setTaskStages(@Nullable List<ITaskStage> taskStages) {
+        this.taskStages = taskStages == null ? null : taskStages.stream()
+                .<ITaskStage>map(TaskStageBinding::of).toList();
+    }
+
+    /** @return 2026/11/07：创建时固定的方法声明优先于显式缺省命名空间。 */
+    @Override
+    public String getTaskStageNamespace() {
+        return callableNamespace == null ? taskStageNamespace : callableNamespace;
+    }
+
+    /**
+     * 显式任务配置构造器，在创建配置时固定回调与手工阶段的静态声明。
+     * @param <T> 任务结果类型
+     * @author zExNocs
+     * @date 2026/11/07
+     * @since 4.9.0-l
+     * @version 4.9.0-l
+     */
+    public static class TaskConfigBuilder<T> {
+        /**
+         * 固定本配置的原回调及方法阶段声明，不在任务执行中解析。
+         * @param callable 原业务回调
+         * @return 本构造器
+         */
+        public TaskConfigBuilder<T> callable(IMethodCallable<ITaskResult<T>> callable) {
+            this.callable = callable;
+            var annotation = MethodCallableUtils.INSTANCE.getAnnotation(callable, SetTaskStage.class);
+            this.callableNamespace = annotation == null ? null : annotation.value();
+            return this;
+        }
+
+        /**
+         * 创建手工阶段的不可变快照。
+         * @param taskStages 明确阶段，空值表示使用命名空间缓存
+         * @return 本构造器
+         */
+        public TaskConfigBuilder<T> taskStages(@Nullable List<ITaskStage> taskStages) {
+            this.taskStages = taskStages == null ? null : taskStages.stream()
+                    .<ITaskStage>map(TaskStageBinding::of).toList();
+            return this;
+        }
+    }
 
     // ------------- indirect use -------------------
     /**

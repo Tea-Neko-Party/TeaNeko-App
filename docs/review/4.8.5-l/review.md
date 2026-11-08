@@ -22,7 +22,7 @@
 
 ## 观测采集开销
 
-**非阻断建议，尚无容量故障证据。** [LLMInteractionExecution:222](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/LLMInteractionExecution.java#L222) 在每次实际模型调用前无条件创建输入快照，[LLMRequestSnapshot:32](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/interaction/LLMRequestSnapshot.java#L32) 复制消息并保存协议声明；内容开关到终态格式化时才生效。因此关闭 INFO 或正文并不会取消这部分对象构造，多轮工具交互仍保留各轮输入容器及声明。
+**非阻断建议，尚无容量故障证据。** [LLMInteractionExecution:222](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/LLMInteractionExecution.java#L222) 在每次实际模型调用前无条件创建输入快照，[LLMRequestSnapshot:32](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/interaction/LLMRequestSnapshot.java#L32) 复制消息并保存协议声明；内容开关到终态格式化时才生效。因此关闭 INFO 或正文并不会取消这部分对象构造，多轮工具交互仍保留各轮输入容器及声明。
 
 `max-content-characters` 限制最终日志正文长度，不是请求快照的内存上限。本文不将其量化为内存泄漏或吞吐下降，文本字符串也不等于每次均深复制。可在后续有真实长上下文、多轮工具负载时，测量观测开关前后的分配量与完成耗时；若需优化，由集成层在请求边界确定一次类型化采集策略，向下传递，关闭时跳过只为日志服务的快照。保持底层不依赖上层配置、真实模型输入不受影响，不在每个消息步骤增加配置扫描。
 

@@ -1,10 +1,12 @@
 package org.zexnocs.teanekocore.database.base.interfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 
 import java.util.Collection;
 
@@ -29,8 +31,8 @@ public interface IDatabaseService {
      * @param cacheCallback       缓存回调，可选提供。
      */
     void pushQuickTask(String taskName,
-                        @NonNull VoidCallable transactionCallback,
-                        @Nullable VoidCallable cacheCallback);
+                        @NonNull IVoidCallable transactionCallback,
+                        @Nullable IVoidCallable cacheCallback);
 
     /**
      * 直接执行数据库任务。
@@ -48,14 +50,14 @@ public interface IDatabaseService {
      *
      * @param tasks 事务任务
      */
-    void __executeTaskWithTransaction(Collection<VoidCallable> tasks) throws Exception;
+    void __executeTaskWithTransaction(Collection<IVoidCallable> tasks) throws Exception;
 
     /**
      * 给 Database Config 执行的缓存处理
      *
      * @param tasks 缓存任务
      */
-    void __executeTaskWithCache(Collection<VoidCallable> tasks) throws Exception;
+    void __executeTaskWithCache(Collection<IVoidCallable> tasks) throws Exception;
 
     /**
      * 获取最大重试的尝试次数。

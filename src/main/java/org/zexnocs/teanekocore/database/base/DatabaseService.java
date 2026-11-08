@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.base;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +13,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Collection;
@@ -51,8 +53,8 @@ public class DatabaseService implements IDatabaseService {
      */
     @Override
     public void pushQuickTask(String taskName,
-                               @NonNull VoidCallable transactionCallback,
-                               @Nullable VoidCallable cacheCallback) {
+                               @NonNull IVoidCallable transactionCallback,
+                               @Nullable IVoidCallable cacheCallback) {
         var config = new DatabaseTaskConfig(this, taskName);
         config.addTransactionTask(transactionCallback);
         if(cacheCallback != null) {
@@ -84,7 +86,7 @@ public class DatabaseService implements IDatabaseService {
      */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void __executeTaskWithTransaction(Collection<VoidCallable> tasks) throws Exception {
+    public void __executeTaskWithTransaction(Collection<IVoidCallable> tasks) throws Exception {
         // 2026/11/06：在原事务内复核协作取消，未知写入不因等待结束而自动重试。
         for (var task : tasks) {
             org.zexnocs.teanekocore.actuator.task.TaskExecution.checkCurrent();
@@ -99,7 +101,7 @@ public class DatabaseService implements IDatabaseService {
      * @param tasks 缓存任务
      */
     @Override
-    public void __executeTaskWithCache(Collection<VoidCallable> tasks) throws Exception {
+    public void __executeTaskWithCache(Collection<IVoidCallable> tasks) throws Exception {
         for (var task : tasks) {
             task.call();
         }

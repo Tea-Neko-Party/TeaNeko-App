@@ -30,10 +30,12 @@ import java.util.Map;
  *
  * <br>2026/11/06：声明独立空间管理与观测文件白名单，保留显式禁用。
  *
+ * <br>2026/11/07：登记插件总管理资源及精确白名单迁移版本，保留显式拒绝策略。
+ * <br>2026/11/07：管理员登录后默认开放注册能力，本地白名单改为显式启用的限制策略。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 @Getter
 @Setter
@@ -50,6 +52,8 @@ public class WebSecurityFileConfig implements IFileConfigData {
     @NonNull
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Map<String, String> machineTokens = Map.of();
+    // 2026/11/07：新旧配置缺省都开放已注册能力；需要收紧时显式启用以下白名单。
+    private boolean localAllowlistEnabled;
     // 2026/11/04：保留旧字段读取兼容；管理员聊天配置已不再使用该白名单。
     @NonNull
     private List<String> settingsSections = List.of("agent");
@@ -60,15 +64,19 @@ public class WebSecurityFileConfig implements IFileConfigData {
     @NonNull
     private List<String> fileSections = List.of("agent.main", "agent.models", "agent.personality", "agent.expression",
             "agent.stickers", "agent.media", "agent.observability", "onebot.main", "web.chat");
-    // 2026/11/03：管理资源同样需要本地白名单，不能因为注册插件就自动向公网开放。
+    // 2026/11/07：仅显式启用本地限制时使用此列表，登录鉴权始终生效。
     @NonNull
-    private List<String> managementResources = List.of("teaneko.agent:activity", "teaneko.agent:memory",
-            "teaneko.agent:profiles", "teaneko.agent:personality", "teaneko.agent:layers",
-            "teaneko.agent:schedules", "teaneko.agent:library", "teaneko.agent:memory-space",
-            "teaneko.agent:personality-space", "teaneko.agent:profile-space", "teaneko.agent:layers-space", "teaneko.core:runtime", "teaneko.core:logs");
+    private List<String> managementResources = List.of("teaneko.agent:activity", "agent.cognition:memory",
+            "agent.cognition:profiles", "agent.cognition:personality", "agent.cognition:layers",
+            "agent.automation:schedules", "teaneko.agent:library", "agent.cognition:memory-space",
+            "agent.cognition:personality-space", "agent.cognition:profile-space", "agent.cognition:layers-space",
+            "teaneko.core:runtime", "teaneko.core:logs", "teaneko.core:plugins.catalog", "teaneko.core:plugins.preview",
+            "teaneko.core:plugins.change", "teaneko.core:plugins.operation", "teaneko.core:plugins.pages");
+    // 2026/11/07：记录宿主管理功能首次配置迁移，空列表在限制模式下保持拒绝。
+    private int pluginManagementVersion;
     private int idleMinutes = 30;
     @NonNull
-    // 2026/11/06：缺省仅开放显式管理来源的内置命令；明确空列表仍关闭全部指令。
+    // 2026/11/07：限制模式仅允许所列前缀；默认模式仍要求方法声明管理来源。
     private List<String> consolePrefixes = List.of("/console");
     private int absoluteHours = 8;
 
@@ -90,7 +98,7 @@ public class WebSecurityFileConfig implements IFileConfigData {
                 || fileSections.size() > 32 || fileSections.stream().anyMatch(value ->
                 !value.matches("[a-z][a-z0-9_.-]{0,63}"))
                 || fileSections.stream().distinct().count() != fileSections.size()
-                || managementResources.size() > 32 || managementResources.stream().anyMatch(value ->
+                || managementResources.size() > 256 || managementResources.stream().anyMatch(value ->
                 !value.matches("[a-z][a-z0-9_.-]{0,63}:[a-z][a-z0-9.-]{0,63}"))
                 || managementResources.stream().distinct().count() != managementResources.size()
                 || consolePrefixes.size() > 32 || consolePrefixes.stream().anyMatch(value ->
@@ -126,7 +134,7 @@ public class WebSecurityFileConfig implements IFileConfigData {
         machineTokens.forEach((id, secret) -> normalizedTokens.put(id, secret.isBlank() ? "" : secret));
         return new Snapshot(enabled, adminToken, publicOrigin, List.copyOf(trustedProxies),
                 Map.copyOf(normalizedTokens), List.copyOf(settingsSections), List.copyOf(fileSections), List.copyOf(managementResources),
-                List.copyOf(consolePrefixes), idleMinutes, absoluteHours, List.copyOf(settingsGroups));
+                List.copyOf(consolePrefixes), idleMinutes, absoluteHours, List.copyOf(settingsGroups), localAllowlistEnabled);
     }
 
     /**
@@ -162,10 +170,11 @@ public class WebSecurityFileConfig implements IFileConfigData {
      * @param idleMinutes 空闲期限
      * @param absoluteHours 绝对期限
      * @param settingsGroups 旧配置分组兼容值
+     * @param localAllowlistEnabled 是否显式限制文件区、管理资源和指令台
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.3-l
+     * @version 4.9.0-l
      */
     @JsonIgnoreType
     public record Snapshot(boolean enabled, @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) String adminToken,
@@ -173,7 +182,34 @@ public class WebSecurityFileConfig implements IFileConfigData {
                            @JsonProperty(access = JsonProperty.Access.WRITE_ONLY) Map<String, String> machineTokens,
                            List<String> settingsSections, List<String> fileSections, List<String> managementResources,
                            List<String> consolePrefixes,
-                           int idleMinutes, int absoluteHours, List<String> settingsGroups) {
+                           int idleMinutes, int absoluteHours, List<String> settingsGroups, boolean localAllowlistEnabled) {
+        /**
+         * 2026/11/07：默认开放注册文件表单，显式限制时仍按精确键匹配。
+         * @param id 文件表单标识
+         * @return 本地策略是否允许
+         */
+        public boolean allowsFileSection(String id) {
+            return !localAllowlistEnabled || fileSections.contains(id);
+        }
+
+        /**
+         * 2026/11/07：登录管理员默认可访问注册管理资源，业务资格仍由调用边界复核。
+         * @param key 管理资源键
+         * @return 本地策略是否允许
+         */
+        public boolean allowsManagementResource(String key) {
+            return !localAllowlistEnabled || managementResources.contains(key);
+        }
+
+        /**
+         * 2026/11/07：默认允许已声明管理来源的方法，显式限制时按前缀收窄。
+         * @param prefix 命令前缀
+         * @return 本地策略是否允许
+         */
+        public boolean allowsConsolePrefix(String prefix) {
+            return !localAllowlistEnabled || consolePrefixes.contains(prefix);
+        }
+
         /**
          * 2026/11/04：只替换机器策略，其余认证根字段保持原值。
          * @param tokens 已校验且归一化的机器令牌
@@ -181,7 +217,8 @@ public class WebSecurityFileConfig implements IFileConfigData {
          */
         public Snapshot withMachineTokens(Map<String, String> tokens) {
             return new Snapshot(enabled, adminToken, publicOrigin, trustedProxies, Map.copyOf(tokens),
-                    settingsSections, fileSections, managementResources, consolePrefixes, idleMinutes, absoluteHours, settingsGroups);
+                    settingsSections, fileSections, managementResources, consolePrefixes, idleMinutes, absoluteHours,
+                    settingsGroups, localAllowlistEnabled);
         }
 
         /** @return 不含配置和令牌的说明 */

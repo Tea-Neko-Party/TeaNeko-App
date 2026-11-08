@@ -1,13 +1,15 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.tool.*;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
-import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
@@ -24,6 +26,7 @@ import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.utils.RandomUtil;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoData;
 import org.zexnocs.teanekoplugin.general.info.messageboard.MessageBoardInfoService;
 import org.zexnocs.teanekoplugin.general.info.personal.PersonalInfoService;
@@ -48,10 +51,11 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/05：经独立工具入口验证原资料及留言权限。
  * <br>2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/07：资料服务显式装配插件访问端口，保持原只读工具验证。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.9.0-l
  */
 class InfoAgentToolsTest {
     private final UUID target = UUID.randomUUID();
@@ -69,19 +73,20 @@ class InfoAgentToolsTest {
      * 2026/11/05：简化冗余类型实参、变量或转换，保持原业务与测试边界。
      */
     InfoAgentToolsTest() {
-        var sources = mock(NativeCommandBridge.class);
+        var sources = mock(NativeMessageSources.class);
         var client = mock(ITeaNekoClient.class); when(client.getClientId()).thenReturn("fake");
         var data = TeaNekoMessageData.builder().client(client).userData(actor).scopeId("scope").messageId("message")
                 .messageType(TeaNekoMessageType.GROUP).time(Instant.parse("2026-11-02T00:00:00Z"))
                 .messages(new DefaultTeaNekoContentListBuilder().addText("查询资料").build()).build();
-        request = new AgentRunRequest(UUID.randomUUID(), NativeCommandBridge.actor(data), AgentActivity.COMMAND, List.of());
+        request = new AgentRunRequest(UUID.randomUUID(), NativeMessageSources.actor(data), AgentActivity.COMMAND, List.of());
         when(sources.source(request)).thenReturn(Optional.of(data));
         var coins = mock(ITeaUserCoinService.class); IItemDataDTO<?> coin = mock(IItemDataDTO.class);
         when(coin.getCount()).thenReturn(42); doReturn(coin).when(coins).getCoin(target);
         when(personal.getPersonInfo(target)).thenReturn("喜欢花茶"); when(messages.getMessageList(target)).thenReturn(List.of(
                 new MessageBoardInfoData("较早留言", UUID.randomUUID(), Instant.parse("2026-11-01T00:00:00Z")),
                 new MessageBoardInfoData("最新留言", UUID.randomUUID(), Instant.parse("2026-11-02T00:00:00Z"))));
-        var info = new InfoService(mock(RandomUtil.class), personal, messages, coins);
+        // 2026/11/07：此用例只读资料，发送路径所需的插件门禁由独立回归验证。
+        var info = new InfoService(mock(RandomUtil.class), personal, messages, coins, mock(PluginAccess.class));
         tools = new InfoAgentTools(info, messages, sources, mapper, Runnable::run);
     }
 
@@ -135,7 +140,7 @@ class InfoAgentToolsTest {
      */
     private void assertRevoked(List<LLMToolBinding> selected, String arguments) {
         var failure = assertThrows(java.util.concurrent.CompletionException.class, () -> invoke(selected, InfoAgentTools.MESSAGES, arguments));
-        assertInstanceOf(org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException.class, failure.getCause());
+        assertInstanceOf(org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException.class, failure.getCause());
     }
 
     /** 普通用户能按 UUID 查询现有公开资料，不获得完整留言列表或平台写入能力。 */

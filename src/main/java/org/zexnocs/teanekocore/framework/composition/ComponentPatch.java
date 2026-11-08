@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.framework.composition;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -126,7 +128,7 @@ public final class ComponentPatch {
          * @param <T> 组件值类型
          * @return 当前构建器
          */
-        public <T> Builder copy(ComponentView view, ComponentKey<T> key) {
+        public <T> Builder copy(IComponentView view, ComponentKey<T> key) {
             view.find(key).ifPresent(value -> put(key, value)); return this;
         }
 

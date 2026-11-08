@@ -15,12 +15,12 @@
 | 当前代码 | 已有能力 | 对插件开发的限制 |
 | --- | --- | --- |
 | [AgentExecutionConfig](../../src/main/java/org/zexnocs/teanekoagent/configuration/AgentExecutionConfig.java) | 借用工具、Prompt、Skill 等端口组合服务 | 工具和 Prompt 使用单值 getIfAvailable，不自动汇总多个同类型 Bean；未指定唯一候选时还可能出现多 Bean 歧义 |
-| [MemoryToolConfig](../../src/main/java/org/zexnocs/teanekoagent/component/memory/configuration/MemoryToolConfig.java)、[MemoryPromptConfig](../../src/main/java/org/zexnocs/teanekoagent/component/memory/configuration/MemoryPromptConfig.java) | 默认记忆、历史、命令及资料源 | ConditionalOnMissingBean 表达整体替换；新增同接口 Bean 可能使默认装配退让，不适合插件逐项追加 |
+| [MemoryToolConfig](../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/configuration/MemoryToolConfig.java)、[MemoryPromptConfig](../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/configuration/MemoryPromptConfig.java) | 默认记忆、历史、命令及资料源 | ConditionalOnMissingBean 表达整体替换；新增同接口 Bean 可能使默认装配退让，不适合插件逐项追加 |
 | [AgentExtensionTools](../../src/main/java/org/zexnocs/teanekoagent/component/tool/extension/adapter/AgentExtensionTools.java) | 文件、代码和知识源已有实际工具适配、授权及资料复核 | 需宿主手动组合工具与 Prompt；缺统一的贡献、归属、启用和版本管理 |
-| [AgentScheduleConfig](../../src/main/java/org/zexnocs/teanekoagent/component/schedule/configuration/AgentScheduleConfig.java) | 调度服务接收动作映射 | 默认装配只注册 remind，新增动作仍需改装配代码 |
+| [AgentScheduleConfig](../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/configuration/AgentScheduleConfig.java) | 调度服务接收动作映射 | 默认装配只注册 remind，新增动作仍需改装配代码 |
 | [AgentTurnPipeline](../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java) | Core ECS 描述输入、写入及依赖关系 | Agent 的 admit、prompt、interact、complete 四步固定编译，不能据此宣称已有 System 插件注册入口 |
-| [LLMModelService](../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelService.java) | 支持带 LLMModel 注解的模型 Bean、注册 ID 冲突检查 | 可扩展模型适配，但还缺通用插件归属、启停与调用租约 |
-| [AgentReplyPlan](../../src/main/java/org/zexnocs/teanekoagent/component/expression/AgentReplyPlan.java)、[AgentExtensionCapability](../../src/main/java/org/zexnocs/teanekoagent/component/tool/extension/AgentExtensionCapability.java) | 图文回复和四种内置扩展能力明确、受控 | 输出类型为封闭协议、能力为固定枚举，新增任意类型不能仅靠注册 Bean 完成 |
+| [LLMModelService](../../src/main/java/org/zexnocs/teanekoagent/llm/framework/model/LLMModelService.java) | 支持带 LLMModel 注解的模型 Bean、注册 ID 冲突检查 | 可扩展模型适配，但还缺通用插件归属、启停与调用租约 |
+| [AgentReplyPlan](../../src/main/java/org/zexnocs/teanekoagent/runtime/delivery/AgentReplyPlan.java)、[AgentExtensionCapability](../../src/main/java/org/zexnocs/teanekoagent/component/tool/extension/AgentExtensionCapability.java) | 图文回复和四种内置扩展能力明确、受控 | 输出类型为封闭协议、能力为固定枚举，新增任意类型不能仅靠注册 Bean 完成 |
 | [Core plugin 目录](../../src/main/java/org/zexnocs/teanekocore/plugin/README.md) | 预留插件基础设施位置 | 当前只有说明，没有插件管理公开 API |
 
 App 当前默认扫描 org.zexnocs，Core 类扫描依赖 AutoConfigurationPackages。外部插件应通过明确的 Spring 装配入口纳入所需 Bean 和配置类型，不能假定放入任意包或把 JAR 放进目录就会自动生效。

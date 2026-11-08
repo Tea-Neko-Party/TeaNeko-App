@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.plugin.management;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
@@ -27,17 +29,17 @@ import java.util.concurrent.CompletionStage;
 @Service
 public final class ManagementGateway {
     private final PluginRegistry plugins;
-    private final ObjectProvider<ManagementAuthority> authorities;
-    private final Map<String, ManagementResource<?, ?>> resources;
+    private final ObjectProvider<IManagementAuthority> authorities;
+    private final Map<String, IManagementResource<?, ?>> resources;
     /**
      * 统一校验归属及重名。
      * @param plugins 插件目录
      * @param contributions 管理资源
      * @param authorities 唯一宿主授权适配器，缺失时拒绝
      */
-    public ManagementGateway(PluginRegistry plugins, List<ManagementResource<?, ?>> contributions, ObjectProvider<ManagementAuthority> authorities) {
+    public ManagementGateway(PluginRegistry plugins, List<IManagementResource<?, ?>> contributions, ObjectProvider<IManagementAuthority> authorities) {
         this.plugins = plugins; this.authorities = authorities;
-        var values = new TreeMap<String, ManagementResource<?, ?>>();
+        var values = new TreeMap<String, IManagementResource<?, ?>>();
         for (var resource : contributions) {
             var descriptor = resource.descriptor(); plugins.requireRegistered(descriptor.pluginId());
             if (values.putIfAbsent(descriptor.key(), resource) != null) { throw new IllegalArgumentException("管理资源 ID 重复：" + descriptor.key()); }
@@ -49,10 +51,10 @@ public final class ManagementGateway {
      * @param context 可信管理上下文
      * @return 当前可发现能力
      */
-    public CompletionStage<List<ManagementResource.Descriptor>> describe(ManagementContext context) {
+    public CompletionStage<List<IManagementResource.Descriptor>> describe(ManagementContext context) {
         try {
             var authority = authority();
-            CompletionStage<List<ManagementResource.Descriptor>> result = CompletableFuture.completedStage(List.of());
+            CompletionStage<List<IManagementResource.Descriptor>> result = CompletableFuture.completedStage(List.of());
             for (var resource : resources.values()) {
                 var descriptor = resource.descriptor();
                 if (!plugins.isEnabled(descriptor.pluginId())) { continue; }
@@ -115,7 +117,7 @@ public final class ManagementGateway {
      * @param <R> 返回类型
      * @return 完整业务阶段
      */
-    private static <Q, R> CompletionStage<R> call(ManagementResource<Q, R> resource, ManagementContext context, Object request) {
+    private static <Q, R> CompletionStage<R> call(IManagementResource<Q, R> resource, ManagementContext context, Object request) {
         context.checkActive();
         return resource.execute(context, resource.requestType().cast(request));
     }
@@ -124,7 +126,7 @@ public final class ManagementGateway {
      * @return 宿主授权入口
      * @throws IllegalStateException 当未安装授权时
      */
-    private ManagementAuthority authority() {
+    private IManagementAuthority authority() {
         return Objects.requireNonNull(authorities.getIfAvailable(), "尚未安装可信管理授权适配器。");
     }
 }

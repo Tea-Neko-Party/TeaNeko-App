@@ -17,7 +17,10 @@ import java.nio.file.Path;
 import java.util.Map;
 import java.util.concurrent.CompletionStage;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 
@@ -134,6 +137,8 @@ public class CommandScannerContractTest {
                 for (var method : type.getDeclaredMethods()) {
                     if (method.isAnnotationPresent(DefaultCommand.class) || method.isAnnotationPresent(SubCommand.class)) {
                         methods++;
+                        // 2026/11/07：此独立宿主显式编译发现方法，运行校验不负责懒扫描。
+                        CommandMethodContract.register(method);
                         assertDoesNotThrow(() -> CommandMethodContract.requireAsync(method), method.toString());
                     }
                 }

@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * 固定项目单向依赖及单工具提供者约定，覆盖 import、全限定类型与反射类名。
  * 不加载业务 Bean，不连接数据库或平台。
  *
+ * <br>2026/11/08：检查实际类型和包导入引用，纯包名的归属约束不作为反向类型依赖。
+ *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
@@ -24,7 +26,7 @@ class ProjectLayerBoundaryTest {
     private static final List<String> LAYERS = List.of(
             "teanekocore", "teanekoapp", "teanekoagent", "teanekoclient", "teanekoplugin");
     private static final Pattern REFERENCE = Pattern.compile(
-            "org\\.zexnocs\\.(teanekocore|teanekoapp|teanekoagent|teanekoclient|teanekoplugin)\\b");
+            "org\\.zexnocs\\.(teanekocore|teanekoapp|teanekoagent|teanekoclient|teanekoplugin)\\b(?=\\.[\\w@*])");
     private static final Pattern TOOL = Pattern.compile("@TeaNekoAgentTool\\s*\\(");
 
     /**

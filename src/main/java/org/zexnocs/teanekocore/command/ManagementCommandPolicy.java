@@ -1,23 +1,21 @@
 package org.zexnocs.teanekocore.command;
 
 import org.zexnocs.teanekocore.command.api.CommandOrigin;
-import org.zexnocs.teanekocore.command.api.ManagementCommand;
 import org.zexnocs.teanekocore.command.interfaces.IManagedCommandSource;
 
 import java.lang.reflect.Method;
-import java.lang.reflect.ParameterizedType;
-import java.util.Arrays;
 
 /**
  * 管理来源在原命令链内默认拒绝；目录声明和实际排队启动都使用同一规则。
  * <br>2026/11/03：原生网页来源也可贡献实时守卫，排队后撤权不能继续执行。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/07：管理声明和来源类型只读取初始化编译的合同。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 public final class ManagementCommandPolicy {
     /** 禁止实例化命令策略工具。 */
@@ -28,12 +26,7 @@ public final class ManagementCommandPolicy {
      * @return 是否明确接收受信管理上下文
      */
     public static boolean declared(Method method) {
-        var declaration = method.getAnnotation(ManagementCommand.class);
-        return declaration != null && declaration.version() == 1 && Arrays.stream(method.getGenericParameterTypes())
-                .anyMatch(type -> type instanceof ParameterizedType parameter
-                        && parameter.getRawType() == CommandData.class
-                        && parameter.getActualTypeArguments()[0] instanceof Class<?> source
-                        && IManagedCommandSource.class.isAssignableFrom(source));
+        return CommandMethodContract.metadata(method).managementDeclared();
     }
 
     /**

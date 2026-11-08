@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.configdata;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.RequiredArgsConstructor;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
@@ -361,7 +363,7 @@ public class ConfigDataSetService implements IConfigDataSetService {
      * @return 尚未提交的原数据库任务
      */
     private IDatabaseTaskConfig currentMutation(ConfigManager manager, String key, String field,
-                                                @Nullable String expected, CurrentMutation mutation) {
+                                                @Nullable String expected, ICurrentMutation mutation) {
         var dto = configDataRegisterService.getDto(manager);
         return dto.getTaskConfig("更新群管理规则配置: " + manager.value()).addTransactionTask(() -> {
             var atomic = dto.atomic();
@@ -391,7 +393,7 @@ public class ConfigDataSetService implements IConfigDataSetService {
      * @version 4.7.0-l
      */
     @FunctionalInterface
-    private interface CurrentMutation {
+    private interface ICurrentMutation {
         /**
          * @param current 持锁读取的新对象
          * @return 修改后的对象

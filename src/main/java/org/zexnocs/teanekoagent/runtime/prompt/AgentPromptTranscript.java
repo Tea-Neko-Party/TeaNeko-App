@@ -1,11 +1,13 @@
 package org.zexnocs.teanekoagent.runtime.prompt;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import com.fasterxml.jackson.annotation.JsonIgnoreType;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 
 import java.util.List;
 import java.util.Objects;
@@ -30,7 +32,7 @@ public final class AgentPromptTranscript {
     private final AgentPromptInput input;
     private final LLMInteractionResult interaction;
     private final List<ILLMMessage> messages;
-    private final org.zexnocs.teanekoagent.component.expression.ReplyPlans.@org.jspecify.annotations.Nullable Approved replyPlan;
+    private final org.zexnocs.teanekoagent.runtime.delivery.@org.jspecify.annotations.Nullable IAgentReplyPlan replyPlan;
 
     /**
      * 2026/11/03：保留旧无表达构造，保存已验证布局，不持有转换器、控制或服务。
@@ -49,7 +51,7 @@ public final class AgentPromptTranscript {
      * @param replyPlan 可选表达计划
      */
     private AgentPromptTranscript(AgentPromptInput input, LLMInteractionResult interaction, List<ILLMMessage> messages,
-            org.zexnocs.teanekoagent.component.expression.ReplyPlans.@org.jspecify.annotations.Nullable Approved replyPlan) {
+            org.zexnocs.teanekoagent.runtime.delivery.@org.jspecify.annotations.Nullable IAgentReplyPlan replyPlan) {
         this.input = input; this.interaction = interaction; this.messages = messages; this.replyPlan = replyPlan;
     }
 
@@ -73,10 +75,12 @@ public final class AgentPromptTranscript {
      */
     public AgentPromptInput input() { return input; }
     /** @return 2026/11/03：已绑定原答案的计划，旧交互为空 */
-    public org.zexnocs.teanekoagent.component.expression.ReplyPlans.@org.jspecify.annotations.Nullable Approved replyPlan() { return replyPlan; }
+    public org.zexnocs.teanekoagent.runtime.delivery.@org.jspecify.annotations.Nullable IAgentReplyPlan replyPlan() {
+        return replyPlan;
+    }
     /** @return 2026/11/03：原合同核验后的最终语义答案 */
-    public org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage projectedAnswer() {
-        return (org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage) messages.getLast();
+    public org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage projectedAnswer() {
+        return (org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage) messages.getLast();
     }
     /**
      * 2026/11/03：先验证真实模型链，再仅替换最后正式答案，不沉积控制信封。
@@ -88,13 +92,13 @@ public final class AgentPromptTranscript {
      * @throws IllegalArgumentException 当原答案摘要不一致时
      */
     public static AgentPromptTranscript createExpression(AgentPromptInput input, LLMInteractionResult interaction, LLMMessageCodec codec,
-            org.zexnocs.teanekoagent.component.expression.ReplyPlans.Approved plan) {
+            org.zexnocs.teanekoagent.runtime.delivery.IAgentReplyPlan plan) {
         var base = create(input, interaction, codec);
         if (!plan.sourceDigest().equals(org.zexnocs.teanekocore.utils.StableDigest.sha256(codec.signature(List.of(interaction.finalCandidate().orElseThrow())).toString()))) {
             throw new IllegalArgumentException("表达计划与原模型答案不一致。");
         }
         var projected = new java.util.ArrayList<>(base.messages); projected.removeLast(); projected.add(plan.answer());
-        return new AgentPromptTranscript(input, interaction, org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots.messages(projected), plan);
+        return new AgentPromptTranscript(input, interaction, org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots.messages(projected), plan);
     }
 
 

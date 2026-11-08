@@ -17,9 +17,9 @@
 
 ### W01：协议确认先于状态收敛
 
-- [api.ts](../../../frontend/src/api.ts) 的 `request` 拒绝成功状态下的无效 JSON／null；`requestEmpty` 为合法空响应保留独立入口，登录、登出使用该入口，CSRF 返回值另行验证。
-- [management-receipts.ts:16](../../../frontend/src/management-receipts.ts#L16) 接收 `unknown`，校验必要字段、资源允许的状态和原 `operationId`；成功目标按动作区分，克隆／备份允许返回新目标。
-- [AgentWorkspaceView.finish:209](../../../frontend/src/AgentWorkspaceView.vue#L209) 先取得 `confirmedReceipt` 再清除 `pending`；刷新失败明确提示“修改已确认”，不让用户误将已提交操作重新执行。
+- [api.ts](../../../frontend/src/shared/api/client.ts) 的 `request` 拒绝成功状态下的无效 JSON／null；`requestEmpty` 为合法空响应保留独立入口，登录、登出使用该入口，CSRF 返回值另行验证。
+- [management-receipts.ts:16](../../../frontend/src/shared/api/management-receipts.ts#L16) 接收 `unknown`，校验必要字段、资源允许的状态和原 `operationId`；成功目标按动作区分，克隆／备份允许返回新目标。
+- [AgentWorkspaceView.finish:209](../../../frontend/src/features/agent/AgentWorkspaceView.vue#L209) 先取得 `confirmedReceipt` 再清除 `pending`；刷新失败明确提示“修改已确认”，不让用户误将已提交操作重新执行。
 - `resend` 保留原请求参数；整理恢复的查询使用 `REPLAY_OPERATION`，不把查询变成再次恢复。坏回执经过真实 `run` 错误处理后仍保留恢复入口。
 
 本轮隔离执行的 20 个场景覆盖上述原故障和修复容易误伤的终态／目标差异，未仅以 TypeScript 编译通过代替业务验证。
@@ -33,7 +33,7 @@
 
 ### D02：页面注册与生命周期共同收敛
 
-[page-registry.ts](../../../frontend/src/pages/page-registry.ts) 的声明派生页面类型和导航，重复 key 明确失败；[ConsolePageHost](../../../frontend/src/pages/ConsolePageHost.vue) 负责按需加载和会话内保留，[ConsolePageOutlet](../../../frontend/src/pages/ConsolePageOutlet.vue) 按页面 key 隔离实例。[page-guards](../../../frontend/src/pages/page-guards.ts) 汇总嵌套草稿，确认退出只批准离开，不提前删除数据；[active-polling](../../../frontend/src/pages/active-polling.ts) 在页面未激活或浏览器不可见时停止新轮询，不取消已提交写入。
+[page-registry.ts](../../../frontend/src/app/pages/page-registry.ts) 的声明派生页面类型和导航，重复 key 明确失败；[ConsolePageHost](../../../frontend/src/app/pages/ConsolePageHost.vue) 负责按需加载和会话内保留，[ConsolePageOutlet](../../../frontend/src/app/pages/ConsolePageOutlet.vue) 按页面 key 隔离实例。[page-guards](../../../frontend/src/shared/lifecycle/page-guards.ts) 汇总嵌套草稿，确认退出只批准离开，不提前删除数据；[active-polling](../../../frontend/src/shared/lifecycle/active-polling.ts) 在页面未激活或浏览器不可见时停止新轮询，不取消已提交写入。
 
 同一组 11 个真实浏览器场景分别在源码服务和本轮生成的生产分包运行：首次仅挂载概览；文件／模型实例独立；坏回执跨导航保留；明文令牌离页收起；指令轮询暂停／恢复且不重发；独立空间选择保留；网页聊天输入及标题保留；动态加载失败保留原页；注销失败不清状态、成功才销毁；桌面／移动可见条件一致；认证失效后的迟到模块不重建旧会话。两轮均无页面异常或未声明 API 调用。
 

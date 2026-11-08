@@ -16,15 +16,16 @@ import java.util.concurrent.ConcurrentHashMap;
  * 在既有客户端外侧统一检查每次入站和实际发送，不修改平台事件或关闭借用实现。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/07：向连接守卫交付建立与真实关闭通知，支持插件停用排空。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorator {
     private final List<IClientConnectionGuard> guards;
-    private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Connection> sessions = new ConcurrentHashMap<>();
 
     /**
      * @param delegate 容器拥有的实际客户端
@@ -46,11 +47,20 @@ public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorat
             wrapped.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
-        sessions.put(session.getId(), wrapped);
+        // 2026/11/07：连接回调的实际完成也属于资源终态，不能仅凭网络关闭提前排空。
+        var connection = new Connection(wrapped);
+        if (sessions.putIfAbsent(session.getId(), connection) != null) {
+            throw new IllegalStateException("客户端连接标识重复。");
+        }
         try {
+            // 2026/11/07：登记与最后资格复核连续执行，覆盖停用和连接建立竞争。
+            guards.forEach(guard -> guard.connected(wrapped));
+            if (!allowed(wrapped)) {
+                wrapped.close(CloseStatus.POLICY_VIOLATION);
+                return;
+            }
             super.afterConnectionEstablished(wrapped);
         } catch (Exception failure) {
-            sessions.remove(session.getId());
             try {
                 wrapped.close(CloseStatus.SERVER_ERROR);
             } catch (IOException closing) {
@@ -59,6 +69,8 @@ public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorat
                 }
             }
             throw failure;
+        } finally {
+            connection.leave();
         }
     }
 
@@ -69,12 +81,20 @@ public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorat
      */
     @Override
     public void handleMessage(WebSocketSession session, @NonNull WebSocketMessage<?> message) throws Exception {
-        var wrapped = sessions.get(session.getId());
-        if (wrapped == null || !allowed(wrapped)) {
+        var connection = sessions.get(session.getId());
+        if (connection == null || !connection.enter()) {
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
-        super.handleMessage(wrapped, message);
+        try {
+            if (!allowed(connection.session)) {
+                session.close(CloseStatus.POLICY_VIOLATION);
+                return;
+            }
+            super.handleMessage(connection.session, message);
+        } finally {
+            connection.leave();
+        }
     }
 
     /**
@@ -84,8 +104,18 @@ public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorat
      */
     @Override
     public void afterConnectionClosed(WebSocketSession session, @NonNull CloseStatus status) throws Exception {
-        var wrapped = sessions.remove(session.getId());
-        super.afterConnectionClosed(wrapped == null ? session : wrapped, status);
+        var connection = sessions.remove(session.getId());
+        // 2026/11/07：原客户端收尾完成后才归还连接生命周期。
+        var actual = connection == null ? session : connection.session;
+        try {
+            super.afterConnectionClosed(actual, status);
+        } finally {
+            if (connection == null) {
+                guards.forEach(guard -> guard.disconnected(actual));
+            } else {
+                connection.closed();
+            }
+        }
     }
 
     /**
@@ -107,7 +137,76 @@ public final class GuardedClientWebSocketHandler extends WebSocketHandlerDecorat
      */
     @Override
     public void handleTransportError(@NonNull WebSocketSession session, @NonNull Throwable exception) throws Exception {
-        super.handleTransportError(sessions.getOrDefault(session.getId(), session), exception);
+        var connection = sessions.get(session.getId());
+        if (connection == null) {
+            super.handleTransportError(session, exception);
+            return;
+        }
+        if (!connection.enter()) {
+            return;
+        }
+        try {
+            super.handleTransportError(connection.session, exception);
+        } finally {
+            connection.leave();
+        }
+    }
+
+    /**
+     * 一个网络连接及已进入的同步协议回调；异步自有业务仍由插件生命周期排空。
+     * <br>2026/11/07：原关闭回调和所有已进入回调都结束后才通知守卫释放资源。
+     *
+     * @author zExNocs
+     * @date 2026/11/07
+     * @since 4.9.0-l
+     * @version 4.9.0-l
+     */
+    private final class Connection {
+        private final WebSocketSession session;
+        private int running = 1;
+        private boolean closed;
+        private boolean notified;
+
+        /** @param session 实际借用的守卫会话 */
+        private Connection(WebSocketSession session) {
+            this.session = session;
+        }
+
+        /** @return 连接尚未关闭时登记当前回调并返回真 */
+        private synchronized boolean enter() {
+            if (closed) {
+                return false;
+            }
+            running++;
+            return true;
+        }
+
+        /** 释放已经实际返回的协议回调，最后一个回调可以完成停用排空。 */
+        private void leave() {
+            synchronized (this) {
+                running--;
+            }
+            notifyIfComplete();
+        }
+
+        /** 记录底层关闭回调已经完成，但不跳过其他仍在运行的回调。 */
+        private void closed() {
+            synchronized (this) {
+                closed = true;
+            }
+            notifyIfComplete();
+        }
+
+        /** 锁外通知完整结束，避免守卫回调与网络资源锁互相等待。 */
+        private void notifyIfComplete() {
+            synchronized (this) {
+                if (!closed || running != 0 || notified) {
+                    return;
+                }
+                notified = true;
+            }
+            guards.forEach(guard -> guard.disconnected(session));
+        }
     }
 
     /**

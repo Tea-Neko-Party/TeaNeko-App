@@ -13,4 +13,4 @@
 
 管理等待到期返回 `504 EXECUTION_WAIT_ENDED`，容量不足返回 `429 EXECUTION_BUSY`。网页保留原业务操作编号，通过对应资源的查询操作确认结果。管理调用列表中的宿主请求号与业务操作号不同；列表只显示资源、占用时间和等待状态，不显示正文或主体。
 
-新增 `ManagementResource.execute()` 必须返回覆盖真实业务收尾的阶段，不能返回提前结束的超时包装。事件监听器同步登记异步业务，客户端使用 `pushEventWithCompletion()` 等待整条通知链与已登记业务；普通 `pushEventWithFuture()` 保留原通知完成合同。
+新增 `IManagementResource.execute()` 必须返回覆盖真实业务收尾的阶段，不能返回提前结束的超时包装。事件监听器同步登记异步业务，客户端使用 `pushEventWithCompletion()` 等待整条通知链与已登记业务；普通 `pushEventWithFuture()` 保留原通知完成合同。

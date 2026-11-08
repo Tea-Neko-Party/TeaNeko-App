@@ -30,6 +30,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -40,15 +41,37 @@ import static org.mockito.Mockito.*;
  * 修改记录：<br>
  * 2026/11/05：核对公开连接地址和实际监听端口，普通目录继续排除令牌。
  * <br>2026/11/05：夹具通过专用类型目录装配配置服务。
+ * <br>2026/11/07：保存后的客户端资格撤销同时阻止秘密读取和整体应用。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 class MachineTokenServiceTest {
     @TempDir
     Path root;
+
+    /**
+     * 原文件保存后撤销客户端，不可通过秘密读取、回执恢复或整体应用绕过门禁。
+     * @throws Exception 当临时配置创建失败时
+     */
+    @Test
+    void revocationBlocksSecretAndPreviouslySavedApplication() throws Exception {
+        var fixture = new Fixture(root);
+        var view = fixture.service.read(() -> {}).toCompletableFuture().join();
+        var change = new MachineTokens.Change(UUID.randomUUID(), view.revision(), "SET", "new-test-token");
+        var saved = fixture.service.save("onebot", change, () -> {}).toCompletableFuture().join();
+        fixture.permitted.set(false);
+        assertThrows(IllegalStateException.class, () -> fixture.service.reveal("onebot", () -> {}));
+        assertThrows(CompletionException.class, () -> fixture.service.operation(change.operationId(), () -> {})
+                .toCompletableFuture().join());
+        assertThrows(CompletionException.class, () -> fixture.service.apply(
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> {})
+                .toCompletableFuture().join());
+        assertEquals("original-token", fixture.files.requireCurrent(WebSecurityFileConfig.class)
+                .snapshot().machineTokens().get("onebot"));
+    }
 
     /**
      * 局部修改保留其他秘密与模板，重试不可更换秘密，保存和运行应用分开。
@@ -110,17 +133,19 @@ class MachineTokenServiceTest {
     /**
      * 固定临时文件和同步执行域，不启动平台或模型。
      * <br>2026/11/05：提供与实际部署一致的连接端口环境。
+     * <br>2026/11/07：提供真实业务提交边界可观察的资格撤销开关。
      *
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.8.2-l
+     * @version 4.9.0-l
      */
     private static final class Fixture {
         final ObjectMapper mapper = new ObjectMapper();
         final Path path;
         final FileConfigService files;
         final MachineTokenService service;
+        final AtomicBoolean permitted = new AtomicBoolean(true);
 
         /**
          * @param root 本测试唯一拥有的临时目录
@@ -149,7 +174,18 @@ class MachineTokenServiceTest {
             files.reload();
             var clients = mock(ClientManagementDirectory.class);
             when(clients.list()).thenReturn(List.of(new IClientManagementAdapter.View("onebot", "OneBot", "CONNECTED", 1, "已连接", Instant.now(), true)));
-            when(clients.guard(eq("onebot"), any())).thenAnswer(call -> call.getArgument(1));
+            // 2026/11/07：返回的守卫在实际使用时检查资格，不把创建时允许当成永久授权。
+            when(clients.guard(eq("onebot"), any())).thenAnswer(call -> {
+                Runnable original = call.getArgument(1);
+                Runnable checked = () -> {
+                    original.run();
+                    if (!permitted.get()) {
+                        throw new IllegalStateException("测试客户端资格已撤销。");
+                    }
+                };
+                checked.run();
+                return checked;
+            });
             var scanner = mock(TeaNekoClientScanner.class);
             var client = mock(ITeaNekoClient.class);
             var socket = mock(org.zexnocs.teanekoapp.client.AbstractWebsocketClient.class);

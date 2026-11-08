@@ -1,0 +1,450 @@
+package org.zexnocs.teanekoplugin.general.engagement.signin;
+
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import org.zexnocs.teanekoplugin.support.PluginTaskScope;
+
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
+
+// 2026/11/07：迁入所属业务插件，稳定业务标识和存储键保持不变。
+
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+
+import org.jspecify.annotations.Nullable;
+import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
+import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserCoinService;
+import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
+import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
+import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
+import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
+import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
+import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseTaskConfig;
+import org.zexnocs.teanekocore.database.easydata.cleanable.CleanableEasyData;
+import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
+import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
+import org.zexnocs.teanekocore.utils.ChinaDateUtil;
+import org.zexnocs.teanekocore.utils.RandomUtil;
+import org.zexnocs.teanekoplugin.general.engagement.signin.data.SignInChunkData;
+import org.zexnocs.teanekoplugin.general.engagement.signin.data.SignInData;
+import org.zexnocs.teanekoplugin.general.engagement.signin.data.SignInRecordData;
+
+import java.time.DayOfWeek;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.locks.ReentrantLock;
+
+/**
+ * 签到服务
+ *
+ * <br>2026/11/04：声明定时任务分类及网页控制边界。
+ * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
+ *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ * <br>2026/11/07：异步副作用前复核固定插件代次，停用后拒绝迟到业务。
+ *
+ * @author zExNocs
+ * @date 2026/10/28
+ * @since 4.1.0
+ * @version 4.9.0-l
+ */
+@Service
+// 2026/11/04：展示声明不改变原任务调度和生命周期。
+// 2026/11/04：补充任务用途、执行边界与网页控制说明。
+@TimerDisplay(category = "plugin.business", categoryName = "业务插件", name = "每日签到缓存重置",
+        description = "按每日零点的 cron 规则清空当天签到去重缓存，为新一天的签到释放登记位置。"
+        + "只重置临时去重标记，不删除历史签到数据、连续签到记录或积分；后续签到仍执行原日期与持久化校验。"
+        + "任务属于只读维护，实际触发时区以当前调度规则为准。", controllable = false)
+@PluginOwned("general.engagement")
+public class SignInService implements IPluginLifecycle {
+    // 2026/11/07：异步业务固定入口代次，停用后不启动后续副作用。
+    private final PluginAccess plugins;
+    // 2026/11/07：每次启用单独登记定时器和在途工作，旧代次不可恢复。
+    private @Nullable PluginTaskScope lifecycle;
+
+    /// 存储签到数据的命名空间
+    public static final String NAMESPACE = "sign_in";
+
+    /// 签到领取的最小金币数
+    private static final int MIN_COIN = 10;
+
+    /// 签到领取的最大金币数
+    private static final int MAX_COIN = 50;
+
+    /// 用来缓存用户签到，防止用户重复签到
+    private final Map<UUID, Boolean> todaySignInSet = new ConcurrentHashMap<>();
+
+    /// 锁，防止同一时间签到，UUID -> 锁对象
+    private final ConcurrentMapCacheContainer<UUID, ReentrantLock> userLocks;
+
+    private final ITimerService iTimerService;
+    private final RandomUtil randomUtil;
+    private final ITeaUserCoinService iTeaUserCoinService;
+
+    /**
+     * 组合定时、随机数、积分和缓存服务，签到写入与奖励仍按原业务事务执行。
+     *
+     * @param iTimerService 本次装配使用的 {@code ITimerService} 服务
+     * @param randomUtil 用于本次处理的 {@code randomUtil} 数据
+     * @param iTeaUserCoinService 本次装配使用的 {@code ITeaUserCoinService} 服务
+     * @param iCacheService 缓存注册与生命周期服务
+     * @param plugins 统一插件代次访问入口
+     */
+    public SignInService(ITimerService iTimerService,
+                         RandomUtil randomUtil,
+                         ITeaUserCoinService iTeaUserCoinService,
+                         ICacheService iCacheService, PluginAccess plugins) {
+        this.plugins = plugins;
+        this.iTimerService = iTimerService;
+        this.randomUtil = randomUtil;
+        this.iTeaUserCoinService = iTeaUserCoinService;
+        this.userLocks = ConcurrentMapCacheContainer.of(iCacheService);
+    }
+
+    /**
+     * 初始化，制造一个定时器每天零点准时清理 {@code todaySignInSet}
+     * <br>2026/11/07：由插件启用触发，每次启用使用独立定时器代次。
+     * @return 定时器已完成登记的阶段
+     */
+    @Override
+    public synchronized CompletionStage<Void> start() {
+        if (lifecycle != null) {
+            return CompletableFuture.completedStage(null);
+        }
+        var scope = new PluginTaskScope();
+        lifecycle = scope;
+        todaySignInSet.clear();
+
+        scope.own(iTimerService.registerByCron(
+                "重置签到缓存",
+                "CLEAN-SIGN-IN-SET",
+                () -> scope.execute(() -> {
+                    todaySignInSet.clear();
+                    return EmptyTaskResult.INSTANCE;
+                }),
+                "0 0 0 * * ?",
+                EmptyTaskResult.getResultType()));
+        return CompletableFuture.completedStage(null);
+    }
+
+    /** @return 2026/11/07：所属业务插件的稳定标识。 */
+    @Override
+    public String pluginId() {
+        return "general.engagement";
+    }
+
+    /** @return 2026/11/07：插件内部唯一的后台任务标识。 */
+    @Override
+    public String id() {
+        return "signin-reset";
+    }
+
+    /**
+     * 2026/11/07：关闭本代定时入口并等待正在执行的回调，不销毁借用资源。
+     * @return 本代后台工作已结束的阶段
+     */
+    @Override
+    public synchronized CompletionStage<Void> stop() {
+        var scope = lifecycle;
+        lifecycle = null;
+        return scope == null ? CompletableFuture.completedStage(null) : scope.stop();
+    }
+
+    /**
+     * 线性安全的签到
+     *
+     * @param userId 用户 ID
+     * @param now    当前时间点
+     * @param sender 消息发送器
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
+        var lock = userLocks.computeIfAbsent(userId, key -> new ReentrantLock());
+        lock.lock();
+        try {
+            return __signIn(userId, now, sender);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    /**
+     * 签到
+     *
+     * @param userId 用户 ID
+     * @param now    当前时间点
+     * @param sender 消息发送器
+     * @return 等待本次业务及其异步后续处理结束的阶段；正常完成不额外证明具体业务已被接受
+     */
+    public CompletionStage<Void> __signIn(UUID userId, Instant now, @Nullable IEasyMessageSenderBuilder sender) {
+        // 2026/11/07：固定本次业务代次，异步恢复时必须复核。
+        var pluginToken = plugins.captureOwner("general.engagement");
+        // 获取当前时间和日期
+        var currentDate = ChinaDateUtil.Instance.convertToChinaDate(now);
+
+        // 获取用户的签到数据
+        var target = GeneralEasyData.of(NAMESPACE).get(userId.toString());
+        var data = getSignInData(target);
+        // 检查用户是否在缓存中已经签到过了，如果是则直接返回签到过的消息
+        String repeatMsg = checkRepeatSignIn(userId, currentDate, data);
+        if (repeatMsg != null) {
+            return sender == null ? CompletableFuture.completedStage(null) : sender.sendAtReplyMessageAsync(repeatMsg);
+        }
+
+        // 计算签到奖励
+        int luckyNumber = generateLuckyNumber();
+        int coin = calculateCoin(currentDate, luckyNumber);
+        // 获取当前连续签到天数
+        var chunks = new LinkedList<>(target.getList(SignInChunkData.KEY, SignInChunkData.class));
+        int continuous = updateChunks(chunks, currentDate, now);
+        // 构建新的签到数据和签到记录
+        var newData = buildNewSignInData(data, now, luckyNumber, continuous);
+        var record = buildRecord(now, luckyNumber, coin);
+        // 更新数据库
+        return pushDatabaseUpdate(userId, target, chunks, newData, record, coin, currentDate)
+                .addTransactionTask(() -> plugins.check(pluginToken))
+                .pushAsync()
+                .whenComplete((ignored, error) -> {
+                    if (error != null) todaySignInSet.remove(userId);
+                })
+                .thenCompose(ignored -> {
+                    plugins.check(pluginToken);
+                    return sender == null ? CompletableFuture.completedStage(null)
+                            : sender.sendAtReplyMessageAsync(buildSuccessMessage(currentDate, now, luckyNumber,
+                                    coin, continuous, newData.getTotalDays()));
+                });
+    }
+
+    /**
+     * 获取签到数据，如果不存在则返回一个默认的签到数据对象。
+     *
+     * @param target 签到数据所在的 EasyDataDto 对象
+     * @return {@link SignInData } 签到数据
+     */
+    public SignInData getSignInData(IEasyDataDto target) {
+        return target.get(SignInData.KEY,
+                SignInData.builder()
+                        .totalDays(0)
+                        .lastTime(Instant.EPOCH)
+                        .lastNumber(0)
+                        .continuousDays(0)
+                        .build());
+    }
+
+    /**
+     * 获取签到记录块列表，如果不存在则返回一个空列表。
+     *
+     * @param userId 用户 ID
+     * @param currentDate 当前日期
+     * @param data 签到数据
+     * @return 重复或过快签到的拒绝反馈；允许继续时为 null
+     */
+    private String checkRepeatSignIn(UUID userId,
+                                     LocalDate currentDate,
+                                     SignInData data) {
+        var lastDate = ChinaDateUtil.Instance.convertToChinaDate(data.getLastTime());
+        // 使用缓存来判断用户是否已经签到过了，如果 put 返回的不是 null，说明用户之前已经签到过了。
+        if (todaySignInSet.put(userId, true) != null) {
+            // 如果用户上次签到的日期不是今天，说明数据库还没更新，用户签到过快。
+            if (!currentDate.isEqual(lastDate)) {
+                return "主人您签到太快了喵！";
+            }
+            // 否则返回已经签到过的消息
+            return """
+               主人您今天已经签到过了喵！
+               您今天的幸运数字是 %d 喵！
+               您已经连续签到 %d 天喵！
+               您已经累计签到 %d 天喵！"""
+                    .formatted(data.getLastNumber(),
+                            data.getContinuousDays(),
+                            data.getTotalDays());
+        }
+        // 使用 data 中的最后一次签到时间来判断用户是否已经签到过了
+        // 只有在 签到 → 服务器重启 → 用户再次签到 情况下才会出现用户签到过了但是缓存里没有的情况
+        if(currentDate.isEqual(lastDate)) {
+            return """
+               主人您今天已经签到过了喵！
+               您今天的幸运数字是 %d 喵！
+               您已经连续签到 %d 天喵！
+               您已经累计签到 %d 天喵！"""
+                    .formatted(data.getLastNumber(),
+                            data.getContinuousDays(),
+                            data.getTotalDays());
+        }
+        return null;
+    }
+
+    /**
+     * 生成一个随机的幸运数字，范围在 1 到 100 之间。
+     *
+     * @return int 幸运数字
+     */
+    private int generateLuckyNumber() {
+        return randomUtil.nextInt(100) + 1;
+    }
+
+    /**
+     * 根据当前日期和幸运数字计算签到奖励的猫猫币数量。
+     * 如果当前日期是周四，则奖励固定为 50 猫猫币；
+     * 否则根据幸运数字在 MIN_COIN 和 MAX_COIN 之间线性计算奖励。
+     *
+     * @param date 当前日期
+     * @param luckyNumber 幸运数字
+     * @return 按原签到规则计算的本次积分奖励
+     */
+    private int calculateCoin(LocalDate date, int luckyNumber) {
+        if (date.getDayOfWeek() == DayOfWeek.THURSDAY) {
+            return 50;
+        }
+        return (int) (MIN_COIN + (MAX_COIN - MIN_COIN) * luckyNumber / 100.0);
+    }
+
+    /**
+     * 构建新的签到数据对象，包含更新后的总签到天数、最后一次签到时间、幸运数字和连续签到天数。
+     *
+     * @param chunks 签到记录块列表
+     * @param currentDate 当前日期
+     * @param now 当前时间戳
+     * @return int 当前连续签到天数
+     */
+    private int updateChunks(List<SignInChunkData> chunks,
+                             LocalDate currentDate,
+                             Instant now) {
+        int continuous = 1;
+        if (!chunks.isEmpty()) {
+            var last = chunks.getLast();
+            if (currentDate.minusDays(1)
+                    .isEqual(ChinaDateUtil.Instance.convertToChinaDate(last.getLastTime()))) {
+                continuous = last.getContinuous() + 1;
+                chunks.removeLast();
+            }
+        }
+        chunks.addLast(SignInChunkData.builder()
+                .lastTime(now)
+                .continuous(continuous)
+                .build());
+        return continuous;
+    }
+
+    /**
+     * 构建签到记录对象，包含签到时间、幸运数字和获得的猫猫币数量。
+     *
+     * @param data 签到数据
+     * @param now 当前时间戳
+     * @param luckyNumber 幸运数字
+     * @param continuous 当前连续签到天数
+     * @return {@link SignInData } 签到数据
+     */
+    private SignInData buildNewSignInData(SignInData data,
+                                          Instant now,
+                                          int luckyNumber,
+                                          int continuous) {
+
+        return data.toBuilder()
+                .totalDays(data.getTotalDays() + 1)
+                .lastTime(now)
+                .lastNumber(luckyNumber)
+                .continuousDays(continuous)
+                .build();
+    }
+
+    /**
+     * 构建签到成功消息，包含签到时间、幸运数字、获得的猫猫币数量、连续签到天数和累计签到天数。
+     *
+     * @param now 当前时间戳
+     * @param luckyNumber 幸运数字
+     * @param coin 获得的猫猫币数量
+     * @return 包含本次签到结果与时间的记录
+     */
+    private SignInRecordData buildRecord(Instant now,
+                                         int luckyNumber,
+                                         int coin) {
+
+        return SignInRecordData.builder()
+                .time(ChinaDateUtil.Instance.convertToDateTimeString(now))
+                .coin(coin)
+                .luckyNumber(luckyNumber)
+                .build();
+    }
+
+    /**
+     * 将更新后的签到数据、签到记录和用户猫猫币数量推送到数据库中。
+     *
+     * @param userId 原业务边界中的目标用户标识
+     * @param target 原存储协议使用的数据目标
+     * @param chunks 用于本次处理的 {@code chunks} 数据
+     * @param newData 用于本次处理的 {@code newData} 数据
+     * @param record 用于本次处理的 {@code record} 数据
+     * @param coin 用于本次处理的 {@code coin} 数据
+     * @param currentDate 用于本次处理的 {@code currentDate} 数据
+     * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
+     */
+    private IDatabaseTaskConfig pushDatabaseUpdate(UUID userId,
+                                                   IEasyDataDto target,
+                                                   List<SignInChunkData> chunks,
+                                                   SignInData newData,
+                                                   SignInRecordData record,
+                                                   int coin,
+                                                   LocalDate currentDate) {
+
+        var targetTask = target.getTaskConfig("签到数据更新")
+                .set(SignInData.KEY, newData)
+                .set(SignInChunkData.KEY, chunks);
+
+        var recordTask = CleanableEasyData.of(NAMESPACE)
+                .get(userId.toString())
+                .getTaskConfig("签到记录数据更新")
+                .set(ChinaDateUtil.Instance.convertToString(currentDate), record);
+
+        return iTeaUserCoinService.getCoin(userId)
+                .getDatabaseTaskConfig("签到金币更新")
+                .addCount(coin)
+                .merge(targetTask)
+                .merge(recordTask);
+    }
+
+    /**
+     * 构建签到成功消息，包含签到时间、幸运数字、获得的猫猫币数量、连续签到天数和累计签到天数。
+     *
+     * @param date 用于本次处理的 {@code date} 数据
+     * @param now 用于本次处理的 {@code now} 数据
+     * @param luckyNumber 用于本次处理的 {@code luckyNumber} 数据
+     * @param coin 用于本次处理的 {@code coin} 数据
+     * @param continuous 用于本次处理的 {@code continuous} 数据
+     * @param totalDays 用于本次处理的 {@code totalDays} 数据
+     * @return 按本方法契约生成的文本或标识
+     */
+    private String buildSuccessMessage(LocalDate date,
+                                       Instant now,
+                                       int luckyNumber,
+                                       int coin,
+                                       int continuous,
+                                       int totalDays) {
+        // 如果是星期四且不是 六月四日
+        var extra = ((date.getDayOfWeek() == DayOfWeek.THURSDAY)
+                && (date.getMonthValue() != 6 || date.getDayOfMonth() != 4))
+                ? "疯狂星期四v你 50 喵！\n" : "";
+        return """
+        %s主人签到成功喵！
+        您今日签到时间：%s 喵
+        您的幸运数字：%d 喵 [%d, %d]
+        您获得了猫猫币：%d 喵 [%d, %d]
+        您已经连续签到：%d 天
+        您已经累计签到：%d 天"""
+                .formatted(
+                        extra,
+                        ChinaDateUtil.Instance.convertToDateTimeString(now),
+                        luckyNumber, 1, 100,
+                        coin, MIN_COIN, MAX_COIN,
+                        continuous,
+                        totalDays);
+    }
+}

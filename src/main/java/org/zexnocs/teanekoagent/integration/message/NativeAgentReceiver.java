@@ -1,12 +1,13 @@
 package org.zexnocs.teanekoagent.integration.message;
 
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.zexnocs.teanekoagent.component.proactive.adapter.ProactiveCoordinator;
-import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
+import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
@@ -41,10 +42,12 @@ import java.util.stream.Collectors;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/07：通过可选采集端口调用插件业务，纯模型入站不依赖记忆实现。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 @EventListener
 public final class NativeAgentReceiver {
@@ -56,8 +59,8 @@ public final class NativeAgentReceiver {
     private final CommandScanner commands;
     private final Executor executor;
     private final ILogger logger;
-    private final @Nullable PlatformHistoryCapture capture;
-    private final @Nullable ProactiveCoordinator proactive;
+    private final @Nullable IPlatformHistoryCapture capture;
+    private final @Nullable IAgentProactiveCoordinator proactive;
 
     /**
      * 组合既有配置、命令识别和业务执行器，不在事件通知线程等待模型。
@@ -90,7 +93,7 @@ public final class NativeAgentReceiver {
      */
     public NativeAgentReceiver(IConfigDataService configs, AgentScopeConfigManager manager, AgentTriggerGate triggers,
             AgentAutomaticGateway gateway, TeaNekoCommandConverter converter, CommandScanner commands,
-            @Qualifier("virtualExecutor") Executor executor, ILogger logger, @Nullable PlatformHistoryCapture capture) {
+            @Qualifier("virtualExecutor") Executor executor, ILogger logger, @Nullable IPlatformHistoryCapture capture) {
         this(configs, manager, triggers, gateway, converter, commands, executor, logger, capture, null);
     }
 
@@ -109,7 +112,7 @@ public final class NativeAgentReceiver {
      */
     @Autowired public NativeAgentReceiver(IConfigDataService configs, AgentScopeConfigManager manager, AgentTriggerGate triggers,
             AgentAutomaticGateway gateway, TeaNekoCommandConverter converter, CommandScanner commands,
-            @Qualifier("virtualExecutor") Executor executor, ILogger logger, @Nullable PlatformHistoryCapture capture, @Nullable ProactiveCoordinator proactive) {
+            @Qualifier("virtualExecutor") Executor executor, ILogger logger, @Nullable IPlatformHistoryCapture capture, @Nullable IAgentProactiveCoordinator proactive) {
         this.configs = configs; this.manager = manager; this.triggers = triggers; this.gateway = gateway;
         this.converter = converter; this.commands = commands; this.executor = executor; this.logger = logger;
         this.capture = capture;
@@ -158,12 +161,12 @@ public final class NativeAgentReceiver {
             return new Input(payload, self.get(), mention, named);
         }, executor).thenCompose(input -> {
             if (input == null) { return CompletableFuture.completedFuture(false); }
-            var history = capture == null ? CompletableFuture.completedFuture(new PlatformHistoryCapture.Capture(null, true))
+            var history = capture == null ? CompletableFuture.completedFuture(new IPlatformHistoryCapture.Capture(null, true))
                     : capture.capture(data, input.payload());
             return history.thenCompose(collected -> {
             if (!collected.accepted()) { return CompletableFuture.completedFuture(false); }
             return replyToSelf(data, input).thenComposeAsync(reply -> {
-                var ticket = triggers.acquire(new AgentTriggerGate.Signal(NativeCommandBridge.actor(data), AgentTriggerGate.Kind.MESSAGE,
+                var ticket = triggers.acquire(new AgentTriggerGate.Signal(NativeMessageSources.actor(data), AgentTriggerGate.Kind.MESSAGE,
                         // 2026/11/02：群聊保留原提及/引用规则，私聊无需提及。
                         input.mention(), reply, input.named(), false, data.getMessageType() == TeaNekoMessageType.PRIVATE || data.getMessageType() == TeaNekoMessageType.PRIVATE_TEMP));
                 if (ticket.isEmpty()) { return proactive == null ? CompletableFuture.completedFuture(false) : proactive.offer(data, input.payload()); }
@@ -229,7 +232,7 @@ public final class NativeAgentReceiver {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private record Input(NativeMessageInput payload, String self, boolean mention, boolean named) { }
 }

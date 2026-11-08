@@ -48,25 +48,20 @@ class AgentLayerBoundaryTest {
     }
 
     /**
-     * 验证运行域只使用 Core 与组件端口，不直接装配 App 集成、配置及具体存储。
-     * 2026/11/05：组件目录已包含完整能力实现，不再将其整体视为纯数据。
+     * 验证整个 Agent 层只依赖自身、App 与 Core，业务接口也不能反向引用插件。
+     * 2026/11/07：同时检查普通导入和带类型注解的全限定名，覆盖迁移后的组件及中立端口。
      * @throws Exception 当源码无法读取时
      */
     @Test void agentDomainDoesNotImportPlatformLegacyOrAdapters() throws Exception {
-        var root = Path.of("src/main/java/org/zexnocs/teanekoagent/runtime");
+        var root = Path.of("src/main/java/org/zexnocs/teanekoagent");
         var violations = new ArrayList<String>();
         try (var files = Files.walk(root)) {
             for (var file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 for (var line : Files.readAllLines(file)) {
-                    if (line.stripLeading().startsWith("import org.zexnocs.")
-                            && !line.contains("org.zexnocs.teanekoagent.runtime.")
-                            && !line.contains("org.zexnocs.teanekoagent.component.")
-                            && !line.contains("org.zexnocs.teanekocore.")) {
-                        violations.add(root.relativize(file) + ": " + line);
-                    }
-                    if (line.stripLeading().startsWith("import org.zexnocs.teanekoagent.component.")
-                            && (line.contains(".adapter.") || line.contains(".configuration.")
-                            || line.contains(".file_config.") || line.contains(".EasyData"))) {
+                    var code = line.stripLeading();
+                    if (!code.startsWith("//") && !code.startsWith("*")
+                            && (code.contains("org.zexnocs.teanekoplugin.")
+                            || code.contains("org.zexnocs.teanekoclient."))) {
                         violations.add(root.relativize(file) + ": " + line);
                     }
                 }

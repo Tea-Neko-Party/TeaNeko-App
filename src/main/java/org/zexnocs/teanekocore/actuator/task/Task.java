@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.actuator.task;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.Setter;
@@ -18,7 +20,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 由 {@link TaskService} 管理的异步 {@link org.zexnocs.teanekocore.framework.function.MethodCallable} 任务，只能执行一次的任务。
+ * 由 {@link TaskService} 管理的异步 {@link org.zexnocs.teanekocore.framework.function.IMethodCallable} 任务，只能执行一次的任务。
  * {@link TaskConfig} 可以生成多个 {@link Task} 实例，每个实例只能执行一次。
  * 不允许外部直接创建 {@link Task} 实例，必须通过 {@link TaskConfig} 创建。
  *

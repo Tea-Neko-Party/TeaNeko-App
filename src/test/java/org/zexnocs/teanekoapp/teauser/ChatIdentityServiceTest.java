@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.teauser;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
@@ -10,7 +12,7 @@ import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDtoTaskConfig;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransactionDto;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -20,7 +22,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * 通过 DTO 边界验证名称更新、空资料保留、群名片隔离及迟到消息，避免使用真实数据库。
@@ -44,11 +51,14 @@ class ChatIdentityServiceTest {
         var transaction = mock(IEasyDataTransactionDto.class);
         var task = mock(IEasyDataDtoTaskConfig.class);
         var rows = new HashMap<String, EasyDataRow>();
-        var work = new AtomicReference<VoidCallable>();
+        var work = new AtomicReference<IVoidCallable>();
         when(data.getEasyDataFor(any(), anyString(), anyString())).thenReturn(dto);
         when(dto.atomic()).thenReturn(transaction);
         when(dto.getTaskConfig(anyString())).thenReturn(task);
-        doAnswer(call -> { work.set(call.getArgument(0)); return task; }).when(task).addTransactionTask(any());
+        doAnswer(call -> {
+            work.set(call.getArgument(0));
+            return task;
+        }).when(task).addTransactionTask(any());
         when(task.pushAsync()).thenAnswer(ignored -> { work.get().call(); return CompletableFuture.completedStage(null); });
         when(transaction.find(anyString(), any())).thenAnswer(call -> rows.get(call.getArgument(0, String.class)));
         when(transaction.create(anyString(), anyString())).thenAnswer(call -> {

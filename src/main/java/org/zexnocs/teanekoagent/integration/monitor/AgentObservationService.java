@@ -1,10 +1,12 @@
 package org.zexnocs.teanekoagent.integration.monitor;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionObserver;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionObserver;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
 import org.zexnocs.teanekoagent.runtime.monitor.IAgentActivityObserver;

@@ -7,19 +7,36 @@ import org.zexnocs.teanekoapp.message.content.TextTeaNekoContentPart;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.command.*;
-import org.zexnocs.teanekocore.command.api.*;
+import org.zexnocs.teanekocore.command.CommandData;
+import org.zexnocs.teanekocore.command.CommandMapData;
+import org.zexnocs.teanekocore.command.CommandMethodContract;
+import org.zexnocs.teanekocore.command.CommandResult;
+import org.zexnocs.teanekocore.command.CommandScanner;
+import org.zexnocs.teanekocore.command.ManagementCommandPolicy;
+import org.zexnocs.teanekocore.command.api.CommandOrigin;
+import org.zexnocs.teanekocore.command.api.CommandPermission;
+import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.interfaces.ICommandDispatcher;
 import org.zexnocs.teanekocore.command.interfaces.ICommandErrorHandler;
 import org.zexnocs.teanekocore.command.interfaces.IHelpSubCommandHandler;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
-import org.zexnocs.teanekocore.framework.description.Description;
 import org.zexnocs.teanekocore.utils.StableDigest;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Semaphore;
 
 /**
  * 指令台受理、连接捕获、原命令链和持久终态的编排，不派生原生平台身份。
@@ -29,11 +46,12 @@ import java.util.concurrent.*;
  * <br>2026/11/05：指令台目录只查询已注册方法，不在页面请求中解析 Bean 类型或重新枚举方法。
  *
  * <br>2026/11/06：补齐执行与回执持久化诊断，明确命令拒绝原因。
+ * <br>2026/11/07：命令目录与执行复核使用真实子命令贡献者归属。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 @Service
 public final class ClientConsoleService {
@@ -87,27 +105,32 @@ public final class ClientConsoleService {
                 adapter.consoleState(resolved).thenApply(state -> {
                     guard.run();
                     var found = new ArrayList<ClientConsole.Command>();
-                    for (var prefix : files.requireCurrent(WebSecurityFileConfig.class).snapshot().consolePrefixes()) {
+                    // 2026/11/07：从已编译命令目录投影全部管理声明，显式白名单才收窄前缀。
+                    var policy = files.requireCurrent(WebSecurityFileConfig.class).snapshot();
+                    var prefixes = commands.getPrefixCommandKeys().stream()
+                            .filter(policy::allowsConsolePrefix).distinct().toList();
+                    for (var prefix : prefixes) {
                         var map = commands.getPrefixCommand(prefix);
                         if (map == null || !map.getCommandAnnotation().enable()) {
                             continue;
                         }
-                        // 2026/11/05：别名与默认方法复用扫描缓存，查询不再依赖底层发现工具。
+                        // 2026/11/07：方法目录复用扫描缓存，插件子命令按实际贡献 Bean 判断归属。
                         for (var method : map.getRegisteredMethods()) {
-                            if (!ManagementCommandPolicy.declared(method) || !plugins.enabled(map.getCommand(), method)) {
+                            var metadata = CommandMethodContract.metadata(method);
+                            if (!ManagementCommandPolicy.declared(method) || !plugins.enabled(map.target(method), method)) {
                                 continue;
                             }
                             String usage = prefix;
-                            var sub = method.getAnnotation(SubCommand.class);
+                            var sub = metadata.child();
                             if (sub != null && map.getSubCommand(sub.value()[0]) != null) {
                                 usage += " " + sub.value()[0];
                             } else if (!method.equals(map.getDefaultCommandMethod())) {
                                 continue;
                             }
-                            var description = method.getAnnotation(Description.class);
-                            found.add(new ClientConsole.Command(usage, description == null ? "未提供使用说明"
-                                    : description.value().substring(0, Math.min(4000, description.value().length())),
-                                    method.getAnnotation(ManagementCommand.class).sendsMessages()));
+                            found.add(new ClientConsole.Command(usage, !metadata.documented() ? "未提供使用说明"
+                                    : metadata.description().substring(0, Math.min(4000, metadata.description().length())),
+                                    Objects.requireNonNull(metadata.management()).sendsMessages(),
+                                    plugins.owner(map.target(method), method)));
                         }
                     }
                     return new ClientConsole.Catalog(resolved.name(), state,
@@ -215,7 +238,8 @@ public final class ClientConsoleService {
                         var words = new TextTeaNekoContentPart(work.request.text()).toCommandArgs();
                         var command = Objects.requireNonNull(commands.getPrefixCommand(words[0]), "原命令已经不在目录。");
                         var source = new ConsoleInvocation(lease, () -> check(work), method -> {
-                            var token = plugins.capture(command.getCommand(), method);
+                            // 2026/11/07：扩展子命令固定实际贡献者的插件代次。
+                            var token = plugins.capture(command.target(method), method);
                             return () -> plugins.check(token);
                         });
                         work.source = source;
@@ -324,8 +348,8 @@ public final class ClientConsoleService {
                     return CompletableFuture.failedStage(new SecurityException("该帮助入口不支持管理来源。"));
                 }
                 ManagementCommandPolicy.check(data, method);
-                var description = method.getAnnotation(Description.class);
-                return source.print(description == null ? "该方法未提供使用说明。" : description.value());
+                var metadata = CommandMethodContract.metadata(method);
+                return source.print(metadata.documented() ? metadata.description() : "该方法未提供使用说明。");
             }
         };
     }
@@ -339,7 +363,7 @@ public final class ClientConsoleService {
         work.platform.run();
         var words = new TextTeaNekoContentPart(work.request.text()).toCommandArgs();
         if (closed || Instant.now().isAfter(work.deadline) || words.length == 0
-                || !files.requireCurrent(WebSecurityFileConfig.class).snapshot().consolePrefixes().contains(words[0])) {
+                || !files.requireCurrent(WebSecurityFileConfig.class).snapshot().allowsConsolePrefix(words[0])) {
             throw new SecurityException("指令台生命周期或本机命令白名单已失效。");
         }
     }

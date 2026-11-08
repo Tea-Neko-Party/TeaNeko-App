@@ -13,23 +13,34 @@ trusted-proxies: ['127.0.0.1']
 #   onebot: '${TEANEKO_ONEBOT_ACCESS_TOKEN}'
 machine-tokens: {}
 # 2026/11/04：管理员直接编辑适用且已启用的聊天配置，无需 settings-sections/settings-groups 白名单。
-# 只开放声明管理来源的注册方法；旧配置需本机明确补充后重载。
+# 2026/11/07：登录后默认开放全部已注册文件区、管理资源及支持管理来源的命令。
+# 旧配置缺少此字段时同样默认开放；需要限制时改为 true，下面三个列表才生效。
+local-allowlist-enabled: false
+# 只执行已声明管理来源的注册方法；此列表仅用于显式限制模式。
 console-prefixes: ['/console']
-# 2026/11/03：只公开这些已注册文件表单，不开放认证根配置或任意路径。
+# 显式限制模式的文件表单列表；默认模式也不允许编辑认证根配置或任意路径。
 file-sections: ['agent.main', 'agent.models', 'agent.personality', 'agent.expression', 'agent.stickers', 'agent.media', 'agent.observability', 'onebot.main', 'web.chat']
-# 2026/11/03：只向当前管理员开放列出的类型化管理资源。
+# 显式限制模式的类型化管理资源列表。
 management-resources:
+  # 2026/11/07：宿主插件管理入口，关闭业务插件后仍可重新开启。
+  - 'teaneko.core:plugins.catalog'
+  - 'teaneko.core:plugins.preview'
+  - 'teaneko.core:plugins.change'
+  - 'teaneko.core:plugins.operation'
+  - 'teaneko.core:plugins.pages'
   - 'teaneko.agent:activity'
-  - 'teaneko.agent:memory'
-  - 'teaneko.agent:profiles'
-  - 'teaneko.agent:personality'
-  - 'teaneko.agent:layers'
-  - 'teaneko.agent:schedules'
+  - 'agent.cognition:memory'
+  - 'agent.cognition:profiles'
+  - 'agent.cognition:personality'
+  - 'agent.cognition:layers'
+  - 'agent.automation:schedules'
   # 2026/11/06：实例目录和独立空间管理，不修改任何聊天绑定。
   - 'teaneko.agent:library'
-  - 'teaneko.agent:memory-space'
-  - 'teaneko.agent:personality-space'
-  - 'teaneko.agent:profile-space'
-  - 'teaneko.agent:layers-space'
+  - 'agent.cognition:memory-space'
+  - 'agent.cognition:personality-space'
+  - 'agent.cognition:profile-space'
+  - 'agent.cognition:layers-space'
   - 'teaneko.core:runtime'
   - 'teaneko.core:logs'
+# 2026/11/07：保留历史列表的精确资源映射；默认开放不依赖列表是否完整。
+plugin-management-version: 1

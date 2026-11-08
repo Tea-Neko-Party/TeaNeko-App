@@ -18,7 +18,7 @@
 
 证据位于 `temp/verification/4.8.7-l/sticker-tests.log`、`sticker-final-build.log`、`sticker-portability/`，JavaDoc 位于 `temp/javadoc/4.8.7-l/sticker-portability/`。测试使用原隔离事务夹具、真实临时文件与本地模型/API 替身，没有修改现有业务库或请求外部模型。
 
-现有图库的实际迁移在运行新版后发生。部署前备份完整数据库与素材目录；旧程序不识别新描述引用，回退必须恢复升级前的配套备份。迁移、默认概率及复制方法以[图库说明](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md)为准。
+现有图库的实际迁移在运行新版后发生。部署前备份完整数据库与素材目录；旧程序不识别新描述引用，回退必须恢复升级前的配套备份。迁移、默认概率及复制方法以[图库说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md)为准。
 
 ## 定时维护预算修正
 

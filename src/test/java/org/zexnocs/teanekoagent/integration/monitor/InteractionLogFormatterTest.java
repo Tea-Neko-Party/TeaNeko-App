@@ -1,22 +1,24 @@
 package org.zexnocs.teanekoagent.integration.monitor;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMRequestSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMImageDetail;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.structured.LLMJsonInstruction;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMRequestSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenUsage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMImageDetail;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonInstruction;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import tools.jackson.databind.json.JsonMapper;
 

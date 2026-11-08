@@ -24,13 +24,13 @@ import java.util.function.Function;
  * 只编辑认证文件中的机器令牌；复用原文件类型锁、原子替换及持久回执。
  * 应用前确认其他认证根字段与当前运行值一致，不顺带应用本机尚未确认的设置。
  *
- * 修改记录：<br>
- * 2026/11/05：返回公开连接地址及代理监听端口，保持令牌查看与普通目录隔离。
+ * <br>2026/11/05：返回公开连接地址及代理监听端口，保持令牌查看与普通目录隔离。
+ * <br>2026/11/07：机器入口投影插件归属，目录及应用前统一复核客户端资格。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Service
 public final class MachineTokenService {
@@ -65,6 +65,7 @@ public final class MachineTokenService {
     }
 
     /**
+     * 2026/11/07：固定目录条目的客户端资格，返回前复核停止和重启代次。
      * @param guard 当前管理员会话
      * @return 不含秘密的真实入口目录及磁盘、运行状态
      */
@@ -73,15 +74,19 @@ public final class MachineTokenService {
             var snapshot = document.read();
             var disk = parse(document, snapshot).snapshot();
             var active = files.requireCurrent(WebSecurityFileConfig.class).snapshot();
+            var checks = new ArrayList<Runnable>();
             var values = clients.list().stream().filter(value -> machine(value.clientId()))
                     // 2026/11/05：公开连接端口可能由 TLS 代理提供，与后端监听端口分别展示。
                     .map(value -> {
+                        checks.add(clientGuard(value.clientId(), guard));
                         var address = endpoints.address(value.clientId(), active.publicOrigin());
                         return new MachineTokens.Client(value.clientId(), value.name(),
                                 policy(disk.machineTokens(), value.clientId()), policy(active.machineTokens(), value.clientId()),
-                                address.toString(), address.getPort() == -1 ? 443 : address.getPort(), endpoints.backendPort());
+                                address.toString(), address.getPort() == -1 ? 443 : address.getPort(),
+                                endpoints.backendPort(), value.pluginId());
                     })
                     .toList();
+            checks.forEach(Runnable::run);
             guard.run();
             return new MachineTokens.View(snapshot.revision(), document.runtime(), values);
         });
@@ -165,6 +170,7 @@ public final class MachineTokenService {
 
     /**
      * 只发布机器策略，发布后原管理员会话失效，但成功结果仍交还本次请求。
+     * 2026/11/07：只对发生变更的客户端固定插件代次，关闭后的入口不能借整体应用修改。
      * @param application 固定磁盘版本及应用编号
      * @param guard 发布前的真实会话
      * @return 应用回执，不能把会话换代误报为保存或应用失败
@@ -185,12 +191,20 @@ public final class MachineTokenService {
             if (!snapshot.exists() || !current.equals(requested.withMachineTokens(current.machineTokens()))) {
                 throw new IllegalStateException("认证根设置还有其他未应用变更，请先在本机确认。");
             }
+            var changed = new HashSet<>(current.machineTokens().keySet());
+            changed.addAll(requested.machineTokens().keySet());
+            var checks = changed.stream().filter(client -> !Objects.equals(current.machineTokens().get(client),
+                    requested.machineTokens().get(client))).map(client -> clientGuard(client, guard)).toList();
+            Runnable checked = () -> {
+                guard.run();
+                checks.forEach(Runnable::run);
+            };
             Instant at = Instant.now();
             var receipt = new FileSettings.Receipt(application.operationId(), "APPLYING", snapshot.revision(),
                     document.runtime(), "机器策略正在应用，结果尚待确认。", List.of(), at, false);
             var entry = new FileConfigOperations.Entry(ACTOR, SECTION, fingerprint, snapshot.revision(), snapshot.revision(), receipt);
             journal.put(application.operationId(), entry);
-            var stamp = document.publish(snapshot.revision(), candidate, guard);
+            var stamp = document.publish(snapshot.revision(), candidate, checked);
             // 2026/11/04：授权已在实际发布前复核，不能再用刚被本次变更撤销的会话判定失败。
             receipt = new FileSettings.Receipt(application.operationId(), "APPLIED", snapshot.revision(), stamp,
                     "机器策略已应用。请重新登录；原机器连接在后续收发时复核，新连接使用新策略。", List.of(), at, false);
@@ -200,6 +214,7 @@ public final class MachineTokenService {
     }
 
     /**
+     * 2026/11/07：具体客户端回执同样要求该入口当前可用，整体应用回执仍可跨重新登录恢复。
      * @param operation 原编号
      * @param guard 当前有效会话，包括重新登录后的管理员
      * @return 原机器令牌操作的恢复回执，不导出候选秘密
@@ -211,6 +226,9 @@ public final class MachineTokenService {
                     || !(entry.section().equals(SECTION) || entry.section().startsWith(SECTION + "."))) {
                 throw new NoSuchElementException("原机器令牌操作不存在或已经过期。");
             }
+            var checked = entry.section().equals(SECTION) ? guard
+                    : clientGuard(entry.section().substring(SECTION.length() + 1), guard);
+            checked.run();
             return FileSettingsService.recover(journal, operation, entry, document);
         }));
     }

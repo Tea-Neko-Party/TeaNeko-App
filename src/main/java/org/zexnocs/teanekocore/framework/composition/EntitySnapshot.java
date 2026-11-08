@@ -1,6 +1,12 @@
 package org.zexnocs.teanekocore.framework.composition;
 
-import java.util.*;
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -14,7 +20,7 @@ import java.util.stream.Collectors;
  * @since 4.5.0-l
  * @version 4.5.0-l
  */
-public final class EntitySnapshot implements ComponentView {
+public final class EntitySnapshot implements IComponentView {
     private final EntityId id;
     private final long revision;
     private final Map<String, ComponentPatch.Change> components;

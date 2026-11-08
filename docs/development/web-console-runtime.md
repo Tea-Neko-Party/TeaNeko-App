@@ -96,10 +96,10 @@ max-runs 范围为 100–10000；max-logs 为 100–20000；retention-minutes �
 
 ## 扩展与安全
 
-Core 运行与日志分别贡献 `teaneko.core:runtime`、`teaneko.core:logs`；聊天计划贡献 `teaneko.agent:schedules`。三项均须列入本机 management-resources；旧配置文件不会因模板升级自动增加白名单，需本机明确补充后重载并重新登录。
+Core 运行与日志分别贡献 `teaneko.core:runtime`、`teaneko.core:logs`；聊天计划贡献 `agent.automation:schedules`。登录后默认开放三项注册资源；显式启用 `local-allowlist-enabled` 时才要求列入 `management-resources`。旧列表继续按精确键迁移，但默认访问不依赖旧列表是否完整。定时规则和单次任务携带 pluginId，可按插件筛选；停用后相应目录与日志来源隐藏。
 
-全局资源实现 GlobalManagementResource，经 `POST /api/v1/management/{resource}` 进入原 ManagementGateway；聊天入口不能调用全局资源，全局入口也不能拿聊天资源冒充全局能力。沿用真实会话、CSRF、插件代次及在途上下文授权，没有平行匿名管理网关。请求与真实完成阶段结束后才释放控制和并发槽。
+全局资源实现 IGlobalManagementResource，经 `POST /api/v1/management/{resource}` 进入原 ManagementGateway；聊天入口不能调用全局资源，全局入口也不能拿聊天资源冒充全局能力。沿用真实会话、CSRF、插件代次及在途上下文授权，没有平行匿名管理网关。请求与真实完成阶段结束后才释放控制和并发槽。
 
-自定义 ITimer 可覆盖 observation() 返回 TimerObservation；仅提供实际可知的规则与时间，不联网、不触发任务。其他实例级管理贡献实现 GlobalManagementResource 并注册 Spring Bean，宿主继续按本机白名单决定是否开放。日志插件通过结构化 MDC 补充关联字段，不把控制对象或凭据写入日志。
+自定义 ITimer 可覆盖 observation() 返回 TimerObservation；仅提供实际可知的规则与时间，不联网、不触发任务。其他实例级管理贡献实现 IGlobalManagementResource 并注册 Spring Bean，宿主默认向登录管理员开放注册资源，本机可选白名单用于收窄。日志插件通过结构化 MDC 补充关联字段，不把控制对象或凭据写入日志。
 
 必要测试使用真实本地执行器、计时器、原 EasyData 事务夹具与真实 MVC 安全链；页面另外使用离线 API 夹具。真实数据库、调度负载、日志后端重配置和公网部署仍需按部署清单实机验证。

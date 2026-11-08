@@ -1,13 +1,15 @@
 package org.zexnocs.teanekoagent.integration.config;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfigParameter;
-import org.zexnocs.teanekoagent.component.llm.file_config.interfaces.ILLMFileConfigService;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfigParameter;
+import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoUserData;
@@ -20,8 +22,16 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证模型切换的 OWNER 约束、已配置路由要求和版本事务，不调用数据库或模型网络。

@@ -16,10 +16,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
+ * <br>2026/11/07：指令目录公开真实贡献插件，支持实时资格撤销。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 public final class ClientConsole {
     /** 禁止实例化协议命名空间。 */
@@ -72,16 +74,29 @@ public final class ClientConsole {
     /**
      * 原目录中明确允许管理来源的方法。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/07：管理命令公开真实贡献者的插件归属。
      *
      * @param usage 已注册命令或子命令
      * @param description 原中文说明
      * @param sendsMessages 是否声明向真实目标发送
+     * @param pluginId 真实命令贡献者的插件归属，宿主方法可为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.9.0-l
      */
-    public record Command(String usage, String description, boolean sendsMessages) {}
+    public record Command(String usage, String description, boolean sendsMessages,
+            @org.jspecify.annotations.Nullable String pluginId) {
+        /**
+         * 2026/11/07：保留宿主命令原构造入口。
+         * @param usage 已注册命令用法
+         * @param description 中文说明
+         * @param sendsMessages 是否可能发送消息
+         */
+        public Command(String usage, String description, boolean sendsMessages) {
+            this(usage, description, sendsMessages, null);
+        }
+    }
 
     /**
      * 指令目录与当前目标状态。

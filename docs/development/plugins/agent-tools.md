@@ -1,10 +1,12 @@
 # 注解式 Agent 工具
 
-v4.8.0-l 的显式装配须安装 `tool` 才会选入工具。`@TeaNekoAgentToolClass(requires = {"memory"})` 可进一步要求业务组件；未安装时不解析或执行这些工具。客户端、条件和权限约束继续保留。“API 文档 → 工具目录”展示注解参数，不代表当前聊天已获授权。
+v4.9.0-l 的显式装配须安装 `tool` 才会选入工具。`@TeaNekoAgentToolClass(requires = {"memory"})` 可进一步要求业务组件；未安装时不解析或执行这些工具。客户端、条件和权限约束继续保留。“API 文档 → 工具目录”展示注解参数，不代表当前聊天已获授权。
 
-适用版本：v4.8.0-l。普通工具使用两个注解即可注册，一个工具类只声明一个工具方法，不必实现工具接口或手写 JSON schema。业务类必须已是 Spring Bean，例如使用 `@Service`、`@Component` 或返回具体类型的 `@Bean`。
+适用版本：v4.9.0-l。普通工具使用工具注解和插件归属声明注册，一个工具类只声明一个工具方法，不必实现工具接口或手写 JSON schema。业务类必须已是 Spring Bean，例如使用 `@Service`、`@Component` 或返回具体类型的 `@Bean`。
 
 ## 最小示例
+
+先按[插件底座指南](core.md)注册 ID 为 `example.text`、依赖 `teaneko.agent` 的 `@TeaNekoPlugin`，再提供以下 Spring Bean。
 
 ```java
 import org.springframework.stereotype.Service;
@@ -12,16 +14,20 @@ import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
 import org.zexnocs.teanekocore.command.api.DefaultValue;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.plugin.PluginOwned;
 
 /**
  * 提供文本重复工具。
+ * <br>2026/11/07：声明独立插件归属。
+ *
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 @Service
 @TeaNekoAgentToolClass("text-utils")
+@PluginOwned("example.text")
 public class TextRepeatTool {
     /**
      * 返回指定次数的文字，实际业务限制仍由方法校验。
@@ -42,7 +48,7 @@ public class TextRepeatTool {
 }
 ```
 
-该工具归属自动能力 `teaneko.agent:text-utils`。默认安装到沿用宿主默认能力的实例；显式选择 features 的实例须包含这个 key。实例仍须允许 `AgentActivity.TOOL`，并通过原 scope 开关、准入及预算检查。
+该工具归属自动能力 `example.text:text-utils`。默认安装到沿用宿主默认能力的实例；显式选择 features 的实例须包含这个 key。实例仍须允许 `AgentActivity.TOOL`，并通过原 scope 开关、准入及预算检查。
 
 生产注册表在初始化或显式重扫时编译类注解、方法规格、参数绑定规则和代理调用目录；每轮只读缓存，权限、组件装配和客户端状态仍实时复核。参数改名、默认值及 DTO 展开也不在执行期重新读取注解。独立宿主直接使用 `TeaNekoAgentToolMethods.select` 前，须在初始化时对实际 Bean 调用 `TeaNekoAgentToolMethods.prepare(bean)`；不能在消息路径临时扫描。未准备的类型明确报错，保留 Spring 代理调用，不绕过拦截器。
 
@@ -66,7 +72,7 @@ public class TextRepeatTool {
 | `@TeaNekoAgentToolParam(allowedValues = {"sender", "replied"})` | 限制字符串枚举；已有 Java 枚举直接使用枚举类型即可 |
 | `@TeaNekoAgentToolParam(flatten = true)` | 将唯一业务 DTO 的字段展开为根参数；可同时注入宿主上下文 |
 
-参数解析复用既有 LLM schema 工厂，支持 UUID、枚举、数组、集合和 DTO。DTO 字段按 Java 名称生成 schema，避免用只改变序列化名称的注解使 schema 与数据不一致。忽略字段可用 Core 的 Ignore。展开 DTO 的实际示例见 [AgentMemoryToolSource](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/AgentMemoryToolSource.java)。
+参数解析复用既有 LLM schema 工厂，支持 UUID、枚举、数组、集合和 DTO。DTO 字段按 Java 名称生成 schema，避免用只改变序列化名称的注解使 schema 与数据不一致。忽略字段可用 Core 的 Ignore。展开 DTO 的实际示例见 [AgentMemoryToolSource](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/AgentMemoryToolSource.java)。
 
 可选表示字段可省略；当前 schema 不允许显式 JSON null。默认值必须可转换且满足业务约束。schema 校验类型、必填、枚举及未知字段；范围、授权、预算和幂等仍由业务方法及原领域服务校验。
 
@@ -86,18 +92,18 @@ client 是实际请求中的客户端标识，不能由模型参数指定。客�
 | `ToolInvocationContext` | 当前 requestId、只读组件快照和借用控制 |
 | `ILLMToolCall` | 原工具调用，副作用幂等应保留它的 ID |
 
-完整包名分别为 `org.zexnocs.teanekoagent.component.tool`、`org.zexnocs.teanekoagent.component.llm.framework.tool` 和后者的 `interfaces` 子包。控制由宿主管理，工具不得关闭它或将上下文存入单例字段。
+完整包名分别为 `org.zexnocs.teanekoagent.component.tool`、`org.zexnocs.teanekoagent.llm.framework.tool` 和后者的 `interfaces` 子包。控制由宿主管理，工具不得关闭它或将上下文存入单例字段。
 
 动态工具设置 `condition = "canRead"`，类中提供 `public boolean canRead(TeaNekoAgentToolContext context)`。选择阶段及实际业务调用前后均检查该条件；执行条件撤销会停止整轮交互，已取到的内容不会交付模型。条件必须是无副作用的快速准入读取；选择阶段没有 call/invocation，不能在其中调用 requireInvocation()。依赖资料的工具根据 context.input() 中实际保留的片段决定可见性。
 
-业务仍须调用原授权服务；参考 [InfoUserMessagesTool](../../../src/main/java/org/zexnocs/teanekoplugin/general/info/InfoUserMessagesTool.java) 的独立留言工具及其复用的 DEBUG 检查，以及 [AgentCommandToolSource](../../../src/main/java/org/zexnocs/teanekoagent/integration/command/AgentCommandToolSource.java) 的原命令链。不从业务 JSON 接收 actor、角色或可信 scope。
+业务仍须调用原授权服务；参考 [InfoUserMessagesTool](../../../src/main/java/org/zexnocs/teanekoplugin/general/info/InfoUserMessagesTool.java) 的独立留言工具及其复用的 DEBUG 检查，以及 [AgentCommandToolSource](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/integration/command/AgentCommandToolSource.java) 的原命令链。不从业务 JSON 接收 actor、角色或可信 scope。
 
 ## 返回值与异步
 
 - String 原样作为结果；普通 DTO 转 JSON；void/null 业务值转为空字符串。
 - CompletionStage 或 CompletableFuture 等待真实完成再处理结果；声明阶段却返回 null 会失败。返回完整组合阶段，不启动后台工作后提前报告成功。
 - 图像工具明确返回 `LLMToolOutput` 或 `CompletionStage<LLMToolOutput>`；使用 `new LLMToolOutput(文字, List<ImageLLMContentPart>)`。普通 JSON 里的 URL 不会自动成为视觉输入。
-- 图像结果沿用原数量、容量、视觉模型能力及历史投影检查；参考 [OnebotMessageTool.getMessage](../../../src/main/java/org/zexnocs/teanekoclient/onebot/agent/OnebotMessageTool.java)，来源校验和图像投影集中在 [OnebotAgentSupport](../../../src/main/java/org/zexnocs/teanekoclient/onebot/agent/OnebotAgentSupport.java)。
+- 图像结果沿用原数量、容量、视觉模型能力及历史投影检查；参考 [OnebotMessageTool.getMessage](../../../src/main/java/org/zexnocs/teanekoplugin/onebot/common/agent/OnebotMessageTool.java)，来源校验和图像投影集中在 [OnebotAgentSupport](../../../src/main/java/org/zexnocs/teanekoplugin/onebot/common/agent/OnebotAgentSupport.java)。
 
 业务方法、完成检查和序列化使用宿主借用的业务执行器，不创建第二套线程池。取消/超时结束等待并拒绝迟到结果，不承诺强制中断任意同步业务或回滚外部副作用。业务适配器继续按原控制释放实际 IO 资源。
 
@@ -105,14 +111,14 @@ client 是实际请求中的客户端标识，不能由模型参数指定。客�
 
 ## 插件归属与高级入口
 
-普通应用工具默认归属 `teaneko.agent`。独立插件提供 PluginModule，并在类上用 `pluginId` 或 Core `@PluginOwned` 声明所属插件；宿主核对插件注册、依赖、逻辑开关和版本。仅希望显式安装时设置 `defaultEnabled = false`，然后在 AgentDefinition.features 选择自动能力。
+工具优先继承 Core `@PluginOwned` 声明，也可用 `@TeaNekoAgentToolClass.pluginId` 明确指定；未声明的宿主工具在公开目录中使用空插件 ID，内部执行桥保留独立宿主能力 `teaneko.agent`。业务插件通过 @TeaNekoPlugin 注册身份并显式声明归属；宿主核对插件注册、依赖、逻辑开关和版本。仅希望显式安装时设置 `defaultEnabled = false`，然后在 AgentDefinition.features 选择自动能力。
 
 注册时读取 Bean 类型元数据，实际选择才取得业务 Bean。工厂方法应返回可识别的具体提供者类型；无法从接口返回类型预知的懒 FactoryBean 产品不属于此自动发现入口。注册后动态添加新 Bean 不会重建既有能力目录。
 
 内置记忆、历史、命令、平台和资料工具使用独立的注解提供者；既有组合能力使用 `managedByFeature = true`，由原 Feature 显式调用同一 TeaNekoAgentToolMethods 解析器，保持能力 ID 和 Prompt 归属。普通新工具保持默认 false；自动能力与既有能力重名会在注册阶段报错。
 
-一个工具类只声明一个 `@TeaNekoAgentTool` 方法；查询、授权和转换共用领域服务。同一能力下的多个工具类可使用相同的类级 `value`，但工具名必须不同。平台实现放在 `teanekoclient/<客户端>/agent`，由客户端主动适配 Agent，不要求底层组件写死平台能力标识。
+一个工具类只声明一个 `@TeaNekoAgentTool` 方法；查询、授权和转换共用领域服务。同一能力下的多个工具类可使用相同的类级 `value`，但工具名必须不同。官方客户端的协议适配放在 `teanekoclient/<客户端>/agent`，业务工具放在 `teanekoplugin/<分类>/<插件>/agent` 并声明客户端需求，不要求底层组件写死平台能力标识。
 
-需要同时贡献平台参考资料时，由 `AgentFeature` 持有工具和 Prompt 端口。其 `assemblyRequirements()` 可返回 `Set.of("tool")`，仅当这些组件全部装配、`defaultEnabled()` 为真且所属插件启用时自动接入；空集合不触发此规则。旧实例和显式能力选择保留原行为。共享支持 Bean 不应另外实现宿主附加来源接口，避免同一资料重复装配。
+需要同时贡献平台参考资料时，由 `IAgentFeature` 持有工具和 Prompt 端口。其 `assemblyRequirements()` 可返回 `Set.of("tool")`，仅当这些组件全部装配、`defaultEnabled()` 为真且所属插件启用时自动接入；空集合不触发此规则。旧实例和显式能力选择保留原行为。共享支持 Bean 不应另外实现宿主附加来源接口，避免同一资料重复装配。
 
 依赖动态后端或真实 Skill 目录的工具继续使用底层 LLMToolBinding。组件、System、资料与事件的组合方式见 [Agent 插件指南](agent.md)；只新增普通工具时无需实现这些接口。

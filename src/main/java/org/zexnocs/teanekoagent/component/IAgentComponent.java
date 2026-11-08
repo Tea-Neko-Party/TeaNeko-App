@@ -1,8 +1,10 @@
 package org.zexnocs.teanekoagent.component;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
-import org.zexnocs.teanekoagent.plugin.AgentFeature;
+import org.zexnocs.teanekoagent.plugin.IAgentFeature;
 import org.zexnocs.teanekocore.framework.composition.ComponentKey;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import tools.jackson.databind.JsonNode;
@@ -45,7 +47,7 @@ public interface IAgentComponent {
         return Set.of();
     }
     /** @return 在明确阶段执行的 ECS 系统，读取本组件参数并返回受控补丁。 */
-    default List<AgentFeature.SystemContribution> systems() {
+    default List<IAgentFeature.SystemContribution> systems() {
         return List.of();
     }
 

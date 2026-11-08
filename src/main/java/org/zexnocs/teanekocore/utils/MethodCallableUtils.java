@@ -1,7 +1,9 @@
 package org.zexnocs.teanekocore.utils;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.lang.annotation.Annotation;
 import java.lang.invoke.MethodType;
@@ -9,7 +11,7 @@ import java.lang.invoke.SerializedLambda;
 import java.lang.reflect.Method;
 
 /**
- * 用于从 {@link org.zexnocs.teanekocore.framework.function.MethodCallable} 中提取注解信息的工具类。
+ * 用于从 {@link org.zexnocs.teanekocore.framework.function.IMethodCallable} 中提取注解信息的工具类。
  * <br>2026/11/04：按完整方法描述符解析重载，使用原加载器且不提前初始化业务类型。
  *
  * @author zExNocs
@@ -22,12 +24,12 @@ public enum MethodCallableUtils {
     INSTANCE;
 
     /**
-     * 从 {@link MethodCallable} 中提取方法信息。
+     * 从 {@link IMethodCallable} 中提取方法信息。
      *
-     * @param callable 包含方法引用的 {@link MethodCallable} 实例
+     * @param callable 包含方法引用的 {@link IMethodCallable} 实例
      * @return {@link Method } 提取到的方法信息，如果提取失败则返回 null
      */
-    public @Nullable Method extractMethod(MethodCallable<?> callable) {
+    public @Nullable Method extractMethod(IMethodCallable<?> callable) {
         try {
             // 通过反射获取 lambda 表达式的实现方法信息。
             Method writeReplace = callable.getClass().getDeclaredMethod("writeReplace");
@@ -51,15 +53,15 @@ public enum MethodCallableUtils {
     }
 
     /**
-     * 从 {@link MethodCallable} 中提取指定注解的信息。
+     * 从 {@link IMethodCallable} 中提取指定注解的信息。
      * 2026/11/04：标注未知来源或未声明注解时的原空值合同。
      *
-     * @param callable          包含方法引用的 {@link MethodCallable} 实例
+     * @param callable          包含方法引用的 {@link IMethodCallable} 实例
      * @param annotationClass   要提取的注解类型
      * @param <T> 注解类型
      * @return 注解实例；来源未知或未声明时为空
      */
-    public <T extends Annotation> @Nullable T getAnnotation(MethodCallable<?> callable, Class<T> annotationClass) {
+    public <T extends Annotation> @Nullable T getAnnotation(IMethodCallable<?> callable, Class<T> annotationClass) {
         Method method = extractMethod(callable);
         if (method != null) {
             return method.getAnnotation(annotationClass);

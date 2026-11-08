@@ -1,24 +1,39 @@
 package org.zexnocs.teanekoagent.integration.message;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
 
 import jakarta.annotation.PreDestroy;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.component.expression.AgentReplyPlan;
-import org.zexnocs.teanekoagent.component.expression.ExpressionDelivery;
-import org.zexnocs.teanekoagent.component.expression.ReplyCoordinator;
-import org.zexnocs.teanekoagent.component.expression.adapter.AgentReplySender;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.memory.history.AgentDeliveryService;
-import org.zexnocs.teanekoagent.component.memory.history.HistoryContext;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.tool.command.CommandInvocationReceipt;
-import org.zexnocs.teanekoagent.component.tool.command.ICommandAttemptStore;
-import org.zexnocs.teanekoagent.integration.command.NativeCommandBridge;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentDeliveryException;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentUserText;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
+import org.zexnocs.teanekoagent.runtime.IAgentRegistry;
+import org.zexnocs.teanekoagent.runtime.IAgentService;
+import org.zexnocs.teanekoagent.runtime.context.IAgentCapturedContext;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplySender;
+import org.zexnocs.teanekoagent.runtime.delivery.IAgentDeliveryLedger;
+import org.zexnocs.teanekoagent.runtime.delivery.IAgentReplyDelivery;
+import org.zexnocs.teanekoagent.runtime.delivery.ReplyCoordinator;
+import org.zexnocs.teanekoagent.runtime.operation.AgentOperationReceipt;
+import org.zexnocs.teanekoagent.runtime.operation.IAgentOperationStore;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -31,6 +46,8 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 自动消息的模型、持久化防重与顺序发送闭环，不借用命令 DEBUG 或内部客户端。
@@ -47,10 +64,11 @@ import java.util.concurrent.CompletionStage;
  * <br>2026/11/05：自动回复失败可提示具体原因，取消和撤权不补发。
  *
  * <br>2026/11/05：发送前复核分别报告拒绝状态、目标和计划变化，保留原诊断。
+ * <br>2026/11/07：通过引用端口资格选择可选记忆，停用后的基础自动回复不触碰记忆存储。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.9.0-l
  */
 @Service
 public final class AgentAutomaticGateway implements AutoCloseable {
@@ -67,25 +85,25 @@ public final class AgentAutomaticGateway implements AutoCloseable {
     private final IAgentFactory factory;
     private final IAgentRegistry registry;
     private final IAgentService agents;
-    private final IAgentMemoryReferences references;
-    private final ICommandAttemptStore attempts;
+    private final IAgentContextReferences references;
+    private final IAgentOperationStore attempts;
     private final AgentAutomaticAccess access;
     private final AgentTriggerGate triggers;
-    private final NativeCommandBridge nativeCommands;
+    private final NativeMessageSources nativeCommands;
     private @Nullable AgentHandle handle;
     private boolean closed;
-    private @Nullable AgentDeliveryService delivery;
+    private @Nullable IAgentDeliveryLedger delivery;
     // 2026/11/03：拥有者只标记本入口生命周期，不作为持久身份或目标边界。
     private final String replyOwner = "automatic:" + UUID.randomUUID();
     private @Nullable ReplyCoordinator coordinator;
-    private @Nullable ExpressionDelivery expressionDelivery;
+    private @Nullable IAgentReplyDelivery expressionDelivery;
     /**
      * 2026/11/03：完整默认装配共享真实目标队列，旧独立宿主保持原行为。
      * @param delivery 表达交付边界
      * @param coordinator 目标顺序与取消
      */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void setExpressions(ExpressionDelivery delivery, ReplyCoordinator coordinator) {
+    public void setExpressions(IAgentReplyDelivery delivery, ReplyCoordinator coordinator) {
         // 2026/11/03：可选装配的非空依赖分别赋值，保留未装配时的可空字段状态。
         this.expressionDelivery = delivery;
         this.coordinator = coordinator;
@@ -96,7 +114,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      * @param delivery 持久回执边界
      */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void setDelivery(@Nullable AgentDeliveryService delivery) {
+    public void setDelivery(@Nullable IAgentDeliveryLedger delivery) {
         // 2026/11/03：参数与可清除的可空字段契约一致。
         this.delivery = delivery;
     }
@@ -113,8 +131,8 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      * @param nativeCommands 真实命令来源租约，仍遵守原工具开关和权限
      */
     public AgentAutomaticGateway(IAgentFactory factory, IAgentRegistry registry, IAgentService agents,
-            IAgentMemoryReferences references, ICommandAttemptStore attempts, AgentAutomaticAccess access, AgentTriggerGate triggers,
-            NativeCommandBridge nativeCommands) {
+            IAgentContextReferences references, IAgentOperationStore attempts, AgentAutomaticAccess access, AgentTriggerGate triggers,
+            NativeMessageSources nativeCommands) {
         this.factory = factory; this.registry = registry; this.agents = agents; this.references = references;
         this.attempts = attempts; this.access = access; this.triggers = triggers;
         this.nativeCommands = nativeCommands;
@@ -144,7 +162,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      * @return 全部实际交付成功时为真
      */
     public CompletionStage<Boolean> respond(ITeaNekoMessageData data, NativeMessageInput input, AgentTriggerGate.Ticket ticket,
-            @Nullable HistoryContext captured) {
+            @Nullable IAgentCapturedContext captured) {
         if (coordinator != null) {
             var actor = ticket.signal().actor();
             var id = requestId(actor);
@@ -168,25 +186,31 @@ public final class AgentAutomaticGateway implements AutoCloseable {
      * @return 实际交付状态
      */
     private CompletionStage<Boolean> respondPrepared(ITeaNekoMessageData data, NativeMessageInput input, AgentTriggerGate.Ticket ticket,
-            @Nullable HistoryContext captured, @Nullable ExecutionControl control) {
+            @Nullable IAgentCapturedContext captured, @Nullable ExecutionControl control) {
         try {
             triggers.verify(ticket);
             var actor = ticket.signal().actor();
-            if (!actor.equals(NativeCommandBridge.actor(data)) || !input.hasContent() || input.text().length() > 65536) {
+            if (!actor.equals(NativeMessageSources.actor(data)) || !input.hasContent() || input.text().length() > 65536) {
                 throw new IllegalArgumentException("自动消息来源或文本无效。");
             }
             var id = requestId(actor);
-            var fixed = captured == null
-                    ? references.resolve(actor.scope())
-                    : references.verify(captured.reference()).thenApply(ignored -> captured.reference());
+            // 2026/11/07：未选择引用能力时保持基础模型入口；已采集凭据仍严格复核而不静默降级。
+            CompletionStage<? extends @Nullable IAgentContextReference> fixed;
+            if (captured != null) {
+                fixed = references.verify(captured.reference()).thenApply(ignored -> captured.reference());
+            } else if (references.available(actor.scope())) {
+                fixed = references.resolve(actor.scope());
+            } else {
+                fixed = CompletableFuture.completedStage(null);
+            }
             return fixed.thenCompose(reference -> {
                 // 2026/11/05：异步资料查询结束后不得继续提交已经停止的请求。
                 if (control != null) {
                     control.checkActive();
                 }
                 triggers.verify(ticket);
-                var attempt = new ICommandAttemptStore.Attempt(id, "automatic-entry", actor, reference, input.digest(),
-                        ICommandAttemptStore.Kind.CHAT_ENTRY);
+                var attempt = new IAgentOperationStore.Attempt(id, "automatic-entry", actor, reference, input.digest(),
+                        IAgentOperationStore.Kind.CHAT_ENTRY);
                 return attempts.claim(attempt).thenCompose(claim -> {
                     if (!claim.acquired()) {
                         return CompletableFuture.completedFuture(false);
@@ -226,8 +250,8 @@ public final class AgentAutomaticGateway implements AutoCloseable {
                     return work.whenComplete((sent, failure) -> access.release(ticket))
                             .handle((sent, failure) -> {
                                 var status = failure == null
-                                        ? CommandInvocationReceipt.Status.COMPLETED : CommandInvocationReceipt.Status.FAILED;
-                                return attempts.finish(attempt, new CommandInvocationReceipt(status)).thenApply(receipt -> {
+                                        ? AgentOperationReceipt.Status.COMPLETED : AgentOperationReceipt.Status.FAILED;
+                                return attempts.finish(attempt, new AgentOperationReceipt(status)).thenApply(receipt -> {
                                     if (failure != null) {
                                         throw new CompletionException(failure);
                                     }
@@ -272,7 +296,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
             }
             triggers.verify(ticket);
             if (!failureReplies.test(request.actor().scope())
-                    || !request.actor().equals(NativeCommandBridge.actor(data))) {
+                    || !request.actor().equals(NativeMessageSources.actor(data))) {
                 return CompletableFuture.completedStage(false);
             }
             return data.getMessageSender().sendReplyMessageAsync("Agent 未能回复：" + result.failureDescription())
@@ -280,7 +304,9 @@ public final class AgentAutomaticGateway implements AutoCloseable {
         }
         // 2026/11/03：表达计划复用原票据和目标守卫，完成段数不通过重解析推断。
         if (result.replyPlan() != null) {
-            if (result.replyPlan().steps().isEmpty()) { return CompletableFuture.completedStage(false); }
+            if (!result.replyPlan().hasOutput()) {
+                return CompletableFuture.completedStage(false);
+            }
             if (expressionDelivery == null || control == null) { return CompletableFuture.failedStage(new IllegalStateException("表达计划缺少实际交付装配。")); }
             return expressionDelivery.send(data, request, result, control, () -> agents.retry(target, request).thenAccept(checked -> {
                 synchronized (this) { if (closed) { throw new IllegalStateException("自动回复入口已关闭。"); } }
@@ -288,7 +314,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
                 if (checked.status() != AgentRunResult.Status.SUCCESS) {
                     throw new AgentDeliveryException(checked);
                 }
-                if (!NativeCommandBridge.actor(data).equals(request.actor())) {
+                if (!NativeMessageSources.actor(data).equals(request.actor())) {
                     throw new AgentDeliveryException("自动回复的发送者或聊天目标已变化，已停止交付。");
                 }
                 if (!java.util.Objects.equals(checked.replyPlan(), result.replyPlan())) {
@@ -311,7 +337,7 @@ public final class AgentAutomaticGateway implements AutoCloseable {
                 }
                 synchronized (this) { if (closed) { throw new IllegalStateException("自动回复入口已关闭。"); } }
                 triggers.verify(ticket);
-                if (!request.actor().equals(org.zexnocs.teanekoagent.integration.command.NativeCommandBridge.actor(data))) {
+                if (!request.actor().equals(org.zexnocs.teanekoagent.integration.message.NativeMessageSources.actor(data))) {
                     throw new IllegalStateException("自动回复的原生目标已变化。");
                 }
                 return AgentReplySender.send(data, part);

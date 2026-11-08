@@ -3,6 +3,7 @@ package org.zexnocs.teanekoapp.web.settings;
 import org.jspecify.annotations.Nullable;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoapp.web.plugins.PluginOwners;
 import org.zexnocs.teanekocore.database.configdata.scanner.ConfigManager;
 import org.zexnocs.teanekocore.framework.extension.AnnotatedBeanRegistry;
 import org.zexnocs.teanekocore.reload.api.IScanner;
@@ -17,10 +18,11 @@ import java.util.Map;
  * 在重载服务初始化阶段扫描，避免目录构造期间提前实例化业务插件。
  * <br>2026/11/05：目录接入显式重扫生命周期，查询不触发首次扫描或失败重试。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.1-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Service
 public final class ChatSettingsDirectory implements IScanner {
@@ -125,15 +127,29 @@ public final class ChatSettingsDirectory implements IScanner {
     /**
      * 配置来源与元数据，不作为浏览器响应导出。
      *
+     * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
      * @param id 配置区稳定键
      * @param group 稳定分组
      * @param owner 所属原 Bean 类型
      * @param section 专用或自动投影
+     * @param pluginId 所属插件 ID，宿主未声明归属时为空
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.7.1-l
-     * @version 4.7.1-l
+     * @version 4.9.0-l
      */
     @com.fasterxml.jackson.annotation.JsonIgnoreType
-    public record Entry(String id, String group, Class<?> owner, IChatSettingsSection section) {}
+    // 2026/11/07：配置归属随发现快照发布，页面请求不重复解析注解。
+    public record Entry(String id, String group, Class<?> owner, IChatSettingsSection section,
+                        @Nullable String pluginId) {
+        /**
+         * @param id 配置区标识
+         * @param group 显示分组
+         * @param owner 贡献类型
+         * @param section 原配置端口
+         */
+        public Entry(String id, String group, Class<?> owner, IChatSettingsSection section) {
+            this(id, group, owner, section, PluginOwners.resolve(owner, section.manager().configType()));
+        }
+    }
 }

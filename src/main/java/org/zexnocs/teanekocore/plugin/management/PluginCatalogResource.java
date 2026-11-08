@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.plugin.management;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 
@@ -17,7 +19,7 @@ import java.util.concurrent.CompletionStage;
  * @version 4.6.0-l
  */
 @Component
-public final class PluginCatalogResource implements ManagementResource<PluginCatalogResource.Query, List<PluginRegistry.View>> {
+public final class PluginCatalogResource implements IManagementResource<PluginCatalogResource.Query, List<PluginRegistry.View>> {
     private final PluginRegistry plugins;
     /**
      * 借用统一插件目录。

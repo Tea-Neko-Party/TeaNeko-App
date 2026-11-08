@@ -16,14 +16,14 @@
 
 | 本次工作 | 按需阅读 |
 | --- | --- |
-| 已交付功能、配置及扩展 API | [表达模块说明](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/README.md) |
+| 已交付功能、配置及扩展 API | [表达模块说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/README.md) |
 | 协议、人格语气、等待及顺序 | [拟人表达设计](4.6.2-expression-specification.md) |
 | 注解、scanner、注册键及扩展选择 | [注解扩展设计](4.6.2-extension-specification.md) |
-| 当前素材配置、采集及后端扩展 | [素材模块说明](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md) |
+| 当前素材配置、采集及后端扩展 | [素材模块说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md) |
 | 素材收集、视觉分析、分类、配额及管理目标 | [表情包设计](4.6.2-sticker-specification.md) |
 | 已有平台回复和原生消息 | [平台说明](../../../src/main/java/org/zexnocs/teanekoagent/integration/message/README.md) |
-| 真实发送状态与历史 | [持久历史](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/history/README.md) |
-| 人格与观察式表达 | [人格说明](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/README.md#持久观察式人格) |
+| 真实发送状态与历史 | [持久历史](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/history/README.md) |
+| 人格与观察式表达 | [人格说明](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/README.md#持久观察式人格) |
 | 工具、事件、Feature 和管理扩展 | [Agent 插件指南](../../development/plugins/agent.md)、[管理扩展](../../development/plugins/management.md) |
 
 外部源码调研只保存在 temp/docs。正式文档只描述本项目职责与实现结论；不复制参考项目名称、地址或对照表。

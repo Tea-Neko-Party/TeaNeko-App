@@ -56,11 +56,12 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：验证方法声明、分页前分类、只读门禁与实际 Spring 注册任务关联。
  * <br>2026/11/05：重复页面观测只读来源缓存，显式重扫失败保留旧目录。
+ * <br>2026/11/07：实际方法声明改为显式初始化缓存。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Timeout(10)
 class RuntimeObservationTest {
@@ -128,6 +129,8 @@ class RuntimeObservationTest {
             when(scanner.getBeansOfType(ITimerViewSource.class)).thenReturn(Map.of("spring", source));
             sources.init();
             sources.init();
+            // 2026/11/07：方法发现只在显式初始化完成，页面查询不懒扫描。
+            source.init();
             var directory = new TimerDirectory();
             directory.installSources(sources);
             var page = directory.page("", 10, "agent.memory", "FIXED_DELAY", "", "测试");

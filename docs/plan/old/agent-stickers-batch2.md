@@ -1,6 +1,6 @@
 # 第二批素材采集交付记录
 
-日期：2026/11/03。当前进度与下一步统一见[实施入口](agent-expression-stickers.md)，配置、API 和生命周期统一见[素材模块](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md)。本记录保留本次实现及离线验收事实，不作为另一份当前规格。
+日期：2026/11/03。当前进度与下一步统一见[实施入口](agent-expression-stickers.md)，配置、API 和生命周期统一见[素材模块](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md)。本记录保留本次实现及离线验收事实，不作为另一份当前规格。
 
 - 新增真实人类图片监听与注解收藏工具，普通聊天不等视觉任务；当前消息/直接引用经原消息端口验证，工具不接受任意 URL 或跨区域身份。
 - 队列、限额、内容摘要、分析缓存和文件回收由 agent.sticker.v1 的专用 DTO 根事务仲裁。实例 catalog-id 与共享素材卷身份绑定，记忆 clear/reset 不触及图库。

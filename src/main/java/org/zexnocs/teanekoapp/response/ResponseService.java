@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.response;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.zexnocs.teanekoapp.response.exception.ResponseEchoDuplicateException;
 import org.zexnocs.teanekoapp.response.interfaces.IResponseService;
 import org.zexnocs.teanekoapp.sender.api.ISendData;
@@ -8,7 +10,7 @@ import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.event.core.EventHandler;
 import org.zexnocs.teanekocore.event.core.EventListener;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.DeserializationFeature;
@@ -35,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @EventListener
 public class ResponseService implements IResponseService {
     /// 用于存放 echo → responseData 的映射关系
-    private final Map<String, Pair<UUID, ISendData<?>>> echoToSendDataMap = new ConcurrentHashMap<>();
+    private final Map<String, IPair<UUID, ISendData<?>>> echoToSendDataMap = new ConcurrentHashMap<>();
 
     /// objectMapper，允许将单个对象转化成 list
     private final ObjectMapper defaultObjectMapper;

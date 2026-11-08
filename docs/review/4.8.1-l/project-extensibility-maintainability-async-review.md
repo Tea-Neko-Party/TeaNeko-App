@@ -69,7 +69,7 @@
 - [AgentComponentRegistry](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java) 缓存已校验的静态声明，向参数校验、运行装配和 Web 目录提供共同元数据；[AgentComponentFeature](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentFeature.java) 将原 Spring 组件桥接到既有能力执行链，不重新实例化业务服务。
 - [SystemPipeline](../../../src/main/java/org/zexnocs/teanekocore/framework/composition/SystemPipeline.java) 在编译时检查重复系统、依赖环及无顺序的多个写入者，运行时检查实体版本和补丁范围。它不只是一个按顺序调用函数的列表。
 - [TeaNekoAgentToolRegistry](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolRegistry.java) 和 [TeaNekoAgentToolMethods](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/TeaNekoAgentToolMethods.java) 已将注解工具纳入能力选择、可信上下文、客户端过滤和真实异步返回链。
-- [ReplyExtensionRegistry](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/ReplyExtensionRegistry.java) 按协议、版本、指令和内容类型分派；[LLMModelService](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/framework/model/LLMModelService.java) 按 `@LLMModel` 发现模型。这些位置不需要随着普通实现增加而追加供应商或内容类型分支。
+- [ReplyExtensionRegistry](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/ReplyExtensionRegistry.java) 按协议、版本、指令和内容类型分派；[LLMModelService](../../../src/main/java/org/zexnocs/teanekoagent/llm/framework/model/LLMModelService.java) 按 `@LLMModel` 发现模型。这些位置不需要随着普通实现增加而追加供应商或内容类型分支。
 - [ChatSettingsDirectory](../../../src/main/java/org/zexnocs/teanekoapp/web/settings/ChatSettingsDirectory.java) 能自动投影配置管理器，并允许明确的专用适配器；[ManagementGateway](../../../src/main/java/org/zexnocs/teanekocore/plugin/management/ManagementGateway.java) 组合管理资源，保留宿主授权和插件代次复核。
 
 ### 3.2 典型扩展场景
@@ -86,7 +86,7 @@
 | 新增模型执行适配器 | 实现 `ILLMModel` 并声明 `@LLMModel` | 0 | 模型配置、凭据、真实上下文容量仍须完整接入 |
 | 为模型增加现有格式的 Web 模板 | `@LLMConfigurationAdapter` 与模板实现 | 0，普通模板 `M_ui = 0` | 模板字段取值可扩展，不代表任意新控件都已可扩展 |
 | 新增回复协议、指令或内容类型 | 对应 `TeaNekoReply*` 注解和接口 | 0 | 精确版本与类型，不能绕过统一编译、发送守卫和回执 |
-| 新增定时业务动作 | `AgentTaskAction` Bean | 0 | [AgentScheduleConfig](../../../src/main/java/org/zexnocs/teanekoagent/component/schedule/configuration/AgentScheduleConfig.java) 已组合动作并拒绝同名，不应另建 Timer |
+| 新增定时业务动作 | `AgentTaskAction` Bean | 0 | [AgentScheduleConfig](../../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/configuration/AgentScheduleConfig.java) 已组合动作并拒绝同名，不应另建 Timer |
 | 新增聊天配置区或管理资源 | 配置管理器 / 专用配置区 / `ManagementResource` | 0，通用表单通常 `M_ui = 0` | 聊天配置不恢复本地分组白名单；文件配置仍遵守自身保护规则 |
 | 新增平台客户端与内容数据类型 | `@TeaNekoClient`、客户端接口、`@TeaNekoContentPart` | 基础注册为 0 | 完整平台还需自己的收发、身份、管理与表达适配；不能只算一个客户端类就宣称接入完成 |
 | 新增可序列化 Agent 组件 | `@TeaNekoAgentComponent`、`IAgentComponent`，贡献参数、系统、工具或资料 | 已有合同内为 0，普通字段 `M_ui = 0` | 复用四阶段和现有字段类型；替换内建人格或表达语义槽位不属于同等成本，见 E2 |
@@ -119,9 +119,9 @@
 源码事实：
 
 - [IAgentComponent](../../../src/main/java/org/zexnocs/teanekoagent/component/IAgentComponent.java) 已声明参数、字段、数据键、初始化、System、工具及资料来源；[AgentTurnPipeline.compile](../../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L125) 实际接入四个组件执行阶段。
-- [PersonalityComponent](../../../src/main/java/org/zexnocs/teanekoagent/component/personality/PersonalityComponent.java) 注入人格解析系统；[MemoryComponent](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/MemoryComponent.java) 注入输入和输出系统，真实等待历史保存；[ExpressionCompileSystem](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/ExpressionCompileSystem.java) 返回实际表达编译阶段。不是只有组件外壳或开关。
+- [PersonalityComponent](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/personality/PersonalityComponent.java) 注入人格解析系统；[MemoryComponent](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/MemoryComponent.java) 注入输入和输出系统，真实等待历史保存；[ExpressionCompileSystem](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/ExpressionCompileSystem.java) 返回实际表达编译阶段。不是只有组件外壳或开关。
 - [AgentScopeFieldChecker](../../../src/main/java/org/zexnocs/teanekoagent/integration/config/AgentScopeFieldChecker.java#L75) 保存时校验装配，[ConfigDataAgentScopePolicy](../../../src/main/java/org/zexnocs/teanekoagent/integration/config/ConfigDataAgentScopePolicy.java#L64) 运行读取时复核；[AgentComponentController](../../../src/main/java/org/zexnocs/teanekoagent/integration/web/AgentComponentController.java#L80) 提供统一字段目录，普通表单据此生成。
-- 客户端能力通过 `assemblyRequirements()` 主动声明所需组件；[ToolComponent](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/ToolComponent.java) 只依赖本层工具能力，[OnebotAgentFeature](../../../src/main/java/org/zexnocs/teanekoclient/onebot/agent/OnebotAgentFeature.java#L114) 负责平台适配，不再由 Agent 固定绑定平台能力标识。
+- 客户端能力通过 `assemblyRequirements()` 主动声明所需组件；[ToolComponent](../../../src/main/java/org/zexnocs/teanekoagent/component/tool/ToolComponent.java) 只依赖本层工具能力，[OnebotAgentFeature](../../../src/main/java/org/zexnocs/teanekoplugin/onebot/common/agent/OnebotAgentFeature.java#L114) 负责平台适配，不再由 Agent 固定绑定平台能力标识。
 - 剩余耦合是 `AgentTurnPipeline.preparePrompt` 直接消费 [PersonalityResolveSystem.SNAPSHOT](../../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L222)，`projectComponents` 直接消费 [ExpressionCompileSystem.PLAN](../../../src/main/java/org/zexnocs/teanekoagent/runtime/AgentTurnPipeline.java#L391)；旧实例兼容路径仍调用人格、历史和表达端口，[AgentExecutionConfig](../../../src/main/java/org/zexnocs/teanekoagent/configuration/AgentExecutionConfig.java) 仍显式组合部分来源。
 
 判断：在已有四阶段追加能力、使用普通字段并沿用默认宿主语义，可以静态判定 `M_core = 0`、`M_ui = 0`。替换人格快照来源、表达计划投影等内建语义则仍可能修改宿主。这是局部可替换性限制，不再是“组件没有执行闭环”。
@@ -140,7 +140,7 @@
 
 [BeanScanner](../../../src/main/java/org/zexnocs/teanekocore/utils/scanner/BeanScanner.java) 使用目标类的 `getAnnotation`，而工具方法编译已经使用 Spring 的合并注解读取；[ClassScanner](../../../src/main/java/org/zexnocs/teanekocore/utils/scanner/ClassScanner.java) 对“有注解但不满足接口”的类采取跳过，扫描异常还存在捕获 `Throwable` 后继续的路径。因此不能假定所有扩展点都支持相同的组合注解、错误声明诊断和失败语义。
 
-目录生命周期已有部分改善：[AgentComponentRegistry.entries](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java#L42) 通过同步方法和 `registered` 缓存静态目录，上次“每次重建”的判断已不适用。[LLMConfigurationDirectory.describe](../../../src/main/java/org/zexnocs/teanekoagent/component/llm/file_config/form/LLMConfigurationDirectory.java#L61) 仍每次建立模型模板及凭据输入注册表；聊天配置和文件配置目录则保留首次构建的快照。尚无测量证明这是性能热点，建议针对剩余生命周期和错误出现时机的不一致处理。
+目录生命周期已有部分改善：[AgentComponentRegistry.entries](../../../src/main/java/org/zexnocs/teanekoagent/component/AgentComponentRegistry.java#L42) 通过同步方法和 `registered` 缓存静态目录，上次“每次重建”的判断已不适用。[LLMConfigurationDirectory.describe](../../../src/main/java/org/zexnocs/teanekoagent/llm/file_config/form/LLMConfigurationDirectory.java#L61) 仍每次建立模型模板及凭据输入注册表；聊天配置和文件配置目录则保留首次构建的快照。尚无测量证明这是性能热点，建议针对剩余生命周期和错误出现时机的不一致处理。
 
 建议：
 
@@ -153,11 +153,11 @@
 
 ### E4：后端元数据扩展较好，专用前端仍是编译期显式装配——优先级 P2，按需求实施
 
-[AgentAssemblyEditor.vue](../../../frontend/src/AgentAssemblyEditor.vue#L165) 已按组件目录的 `fields`、`defaults` 和 `requires` 渲染与选择，支持 BOOLEAN、NUMBER、JSON、SECRET、LONG_TEXT、TEXT。使用这些字段类型的普通新组件无需修改宿主表单，不能继续笼统评价为“组件前端没有通用扩展”。
+[AgentAssemblyEditor.vue](../../../frontend/src/features/agent/AgentAssemblyEditor.vue#L165) 已按组件目录的 `fields`、`defaults` 和 `requires` 渲染与选择，支持 BOOLEAN、NUMBER、JSON、SECRET、LONG_TEXT、TEXT。使用这些字段类型的普通新组件无需修改宿主表单，不能继续笼统评价为“组件前端没有通用扩展”。
 
-[ModelTemplateEditor.vue](../../../frontend/src/ModelTemplateEditor.vue) 已通过后端 catalog 展示模型类型、默认值、型号、容量和图标，增加同类模板无需追加供应商分支。但该组件的 `form` 和提交逻辑仍明确列举现有字段，新协议若需要额外专用控件，不能仅靠模板默认值自动获得可编辑界面。
+[ModelTemplateEditor.vue](../../../frontend/src/features/models/ModelTemplateEditor.vue) 已通过后端 catalog 展示模型类型、默认值、型号、容量和图标，增加同类模板无需追加供应商分支。但该组件的 `form` 和提交逻辑仍明确列举现有字段，新协议若需要额外专用控件，不能仅靠模板默认值自动获得可编辑界面。
 
-[ConsoleNavigation.vue](../../../frontend/src/ConsoleNavigation.vue) 的页面类型、导航组和 [App.vue](../../../frontend/src/App.vue) 的页面装配也由源码显式定义。后端贡献了管理资源，不代表已经自动生成一个完整的新业务页面。
+[ConsoleNavigation.vue](../../../frontend/src/app/ConsoleNavigation.vue) 的页面类型、导航组和 [App.vue](../../../frontend/src/app/App.vue) 的页面装配也由源码显式定义。后端贡献了管理资源，不代表已经自动生成一个完整的新业务页面。
 
 建议优先复用已有通用字段描述和编辑器。只有确有多个独立页面扩展需求时，再增加前端构建期页面描述注册和统一导航入口，明确页面 ID、权限、标题及组件加载关系；不在后端下发可执行脚本，不引入远程任意前端插件机制。
 

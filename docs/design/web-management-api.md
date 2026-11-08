@@ -30,7 +30,7 @@
 | FileConfig 与 Core YAML 环境解析 | 已注册配置、字段解析、缓存和重载 | 原文档版本/局部编辑、原子替换、应用方确认、脱敏与占位符保留；现有 write/reload 不等于跨模块热更事务 |
 | 通用消息接口与独立 WebTeaNekoClient | 原消息、命令、工具箱、Agent 和逐段回执 | 已接通持久私聊/模拟群、成员权限、认证图片与游标补读，不依赖测试类或复用 OneBot 身份 |
 
-源码依据：[记忆管理](../../src/main/java/org/zexnocs/teanekoagent/component/memory/admin/README.md)、[配置写入端口](../../src/main/java/org/zexnocs/teanekocore/database/configdata/interfaces/IConfigDataSetService.java)、[任务服务](../../src/main/java/org/zexnocs/teanekoagent/component/schedule/AgentScheduleService.java)、[任务状态](../../src/main/java/org/zexnocs/teanekoagent/component/schedule/AgentScheduledTask.java)、[定时器端口](../../src/main/java/org/zexnocs/teanekocore/actuator/timer/interfaces/ITimerService.java)、[运行监控](../../src/main/java/org/zexnocs/teanekoagent/runtime/monitor/AgentRuntimeMonitor.java)。
+源码依据：[记忆管理](../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/admin/README.md)、[配置写入端口](../../src/main/java/org/zexnocs/teanekocore/database/configdata/interfaces/IConfigDataSetService.java)、[任务服务](../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/AgentScheduleService.java)、[任务状态](../../src/main/java/org/zexnocs/teanekoplugin/agent/automation/schedule/AgentScheduledTask.java)、[定时器端口](../../src/main/java/org/zexnocs/teanekocore/actuator/timer/interfaces/ITimerService.java)、[运行监控](../../src/main/java/org/zexnocs/teanekoagent/runtime/monitor/AgentRuntimeMonitor.java)。
 
 ## 统一应用合同
 

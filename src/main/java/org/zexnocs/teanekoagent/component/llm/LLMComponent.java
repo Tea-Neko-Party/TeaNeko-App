@@ -1,14 +1,15 @@
 package org.zexnocs.teanekoagent.component.llm;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.zexnocs.teanekoagent.component.DeclaredAgentComponent;
 import org.zexnocs.teanekoagent.component.TeaNekoAgentComponent;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfigParameter;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMOptionBoundary;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMProviderAccess;
-import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfigParameter;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMOptionBoundary;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMProviderAccess;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.PropertyNamingStrategies;
 import tools.jackson.databind.json.JsonMapper;
@@ -22,14 +23,15 @@ import java.util.Map;
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  *
  * <br>2026/11/06：声明组件显示优先级，运行依赖和装配行为不变。
+ * <br>2026/11/07：组件只适配独立 LLM 与 Agent 装配，作为系统原生能力提供。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 @TeaNekoAgentComponent(id = "llm", order = 0, name = "大语言模型", description = "必要组件；选择系统模型或仅当前聊天保存的私有模型。")
-@PluginOwned("teaneko.agent")
+// 2026/11/07：模型桥属于 Agent 底座，不声明业务插件归属。
 public final class LLMComponent extends DeclaredAgentComponent {
     private final org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser parser;
     private static final JsonMapper JSON = JsonMapper.builder()

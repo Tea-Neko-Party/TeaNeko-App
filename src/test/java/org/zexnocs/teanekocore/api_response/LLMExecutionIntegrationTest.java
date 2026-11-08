@@ -1,24 +1,26 @@
 package org.zexnocs.teanekocore.api_response;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.llm.file_config.interfaces.ILLMFileConfigService;
-import org.zexnocs.teanekoagent.component.llm.framework.input.LLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.model.*;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ICredentialResolver;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.IDefaultModelResolver;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModel;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.LLMModel;
-import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.instance.deepseek.DeepSeekChatModel;
-import org.zexnocs.teanekoagent.component.llm.instance.kimi.KimiChatModel;
-import org.zexnocs.teanekoagent.component.llm.instance.openai.completions.OpenAIChatCompletionsModel;
-import org.zexnocs.teanekoagent.component.llm.instance.openai.responses.OpenAIResponsesModel;
+import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.model.*;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.IDefaultModelResolver;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatModel;
+import org.zexnocs.teanekoagent.llm.instance.kimi.KimiChatModel;
+import org.zexnocs.teanekoagent.llm.instance.openai.completions.OpenAIChatCompletionsModel;
+import org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesModel;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;

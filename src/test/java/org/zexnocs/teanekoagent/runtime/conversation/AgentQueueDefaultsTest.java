@@ -1,15 +1,25 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.InteractionRuntime;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.configuration.AgentConversationConfig;
 import org.zexnocs.teanekoagent.configuration.SpringAgentConversationDefaults;
 import org.zexnocs.teanekoagent.configuration.SpringAgentQueueDefaults;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
@@ -21,8 +31,22 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证排队及会话保留配置懒读取、范围和脱敏失败，不启动应用或数据库。
@@ -91,7 +115,7 @@ class AgentQueueDefaultsTest {
         var policy = mock(IAgentConversationPolicy.class);
         var executor = mock(ExecutorService.class); var scheduler = mock(ScheduledExecutorService.class);
         var built = new AgentConversationConfig().agentService(port, defaults, conversations, policy, new ObjectMapper(),
-                executor, scheduler, mock(ILogger.class), mock(org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences.class));
+                executor, scheduler, mock(ILogger.class), mock(org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences.class));
         assertInstanceOf(AgentConversationService.class, built);
         assertInstanceOf(IAgentConversationControl.class, built);
         built.close();

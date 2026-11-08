@@ -2,6 +2,7 @@ package org.zexnocs.teanekocore.event.core;
 
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.event.interfaces.IEvent;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -10,31 +11,53 @@ import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
 
 import java.lang.reflect.Method;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * 扫描事件处理器的类。
  * <br>2026/11/02：相同优先级按 Bean 名及方法签名确定稳定监听顺序。
  * <br>2026/11/04：根据实际事件类型合并父类监听器，未被类扫描覆盖的客户端事件也能进入通用消息链。
  *
+ * <br>2026/11/07：初始化时固定监听器插件归属，运行路径不重复发现。
+ * <br>2026/11/07：事件命名空间和监听目录原子发布，运行时只匹配已发现的类型声明。
+ *
  * @author zExNocs
  * @date 2026/02/17
  * @since 4.0.0
- * @version 4.7.5-l
+ * @version 4.9.0-l
  * @see EventHandler
  * @see EventListener
  */
 @Service("eventHandlerScanner")
 public class EventHandlerScanner extends AbstractScanner {
-    /// 事件类 → 事件处理器列表
-    @SuppressWarnings("rawtypes")
-    private final Map<Class<? extends IEvent>,
-            List<EventHandlerPatch<? extends IEvent>>> eventHandlerMap = new ConcurrentHashMap<>();
+    // 2026/11/07：监听列表与无监听事件的命名空间一并发布，重扫失败保留原完整目录。
+    private volatile @Nullable Snapshot registered;
     private final IBeanScanner iBeanScanner;
     private final ILogger iLogger;
     private final IClassScanner iClassScanner;
+    private org.zexnocs.teanekocore.plugin.PluginAccess plugins;
+
+    /**
+     * 2026/11/07：事件注册时编译插件归属，分发时不再解析代理类型和注解。
+     * @param plugins 统一插件归属目录
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public synchronized void installPlugins(org.zexnocs.teanekocore.plugin.PluginAccess plugins) {
+        // 2026/11/07：早期初始化已发布监听目录时只补归属登记，不触发发现扫描。
+        var current = registered;
+        if (current != null) {
+            current.handlers().values().stream().flatMap(List::stream).distinct()
+                    .forEach(patch -> plugins.register(patch.getTarget(), patch.getMethod()));
+        }
+        this.plugins = plugins;
+    }
+
 
     /**
      * 2026/11/02：补充扫描依赖合同，初始化时生成监听目录。
@@ -96,19 +119,23 @@ public class EventHandlerScanner extends AbstractScanner {
             }
         }
 
-        // 转化成 eventHandlerMap
-        eventHandlerMap.clear();
-        for (var entry : eventHandlerSetByType.entrySet()) {
-            var eventType = entry.getKey();
-            var handlerSet = entry.getValue();
-            var handlerList = new CopyOnWriteArrayList<>(handlerSet);
-            eventHandlerMap.put(eventType, handlerList);
+        // 2026/11/07：完整校验所有处理器归属后才发布监听目录。
+        if (plugins != null) {
+            eventHandlerSetByType.values().stream().flatMap(Set::stream).distinct()
+                    .forEach(patch -> plugins.register(patch.getTarget(), patch.getMethod()));
         }
-
-        // 排序事件处理器
-        for (var list : eventHandlerMap.values()) {
-            list.sort(EventHandlerPatch::compareTo);
+        // 2026/11/07：先构造排序后的全部监听列表，再原子替换；失败保留原目录。
+        var completed = new HashMap<Class<?>, List<EventHandlerPatch<?>>>();
+        eventHandlerSetByType.forEach((type, handlers) ->
+                completed.put(type, handlers.stream().<EventHandlerPatch<?>>map(value -> value).sorted().toList()));
+        var knownEvents = new HashSet<Class<?>>(eventTypes);
+        knownEvents.addAll(eventHandlerSetByType.keySet());
+        var namespaces = new HashMap<Class<?>, String>();
+        for (var type : knownEvents) {
+            var declaration = type.getAnnotation(Event.class);
+            namespaces.put(type, declaration == null ? "" : declaration.namespace());
         }
+        registered = new Snapshot(Map.copyOf(completed), Map.copyOf(namespaces));
     }
 
     /**
@@ -117,7 +144,7 @@ public class EventHandlerScanner extends AbstractScanner {
      */
     @Override
     protected void _clear() {
-        eventHandlerMap.clear();
+        // 2026/11/07：重扫前保留运行快照，只有完整扫描成功才替换。
     }
 
     /**
@@ -257,23 +284,54 @@ public class EventHandlerScanner extends AbstractScanner {
     }
 
     /**
-     * 获取事件处理器列表
+     * 2026/11/07：按已登记类型匹配监听器，支持运行时子类型但不在消息路径发现父类型目录。
      * @param eventClass 事件类
      * @return 事件处理器列表
      */
     @NonNull
-    @SuppressWarnings("rawtypes")
-    public List<EventHandlerPatch<? extends IEvent>> getEventHandlerList(Class<? extends IEvent> eventClass) {
+    public List<EventHandlerPatch<?>> getEventHandlerList(@Nullable Class<?> eventClass) {
+        var fixed = snapshot().handlers();
         if (eventClass == null) {
             return Collections.emptyList();
         }
-        // 2026/11/04：运行时沿真实继承关系取监听器，去重并保持原优先级和稳定顺序。
-        var handlers = new TreeSet<>(eventHandlerMap.getOrDefault(eventClass, List.of()));
-        Class<?> parent = eventClass.getSuperclass();
-        while (parent != null && IEvent.class.isAssignableFrom(parent)) {
-            handlers.addAll(eventHandlerMap.getOrDefault(parent.asSubclass(IEvent.class), List.of()));
-            parent = parent.getSuperclass();
-        }
+        var handlers = new TreeSet<EventHandlerPatch<?>>();
+        fixed.forEach((type, values) -> {
+            if (type.isAssignableFrom(eventClass)) {
+                handlers.addAll(values);
+            }
+        });
         return List.copyOf(handlers);
     }
+
+    /**
+     * 2026/11/07：仅查询初始化发现的事件命名空间，未登记类型使用宿主默认而不触发懒扫描。
+     * @param eventClass 当前真实事件类型
+     * @return 声明的命名空间，空文本或未登记时表示使用默认执行域
+     */
+    public @Nullable String namespace(Class<?> eventClass) {
+        return snapshot().namespaces().get(eventClass);
+    }
+
+    /**
+     * @return 同一次完整扫描发布的目录
+     * @throws IllegalStateException 当初始化尚未成功时
+     */
+    private Snapshot snapshot() {
+        var current = registered;
+        if (current == null) {
+            throw new IllegalStateException("事件监听目录尚未就绪，请完成初始化或显式重扫。");
+        }
+        return current;
+    }
+
+    /**
+     * 事件静态声明的原子发布单位，不持有本次事件或运行状态。
+     * @param handlers 已发现的各类事件监听器
+     * @param namespaces 包含无监听事件的命名空间声明
+     * @author zExNocs
+     * @date 2026/11/07
+     * @since 4.9.0-l
+     * @version 4.9.0-l
+     */
+    private record Snapshot(Map<Class<?>, List<EventHandlerPatch<?>>> handlers, Map<Class<?>, String> namespaces) {}
 }

@@ -1,18 +1,20 @@
 package org.zexnocs.teanekocore.framework.pair;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.AllArgsConstructor;
 
 import java.util.Objects;
 
 /**
- * first 和 second 的位置没有区别的 Pair。
+ * first 和 second 的位置没有区别的 IPair。
  * 例如 ("a", "b") 和 ("b", "a") 的 HashCode 和 equals 都相同。
  *
  * @author zExNocs
  * @date 2026/02/11
  */
 @AllArgsConstructor
-public class UnorderedPair<T> implements Pair<T, T> {
+public class UnorderedPair<T> implements IPair<T, T> {
     /**
      * 创建一个 UnorderedPair 实例。
      *

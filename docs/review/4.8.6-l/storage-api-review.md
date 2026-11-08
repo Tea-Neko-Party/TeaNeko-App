@@ -15,7 +15,7 @@
 | 共享记忆索引缺少重建的早期候选 V486-D03 | 最终读取的 `EasyDataLayeredMemoryStore.maintain()` 已对未过期短期消息调用 `indexShared()`；每页 16 行，分区和消息游标循环 | **撤销“没有重建入口”的缺陷判断。** 应验证清理后补建、回滚及代次边界，不再要求实现已经存在的入口 |
 | 管理请求权限与撤销 | 真实会话、上下文对象身份、资源白名单、插件代次在调用和业务阶段继续校验 | 本轮未确认越权漏洞；源码审查不能替代所有并发交错与代理部署验证 |
 
-共享索引的补建与轮转证据见 [EasyDataLayeredMemoryStore.java](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/adapter/EasyDataLayeredMemoryStore.java) 第 339–391 行。更新审查期间工作区发生了这一变化，因此不保留较早读取形成的过期缺陷。
+共享索引的补建与轮转证据见 [EasyDataLayeredMemoryStore.java](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/adapter/EasyDataLayeredMemoryStore.java) 第 339–391 行。更新审查期间工作区发生了这一变化，因此不保留较早读取形成的过期缺陷。
 
 ## 2. 实际数据结构
 
@@ -112,7 +112,7 @@ A01 修改须特别注意：[ManagementGateway.java](../../../src/main/java/org/
 
 D01 不应简单把所有 `WRITE` 换成 `NONE`：`home()` 在首次访问时会建立默认档案，删除房间和成员更新也依赖原子性。先识别纯读函数，再拆分初始化/写用例和读取快照，保留必要的锁顺序及撤权检查。
 
-一个非阻断文档漂移：[`memory/namespace/README.md`](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/namespace/README.md) 第 27 行仍声称使用 `GeneralEasyDataRepository` 且不增加表，已与专用 `TeaNekoAgentEasyData` 和 `tea_neko_agent_data` 不符。应改为引用专用存储权威文档，避免实现器照旧说明绕过当前入口。
+一个非阻断文档漂移：[`memory/namespace/README.md`](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/namespace/README.md) 第 27 行仍声称使用 `GeneralEasyDataRepository` 且不增加表，已与专用 `TeaNekoAgentEasyData` 和 `tea_neko_agent_data` 不符。应改为引用专用存储权威文档，避免实现器照旧说明绕过当前入口。
 
 ## 6. 扩容准备与容量检查
 

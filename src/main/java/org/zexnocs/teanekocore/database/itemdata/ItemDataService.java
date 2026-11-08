@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.itemdata;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -18,7 +20,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * 物品数据服务类，提供对物品数据的获取和创建功能。
  *
  * <br>更新日志：
- * <br>4.1.3: 重构数据，不再使用 <@code TaskFuture> 形式来获取数据，而是直接返回数据对象。创建对象会在第一次设置值时真正创建。
+ * <br>4.1.3: 重构数据，不再使用 {@code TaskFuture} 形式来获取数据，而是直接返回数据对象。创建对象会在第一次设置值时真正创建。
  * @see org.zexnocs.teanekocore.database.itemdata.data.ItemDataDTO 一个实现了 IItemDataDTO 接口的物品数据传输对象类
  * @see IItemDataDTO
  * @see IItemMetadata
@@ -29,12 +31,12 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Service
 public class ItemDataService implements IItemDataService {
-    private final ItemDataRepository itemDataRepository;
+    private final IItemDataRepository itemDataRepository;
     private final IItemDataCacheService iItemDataCacheService;
     private final IItemDataDtoService iItemDataDtoService;
 
     @Autowired
-    public ItemDataService(ItemDataRepository itemDataRepository,
+    public ItemDataService(IItemDataRepository itemDataRepository,
                            IItemDataCacheService iItemDataCacheService,
                            IItemDataDtoService iItemDataDtoService) {
         this.itemDataRepository = itemDataRepository;
@@ -49,7 +51,7 @@ public class ItemDataService implements IItemDataService {
      * @param ownerId   拥有者 ID
      * @param type      物品类型
      * @param clazz     物品元数据类型类
-     * @return {@link IItemDataDTO }<{@link T }>
+     * @return {@code IItemDataDTO<T>}：物品元数据传输对象
      */
     @SuppressWarnings("unchecked")
     @Override

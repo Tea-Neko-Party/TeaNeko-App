@@ -1,12 +1,14 @@
 package org.zexnocs.teanekocore.database.easydata.core;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import jakarta.persistence.Table;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.core.ResolvableType;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.database.easydata.BaseEasyDataObject;
-import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.IBaseEasyDataRepository;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.reload.AbstractScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
@@ -16,11 +18,11 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 用于扫描和注册所有 {@link BaseEasyDataRepository} 的子类，
+ * 用于扫描和注册所有 {@link IBaseEasyDataRepository} 的子类，
  * 并根据它们的泛型参数（即实体类）进行映射，以便在运行时能够根据实体类获取对应的仓库实例。
  *
  * @see BaseEasyDataObject
- * @see BaseEasyDataRepository
+ * @see IBaseEasyDataRepository
  * @author zExNocs
  * @date 2026/02/15
  * @since 4.0.0
@@ -28,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 @Service("easyDataRepositoryScanner")
 public class EasyDataRepositoryScanner extends AbstractScanner {
     /// 仓库的实体类 → 仓库类
-    private final Map<Class<? extends BaseEasyDataObject>, BaseEasyDataRepository<?>> repositories =
+    private final Map<Class<? extends BaseEasyDataObject>, IBaseEasyDataRepository<?>> repositories =
             new ConcurrentHashMap<>();
 
     /// bean scanner
@@ -50,11 +52,11 @@ public class EasyDataRepositoryScanner extends AbstractScanner {
      */
     @Override
     protected synchronized void _scan() {
-        var beans = beanScanner.getBeansOfType(BaseEasyDataRepository.class);
+        var beans = beanScanner.getBeansOfType(IBaseEasyDataRepository.class);
         for (var repository: beans.values()) {
             var clazz = repository.getClass();
-            // 获取 BaseEasyDataRepository 子类的泛型参数 "T"
-            ResolvableType type = ResolvableType.forClass(BaseEasyDataRepository.class, clazz);
+            // 获取 IBaseEasyDataRepository 子类的泛型参数 "T"
+            ResolvableType type = ResolvableType.forClass(IBaseEasyDataRepository.class, clazz);
             Class<?> genericClass = type.getGeneric(0).resolve();
             if(genericClass == null) {
                 // 泛型参数为 null
@@ -111,7 +113,7 @@ public class EasyDataRepositoryScanner extends AbstractScanner {
      * 获取指定表名的数据仓库。
      * @param tableName 表名
      */
-    public BaseEasyDataRepository<?> getRepository(Class<? extends BaseEasyDataObject> tableName) {
+    public IBaseEasyDataRepository<?> getRepository(Class<? extends BaseEasyDataObject> tableName) {
         // 如果表名为 null，则返回 null
         if (tableName == null) {
             return null;

@@ -24,6 +24,8 @@ import static org.mockito.Mockito.when;
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
+ * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
@@ -45,7 +47,7 @@ class AgentTriggerGateTest {
         assertTrue(gate.acquire(signal(other, false, false)).isEmpty());
         now.set(now.get().plusSeconds(301)); assertTrue(gate.acquire(plain).isEmpty());
         var current = gate.acquire(named).orElseThrow();
-        settings.set(new AgentTriggerGate.Settings(AgentScopePolicy.unregistered(), "Asia/Shanghai", 900, 23, 7));
+        settings.set(new AgentTriggerGate.Settings(AgentScopePolicy.unregistered(), true, "Asia/Shanghai", 900, 23, 7));
         assertThrows(IllegalStateException.class, () -> gate.verify(current)); gate.finish(current, false);
         assertTrue(gate.acquire(signal(actor, true, false)).isEmpty());
     }
@@ -73,7 +75,7 @@ class AgentTriggerGateTest {
      * @return 不含平台依赖的配置
      */
     private static AgentTriggerGate.Settings settings(AgentScopePolicy.Mode mode) {
-        return new AgentTriggerGate.Settings(new AgentScopePolicy(true, true, mode), "Asia/Shanghai", 900, 23, 7);
+        return new AgentTriggerGate.Settings(new AgentScopePolicy(true, true, mode), true, "Asia/Shanghai", 900, 23, 7);
     }
 
     /**

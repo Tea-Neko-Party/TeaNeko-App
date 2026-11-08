@@ -1,20 +1,27 @@
 package org.zexnocs.teanekoagent.component.tool;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.aop.support.AopUtils;
+import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.util.ClassUtils;
 import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
-import org.zexnocs.teanekoagent.plugin.AgentFeature;
+import org.zexnocs.teanekoagent.plugin.IAgentFeature;
 import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
 import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import tools.jackson.databind.ObjectMapper;
@@ -24,7 +31,7 @@ import java.util.concurrent.ExecutorService;
 
 /**
  * 从已注册 Spring Bean 的类型元数据发现注解工具，延迟取得提供者，避免启动扫描产生构造环。
- * 已由原 AgentFeature 拥有的能力不重复安装，新工具自动生成同一套普通能力贡献。
+ * 已由原 IAgentFeature 拥有的能力不重复安装，新工具自动生成同一套普通能力贡献。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：公开已启用插件的注解工具目录，不执行工具方法。
@@ -33,10 +40,12 @@ import java.util.concurrent.ExecutorService;
  * <br>2026/11/05：工具声明和说明由可重扫目录缓存，页面查询不再遍历全部 Bean 定义。
  *
  * <br>2026/11/05：保留已发现提供者类型，高频选择不重新解析代理。
+ * <br>2026/11/07：分离完整安装说明与启用目录，并投影每项工具的插件归属。
+ * <br>2026/11/07：原生工具公开空插件归属，运行能力继续使用独立宿主身份。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.8.3-l
+ * @version 4.9.0-l
  */
 @Component
 public final class TeaNekoAgentToolRegistry implements IScanner {
@@ -46,6 +55,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
     // 2026/11/05：只固定声明和说明，不缓存插件启用或工具执行资格。
     private volatile List<Declaration> discovered = List.of();
     private boolean initialized;
+    private @Nullable PluginRegistry plugins;
 
     /**
      * 2026/11/05：初始化时只发现类型元数据，不实例化工具提供者。
@@ -59,6 +69,20 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
         this.mapper = mapper;
         this.executor = executor;
         init();
+    }
+
+    /**
+     * 2026/11/07：容器注入时验证已有业务归属，不能借宿主能力 ID 绕过插件启停。
+     * @param plugins 已完成声明发现的身份目录
+     */
+    @org.springframework.beans.factory.annotation.Autowired
+    public synchronized void installPlugins(PluginRegistry plugins) {
+        for (var declaration : discovered) {
+            if (declaration.owner() != null) {
+                plugins.descriptor(declaration.owner());
+            }
+        }
+        this.plugins = plugins;
     }
 
     /** 首次发现工具声明，原重载服务再次初始化时不重复扫描。 */
@@ -94,8 +118,18 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
                 }
             }
             var owned = AnnotatedElementUtils.findMergedAnnotation(type, PluginOwned.class);
+            // 2026/11/07：业务工具的两种显式归属必须一致，原生工具不冒充业务插件。
             String owner = !annotation.pluginId().isBlank() ? annotation.pluginId()
-                    : owned == null ? "teaneko.agent" : owned.value();
+                    : owned == null ? null : owned.value();
+            if (owner != null) {
+                PluginDeclarationScanner.requirePluginPackage(type);
+                if (owned != null && !owned.value().equals(owner)) {
+                    throw new IllegalArgumentException("工具插件归属声明冲突：" + type.getName());
+                }
+                if (plugins != null) {
+                    plugins.descriptor(owner);
+                }
+            }
             found.add(new Declaration(beanName, type, annotation, owner, TeaNekoAgentToolMethods.describe(type)));
         }
         discovered = List.copyOf(found);
@@ -109,7 +143,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
      * @return 原能力与自动能力的不可变集合
      * @throws IllegalArgumentException 当注解工具或归属声明冲突时
      */
-    public List<AgentFeature> combine(List<AgentFeature> existing) {
+    public List<IAgentFeature> combine(List<IAgentFeature> existing) {
         var keys = new HashSet<String>(); existing.forEach(value -> keys.add(value.key()));
         var result = new ArrayList<>(existing); var groups = new TreeMap<String, List<Declaration>>();
         var declarations = new HashMap<String, TeaNekoAgentToolClass>();
@@ -118,7 +152,8 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
             var beanName = declaration.name();
             var type = declaration.type();
             var annotation = declaration.annotation();
-            var plugin = declaration.owner();
+            // 2026/11/07：执行桥使用宿主能力身份，公开目录仍保留原生空归属。
+            var plugin = Objects.requireNonNullElse(declaration.owner(), "teaneko.agent");
             var id = annotation.value().isBlank() ? "tools-" + StableDigest.sha256("annotated-agent-tools-v1", type.getName(), beanName).substring(0, 12) : annotation.value();
             var key = plugin + ":" + id;
             if (annotation.managedByFeature()) {
@@ -139,7 +174,7 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
                  * @param runtime 运行快照
                  * @return 当前可选工具
                  */
-                @Override public List<org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding> select(org.zexnocs.teanekoagent.runtime.AgentDefinition definition,
+                @Override public List<org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding> select(org.zexnocs.teanekoagent.runtime.AgentDefinition definition,
                         org.zexnocs.teanekoagent.runtime.AgentRunRequest request, org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot runtime) {
                     return select(definition, request, runtime, null);
                 }
@@ -151,9 +186,9 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
                  * @param input 当前布局
                  * @return 已固定本轮身份的工具集合
                  */
-                @Override public List<org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding> select(org.zexnocs.teanekoagent.runtime.AgentDefinition definition,
+                @Override public List<org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding> select(org.zexnocs.teanekoagent.runtime.AgentDefinition definition,
                         org.zexnocs.teanekoagent.runtime.AgentRunRequest request, org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot runtime, AgentPromptInput input) {
-                    var selected = new ArrayList<org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding>();
+                    var selected = new ArrayList<org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding>();
                     for (var provider : providers) { selected.addAll(TeaNekoAgentToolMethods.select(provider.type(), beans.getBean(provider.name()), definition, request, runtime, input, mapper, executor)); }
                     return List.copyOf(selected);
                 }
@@ -192,13 +227,22 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
      * @return 按工具名排序且去重的公开说明
      */
     public List<TeaNekoAgentToolMethods.Documentation> describe(org.zexnocs.teanekocore.plugin.PluginRegistry plugins) {
+        return installedDescription().stream().filter(item -> item.pluginId() == null
+                || plugins.isEnabled(item.pluginId())).toList();
+    }
+
+    /**
+     * 2026/11/07：总管理使用全部已安装工具说明，普通工具目录仍实时过滤插件状态。
+     * @return 含真实插件归属的静态说明，不包含执行对象
+     */
+    public List<TeaNekoAgentToolMethods.Documentation> installedDescription() {
         var result = new TreeMap<String, TeaNekoAgentToolMethods.Documentation>();
         for (var declaration : discovered) {
-            if (plugins.isEnabled(declaration.owner())) {
-                for (var item : declaration.documentation()) {
-                    if (result.putIfAbsent(item.name(), item) != null) {
-                        throw new IllegalArgumentException("工具目录存在重名声明。");
-                    }
+            for (var item : declaration.documentation()) {
+                var owned = new TeaNekoAgentToolMethods.Documentation(item.name(), item.description(),
+                        item.clients(), item.parameters(), item.conditional(), declaration.owner());
+                if (result.putIfAbsent(item.name(), owned) != null) {
+                    throw new IllegalArgumentException("工具目录存在重名声明。");
                 }
             }
         }
@@ -218,6 +262,6 @@ public final class TeaNekoAgentToolRegistry implements IScanner {
      * @since 4.8.2-l
      * @version 4.8.2-l
      */
-    private record Declaration(String name, Class<?> type, TeaNekoAgentToolClass annotation, String owner,
+    private record Declaration(String name, Class<?> type, TeaNekoAgentToolClass annotation, @Nullable String owner,
                                List<TeaNekoAgentToolMethods.Documentation> documentation) {}
 }

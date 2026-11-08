@@ -1,24 +1,53 @@
 package org.zexnocs.teanekoagent.runtime.access;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.ACTIVITY_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INSTANCE_CLOSED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INSTANCE_NOT_REGISTERED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INVALID_ORIGIN;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.LOCAL_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.MODE_RESTRICTED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.READINESS_UNAVAILABLE;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_CONFIG_UNAVAILABLE;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_POLICY_CHANGED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_UNREGISTERED;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证每类活动都遵守统一登记边界，前置拒绝不读取配置或凭据，也不执行任何业务。

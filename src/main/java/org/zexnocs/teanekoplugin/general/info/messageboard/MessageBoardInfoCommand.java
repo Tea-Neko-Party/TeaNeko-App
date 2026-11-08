@@ -1,5 +1,8 @@
 package org.zexnocs.teanekoplugin.general.info.messageboard;
 
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
@@ -15,11 +18,14 @@ import java.util.concurrent.CompletionStage;
  * 留言信息指令。
  *
  * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
+ * <br>2026/11/07：异步副作用前复核固定插件代次，停用后拒绝迟到业务。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.6-l
+ * @version 4.9.0-l
  */
 @Description("获取、给予留言信息。")
 // 2026/11/04：显示名与稳定指令前缀分别维护。
@@ -27,7 +33,10 @@ import java.util.concurrent.CompletionStage;
         permission = CommandPermission.ALL,
         scope = CommandScope.GROUP,
         permissionPackage = {"info.message"})
+@PluginOwned("general.info")
 public class MessageBoardInfoCommand {
+    // 2026/11/07：异步业务固定入口代次，停用后不启动后续副作用。
+    private final PluginAccess plugins;
     private final MessageBoardInfoService messageBoardInfoService;
     private final ITeaUserService iTeaUserService;
 
@@ -36,9 +45,11 @@ public class MessageBoardInfoCommand {
      *
      * @param messageBoardInfoService 由装配方提供的 {@code MessageBoardInfoService} 协作依赖
      * @param iTeaUserService 本次装配使用的 {@code ITeaUserService} 服务
+     * @param plugins 统一插件代次访问入口
      */
     @Autowired
-    public MessageBoardInfoCommand(MessageBoardInfoService messageBoardInfoService, ITeaUserService iTeaUserService) {
+    public MessageBoardInfoCommand(MessageBoardInfoService messageBoardInfoService, ITeaUserService iTeaUserService, PluginAccess plugins) {
+        this.plugins = plugins;
         this.messageBoardInfoService = messageBoardInfoService;
         this.iTeaUserService = iTeaUserService;
     }
@@ -60,6 +71,8 @@ public class MessageBoardInfoCommand {
     public CompletionStage<Void> getOrGive(CommandData<ITeaNekoMessageData> commandData,
                           @DefaultValue("null") String targetId,
                           List<String> messages) {
+        // 2026/11/07：固定本次业务代次，异步恢复时必须复核。
+        var pluginToken = plugins.captureOwner("general.info");
         var data = commandData.getRawData();
         var sender = data.getUserData().getUuid();
         UUID target;
@@ -98,7 +111,10 @@ public class MessageBoardInfoCommand {
         }
         var message = String.join(" ", messages);
         return messageBoardInfoService.setMessage(sender, target, message)
-                .thenCompose(result -> data.getMessageSender().sendAtReplyMessageAsync(result));
+                .thenCompose(result -> {
+                    plugins.check(pluginToken);
+                    return data.getMessageSender().sendAtReplyMessageAsync(result);
+                });
     }
 
     /**

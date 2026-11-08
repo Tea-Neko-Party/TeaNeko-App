@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoplugin.general.info;
 
+import org.zexnocs.teanekocore.plugin.PluginOwned;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.teauser.interfaces.ITeaUserService;
@@ -15,15 +17,18 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
  *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.6-l
+ * @version 4.9.0-l
  */
 @Description("查询用户在群组中的信息。")
 // 2026/11/04：显示名与稳定指令前缀分别维护。
 @Command(displayName = "用户信息", value = {"/info", "info", "/信息"},
         permission = CommandPermission.ALL)
+@PluginOwned("general.info")
 public class InfoCommand {
     private final InfoService infoService;
     private final ITeaUserService iTeaUserService;

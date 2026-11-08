@@ -1,6 +1,6 @@
 # Agent 组件装配
 
-适用版本：v4.8.6-l。
+适用版本：v4.9.0-l。
 
 ## 默认行为与使用
 
@@ -16,28 +16,29 @@
 
 高级模式提供脱敏 JSON 预览。草稿只保存在当前页面内存，不写浏览器长期存储。
 
-| 标识 | 功能 | 必需依赖 |
-| --- | --- | --- |
-| `llm` | 系统模型或聊天私有模型，所有装配必需 | 无 |
-| `memory` | 会话上下文、持久历史、摘要、分层记忆与画像 | 无 |
-| `personality` | 身份、说话风格及补正 | 无 |
-| `tool` | 工具选择及名称限制，命令工具另有开关 | 无 |
-| `skill` | 选择本地已注册技能，保持原目录和工具权限 | `tool` |
-| `expression` | 分段协议、发送节奏及原生表情 | 无 |
-| `sticker` | 表情采集与共享图库回复 | `expression`、`tool` |
-| `schedule` | 自然语言提醒与定时任务 | `tool` |
-| `proactive` | ACTIVE 模式下的主动候选、静默和冷却 | 无 |
-| `shared-memory` | 同空间同用户的群聊回忆，标明来源 | `memory` |
-| `private-contact` | 回应本轮用户的私聊邀请 | `memory`、`tool` |
-| `affinity` | 亲近程度及受限互动评估 | `memory`、`tool` |
-| `mood` | 短期心情及自然恢复 | `memory`、`tool` |
-| `care` | 有次数上限的主动关怀 | `proactive`、`affinity` |
+| 标识 | 所属插件 | 功能 | 必需依赖 |
+| --- | --- | --- | --- |
+| `llm` | `teaneko.agent` | 系统模型或聊天私有模型，所有装配必需 | 无 |
+| `memory` | `agent.cognition` | 会话上下文、持久历史、摘要、分层记忆、画像及可选跨聊天回忆 | 无 |
+| `personality` | `agent.cognition` | 身份、说话风格及补正 | 无 |
+| `tool` | `agent.automation` | 工具选择及名称限制，命令工具另有开关 | 无 |
+| `skill` | `agent.automation` | 选择本地已注册技能，保持原目录和工具权限 | `tool` |
+| `expression` | `agent.expression` | 分段协议、发送节奏及原生表情 | 无 |
+| `sticker` | `agent.expression` | 表情采集与共享图库回复 | `expression`、`tool` |
+| `schedule` | `agent.automation` | 自然语言提醒与定时任务 | `tool` |
+| `proactive` | `agent.social` | ACTIVE 模式下的主动候选、静默和冷却 | 无 |
+| `private-contact` | `agent.social` | 回应本轮用户的私聊邀请 | `memory`、`tool` |
+| `affinity` | `agent.social` | 亲近程度及受限互动评估 | `memory`、`tool` |
+| `mood` | `agent.social` | 短期心情及自然恢复 | `memory`、`tool` |
+| `care` | `agent.social` | 有次数上限的主动关怀 | `proactive`、`affinity` |
 
-新增组件必须显式选择；卡片展示中文依赖。空间绑定、默认参数和私聊边界见[共享回忆与社交组件](agent-social-memory.md)。
+新增组件必须显式选择；卡片展示中文依赖与插件 ID，并支持按插件筛选。空间绑定、默认参数和私聊边界见[共享回忆与社交组件](agent-social-memory.md)。
+
+跨聊天回忆统一由 `memory.crossChatRecallEnabled` 控制，新装配默认关闭。启动升级已有显式装配时，将旧 `shared-memory.enabled` 转入该参数并移除旧组件；原启用意愿保留，新旧值冲突会明确拒绝。没有 `components` 的历史配置仍按前述规则读取，不为升级强制写回。
 
 安装组件不绕过本地功能开关、客户端范围、权限、预算或插件启停。人格可单独安装；自动观察仍需真实对话证据，通常与记忆配合。未安装人格的记忆使用独立的无人格分区，不自动创建人格记录。
 
-卸载组件不删除已有数据。卸下记忆后不继续采集或使用上下文；旧任务执行时重新检查当前装配。namespace 共享、人格按聊天独立的规则保持不变，资料查看和清理仍走专用管理入口。
+卸载组件不删除已有数据。关闭所属插件后，其组件、工具和配置入口隐藏，运行装配过滤对应能力；持久化参数保留，重新开启后恢复。卸下记忆后不继续采集或使用上下文；旧任务执行时重新检查当前装配。namespace 共享、人格按聊天独立的规则保持不变，资料查看和清理仍走专用管理入口。
 
 ## 命令配置
 

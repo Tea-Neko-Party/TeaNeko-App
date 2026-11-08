@@ -1,11 +1,23 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.IMemoryNamespaceBindingStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespace;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceMutation;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceRegistry;
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.memory.adapter.StoreAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.namespace.*;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
+import org.zexnocs.teanekoagent.component.AgentAssembly;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.StoreAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.*;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.AgentMemoryReferenceException;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
 
@@ -13,6 +25,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -23,11 +36,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：覆盖组件未选择、插件停用和关闭再启用时的迟到引用。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 class StoreAgentMemoryReferencesTest {
     private final AgentScope scope = new AgentScope("客户端", "群");
@@ -55,6 +69,46 @@ class StoreAgentMemoryReferencesTest {
 
     /** 验证构造没有配置读取、绑定查询或默认空间登记。 */
     @Test void constructionIsLazy() { verifyNoInteractions(scopes, bindings, registry); }
+
+    /** 2026/11/07：类型化可用性不读取存储，停用插件的显式解析和复核同样拒绝。 */
+    @Test
+    void disabledPluginNeverReadsOrCreatesMemory() {
+        var plugins = new PluginRegistry(List.of(
+                () -> new PluginDescriptor("agent.cognition", "4.9.0-l", 1, Set.of())));
+        references.installPlugins(plugins);
+        plugins.setEnabled("agent.cognition", false);
+        assertFalse(references.available(scope));
+        assertEquals(AgentMemoryReferenceException.Reason.DISABLED, rejected(references.resolve(scope)).reason());
+        assertEquals(AgentMemoryReferenceException.Reason.DISABLED, rejected(references.verify(fixed)).reason());
+        verifyNoInteractions(scopes, bindings, registry);
+    }
+
+    /** 2026/11/07：基础模型装配不因引用 Bean 已发现而初始化记忆空间。 */
+    @Test
+    void minimalAssemblyKeepsMemoryUnavailableWithoutStorageAccess() {
+        when(scopes.read(scope)).thenReturn(new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE, "",
+                AgentAssembly.parse(AgentAssembly.MINIMAL)));
+        assertFalse(references.available(scope));
+        assertEquals(AgentMemoryReferenceException.Reason.DISABLED, rejected(references.resolve(scope)).reason());
+        verifyNoInteractions(bindings, registry);
+    }
+
+    /** 2026/11/07：插件重新启用不能让旧代读取结果恢复交付资格。 */
+    @Test
+    void reenableRejectsOldGenerationReference() {
+        var plugins = new PluginRegistry(List.of(
+                () -> new PluginDescriptor("agent.cognition", "4.9.0-l", 1, Set.of())));
+        references.installPlugins(plugins);
+        when(scopes.read(scope)).thenReturn(enabled());
+        var physical = new CompletableFuture<Optional<MemoryNamespaceReference>>();
+        when(bindings.readReference(scope)).thenReturn(physical);
+        var result = references.resolve(scope);
+        plugins.setEnabled("agent.cognition", false);
+        plugins.setEnabled("agent.cognition", true);
+        physical.complete(Optional.of(fixed));
+        assertEquals(AgentMemoryReferenceException.Reason.CHANGED, rejected(result).reason());
+        verifyNoInteractions(registry);
+    }
 
     /** 验证未注册和禁用时，在访问空间存储或登记默认空间之前拒绝。 */
     @Test void unregisteredAndDisabledScopesNeverTouchStorage() {

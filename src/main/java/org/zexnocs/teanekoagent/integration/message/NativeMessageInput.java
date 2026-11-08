@@ -1,11 +1,13 @@
 package org.zexnocs.teanekoagent.integration.message;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.content.IAtTeaNekoContentPart;
@@ -74,7 +76,7 @@ public record NativeMessageInput(String text, ILLMMessage message, Instant occur
                 if (++images > 4) {
                     throw new NativeMessageInputException("已遇到图片数=" + images + "，每条消息上限=4；请分条发送。");
                 }
-                if (url == null || url.isBlank()) {
+                if (url.isBlank()) {
                     throw new NativeMessageInputException("第" + images + "张图片缺少可用引用。");
                 }
                 if (url.length() > 2_097_152) {

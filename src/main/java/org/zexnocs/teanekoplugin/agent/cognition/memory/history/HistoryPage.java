@@ -1,0 +1,33 @@
+package org.zexnocs.teanekoplugin.agent.cognition.memory.history;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import java.util.List;
+
+/**
+ * 有界历史页面，省略和扫描上限不伪装成确定没有历史。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ *
+ * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
+ * @param messages 本页完整文本消息，按保存序号倒序
+ * @param nextBefore 下一页游标；零表示本次已扫描至末尾
+ * @param scanned 已检查行数
+ * @param omittedCharacters 是否因字符不足省略完整消息
+ *
+ * @author zExNocs
+ * @date 2026/10/30
+ * @since 4.5.0-l
+ * @version 4.9.0-l
+ */
+public record HistoryPage(List<HistoryMessage> messages, long nextBefore, int scanned, boolean omittedCharacters) {
+    /**
+     * 冻结已检查消息集合。
+     * @param messages 完整消息
+     * @param nextBefore 后续游标
+     * @param scanned 检查量
+     * @param omittedCharacters 字符省略标志
+     */
+    public HistoryPage { messages = List.copyOf(messages); }
+}

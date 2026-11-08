@@ -1,6 +1,7 @@
 import {test} from 'node:test'
 import assert from 'node:assert/strict'
-import {rememberLoginToken, savedLoginToken, takeLoginToken} from '../src/login-token.ts'
+// 2026/11/07：登录令牌按认证功能目录验证，沿用原行为断言。
+import {rememberLoginToken, savedLoginToken, takeLoginToken} from '../src/features/auth/login-token.ts'
 
 // 2026/11/04：使用浏览器接口夹具验证链接消费和显式持久化，不引入 DOM 测试依赖。
 function browser(href) {

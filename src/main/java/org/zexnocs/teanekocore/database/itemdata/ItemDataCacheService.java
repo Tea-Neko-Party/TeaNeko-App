@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.database.itemdata;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,7 +13,7 @@ import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataCacheServic
 import org.zexnocs.teanekocore.database.itemdata.interfaces.IItemDataDTO;
 import org.zexnocs.teanekocore.database.itemdata.metadata.IItemMetadata;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 
 import java.util.HashSet;
 import java.util.Map;
@@ -33,7 +35,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ItemDataCacheService implements IItemDataCacheService {
 
     /// 缓存 (namespace, ownerId) → cache 的映射。
-    private final ConcurrentMapCacheContainer<Pair<String, UUID>, CacheHolder> itemDataDtoCache;
+    private final ConcurrentMapCacheContainer<IPair<String, UUID>, CacheHolder> itemDataDtoCache;
 
     @Autowired
     public ItemDataCacheService(ICacheService iCacheService) {

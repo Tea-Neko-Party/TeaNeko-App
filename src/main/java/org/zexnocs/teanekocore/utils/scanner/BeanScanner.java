@@ -1,11 +1,13 @@
 package org.zexnocs.teanekocore.utils.scanner;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.stereotype.Component;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
@@ -76,9 +78,9 @@ public class BeanScanner implements IBeanScanner {
      * @return 一个包含所有带有指定注解的 Bean 的 Map，键为 Bean 的名称，值为 Bean 的实例
      */
     @Override
-    public <A extends Annotation> Map<String, Pair<A, Object>> getBeansWithAnnotation(Class<A> annotationType) {
+    public <A extends Annotation> Map<String, IPair<A, Object>> getBeansWithAnnotation(Class<A> annotationType) {
         var map = applicationContext.getBeansWithAnnotation(annotationType);
-        var result = new HashMap<String, Pair<A, Object>>();
+        var result = new HashMap<String, IPair<A, Object>>();
         for(var entry: map.entrySet()) {
             var bean = entry.getValue();
             var clazz = getBeanClass(bean);
@@ -103,11 +105,11 @@ public class BeanScanner implements IBeanScanner {
      * @throws InterfaceAndAnnotationInconsistencyException 当带有指定注解的 Bean 中存在不实现指定接口的 Bean 时抛出此异常
      */
     @Override
-    public <A extends Annotation, T> Map<String, Pair<A, T>> getBeansWithAnnotationAndInterface(
+    public <A extends Annotation, T> Map<String, IPair<A, T>> getBeansWithAnnotationAndInterface(
             Class<A> annotationType, Class<T> interfaceType)
             throws InterfaceAndAnnotationInconsistencyException {
         var beans = applicationContext.getBeansWithAnnotation(annotationType);
-        var result = new HashMap<String, Pair<A, T>>();
+        var result = new HashMap<String, IPair<A, T>>();
         for(var entry: beans.entrySet()) {
             var bean = entry.getValue();
             // 检查是否实现了指定接口

@@ -18,7 +18,7 @@
 | `RandomUtil` | 基于 `ThreadLocalRandom` 的随机整数、布尔值和浮点数生成。 |
 | `ExceptionUtils` | 生成异常详情字符串或字符串列表，包含 cause 和 suppressed。 |
 | `ObjectFieldUtil` | 通过反射设置字段、解析字符串值、操作 List 字段。 |
-| `MethodCallableUtils` | 从 `MethodCallable` 方法引用中提取 `Method` 或指定注解。 |
+| `MethodCallableUtils` | 从 `IMethodCallable` 方法引用中提取 `Method` 或指定注解。 |
 | `JsonDescriptionUtil` | 根据字段和 `@Description/@Ignore/@Mask` 生成 JSON 描述文本，并缓存结果。 |
 
 # 三. 扫描器 API
@@ -64,7 +64,7 @@ String message = ExceptionUtils.instance.buildExceptionMessage(throwable);
 ```
 
 ```java
-Map<String, Pair<TaskStage, ITaskStage>> stages =
+Map<String, IPair<TaskStage, ITaskStage>> stages =
         beanScanner.getBeansWithAnnotationAndInterface(TaskStage.class, ITaskStage.class);
 ```
 

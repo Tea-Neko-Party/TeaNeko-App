@@ -1,17 +1,20 @@
 package org.zexnocs.teanekoagent.runtime.workflow;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMProtocolSnapshots;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMProtocolSnapshots;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -22,8 +25,16 @@ import tools.jackson.databind.ObjectWriter;
 import tools.jackson.databind.SerializationFeature;
 
 import java.nio.charset.StandardCharsets;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -34,14 +45,16 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：通过明确的 getter 借用执行资源，保持异步完成后的原关闭责任。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 public final class AgentWorkflowService {
     private final IAgentTurnService turns;
-    private final @Nullable IAgentMemoryReferences references;
+    private final @Nullable IAgentContextReferences references;
     private final Executor executor;
     private final ObjectWriter writer;
     /**
@@ -51,7 +64,7 @@ public final class AgentWorkflowService {
      * @param executor 借用业务执行器
      * @param mapper 低信任结果编码器
      */
-    public AgentWorkflowService(IAgentTurnService turns, @Nullable IAgentMemoryReferences references, Executor executor, ObjectMapper mapper) {
+    public AgentWorkflowService(IAgentTurnService turns, @Nullable IAgentContextReferences references, Executor executor, ObjectMapper mapper) {
         this.turns = Objects.requireNonNull(turns); this.references = references; this.executor = Objects.requireNonNull(executor);
         writer = mapper.writer().without(SerializationFeature.INDENT_OUTPUT, SerializationFeature.WRAP_ROOT_VALUE);
     }
@@ -183,12 +196,8 @@ public final class AgentWorkflowService {
             return stopped.reason() == ExecutionControl.StopReason.DEADLINE_EXCEEDED ? AgentRunResult.Status.TIMED_OUT : AgentRunResult.Status.CANCELLED;
         }
         if (failure instanceof BudgetExceededException) { return AgentRunResult.Status.BUDGET_EXCEEDED; }
-        if (failure instanceof AgentMemoryReferenceException memory) {
-            return switch (memory.reason()) {
-                case CHANGED -> AgentRunResult.Status.STALE_CONVERSATION;
-                case DISABLED -> AgentRunResult.Status.SKIPPED;
-                case UNAVAILABLE -> AgentRunResult.Status.CONFIGURATION_ERROR;
-            };
+        if (failure instanceof org.zexnocs.teanekoagent.runtime.context.IAgentContextFailure contextFailure) {
+            return contextFailure.rejectionStatus();
         }
         if (failure instanceof AgentPromptException prompt) {
             return switch (prompt.reason()) {
@@ -205,14 +214,16 @@ public final class AgentWorkflowService {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
      *
      * @param step 原计划步骤
      * @param request 实际派生请求
      * @param result 已观察结果
+     *
      * @author zExNocs
      * @date 2026/11/01
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private record Completed(AgentWorkflowStep step, AgentRunRequest request, AgentRunResult result) {}
 }

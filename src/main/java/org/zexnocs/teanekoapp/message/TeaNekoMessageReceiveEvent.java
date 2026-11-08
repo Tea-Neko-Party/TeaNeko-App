@@ -3,10 +3,6 @@ package org.zexnocs.teanekoapp.message;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekocore.event.AbstractEvent;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
 
 /**
  * 从客户端接收到 message 时触发的事件。
@@ -30,39 +26,15 @@ import java.util.concurrent.CompletionStage;
  * 修改记录：<br>
  * 2026/11/04：监听器可登记异步业务完成阶段，网页入站不再将事件通知完成当成业务完成。
  * <br>2026/11/07：将已登记消息业务接入事件层的实际完成合同。
+ * <br>2026/11/07：复用通用事件的异步业务登记，保持原调用方法及封闭语义。
  *
  * @author zExNocs
  * @date 2026/02/26
  * @since 4.0.9
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 public class TeaNekoMessageReceiveEvent<T extends ITeaNekoMessageData> extends AbstractEvent<T> {
-    private final List<CompletableFuture<?>> processing = new ArrayList<>();
-    private boolean processingSealed;
-
-    /**
-     * 2026/11/04：只在同步通知监听器期间登记，不阻塞事件执行线程。
-     *
-     * @param stage 已启动的真实异步业务
-     * @throws IllegalStateException 当事件通知已结束后仍试图登记阶段时
-     */
-    public synchronized void trackProcessing(CompletionStage<?> stage) {
-        if (processingSealed) {
-            throw new IllegalStateException("消息通知已结束，不能追加异步处理阶段。");
-        }
-        processing.add(stage.toCompletableFuture());
-    }
-
-    /**
-     * 2026/11/04：通知完成后封闭本次业务集合，失败继续传播，不声称撤销已发生的副作用。
-     *
-     * @return 所有已登记业务实际结束后的完成阶段
-     */
-    @Override
-    public synchronized CompletionStage<Void> processingCompletion() {
-        processingSealed = true;
-        return CompletableFuture.allOf(processing.toArray(CompletableFuture<?>[]::new)).minimalCompletionStage();
-    }
+    // 2026/11/07：登记集合与封闭逻辑由 AbstractEvent 统一维护，客户端子事件继承原公开方法。
     /**
      * 事件的构造函数。
      *

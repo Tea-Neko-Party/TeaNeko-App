@@ -1,11 +1,13 @@
 package org.zexnocs.teanekocore.database.easydata.core;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.Getter;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.database.base.DatabaseTaskConfig;
 import org.zexnocs.teanekocore.database.base.interfaces.IDatabaseService;
-import org.zexnocs.teanekocore.database.easydata.BaseEasyDataRepository;
+import org.zexnocs.teanekocore.database.easydata.IBaseEasyDataRepository;
 import org.zexnocs.teanekocore.database.easydata.core.exception.JsonSerializationFailedException;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDtoTaskConfig;
@@ -13,7 +15,11 @@ import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransa
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -33,7 +39,7 @@ public class EasyDataDto implements IEasyDataDto {
 
     /// 数据库类
     @Getter(lombok.AccessLevel.NONE)
-    private final BaseEasyDataRepository<?> repository;
+    private final IBaseEasyDataRepository<?> repository;
 
     /// 任务链命名空间
     private final String taskStageNamespace;
@@ -64,7 +70,7 @@ public class EasyDataDto implements IEasyDataDto {
      * @param objectMapper JSON 转换器。
      */
     protected EasyDataDto(IDatabaseService databaseService,
-                BaseEasyDataRepository<?> repository,
+                IBaseEasyDataRepository<?> repository,
                 String taskStageNamespace,
                 String namespace,
                 String target,

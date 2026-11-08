@@ -1,18 +1,27 @@
 package org.zexnocs.teanekoagent.configuration;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
 
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ICredentialResolver;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.runtime.AgentFactory;
 import org.zexnocs.teanekoagent.runtime.AgentRegistry;
 import org.zexnocs.teanekoagent.runtime.IAgentFactory;
 import org.zexnocs.teanekoagent.runtime.IAgentRegistry;
-import org.zexnocs.teanekoagent.runtime.access.*;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.access.AgentReadinessService;
+import org.zexnocs.teanekoagent.runtime.access.IAgentActivityPolicy;
+import org.zexnocs.teanekoagent.runtime.access.IAgentReadiness;
+import org.zexnocs.teanekoagent.runtime.access.IAgentRuntimeConfigPort;
+import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
 import org.zexnocs.teanekocore.logger.ILogger;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 装配 Agent 实例底座和检查端口，不创建默认 Agent、注册 scope 或启动后台工作。
@@ -25,7 +34,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentFoundationConfig {

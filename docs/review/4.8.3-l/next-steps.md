@@ -15,7 +15,7 @@ G03 已经[独立复评](g03-reassessment.md)确认关闭，原诊断 1 项及�
 
 真实 MySQL 下的首次删除记录迁移耗时、图库根锁吞吐、四槽调度容量及真实平台回执仍未验收。详细步骤只维护在[部署验收清单](../../development/agent-deployment.md#实机验收清单)，不在此复制第二份。
 
-G03 验证未连接真实数据库、模型或平台。部署 F09 存储变更前须按[迁移与回退合同](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#删除记录迁移与回退)备份、停止旧实例并统一升级；禁止新旧存储语义混跑或直接降级。离线并发用例不能替代实机吞吐证明。
+G03 验证未连接真实数据库、模型或平台。部署 F09 存储变更前须按[迁移与回退合同](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#删除记录迁移与回退)备份、停止旧实例并统一升级；禁止新旧存储语义混跑或直接降级。离线并发用例不能替代实机吞吐证明。
 
 ## 未纳入本批的历史架构事项
 

@@ -1,8 +1,10 @@
 package org.zexnocs.teanekocore.actuator.timer.interfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.timer.CronTimer;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.time.Duration;
 
@@ -35,11 +37,11 @@ public interface ITimerService {
      * @param callable 任务执行的 Callable
      * @param rate 定时器的周期
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return {@code ITimerTaskConfig<T>} 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerByRate(String taskName,
                                            String taskStage,
-                                           MethodCallable<ITaskResult<T>> callable,
+                                           IMethodCallable<ITaskResult<T>> callable,
                                            Duration rate,
                                            Class<T> resultType);
 
@@ -58,11 +60,11 @@ public interface ITimerService {
      * @param callable 任务执行的 Callable
      * @param delay 定时器的周期
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return {@code ITimerTaskConfig<T>} 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerByDelay(String taskName,
                                             String taskStage,
-                                            MethodCallable<ITaskResult<T>> callable,
+                                            IMethodCallable<ITaskResult<T>> callable,
                                             Duration delay,
                                             Class<T> resultType);
 
@@ -81,11 +83,11 @@ public interface ITimerService {
      * @param callable 任务执行的 Callable
      * @param rate 定时器的周期
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return {@code ITimerTaskConfig<T>} 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
                                                 String taskStage,
-                                                MethodCallable<ITaskResult<T>> callable,
+                                                IMethodCallable<ITaskResult<T>> callable,
                                                 Duration rate,
                                                 Class<T> resultType);
 
@@ -98,11 +100,11 @@ public interface ITimerService {
      * @param callable 任务执行的 Callable
      * @param cronExpression 定时器的 cron 表达式
      * @param resultType 任务结果类型
-     * @return {@link ITimerTaskConfig }<{@link T }> 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
+     * @return {@code ITimerTaskConfig<T>} 定时器任务配置对象，用于设置任务的 Future 执行链与生命周期
      */
     <T> ITimerTaskConfig<T> registerByCron(String taskName,
                                            String taskStage,
-                                           MethodCallable<ITaskResult<T>> callable,
+                                           IMethodCallable<ITaskResult<T>> callable,
                                            String cronExpression,
                                            Class<T> resultType);
 }

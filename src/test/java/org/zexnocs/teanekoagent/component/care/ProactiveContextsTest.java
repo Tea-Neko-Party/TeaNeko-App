@@ -1,12 +1,16 @@
 package org.zexnocs.teanekoagent.component.care;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.proactive.IProactiveContextSource;
-import org.zexnocs.teanekoagent.component.proactive.ProactiveContexts;
-import org.zexnocs.teanekoagent.component.proactive.adapter.ProactiveTargets;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.social.proactive.IProactiveContextSource;
+import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveContexts;
+import org.zexnocs.teanekoplugin.agent.social.proactive.adapter.ProactiveTargets;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor.Delivery;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
@@ -38,7 +42,7 @@ class ProactiveContextsTest {
             var target = new ProactiveTargets.Target(reference.scope(), "user", false, "bot");
             var first = mock(IProactiveContextSource.class);
             var second = mock(IProactiveContextSource.class);
-            var session = mock(IProactiveContextSource.Session.class);
+            var session = mock(IProactiveContextSource.ISession.class);
             when(first.applies(any(), any())).thenReturn(true);
             when(first.prepare(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(Optional.of(session)));
             when(session.finish(Delivery.ABSTAINED)).thenReturn(CompletableFuture.completedStage(null));
@@ -52,8 +56,8 @@ class ProactiveContextsTest {
 
     /** 单个会话收尾失败仍通知后续会话，最终保留原失败而不是报告成功。 */
     @Test void finishesRemainingSessionsAfterOneFails() {
-        var first = mock(IProactiveContextSource.Session.class);
-        var second = mock(IProactiveContextSource.Session.class);
+        var first = mock(IProactiveContextSource.ISession.class);
+        var second = mock(IProactiveContextSource.ISession.class);
         when(first.finish(Delivery.SENT)).thenReturn(CompletableFuture.failedStage(new IllegalStateException("测试提交失败")));
         when(second.finish(Delivery.SENT)).thenReturn(CompletableFuture.completedStage(null));
         var selection = new ProactiveContexts.Selection(true, List.of(first, second));

@@ -1,26 +1,47 @@
 package org.zexnocs.teanekoagent.runtime.access;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMProviderAccess;
-import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ICredentialResolver;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModel;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMProviderAccess;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModel;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.logger.ILogger;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.startsWith;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 不启动容器、数据库或 HTTP，验证就绪检查的配置隔离、快照及敏感信息边界。
@@ -116,8 +137,8 @@ class AgentReadinessServiceTest {
         verifyNoInteractions(credentials);
         var decision = new AgentAccessDecision(AgentAccessDecision.Reason.READINESS_UNAVAILABLE,
                 java.util.Optional.empty(), java.util.Optional.of(failed));
-        assertEquals(org.zexnocs.teanekoagent.component.memory.layered.MemoryProcessingException.Reason.READINESS_UNAVAILABLE,
-                new org.zexnocs.teanekoagent.component.memory.layered.MemoryProcessingException(decision).reason());
+        assertEquals(org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryProcessingException.Reason.READINESS_UNAVAILABLE,
+                new org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryProcessingException(decision).reason());
         verify(logger).error(eq(AgentReadinessService.class.getName()), argThat(message ->
                 message.contains("解析有效模型参数") && message.contains("context-window-tokens") && !message.contains(SECRET)));
         verify(logger, never()).error(anyString(), anyString(), any(Throwable.class));

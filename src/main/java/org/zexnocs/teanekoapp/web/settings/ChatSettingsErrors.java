@@ -4,6 +4,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.zexnocs.teanekoapp.web.error.IWebFailureMapper;
+import org.zexnocs.teanekoapp.web.error.LocalResourceNotAllowedException;
 import org.zexnocs.teanekoapp.web.error.WebFailureMapping;
 import org.zexnocs.teanekoapp.web.error.WebManagedEndpoint;
 import org.zexnocs.teanekocore.database.configdata.ConfigEditConflictException;
@@ -33,7 +34,7 @@ import java.util.concurrent.ExecutionException;
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 // 2026/11/04：控制器主动选择安全错误合同，App 不再引用上层控制器类型。
 @RestControllerAdvice(annotations = WebManagedEndpoint.class)
@@ -75,11 +76,20 @@ public final class ChatSettingsErrors {
         if (root instanceof ConfigEditConflictException || root instanceof ConcurrentModificationException) {
             return error(409, "CONFIG_CONFLICT", "配置已被其他操作修改。请刷新后重新确认，未自动覆盖。");
         }
-        if (root instanceof SecurityException) {
-            return error(403, "SETTINGS_FORBIDDEN", "当前会话或配置区授权已经失效。");
-        }
-        if (root instanceof NoSuchElementException) {
-            return error(404, "TARGET_NOT_FOUND", "聊天目标或操作回执不存在，请刷新目录。");
+        // 2026/11/07：本地可选白名单拒绝不再误报为会话过期。
+        switch (root) {
+            case LocalResourceNotAllowedException localResourceNotAllowedException -> {
+                return error(403, "LOCAL_RESOURCE_NOT_ALLOWED",
+                    "本地白名单限制了此管理资源，请调整 web/security.yml 的授权设置。");
+            }
+            case SecurityException securityException -> {
+                return error(403, "SETTINGS_FORBIDDEN", "当前会话或配置区授权已经失效。");
+            }
+            case NoSuchElementException noSuchElementException -> {
+                return error(404, "TARGET_NOT_FOUND", "聊天目标或操作回执不存在，请刷新目录。");
+            }
+            default -> {
+            }
         }
         if (root instanceof IllegalArgumentException
                 // 2026/11/03：显式类型绑定失败属于请求错误，不返回解析正文。

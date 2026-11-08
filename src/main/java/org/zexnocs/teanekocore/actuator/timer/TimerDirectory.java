@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.zexnocs.teanekocore.actuator.runtime.RuntimeMonitor;
+import org.zexnocs.teanekocore.actuator.task.TaskPluginBindings;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 
 import java.time.Instant;
@@ -18,11 +19,12 @@ import java.util.concurrent.locks.ReentrantLock;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：合并真实调度来源，按注解分类并在分页前筛选；关键任务保持只读。
  * <br>2026/11/05：分页复用专用来源缓存，不在页面轮询中发现 Bean。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Component
 public final class TimerDirectory {
@@ -31,6 +33,25 @@ public final class TimerDirectory {
     private final LinkedHashMap<UUID, Operation> operations = new LinkedHashMap<>();
     private final Map<String, String> categoryNames = new ConcurrentHashMap<>();
     private @Nullable TimerSourceScanner scanner;
+    private @Nullable TaskPluginBindings pluginBindings;
+
+    /**
+     * 2026/11/07：目录与实际调度复用缓存归属和有效启停状态。
+     * @param bindings 原任务插件门禁
+     */
+    @Autowired
+    public void installPluginBindings(TaskPluginBindings bindings) {
+        this.pluginBindings = bindings;
+    }
+
+    /**
+     * 2026/11/07：复核已缓存归属，不在页面查询时发现注解。
+     * @param pluginId 所属插件，宿主任务为空
+     * @return 当前可以显示或管理时为真
+     */
+    private boolean enabled(@Nullable String pluginId) {
+        return pluginId == null || pluginBindings != null && pluginBindings.enabled(pluginId);
+    }
 
     /**
      * 2026/11/05：只保存专用缓存目录，发现由初始化或手动重扫触发。
@@ -45,11 +66,20 @@ public final class TimerDirectory {
      * @param timer 原服务刚注册的计时器
      */
     public void register(ITimer<?> timer) {
+        register(timer, TimerPresentation.resolve(timer.getTimerTaskConfig()));
+    }
+
+    /**
+     * 2026/11/07：使用注册方已经冻结的展示声明，不重复解析方法。
+     * @param timer 实际注册的定时器
+     * @param metadata 注册时确认的展示和归属
+     */
+    public void register(ITimer<?> timer, TimerPresentation metadata) {
         if (timers.size() >= 4096) {
             return;
         }
         timers.computeIfAbsent(timer, value -> {
-            var entry = new Entry(value);
+            var entry = new Entry(value, metadata);
             // 2026/11/04：分类键的含义不能随注册顺序改变。
             checkCategory(entry.presentation.category(), entry.presentation.categoryName());
             ids.put(entry.id, entry);
@@ -110,6 +140,25 @@ public final class TimerDirectory {
      * @return 先筛选后分页的统一目录，分类来自本次完整观测窗口
      */
     public Page page(String after, int limit, String category, String kind, String state, String search) {
+        return page(after, limit, category, kind, state, search, null);
+    }
+
+    /**
+     * 2026/11/07：先按当前插件状态与插件标识筛选，再执行分页。
+     * @param after 排他 UUID 游标
+     * @param limit 页大小
+     * @param category 分类筛选
+     * @param kind 规则类型筛选
+     * @param state 观测状态筛选
+     * @param search 名称搜索
+     * @param pluginId 插件标识，空值不限
+     * @return 受插件有效状态约束的分页目录
+     */
+    public Page page(String after, int limit, String category, String kind, String state, String search,
+                     @Nullable String pluginId) {
+        if (pluginId != null && !pluginId.isEmpty()) {
+            org.zexnocs.teanekocore.plugin.PluginDescriptor.requireId(pluginId);
+        }
         if (limit < 1 || limit > 100 || after.length() > 36 || search.length() > 256
                 || !category.isEmpty() && !category.matches("[a-z][a-z0-9_.-]{0,63}")
                 || !kind.isEmpty() && !kind.matches("[A-Z][A-Z0-9_]{0,31}") || state.length() > 32) {
@@ -117,6 +166,7 @@ public final class TimerDirectory {
         }
         // 2026/11/04：来源只贡献观测，外部来源不能取得 Core 暂停能力。
         var observed = new ArrayList<>(ids.values().stream().filter(entry -> entry.presentation.visible())
+                .filter(entry -> enabled(entry.presentation.pluginId()))
                 .map(this::view).toList());
         var sourceIds = new HashSet<String>();
         if (scanner != null) {
@@ -130,11 +180,13 @@ public final class TimerDirectory {
                         !value.source().equals(id) || !value.actions().isEmpty())) {
                     throw new IllegalArgumentException("外部调度来源只能贡献有界的只读观测。");
                 }
-                observed.addAll(contributed);
+                observed.addAll(contributed.stream().filter(value -> enabled(value.pluginId())).toList());
             }
         }
         boolean limited = timers.size() >= 4096 || observed.size() > 4096;
-        var window = observed.stream().sorted(Comparator.comparing(View::id)).limit(4096).toList();
+        var window = observed.stream()
+                .filter(value -> pluginId == null || pluginId.isEmpty() || pluginId.equals(value.pluginId()))
+                .sorted(Comparator.comparing(View::id)).limit(4096).toList();
         var categories = new TreeMap<String, String>();
         var unique = new HashSet<UUID>();
         for (var item : window) {
@@ -188,11 +240,12 @@ public final class TimerDirectory {
                     ? config.getTaskConfig().getName() : metadata.name(), 128), state,
                     entry.revision, entry.timer.observation(), state.equals("REMOVED") || !metadata.controllable()
                     ? List.of() : List.of(entry.paused ? "RESUME" : "PAUSE"), metadata.category(),
-                    metadata.categoryName(), metadata.description(), "core");
+                    metadata.categoryName(), metadata.description(), "core", metadata.pluginId());
         } catch (RuntimeException failure) {
             return new View(entry.id, "定时器状态暂不可用", "UNKNOWN", entry.revision,
                     new TimerObservation("CUSTOM", "规则暂不可用", null, false, ""), List.of(),
-                    entry.presentation.category(), entry.presentation.categoryName(), entry.presentation.description(), "core");
+                    entry.presentation.category(), entry.presentation.categoryName(), entry.presentation.description(), "core",
+                    entry.presentation.pluginId());
         }
     }
 
@@ -208,6 +261,11 @@ public final class TimerDirectory {
      */
     public synchronized Receipt change(UUID id, Change change, Runnable guard) {
         guard.run();
+        // 2026/11/07：已停用插件的旧直达地址和操作重放均不可绕过当前资格。
+        var current = ids.get(id);
+        if (current == null || !enabled(current.presentation.pluginId())) {
+            throw new NoSuchElementException("定时器不在当前可用目录。");
+        }
         var old = operations.get(change.operationId());
         if (old != null) {
             if (!old.timer().equals(id) || !old.change().equals(change)) {
@@ -234,13 +292,16 @@ public final class TimerDirectory {
                 throw new IllegalStateException("定时器当前不可管理。");
             }
             guard.run();
+            if (!enabled(entry.presentation.pluginId())) {
+                throw new IllegalStateException("定时器所属插件已停用。");
+            }
             if (entry.paused != change.paused()) {
                 entry.paused = change.paused();
                 entry.revision++;
             }
             var receipt = new Receipt(change.operationId(), id, entry.revision, entry.paused, Instant.now(),
                     "后续触发门禁已更新；已开始的任务不因此撤销，来源暂停仍独立生效。");
-            operations.put(change.operationId(), new Operation(id, change, receipt));
+            operations.put(change.operationId(), new Operation(id, change, receipt, entry.presentation.pluginId()));
             return receipt;
         } finally {
             entry.lock.unlock();
@@ -254,8 +315,10 @@ public final class TimerDirectory {
      * @throws NoSuchElementException 当编号、目标不匹配或回执过期时
      */
     public synchronized Receipt operation(UUID timer, UUID operation) {
+        // 2026/11/07：回执保留注册时归属，即使计时器已释放也不可暴露停用插件。
         var found = operations.get(operation);
         if (found == null || !found.timer().equals(timer)
+                || !enabled(found.pluginId())
                 || found.receipt().at().isBefore(Instant.now().minusSeconds(86400))) {
             throw new NoSuchElementException("定时器回执不存在、已过期或进程已重启。");
         }
@@ -266,11 +329,12 @@ public final class TimerDirectory {
      * 服务端借用的计时器与短门禁，不直接序列化。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：注册时冻结展示合同，管理查询不修改业务对象。
+     * <br>2026/11/07：增加插件归属与有效状态约束。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.1-l
+     * @version 4.9.0-l
      */
     private static final class Entry {
         final UUID id = UUID.randomUUID();
@@ -280,11 +344,15 @@ public final class TimerDirectory {
         volatile boolean paused;
         volatile long revision = 1;
 
-        /** @param timer 原计时器 */
-        Entry(ITimer<?> timer) {
+        /**
+         * 2026/11/07：借用注册时已经冻结的完整展示声明。
+         * @param timer 原计时器
+         * @param presentation 已缓存的展示与插件归属
+         */
+        Entry(ITimer<?> timer, TimerPresentation presentation) {
             this.timer = timer;
             // 2026/11/04：分类与控制意图在实际注册时确认。
-            this.presentation = timer.getTimerTaskConfig().getPresentation();
+            this.presentation = presentation;
         }
     }
 
@@ -334,21 +402,24 @@ public final class TimerDirectory {
     /**
      * 内部请求绑定，不导出计时器引用。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/07：增加插件归属与有效状态约束。
      *
      * @param timer 固定目标
      * @param change 原参数
      * @param receipt 原结果
+     * @param pluginId 原插件归属，宿主计时器为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.9.0-l
      */
-    private record Operation(UUID timer, Change change, Receipt receipt) {}
+    private record Operation(UUID timer, Change change, Receipt receipt, @Nullable String pluginId) {}
 
     /**
      * 可展示规则与真实支持的动作。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：携带显式分类和实际调度来源，外部来源始终只读。
+     * <br>2026/11/07：增加插件归属与有效状态约束。
      *
      * @param id 本进程标识
      * @param name 安全任务名
@@ -360,13 +431,31 @@ public final class TimerDirectory {
      * @param categoryName 中文分类名
      * @param description 用途说明
      * @param source 调度来源
+     * @param pluginId 所属插件标识，宿主任务或未筛选请求为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.1-l
+     * @version 4.9.0-l
      */
     public record View(UUID id, String name, String state, long revision, TimerObservation rule, List<String> actions,
-                       String category, String categoryName, String description, String source) {
+                       String category, String categoryName, String description, String source, @Nullable String pluginId) {
+        /**
+         * 2026/11/07：兼容原只读来源；未声明插件归属时视为宿主观测。
+         * @param id 进程标识
+         * @param name 显示名称
+         * @param state 观测状态
+         * @param revision 门禁版本
+         * @param rule 调度规则
+         * @param actions 可用动作
+         * @param category 分类
+         * @param categoryName 分类名称
+         * @param description 说明
+         * @param source 来源
+         */
+        public View(UUID id, String name, String state, long revision, TimerObservation rule, List<String> actions,
+                    String category, String categoryName, String description, String source) {
+            this(id, name, state, revision, rule, actions, category, categoryName, description, source, null);
+        }
         /**
          * 2026/11/04：保留旧观测构造，未声明分类的任务不改变原控制意图。
          * @param id 原任务

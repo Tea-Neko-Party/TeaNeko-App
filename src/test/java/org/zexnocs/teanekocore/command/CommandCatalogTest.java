@@ -18,8 +18,17 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证目录复用真实注册与来源检查，管理说明不会成为普通成员的补全授权。
@@ -28,11 +37,12 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：验证主指令默认规则和方法有效权限组的独立投影。
  * <br>2026/11/05：验证重复目录查询不调用底层 Bean 扫描器，类型说明仍正确投影。
+ * <br>2026/11/07：停用安装说明与实时调用目录分离，静态方法元数据保持同一已编译对象。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.5-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 class CommandCatalogTest {
     /**
@@ -55,6 +65,9 @@ class CommandCatalogTest {
         when(scopes.inScope(any(), any(SubCommand.class), any())).thenReturn(true);
         when(permissions.hasPermission(any(), any(SubCommand.class), any())).thenReturn(true);
         var catalog = new CommandCatalog(scanner, permissions, scopes, plugins);
+        var installed = catalog.installedDescription();
+        var method = scanner.getPrefixCommand("/example").getSubCommand("echo").getSecond();
+        var compiled = CommandMethodContract.metadata(method);
         clearInvocations(beans);
         var context = CommandData.builder().rawData(new Object()).permission(CommandPermission.MEMBER).build();
         var allowed = catalog.list(context, () -> {});
@@ -80,6 +93,8 @@ class CommandCatalogTest {
         assertTrue(catalog.list(context, () -> {}).isEmpty());
         when(plugins.enabled(any(), any())).thenReturn(false);
         assertTrue(catalog.list(null, () -> {}).isEmpty());
+        assertEquals(installed, catalog.installedDescription());
+        assertSame(compiled, CommandMethodContract.metadata(method));
         verifyNoInteractions(beans);
         // 2026/11/05：失败重扫保留完整命令快照，后续查询不自动重试发现。
         doThrow(new IllegalStateException("测试命令发现失败。")).when(beans).getBeanClass(bean);

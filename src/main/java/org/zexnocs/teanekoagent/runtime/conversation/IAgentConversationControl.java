@@ -32,7 +32,7 @@ public interface IAgentConversationControl {
      * @return 实际换代的会话数
      * @throws UnsupportedOperationException 当宿主未支持人格协调时
      */
-    default CompletionStage<Integer> synchronizePersonality(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
+    default CompletionStage<Integer> synchronizePromptContext(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
         throw new UnsupportedOperationException("当前会话端口不支持人格管理同步。");
     }
     /**
@@ -42,7 +42,7 @@ public interface IAgentConversationControl {
      * @return 实际推进代次的会话数
      * @throws UnsupportedOperationException 当实现不支持跨作用域同步时
      */
-    default CompletionStage<Integer> synchronizeNamespace(String namespace, ExecutionControl parent) {
+    default CompletionStage<Integer> synchronizePartition(String namespace, ExecutionControl parent) {
         throw new UnsupportedOperationException("当前会话端口不支持共享空间同步。");
     }
     /**
@@ -53,7 +53,7 @@ public interface IAgentConversationControl {
      * @return 实际更换 epoch 的会话数
      * @throws UnsupportedOperationException 当实现尚未支持持久化引用同步时
      */
-    default CompletionStage<Integer> synchronizeMemory(AgentScope scope, ExecutionControl parent) {
+    default CompletionStage<Integer> synchronizeContext(AgentScope scope, ExecutionControl parent) {
         throw new UnsupportedOperationException("会话端口尚未支持持久化记忆引用同步。");
     }
     /**

@@ -1,7 +1,7 @@
 package org.zexnocs.teanekoclient.general.agent;
 
-import org.zexnocs.teanekoagent.component.expression.AgentReplyPlan;
-import org.zexnocs.teanekoagent.component.expression.adapter.AgentReplySender;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplySender;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.sender.api.sender_box.IEasyMessageSenderBuilder;
 

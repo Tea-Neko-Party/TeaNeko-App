@@ -8,6 +8,7 @@ import org.zexnocs.teanekocore.command.api.CommandScope;
 import org.zexnocs.teanekocore.command.api.SubCommand;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataService;
 import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.plugin.PluginOwned;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -17,16 +18,19 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：增加中文指令显示名，供控制台目录与选择卡片使用。
  *
+ * <br>2026/11/07：按业务插件分类声明归属，保留原业务标识与持久化格式。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.1.0
- * @version 4.7.6-l
+ * @version 4.9.0-l
  */
 @Description("有关数据库相关系统级的指令。")
 // 2026/11/04：显示名与稳定指令前缀分别维护。
 @Command(displayName = "数据维护", value = {"/data"},
         permission = CommandPermission.DEBUG,
         scope = CommandScope.ALL)
+@PluginOwned("general.system")
 public class DataCommand {
     private final ICacheService iCacheService;
 

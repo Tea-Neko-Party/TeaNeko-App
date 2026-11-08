@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.plugin;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
@@ -24,7 +26,7 @@ import java.util.Objects;
  * @version 4.8.0-l
  */
 public record SourceAgentFeature(String pluginId, String id, boolean defaultEnabled,
-                                IAgentToolSource tools, IAgentPromptSource prompts, java.util.Set<String> promptNames) implements AgentFeature {
+                                IAgentToolSource tools, IAgentPromptSource prompts, java.util.Set<String> promptNames) implements IAgentFeature {
     /**
      * 构造不提供资料的工具能力。
      * @param pluginId 所属插件

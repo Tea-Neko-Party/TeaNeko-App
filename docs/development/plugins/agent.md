@@ -1,10 +1,10 @@
 # Agent 插件编写
 
-v4.8.0-l 的聊天可选能力优先使用[可装配组件](agent-components.md)，可提供独立参数并自动出现在 Web 装配页。下文的 `AgentFeature` 保留给旧实例、底层贡献及异步环绕。
+v4.9.0-l 的聊天可选能力优先使用[可装配组件](agent-components.md)，可提供独立参数并自动出现在 Web 装配页。下文的 `IAgentFeature` 保留给旧实例、底层贡献及异步环绕。
 
 ## 能力包与实例选择
 
-普通工具优先使用 [注解式 Agent 工具](agent-tools.md)，Spring Bean 加上类和方法标记即可自动注册。需要组合组件、System、资料或事件时，提供依赖 teaneko.agent 的 PluginModule，再提供 AgentFeature Bean。AgentFeature 是能力装配声明，不是运行服务定位器；只覆写本能力需要的成员。
+普通工具优先使用 [注解式 Agent 工具](agent-tools.md)，Spring Bean 加上类和方法标记即可自动注册。需要组合组件、System、资料或事件时，声明依赖 teaneko.agent 的 @TeaNekoPlugin 入口，再提供 IAgentFeature Bean。IAgentFeature 是能力装配声明，不是运行服务定位器；只覆写本能力需要的成员。
 
 | 成员 | 含义 |
 | --- | --- |
@@ -30,17 +30,17 @@ new AgentDefinition("业务助手", modelOptions,
 
 使用宿主注入的 IAgentFactory 创建实例。默认工厂会在登记前检查能力、初始化组件并编译两个阶段的 System 依赖；失败不登记半初始化实例。原三参数定义仍安装宿主默认能力；原独立构造的无插件工厂保留，不支持静默忽略显式 features。
 
-内置能力包括 teaneko.agent:builtin-tools、teaneko.agent:builtin-memory、teaneko.agent:onebot 和 teaneko.agent:layered-memory。最后一项提供同 scope 持久近期与中期资料；显式选择能力集合的实例需自行加入。旧 IAgentToolSource/IAgentPromptSource Bean 代表宿主的额外总来源，不能依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 AgentFeature 追加，避免多个总来源 Bean 歧义。
+内置能力包括 agent.cognition:memory-tools、agent.automation:command-tools、agent.cognition:builtin-memory、onebot.common:onebot 和 agent.cognition:layered-memory。最后一项提供同 scope 持久近期与中期资料；显式选择能力集合的实例需自行加入。旧 IAgentToolSource/IAgentPromptSource Bean 代表宿主的额外总来源，不能依赖 ConditionalOnMissingBean 替换掉内置记忆。保留一个明确总来源即可，普通插件通过 IAgentFeature 追加，避免多个总来源 Bean 歧义。
 
 ## 新增工具
 
-常规工具在已有 Spring Bean 上使用 `@TeaNekoAgentToolClass`，每类只声明一个 `@TeaNekoAgentTool` 公开方法，方法和参数使用 `@Description`；宿主自动生成 schema 并注册普通能力。共享查询和授权逻辑复用服务，平台实现放在 Client 层。支持 client、DefaultValue、可信上下文、异步返回及图像；完整示例和限制见 [工具开发指南](agent-tools.md)。记忆、历史、命令、平台和资料工具已按此方式实现。
+常规工具在已有 Spring Bean 上使用 `@TeaNekoAgentToolClass`，每类只声明一个 `@TeaNekoAgentTool` 公开方法，方法和参数使用 `@Description`；宿主自动生成 schema 并注册普通能力。共享查询和授权逻辑复用服务，平台协议适配放在 Client 层，业务工具放在声明客户端需求的 Plugin。支持 client、DefaultValue、可信上下文、异步返回及图像；完整示例和限制见 [工具开发指南](agent-tools.md)。记忆、历史、命令、平台和资料工具已按此方式实现。
 
-需要动态 schema 或后端策略的工具保留底层入口：使用 LLMTool.builder() 定义协议名、中文描述和参数 schema，再用 LLMToolBinding(definition, executor) 固定定义与异步执行目标。tools() 返回显式选择该绑定的 IAgentToolSource。完整可编译实现见 [ExampleClockFeature.tools](../../../src/main/java/org/zexnocs/teanekoplugin/agent_example/ExampleClockFeature.java)。
+需要动态 schema 或后端策略的工具保留底层入口：使用 LLMTool.builder() 定义协议名、中文描述和参数 schema，再用 LLMToolBinding(definition, executor) 固定定义与异步执行目标。tools() 返回显式选择该绑定的 IAgentToolSource。完整可编译实现见 [ExampleClockFeature.tools](../../../src/main/java/org/zexnocs/teanekoplugin/agent/example/ExampleClockFeature.java)。
 
 执行器参数 call 只有模型业务参数；可信 requestId、实体快照和借用控制来自 ToolInvocationContext。通过 bindings().require(组件键) 读取宿主固定组件，不从 JSON 接收操作者、scope、角色、DEBUG、数据库连接或控制。
 
-平台专用工具使用 `new LLMToolBinding(definition, executor, Set.of("onebot"))`，或在原绑定上调用 `.forClients(Set.of("onebot"))`。不指定或使用空集合允许所有 client；已有受限绑定不能通过再次包装扩大范围。宿主在插件筛选后按请求 client 过滤模型可见工具，并在实际调用时再次核对可信 client 与请求身份。`guarded`、`guardedAsync`、`intercept` 都保留约束；独立于 Agent 使用 LLM 工具集的宿主须自行按 `supportsClient` 选择和校验。完整的平台适配见 [OneBot 工具](../../../src/main/java/org/zexnocs/teanekoclient/onebot/agent/README.md)。
+平台专用工具使用 `new LLMToolBinding(definition, executor, Set.of("onebot"))`，或在原绑定上调用 `.forClients(Set.of("onebot"))`。不指定或使用空集合允许所有 client；已有受限绑定不能通过再次包装扩大范围。宿主在插件筛选后按请求 client 过滤模型可见工具，并在实际调用时再次核对可信 client 与请求身份。`guarded`、`guardedAsync`、`intercept` 都保留约束；独立于 Agent 使用 LLM 工具集的宿主须自行按 `supportsClient` 选择和校验。完整的平台适配见 [OneBot 工具](../../../src/main/java/org/zexnocs/teanekoplugin/onebot/common/agent/README.md)。
 
 协议工具名使用供应商允许的字母/数字/下划线/短横线，建议采用插件前缀，例如 example_clock_now，不直接把带冒号的能力 key 当工具名。绑定继续由 LLMToolSet 冻结 schema、校验 JSON、参数和返回大小；本轮重名明确失败，不悄悄覆盖其他工具。
 
@@ -102,7 +102,7 @@ AgentTurnReport 字段：requestId、agentId、scope、activity、status 定位�
 
 ## 表情包生命周期事件
 
-这两项为全实例图库事件，独立于某个 AgentFeature。监听器仍使用 Core @EventListener、@EventHandler 和 @PluginOwned；安装 PluginModule 后还须在 config/agent/stickers.yml 的 event-plugins 列出插件 ID，默认无第三方参与。
+这两项为全实例图库事件，独立于某个 IAgentFeature。监听器仍使用 Core @EventListener、@EventHandler 和 @PluginOwned；安装 @TeaNekoPlugin 后还须在 config/agent/stickers.yml 的 event-plugins 列出插件 ID，默认无第三方参与。
 
 | 事件 | 触发与字段 | 允许操作 |
 | --- | --- | --- |
@@ -121,7 +121,7 @@ public final class StickerHintListener {
 }
 ```
 
-补充提示不会改变插画排除、类型门槛、容量或当前来源权限。决策在通知结束、失败或五秒超时后冻结，迟到修改抛错；未结束的物理任务仍占有界名额。提交事件是尽力观察，可能因拥塞/失败缺失，不是可靠审计或浏览器订阅协议；消费者通过管理 SPI 查询当前状态，不能以事件回调失败推断事务回滚。文件后端、预览和刷新合同见[素材扩展文档](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展开发)。
+补充提示不会改变插画排除、类型门槛、容量或当前来源权限。决策在通知结束、失败或五秒超时后冻结，迟到修改抛错；未结束的物理任务仍占有界名额。提交事件是尽力观察，可能因拥塞/失败缺失，不是可靠审计或浏览器订阅协议；消费者通过管理 SPI 查询当前状态，不能以事件回调失败推断事务回滚。文件后端、预览和刷新合同见[素材扩展文档](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#扩展开发)。
 
 ## 修改异步 Stage 链
 
@@ -147,22 +147,22 @@ IAgentPromptSource.resolve 返回完整资料；verify 在原模型、工具及�
 
 | 需要扩展 | 接入方式及边界 |
 | --- | --- |
-| 持久任务动作 | 提供 AgentTaskAction Bean；声明 pluginId、动作 id、AgentScheduleService.Action 和动作自身 Policy。创建/执行同时通过公共身份与动作策略，动作在副作用前等待 guard；与内置 remind 重名拒绝，复用原 Timer、存储、防重及真实终态。旧三参构造保留，但默认拒绝创建/执行，插件须补充窄策略 |
+| 持久任务动作 | 提供 AgentTaskAction Bean；声明 pluginId、动作 id、AgentScheduleService.IAction 和动作自身 Policy。创建/执行同时通过公共身份与动作策略，动作在副作用前等待 guard；与内置 remind 重名拒绝，复用原 Timer、存储、防重及真实终态。旧三参构造保留，但默认拒绝创建/执行，插件须补充窄策略 |
 | 知识检索 | 实现 IKnowledgeSource，复用 AgentExtensionTools.knowledgeSearch 及其资料/策略适配，通过 Feature 注册；继续保留来源、revision、完整性和重放检查 |
 | 文件/代码后端 | 实现 IAgentFileAccess 或 IAgentCodeExecutor，经 AgentExtensionTools 生成工具；必须显式提供 IAgentExtensionPolicy，不能因注册 Bean 就开放宿主文件或 shell |
 | 模型供应商 | 实现 ILLMModel，标记 @LLMModel 与 @PluginOwned；继续使用统一 model.yml、原 ExecutionPolicy 和实际 IO 取消；模型服务在完成时复核插件版本 |
 | 记忆、画像、人格业务 | 复用已有服务及专用 EasyData，可贡献候选、工具和资料；最终写入仍受 namespace/generation、主体、来源、锁定和 DEBUG 管理约束 |
-| 自动三层记忆 | ILayeredMemoryCompressor 与 ILongTermMemoryConsolidator 可分别替换摘要和长期选择；复用单个 LayeredMemoryProcessor。替换 ILongTermMemoryStore 仍须实现证据验证、索引/水位原子提交、维护幂等和遗忘抑制。普通资料及工具通过 teaneko.agent:layered-memory、teaneko.agent:long-memory 安装，详见[分层记忆](../../../src/main/java/org/zexnocs/teanekoagent/component/memory/layered/README.md) |
+| 自动三层记忆 | ILayeredMemoryCompressor 与 ILongTermMemoryConsolidator 可分别替换摘要和长期选择；复用单个 LayeredMemoryProcessor。替换 ILongTermMemoryStore 仍须实现证据验证、索引/水位原子提交、维护幂等和遗忘抑制。普通资料及工具通过 agent.cognition:layered-memory、agent.cognition:long-memory 安装，详见[分层记忆](../../../src/main/java/org/zexnocs/teanekoplugin/agent/cognition/memory/layered/README.md) |
 | 观察式人格 | ILongTermMemoryConsolidator.analyze 可在原模型请求同时返回 StyleObservations.Analysis；Target 由宿主固定，插件不能替换人格或自报来源。IStyleObservationStore 在原事务保存观察与采用，独立样本、原管理身份、字段锁定和已关闭学习域仍由宿主验证；旧 consolidate 函数式实现继续兼容 |
 | 记忆维护 | 实现 IMemoryMaintenance 并注册 Bean，原 MemoryMaintenanceService 串行等待每个端口完成；每批必须有界，游标与回收同事务提交，不使用学习关闭作为无限保留过期数据的依据。替换 Store 时同时实现维护或明确提供独立清理后端，保留有效数据、幂等及遗忘保护 |
 | 明确保存 | 默认 ConversationHistoryService 借用 ExplicitMemoryCapture 在模型前提交真实用户原文；替换 IAgentHistoryRecorder 时自行接入这一职责，不能依赖模型必定调用 memory_add。替换 ILongTermMemoryStore 时实现 appendExplicit 的幂等、完整附加信息、有效期和人工保护；未实现默认失败，不能丢弃保存请求 |
 | 平台回执 | 实现 IAgentDeliveryStore 并注册 Bean，AgentDeliveryService 复用原发送链；先占用、等待真实平台消息 ID、逐段记录。已确认重放跳过传输，未知占用禁止自动补发；按原 scope/绑定/generation 读取并有界清理，不把生成或已接受当成对方已读 |
-| 回复协议、指令与内容 | Spring Bean 分别声明 @TeaNekoReplyProtocol、@TeaNekoReplyDirective、@TeaNekoReplyPartHandler 并实现对应接口，按精确 ID/版本注册；复用 scanner 和原插件归属。内容 resolve 可异步，宿主统一冻结计划、控制节奏并检查真实回执，见[表达扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/expression/README.md#扩展开发) |
-| 表情包采集后端 | Spring Bean 实现 IStickerAnalyzer、IStickerAssetStore、IStickerAdmissionPolicy 或 IStickerCatalog，并声明对应 @TeaNekoSticker 注解；本地配置精确选择标识，复用原插件代次。目录回调保持短事务，分析和文件动作在事务外；类型、容量、来源及迟到提交仍由宿主复核，见[素材扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展开发) |
-| 类别选图与原生表情 | sticker 的 teaneko.agent:media-replies 依赖 expression；sticker_list 只在实际资料保留时安装，编译只接受本轮成功完整回执。expression 独立提供 native_faces 原生表情目录，无需安装 sticker/tool。客户端 Bean 实现 IExpressionClientAdapter 并声明 @TeaNekoExpressionClient；资源发送覆写 IReplyPartHandler 的 ReplySendContext 重载并在异步动作后再次守卫，详见[客户端扩展](../../../src/main/java/org/zexnocs/teanekoagent/component/sticker/README.md#扩展客户端编码) |
+| 回复协议、指令与内容 | Spring Bean 分别声明 @TeaNekoReplyProtocol、@TeaNekoReplyDirective、@TeaNekoReplyPartHandler 并实现对应接口，按精确 ID/版本注册；复用 scanner 和原插件归属。内容 resolve 可异步，宿主统一冻结计划、控制节奏并检查真实回执，见[表达扩展](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/expression/README.md#扩展开发) |
+| 表情包采集后端 | Spring Bean 实现 IStickerAnalyzer、IStickerAssetStore、IStickerAdmissionPolicy 或 IStickerCatalog，并声明对应 @TeaNekoSticker 注解；本地配置精确选择标识，复用原插件代次。目录回调保持短事务，分析和文件动作在事务外；类型、容量、来源及迟到提交仍由宿主复核，见[素材扩展](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#扩展开发) |
+| 类别选图与原生表情 | sticker 的 agent.expression:media-replies 依赖 expression；sticker_list 只在实际资料保留时安装，编译只接受本轮成功完整回执。expression 独立提供 native_faces 原生表情目录，无需安装 sticker/tool。客户端 Bean 实现 IExpressionClientAdapter 并声明 @TeaNekoExpressionClient；资源发送覆写 IReplyPartHandler 的 ReplySendContext 重载并在异步动作后再次守卫，详见[客户端扩展](../../../src/main/java/org/zexnocs/teanekoplugin/agent/expression/sticker/README.md#扩展客户端编码) |
 | Skill | 继续经现有本地目录校验/发布与 Skill 策略选择；插件功能配套的 Skill 资源按部署说明安装，不因 JAR 存在就自动发布目录或增加权限 |
 | 显式工作流 | 借用已有 AgentWorkflowService 安排实例，共享原父预算；不透明地自动调用其他 Agent 不属于注册能力 |
-| 管理页面 | 贡献 ManagementResource，按 [管理扩展](management.md) 提供脱敏查询或明确管理操作 |
+| 管理页面 | 贡献 IManagementResource，按 [管理扩展](management.md) 提供脱敏查询或明确管理操作 |
 
 任务动作执行前及每个副作用前等待宿主传入的 guard，使用原任务 ID 与 nextFire 做防重；返回 Outcome.COMPLETED、REJECTED 或 INDETERMINATE，不能把接受请求写成成功交付。动作 ID 格式与原持久化协议一致，最长 48 位小写字母/数字/下划线；建议带插件前缀和必要协议版本，不擅自更改旧任务含义。
 

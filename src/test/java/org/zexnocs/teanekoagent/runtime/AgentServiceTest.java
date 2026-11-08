@@ -1,6 +1,8 @@
 package org.zexnocs.teanekoagent.runtime;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+// 2026/11/07：隔离目录复用生产插件注解，不创建业务入口实例。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -12,44 +14,41 @@ import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.component.AgentComponents;
 import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
-import org.zexnocs.teanekoagent.component.llm.framework.LLMOperationRejectedException;
-import org.zexnocs.teanekoagent.component.llm.framework.input.LLMOptionsPolicy;
-import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.InteractionRuntime;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMTokenEstimate;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.TextLLMContentPart;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.IContextualToolExecutor;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMTool;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.interfaces.ILLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.configuration.AgentExecutionConfig;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenEstimate;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.parameter.AbstractLLMFunctionParameter;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
@@ -65,6 +64,10 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
@@ -112,8 +115,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
-import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.MODEL_REQUESTS;
-import static org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMCallLimits.TOTAL_TOKENS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.MODEL_REQUESTS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.TOTAL_TOKENS;
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.BUDGET_EXCEEDED;
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.CANCELLED;
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.CONFIGURATION_ERROR;
@@ -122,6 +125,10 @@ import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.INVALID_INP
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.SKIPPED;
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.SUCCESS;
 import static org.zexnocs.teanekoagent.runtime.AgentRunResult.Status.TIMED_OUT;
+
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 使用真实 Core 管线和 LLM 交互服务验证 Agent 轮次、动态门控、可信上下文与资源拥有关系。
@@ -154,40 +161,51 @@ class AgentServiceTest {
         var assembly = org.zexnocs.teanekoagent.component.AgentAssembly.parse(
                 "{\"version\":1,\"components\":{\"llm\":{},\"memory\":{},\"expression\":{}}}");
         policy.set(new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE, "", assembly));
-        var references = mock(org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences.class);
+        var references = mock(org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences.class, CALLS_REAL_METHODS);
         when(references.resolve(any())).thenAnswer(call -> CompletableFuture.completedStage(
-                new org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference(call.getArgument(0),
-                        org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId.SHARED, 0, 0)));
+                new org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference(call.getArgument(0),
+                        org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId.SHARED, 0, 0)));
         when(references.verify(any())).thenReturn(CompletableFuture.completedStage(null));
-        var personalities = mock(org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource.class);
+        var personalities = mock(org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource.class, CALLS_REAL_METHODS);
         when(personalities.verify(any(), any(), any())).thenReturn(CompletableFuture.completedStage(null));
-        var history = mock(org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder.class);
-        when(history.record(any(), any(), nullable(org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage.class), any()))
+        var history = mock(org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentHistoryRecorder.class);
+        when(history.record(any(), any(), nullable(org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage.class), any()))
                 .thenReturn(CompletableFuture.completedStage(null));
-        var expression = mock(org.zexnocs.teanekoagent.component.expression.ExpressionRuntime.class);
+        var expression = mock(org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionRuntime.class);
         when(expression.compile(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(null));
         var beans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
         beans.registerSingleton("history", history);
         beans.registerSingleton("expression", expression);
-        var memory = new org.zexnocs.teanekoagent.component.memory.MemoryComponent(
-                new org.zexnocs.teanekoagent.component.memory.MemoryInputSystem(beans.getBeanProvider(
-                        org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder.class)),
-                new org.zexnocs.teanekoagent.component.memory.MemoryOutputSystem(beans.getBeanProvider(
-                        org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder.class)));
-        var expressive = new org.zexnocs.teanekoagent.component.expression.ExpressionComponent(
-                new org.zexnocs.teanekoagent.component.expression.ExpressionCompileSystem(beans.getBeanProvider(
-                        org.zexnocs.teanekoagent.component.expression.ExpressionRuntime.class)));
+        var memory = new org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryComponent(
+                new org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryInputSystem(beans.getBeanProvider(
+                        org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentHistoryRecorder.class)),
+                new org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryOutputSystem(beans.getBeanProvider(
+                        org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentHistoryRecorder.class)));
+        // 2026/11/07：跨聊天来源归入记忆组件，当前测试只验证输入输出系统。
+        var shared = mock(org.zexnocs.teanekoplugin.agent.cognition.memory.shared.SharedMemoryPromptSource.class);
+        when(shared.resolve(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(List.of()));
+        when(shared.verify(any(), any(), any())).thenReturn(CompletableFuture.completedStage(null));
+        when(shared.verifyReplay(any(), any(), any())).thenReturn(CompletableFuture.completedStage(true));
+        beans.registerSingleton("sharedMemory", shared);
+        memory.installShared(beans.getBeanProvider(org.zexnocs.teanekoplugin.agent.cognition.memory.shared.SharedMemoryPromptSource.class));
+        var expressive = new org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionComponent(
+                new org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionCompileSystem(beans.getBeanProvider(
+                        org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionRuntime.class)));
         var llm = new org.zexnocs.teanekoagent.component.llm.LLMComponent(
                 new org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser());
-        var contributions = new ArrayList<org.zexnocs.teanekoagent.plugin.AgentFeature>();
+        var contributions = new ArrayList<org.zexnocs.teanekoagent.plugin.IAgentFeature>();
         Map.of("llm", llm, "memory", memory, "expression", expressive).forEach((id, component) -> contributions.add(
-                new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", id, component)));
-        for (String id : List.of("builtin-memory", "long-memory", "layered-memory", "expression")) {
-            contributions.add(new org.zexnocs.teanekoagent.plugin.SourceAgentFeature("teaneko.agent", id, false,
+                new org.zexnocs.teanekoagent.component.AgentComponentFeature(
+                        id.equals("llm") ? "teaneko.agent" : id.equals("memory") ? "agent.cognition" : "agent.expression", id, component)));
+        for (String id : List.of("builtin-memory", "long-memory", "layered-memory", "memory-tools", "expression")) {
+            contributions.add(new org.zexnocs.teanekoagent.plugin.SourceAgentFeature(
+                    id.equals("expression") ? "agent.expression" : "agent.cognition", id, false,
                     (definition, request, runtime) -> List.of(), org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.empty()));
         }
         var plugins = new org.zexnocs.teanekocore.plugin.PluginRegistry(List.of(() ->
-                new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent", "1", 1, Set.of())));
+                new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent", "1", 1, Set.of()),
+                PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.cognition.CognitionPlugin.class)::descriptor,
+                PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.expression.ExpressionPlugin.class)::descriptor));
         try (var composed = new AgentService(gate, interactions, tools, new ObjectMapper(), runtime,
                 runtime.scheduler, runtime.clock, logger, references,
                 org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource.empty(), personalities, history)) {
@@ -210,13 +228,15 @@ class AgentServiceTest {
         var assembly = org.zexnocs.teanekoagent.component.AgentAssembly.parse(
                 org.zexnocs.teanekoagent.component.AgentAssembly.MINIMAL);
         policy.set(new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE, "", assembly));
-        var references = mock(org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences.class);
-        var personalities = mock(org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource.class);
-        var history = mock(org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder.class);
+        var references = mock(org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences.class, CALLS_REAL_METHODS);
+        var personalities = mock(org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource.class, CALLS_REAL_METHODS);
+        var history = mock(org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentHistoryRecorder.class);
         var llm = new org.zexnocs.teanekoagent.component.llm.LLMComponent(
                 new org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser());
         var plugins = new org.zexnocs.teanekocore.plugin.PluginRegistry(List.of(() ->
-                new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent", "1", 1, Set.of())));
+                new org.zexnocs.teanekocore.plugin.PluginDescriptor("teaneko.agent", "1", 1, Set.of()),
+                PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.cognition.CognitionPlugin.class)::descriptor,
+                PluginDeclarationScanner.declaration(org.zexnocs.teanekoplugin.agent.expression.ExpressionPlugin.class)::descriptor));
         var pluginRuntime = new org.zexnocs.teanekoagent.plugin.AgentPluginRuntime(plugins,
                 List.of(new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "llm", llm)),
                 new org.springframework.beans.factory.support.DefaultListableBeanFactory()
@@ -230,7 +250,12 @@ class AgentServiceTest {
             assertEquals(1, prompts.size());
             reply(response());
             assertEquals(SUCCESS, result.join().status());
-            verifyNoInteractions(references, personalities, history, tools);
+            verify(references, never()).resolve(any());
+            verify(references, never()).verify(any());
+            verify(personalities, never()).resolve(any(), any());
+            // 2026/11/08：允许查询扩展资格，但纯模型装配不能调用业务持久化。
+            verify(history, never()).record(any(), any(), any(), any());
+            verifyNoInteractions(tools);
         }
     }
 
@@ -322,7 +347,7 @@ class AgentServiceTest {
     @ParameterizedTest
     @ValueSource(booleans = {true, false})
     void incompleteReferencedRequestReportsConfigurationRejection(boolean missingConversation) {
-        var references = mock(IAgentMemoryReferences.class);
+        var references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
         try (var referenced = new AgentService(gate, interactions, tools, new ObjectMapper(), runtime,
                 runtime.scheduler, runtime.clock, logger, references)) {
             installObservation(referenced, new AgentObservationFileConfig());
@@ -1103,7 +1128,7 @@ class AgentServiceTest {
         var config = new AgentExecutionConfig(); var executor = mock(ExecutorService.class);
         var beans = new DefaultListableBeanFactory();
         var built = config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
-                executor, runtime.scheduler, logger, mock(IAgentMemoryReferences.class));
+                executor, runtime.scheduler, logger, mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS));
         try (built) { verifyNoInteractions(scopes, readiness, models, executor); }
     }
 
@@ -1113,9 +1138,9 @@ class AgentServiceTest {
         doAnswer(invocation -> { runtime.execute(invocation.getArgument(0)); return null; }).when(executor).execute(any(Runnable.class));
         var beans = new DefaultListableBeanFactory(); beans.registerSingleton("明确工具源", tools);
         select((call, context) -> CompletableFuture.completedStage("工具结果"));
-        var references = mock(IAgentMemoryReferences.class);
-        var fixed = new org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
-                org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
+        var references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
+        var fixed = new org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
+                org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
         when(references.resolve(any())).thenReturn(CompletableFuture.completedStage(fixed));
         when(references.verify(any())).thenReturn(CompletableFuture.completedStage(null));
         var built = config.agentTurnService(gate, interactions, beans.getBeanProvider(IAgentToolSource.class), new ObjectMapper(),
@@ -1140,9 +1165,9 @@ class AgentServiceTest {
         var componentSource = mock(IAgentComponentPromptSource.class);
         var otherComponentSource = mock(IAgentComponentPromptSource.class);
         when(source.resolve(any(), any(), any(), any())).thenReturn(CompletableFuture.completedStage(List.of()));
-        var references = mock(IAgentMemoryReferences.class);
-        var fixed = new org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
-                org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
+        var references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
+        var fixed = new org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference(request(AgentActivity.SERVICE).actor().scope(),
+                org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId.SHARED, 0, 0);
         when(references.resolve(any())).thenReturn(CompletableFuture.completedStage(fixed));
         when(references.verify(any())).thenReturn(CompletableFuture.completedStage(null));
         try (var context = new AnnotationConfigApplicationContext()) {
@@ -1175,7 +1200,7 @@ class AgentServiceTest {
             beans.registerSingleton("virtualExecutor", executor);
             beans.registerSingleton("taskExecutor", runtime.scheduler);
             beans.registerSingleton("projectLogger", logger);
-            beans.registerSingleton("memoryReferences", mock(IAgentMemoryReferences.class));
+            beans.registerSingleton("memoryReferences", mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS));
             context.register(AgentExecutionConfig.class);
             context.refresh();
             var assembled = context.getBean(IAgentTurnService.class);

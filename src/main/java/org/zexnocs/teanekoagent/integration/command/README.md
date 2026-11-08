@@ -4,7 +4,7 @@
 
 全部 Agent 子命令已提供中文 `@Description`，沿用现有 subhelp 的参数、权限和 scope 过滤展示；使用原命令系统的 subhelp 入口查询。显式聊天与普通原生消息共用模型身份前缀，显示元数据不作为原文凭据，不在机器人回复中增加前缀。
 
-提醒入口为 `/agent remind <ISO偏移时间> <时区> <重复秒数，单次填0> <正文>`、`/agent tasks [游标]`、`/agent task <任务UUID>` 和 `/agent canceltask <任务UUID>`；当前原生 `/agent chat 10分钟后提醒我喝水` 等有界表达也可直接创建、查询和取消。时间、当前身份、禁用后的管理权限和实际发送限制统一见 [任务说明](../../component/schedule/README.md)，本模块不重复维护任务规格。
+提醒入口为 `/agent remind <ISO偏移时间> <时区> <重复秒数，单次填0> <正文>`、`/agent tasks [游标]`、`/agent task <任务UUID>` 和 `/agent canceltask <任务UUID>`；当前原生 `/agent chat 10分钟后提醒我喝水` 等有界表达也可直接创建、查询和取消。时间、当前身份、禁用后的管理权限和实际发送限制统一见 [任务说明](../../../teanekoplugin/agent/automation/schedule/README.md)，本模块不重复维护任务规格。
 
 ```text
 /cfg reg agent
@@ -30,9 +30,9 @@
 
 当前 namespace 的权威值保存在原绑定服务中，`/cfg set agent memoryNamespace <已有空间>` 已与 setnamespace 共用同一边界；`/cfg agent` 读取权威值，注册/注销保留原绑定，不向 ConfigData DTO 写入副本。App 通过 IConfigCommandFields 扩展独立业务字段，拒绝重名及覆盖 DTO 字段，Core 配置服务不依赖 Agent。
 
-DEBUG 已提供事实分页、JSON 导出、编辑/锁定、快照克隆、clear 及分批旧代次回收，参数和事务边界见 [记忆管理说明](../../component/memory/admin/README.md)。人格补正的 DEBUG key 绑定、备份/克隆、分页/导出、编辑/锁定和撤销也已接入，参数与共享会话边界见 [人格管理](../../component/personality/README.md#debug-补正管理)。自动群/私聊触发、旁观采集、模型发送计划、内部 Client/Sender 迁移、图片与主动任务的完整平台接入仍待后续阶段，本模块提供显式文本入口。
+DEBUG 已提供事实分页、JSON 导出、编辑/锁定、快照克隆、clear 及分批旧代次回收，参数和事务边界见 [记忆管理说明](../../../teanekoplugin/agent/cognition/memory/admin/README.md)。人格补正的 DEBUG key 绑定、备份/克隆、分页/导出、编辑/锁定和撤销也已接入，参数与共享会话边界见 [人格管理](../../../teanekoplugin/agent/cognition/personality/README.md#debug-补正管理)。自动群/私聊触发、旁观采集、模型发送计划、内部 Client/Sender 迁移、图片与主动任务的完整平台接入仍待后续阶段，本模块提供显式文本入口。
 
-Skill 已支持本地目录、按需加载及作用域启停。`/agent skills` 查看本 scope 的显式选择，`/agent reloadskills` 仅 DEBUG 可重载本地完整目录；OWNER 使用原 `/cfg` 设置 skills 与 skillsEnabled。Skill 不额外授予工具，参数及文件格式见 [Skill 说明](../../component/skill/README.md)。
+Skill 已支持本地目录、按需加载及作用域启停。`/agent skills` 查看本 scope 的显式选择，`/agent reloadskills` 仅 DEBUG 可重载本地完整目录；OWNER 使用原 `/cfg` 设置 skills 与 skillsEnabled。Skill 不额外授予工具，参数及文件格式见 [Skill 说明](../../../teanekoplugin/agent/automation/skill/README.md)。
 
 ## 实际请求与权限
 

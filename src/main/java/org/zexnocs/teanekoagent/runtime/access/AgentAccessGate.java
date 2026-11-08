@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoagent.runtime.access;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
@@ -12,7 +14,19 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import java.util.Objects;
 import java.util.Optional;
 
-import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.*;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.ACTIVITY_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.ACTIVITY_POLICY_REJECTED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.ALLOWED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INSTANCE_CLOSED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INSTANCE_NOT_REGISTERED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.INVALID_ORIGIN;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.LOCAL_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.MODE_RESTRICTED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.READINESS_UNAVAILABLE;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_CONFIG_UNAVAILABLE;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_DISABLED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_POLICY_CHANGED;
+import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason.SCOPE_UNREGISTERED;
 
 /**
  * 新 Agent 所有活动的统一准入检查，先验证实例和 scope，再读取运行配置或凭据。
@@ -109,7 +123,7 @@ public final class AgentAccessGate {
                 var options = definition.modelOptions().toOptions();
                 options.setProvider(policy.modelRoute());
                 definition = new org.zexnocs.teanekoagent.runtime.AgentDefinition(definition.id(),
-                        new org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot(options),
+                        new org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot(options),
                         definition.activities(), definition.features());
             }
             current = Objects.requireNonNull(readiness.inspect(definition));

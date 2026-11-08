@@ -1,38 +1,70 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.InteractionRuntime;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationState;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
-import org.zexnocs.teanekoagent.component.memory.AgentRequestJournal;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentHandle;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentRunResult;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.AgentMemoryReferenceException;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 验证持久化引用在默认邮箱队首、同步通知、结果提交与重放中的隔离和资源拥有关系。
@@ -59,7 +91,7 @@ class AgentConversationMemoryTest {
     private final AtomicReference<Supplier<CompletionStage<MemoryNamespaceReference>>> resolve = new AtomicReference<>(() -> CompletableFuture.completedStage(current.get()));
     private final AtomicReference<Function<MemoryNamespaceReference, CompletionStage<Void>>> verify = new AtomicReference<>(this::initialVerification);
     private final AtomicReference<Supplier<CompletionStage<AgentAccessDecision>>> gate = new AtomicReference<>(() -> CompletableFuture.completedStage(AgentConversationTestCall.allowedAccess()));
-    private final IAgentMemoryReferences references = mock(IAgentMemoryReferences.class);
+    private final IAgentMemoryReferences references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
     private final AgentConversationTestBackend backend = new AgentConversationTestBackend();
     private final IAgentTurnService port = mock(IAgentTurnService.class);
     private final AgentConversationService service = new AgentConversationService(port, AgentQueueSettings::defaults, runtime,
@@ -115,7 +147,8 @@ class AgentConversationMemoryTest {
      */
     private int synchronize() {
         try (var parent = ExecutionControl.create()) {
-            var result = service.synchronizeMemory(scope, parent).toCompletableFuture(); runtime.runAll();
+            var result = service.synchronizeContext(scope, parent).toCompletableFuture();
+            runtime.runAll();
             var changed = result.join(); assertDoesNotThrow(parent::checkActive); return changed;
         }
     }
@@ -134,7 +167,8 @@ class AgentConversationMemoryTest {
     @Test void unchangedReferenceKeepsHistoryAndProvenance() {
         var first = success(handle, request()); var next = request(); success(handle, next);
         var box = service.snapshot(handle, scope).orElseThrow();
-        assertEquals(initial, box.require(AgentComponents.MEMORY_REFERENCE)); assertEquals(initial, first.memoryReference());
+        assertEquals(initial, box.require(AgentComponents.CONTEXT_REFERENCE));
+        assertEquals(initial, first.memoryReference());
         assertEquals(3, backend.calls.get(next.requestId()).request.messages().size());
         assertEquals(first.conversation(), box.require(AgentConversationState.COMPONENT).stamp());
         assertEquals(0, synchronize()); assertEquals(2, box.require(AgentConversationWindow.COMPONENT).turns().size());
@@ -177,11 +211,12 @@ class AgentConversationMemoryTest {
     @Test void lateOldObservationCannotRewindReference() {
         success(handle, request()); var pending = new CompletableFuture<MemoryNamespaceReference>(); resolve.set(() -> pending);
         try (var parent = ExecutionControl.create()) {
-            var old = service.synchronizeMemory(scope, parent).toCompletableFuture(); runtime.runAll();
+            var old = service.synchronizeContext(scope, parent).toCompletableFuture();
+            runtime.runAll();
             current.set(new MemoryNamespaceReference(scope, new MemoryNamespaceId("newer"), 1, 0)); resolve.set(() -> CompletableFuture.completedStage(current.get()));
             assertEquals(1, synchronize()); var stamp = service.snapshot(handle, scope).orElseThrow().require(AgentConversationState.COMPONENT).stamp();
             pending.complete(initial); runtime.runAll(); assertThrows(CompletionException.class, old::join);
-            assertEquals(current.get(), service.snapshot(handle, scope).orElseThrow().require(AgentComponents.MEMORY_REFERENCE));
+            assertEquals(current.get(), service.snapshot(handle, scope).orElseThrow().require(AgentComponents.CONTEXT_REFERENCE));
             assertEquals(stamp, service.snapshot(handle, scope).orElseThrow().require(AgentConversationState.COMPONENT).stamp());
         }
     }
@@ -190,7 +225,8 @@ class AgentConversationMemoryTest {
     @Test void timedOutNotificationCannotApplyLateObservation() {
         var old = success(handle, request()); var pending = new CompletableFuture<MemoryNamespaceReference>(); resolve.set(() -> pending);
         try (var parent = ExecutionControl.create()) {
-            var result = service.synchronizeMemory(scope, parent).toCompletableFuture(); runtime.runAll();
+            var result = service.synchronizeContext(scope, parent).toCompletableFuture();
+            runtime.runAll();
             runtime.advance(Duration.ofSeconds(31)); runtime.runAll(); assertThrows(CompletionException.class, result::join);
             current.set(new MemoryNamespaceReference(scope, new MemoryNamespaceId("late"), 1, 0));
             pending.complete(current.get()); runtime.runAll(); assertDoesNotThrow(parent::checkActive);
@@ -242,7 +278,7 @@ class AgentConversationMemoryTest {
         var result = service.run(handle, request()).toCompletableFuture(); runtime.runAll();
         runtime.advance(Duration.ofSeconds(31)); runtime.runAll(); assertEquals(AgentRunResult.Status.QUEUE_TIMED_OUT, result.join().status());
         pending.complete(initial); runtime.runAll(); assertTrue(backend.calls.isEmpty());
-        assertTrue(service.snapshot(handle, scope).orElseThrow().find(AgentComponents.MEMORY_REFERENCE).isEmpty());
+        assertTrue(service.snapshot(handle, scope).orElseThrow().find(AgentComponents.CONTEXT_REFERENCE).isEmpty());
     }
 
     /** 验证观察父取消只结束重试等待，不取消原运行或关闭借用父控制。 */
@@ -291,7 +327,9 @@ class AgentConversationMemoryTest {
         var old = success(handle, request()); current.set(new MemoryNamespaceReference(scope, new MemoryNamespaceId("after-failure"), 1, 0));
         resolve.set(() -> CompletableFuture.failedStage(new IllegalStateException("测试存储暂不可用")));
         try (var parent = ExecutionControl.create()) {
-            var failed = service.synchronizeMemory(scope, parent).toCompletableFuture(); runtime.runAll(); assertThrows(CompletionException.class, failed::join);
+            var failed = service.synchronizeContext(scope, parent).toCompletableFuture();
+            runtime.runAll();
+            assertThrows(CompletionException.class, failed::join);
         }
         assertEquals(old.conversation(), service.snapshot(handle, scope).orElseThrow().require(AgentConversationState.COMPONENT).stamp());
         resolve.set(() -> CompletableFuture.completedStage(current.get())); var next = request(); success(handle, next);
@@ -336,7 +374,7 @@ class AgentConversationMemoryTest {
         resolve.set(() -> CompletableFuture.completedStage(new MemoryNamespaceReference(new AgentScope("另一客户端", "群"), MemoryNamespaceId.SHARED, 0, 0)));
         var result = service.run(handle, request()).toCompletableFuture(); runtime.runAll();
         assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, result.join().status()); assertTrue(backend.calls.isEmpty());
-        assertTrue(service.snapshot(handle, scope).orElseThrow().find(AgentComponents.MEMORY_REFERENCE).isEmpty());
+        assertTrue(service.snapshot(handle, scope).orElseThrow().find(AgentComponents.CONTEXT_REFERENCE).isEmpty());
     }
 
     /** 验证自定义端口成功结果丢失固定引用时拒绝提交，不能以正常答案绕过引用合同。 */
@@ -368,7 +406,9 @@ class AgentConversationMemoryTest {
             for (int i = 0; i < 20; i++) {
                 jobs.add(workers.submit(() -> {
                     start.await();
-                    try (var parent = ExecutionControl.create()) { return concurrent.synchronizeMemory(scope, parent).toCompletableFuture().get(3, TimeUnit.SECONDS); }
+                    try (var parent = ExecutionControl.create()) {
+                        return concurrent.synchronizeContext(scope, parent).toCompletableFuture().get(3, TimeUnit.SECONDS);
+                    }
                 }));
             }
             start.countDown(); int changes = 0; for (var job : jobs) { changes += job.get(4, TimeUnit.SECONDS); }

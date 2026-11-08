@@ -1,8 +1,10 @@
 package org.zexnocs.teanekocore.framework.bimap;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -77,7 +79,7 @@ public class LockBiMap<K, V> implements IBimap<K, V> {
      * @return 被替换的键值对，如果没有被替换则返回 null。
      */
     @Override
-    public Pair<K, V> put(K key, V value) {
+    public IPair<K, V> put(K key, V value) {
         lock.writeLock().lock();
         try {
             V oldValue = kv.get(key);

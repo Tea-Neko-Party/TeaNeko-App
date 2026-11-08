@@ -1,0 +1,633 @@
+package org.zexnocs.teanekoplugin.contract.agent;
+
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolContext;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekocore.plugin.HostCapability;
+import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolOutput;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import org.aopalliance.intercept.MethodInterceptor;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.springframework.aop.support.AopUtils;
+import org.springframework.aop.framework.ProxyFactory;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
+import org.springframework.stereotype.Service;
+import org.zexnocs.teanekoagent.component.AgentComponents;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionFeature;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.LLMOperationRejectedException;
+import org.zexnocs.teanekoagent.llm.framework.message.content.ImageLLMContentPart;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.MediaReplyFeature;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyService;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyTools;
+import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentTool;
+import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolClass;
+import org.zexnocs.teanekoagent.component.tool.api.TeaNekoAgentToolParam;
+import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
+import org.zexnocs.teanekoagent.runtime.*;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.command.api.DefaultValue;
+import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
+import org.zexnocs.teanekocore.framework.composition.EntityId;
+import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+import org.zexnocs.teanekocore.framework.description.Description;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
+import tools.jackson.databind.ObjectMapper;
+
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
+
+/**
+ * 覆盖自动发现、代理、可信参数及异步结果边界，业务授权继续复用各工具原有测试。
+ * <br>2026/11/04：校正 @since 为首次引入版本。
+ * <br>2026/11/04：覆盖媒体工具和显式能力在真实 Spring 注册链中的联合装配。
+ * <br>2026/11/04：适配可选组件装配及迁移后的数据键，保留原核心行为验证。
+ * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/05：目录查询复用发现结果，重扫失败保留旧声明且插件启停实时生效。
+ * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
+ * <br>2026/11/05：同接口 JDK 代理分别保持名称、参数、客户端、组件依赖和实际执行目标。
+ * <br>2026/11/06：不同代理接口共用继承条件或业务方法时，目录、advice 和动态撤权均保持隔离。
+ * @author zExNocs
+ * @date 2026/11/02
+ * @since 4.6.1-l
+ * @version 4.9.0-l
+ */
+class TeaNekoAgentToolTest {
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final AgentDefinition definition = new AgentDefinition("注解测试", new LLMModelOptionsSnapshot(null), Set.of(AgentActivity.values()));
+    private final AgentRunRequest request = new AgentRunRequest(UUID.randomUUID(),
+            new AgentActorContext(new AgentScope("onebot", "群"), AgentActorContext.Origin.USER, Optional.of(UUID.randomUUID()), "用户", "消息", "群"),
+            AgentActivity.COMMAND, List.of());
+
+    /**
+     * 自动能力进入真实 Spring 宿主目录，扫描不提前构造懒业务 Bean。
+     * 2026/11/05：说明目录不因容器新增声明自动重扫，失败重扫保留原目录并实时检查插件。
+     * 2026/11/07：停用工具仍保留总管理的安装说明，普通目录继续隐藏并输出真实归属。
+     */
+    @Test void discoversSpringServiceLazilyWithoutManualFeature() {
+        var created = new AtomicInteger();
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor(); var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(ObjectMapper.class, () -> mapper);
+            context.registerBean("virtualExecutor", ExecutorService.class, () -> executor, value -> value.setDestroyMethodName(""));
+            // 2026/11/07：可停用工具来自真实插件，宿主能力独立且不可停用。
+            context.registerBean(PluginRegistry.class, () -> new PluginRegistry(List.of(
+                    () -> new PluginDescriptor("test.tools", "4.9.0-l", 1, Set.of())),
+                    List.of(new HostCapability("teaneko.agent", "4.9.0-l", Set.of()))));
+            context.registerBean("demoTools", DemoTools.class, () -> { created.incrementAndGet(); return new DemoTools(); }, value -> value.setLazyInit(true));
+            context.register(TeaNekoAgentToolRegistry.class, AgentPluginRuntime.class);
+            context.refresh();
+            context.getBean(PluginRegistry.class).setEnabled("test.tools", true);
+            assertEquals(Set.of("test.tools:demo"), context.getBean(AgentPluginRuntime.class).featureIds());
+            assertEquals(0, created.get());
+            var features = context.getBean(TeaNekoAgentToolRegistry.class).combine(List.of());
+            assertEquals(3, features.getFirst().tools().select(definition, request, null).size());
+            assertEquals(1, created.get());
+            var directory = context.getBean(TeaNekoAgentToolRegistry.class);
+            var plugins = context.getBean(PluginRegistry.class);
+            var original = directory.describe(plugins);
+            assertTrue(original.stream().allMatch(item -> "test.tools".equals(item.pluginId())));
+            context.registerBean("duplicateTools", DemoTools.class);
+            assertEquals(original, directory.describe(plugins));
+            assertThrows(IllegalArgumentException.class, directory::reload);
+            assertEquals(original, directory.describe(plugins));
+            plugins.setEnabled("test.tools", false);
+            assertTrue(directory.describe(plugins).isEmpty());
+            assertEquals(original, directory.installedDescription());
+        }
+    }
+
+    /**
+     * 2026/11/04：验证真实媒体工具归属能够通过启动注册，且不会重复注册自动能力。
+     */
+    @Test
+    void startsWithMediaToolsOwnedByTheirExplicitFeature() {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor();
+             var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(ObjectMapper.class, () -> mapper);
+            context.registerBean("virtualExecutor", ExecutorService.class, () -> executor,
+                    value -> value.setDestroyMethodName(""));
+            context.registerBean(HostCapability.class,
+                    () -> new HostCapability("teaneko.agent", "4.9.0-l", Set.of()));
+            context.register(PluginDeclarationScanner.class);
+            context.registerBean(StickerReplyService.class, () -> mock(StickerReplyService.class));
+            context.registerBean(ExpressionRuntime.class, () -> mock(ExpressionRuntime.class, org.mockito.Mockito.CALLS_REAL_METHODS));
+            context.registerBean(org.zexnocs.teanekoplugin.agent.expression.expression.NativeFaceService.class,
+                    () -> mock(org.zexnocs.teanekoplugin.agent.expression.expression.NativeFaceService.class));
+            context.register(org.zexnocs.teanekoplugin.agent.expression.ExpressionPlugin.class,
+                    StickerReplyTools.class, MediaReplyFeature.class, ExpressionFeature.class,
+                    TeaNekoAgentToolRegistry.class, AgentPluginRuntime.class, PluginRegistry.class);
+
+            context.refresh();
+
+            assertEquals(Set.of("agent.expression:expression", "agent.expression:media-replies"),
+                    context.getBean(AgentPluginRuntime.class).featureIds());
+        }
+    }
+
+    /** 保留 Spring 环绕，默认值、参数改名及宿主参数只进入实际调用，不接受模型伪造。 */
+    @Test void bindsDescriptionsDefaultsAndTrustedContextThroughProxy() {
+        var target = new DemoTools(); var intercepted = new AtomicInteger();
+        var factory = new ProxyFactory(target); factory.setProxyTargetClass(true);
+        factory.addAdvice((MethodInterceptor) invocation -> { intercepted.incrementAndGet(); return invocation.proceed(); });
+        var bindings = select(factory.getProxy()); var echo = bindings.stream().filter(value -> value.definition().getName().equals("echo")).findFirst().orElseThrow();
+        var schema = echo.definition().getParameters();
+        assertEquals(Set.of("word", "count"), schema.getProperties().keySet());
+        assertEquals(List.of("word"), schema.getRequired());
+        assertEquals("待重复的文字。", schema.getProperties().get("word").getDescription());
+        assertTrue(echo.supportsClient("任意客户端"));
+        var other = new AgentRunRequest(UUID.randomUUID(), new AgentActorContext(new AgentScope("其他", "群"),
+                AgentActorContext.Origin.USER, request.actor().userId(), "用户", "消息", "群"), AgentActivity.COMMAND, List.of());
+        // 2026/11/05：原实例与其代理分别初始化，不借用其他 Bean 的目录身份。
+        TeaNekoAgentToolMethods.prepare(target);
+        assertEquals(2, TeaNekoAgentToolMethods.select(target, definition, other, null, null, mapper, Runnable::run).size());
+        try (var control = ExecutionControl.create()) {
+            var context = invocation(control); var set = new LLMToolSet(mapper, bindings);
+            var result = set.execute(call("echo", "{\"word\":\"茶\"}"), context).toCompletableFuture().join();
+            assertEquals(ToolInvocationResult.Status.SUCCESS, result.status()); assertEquals("茶茶:原调用", result.output());
+            assertTrue(intercepted.get() > 0); assertSame(request, target.seen);
+            assertEquals(ToolInvocationResult.Status.INVALID_ARGUMENTS, set.execute(call("echo", "{\"word\":\"茶\",\"context\":{}}"), context).toCompletableFuture().join().status());
+        }
+    }
+
+    /**
+     * 2026/11/05：共享 JDK 代理类不能串用声明，交换初始化顺序后实际调用仍经过各自代理。
+     * @throws Exception 当有界工具执行失败时
+     */
+    @Test
+    void sharedJdkProxyClassKeepsProvidersIsolated() throws Exception {
+        for (boolean reverse : List.of(false, true)) {
+            var alphaCalls = new AtomicInteger();
+            var betaCalls = new AtomicInteger();
+            var alphaFactory = new ProxyFactory(new AlphaProxyTool());
+            alphaFactory.addAdvice((MethodInterceptor) call -> { alphaCalls.incrementAndGet(); return call.proceed(); });
+            var betaFactory = new ProxyFactory(new BetaProxyTool());
+            betaFactory.addAdvice((MethodInterceptor) call -> { betaCalls.incrementAndGet(); return call.proceed(); });
+            var alpha = alphaFactory.getProxy();
+            var beta = betaFactory.getProxy();
+            assertSame(alpha.getClass(), beta.getClass());
+            assertThrows(IllegalStateException.class,
+                    () -> TeaNekoAgentToolMethods.select(alpha, definition, request, null, null, mapper, Runnable::run));
+            for (Object bean : reverse ? List.of(beta, alpha) : List.of(alpha, beta)) {
+                TeaNekoAgentToolMethods.prepare(bean);
+            }
+            var first = TeaNekoAgentToolMethods.select(alpha, definition, request, null, null, mapper, Runnable::run);
+            var second = TeaNekoAgentToolMethods.select(beta, definition, request, null, null, mapper, Runnable::run);
+            assertEquals(List.of("audit_alpha"), first.stream().map(binding -> binding.definition().getName()).toList());
+            assertEquals(List.of("audit_beta"), second.stream().map(binding -> binding.definition().getName()).toList());
+            assertEquals(List.of("input"), first.getFirst().definition().getParameters().getRequired());
+            assertTrue(second.getFirst().definition().getParameters().getRequired().isEmpty());
+            assertFalse(first.getFirst().supportsClient("web"));
+            assertTrue(second.getFirst().supportsClient("web"));
+            var onlyMemory = definition.withAssembly(org.zexnocs.teanekoagent.component.AgentAssembly.parse(
+                    "{\"version\":1,\"components\":{\"llm\":{},\"tool\":{},\"memory\":{}}}"));
+            assertEquals(1, TeaNekoAgentToolMethods.select(alpha, onlyMemory, request, null, null, mapper, Runnable::run).size());
+            assertTrue(TeaNekoAgentToolMethods.select(beta, onlyMemory, request, null, null, mapper, Runnable::run).isEmpty());
+            try (var control = ExecutionControl.create()) {
+                var a = new LLMToolSet(mapper, first).execute(call("audit_alpha", "{\"input\":\"茶\"}"), invocation(control))
+                        .toCompletableFuture().get(3, TimeUnit.SECONDS);
+                var b = new LLMToolSet(mapper, second).execute(call("audit_beta", "{}"), invocation(control))
+                        .toCompletableFuture().get(3, TimeUnit.SECONDS);
+                assertEquals("甲:茶", a.output());
+                assertEquals("乙:默认", b.output());
+                assertEquals(ToolInvocationResult.Status.SUCCESS, a.status());
+                assertEquals(ToolInvocationResult.Status.SUCCESS, b.status());
+                assertEquals(1, alphaCalls.get());
+                assertEquals(1, betaCalls.get());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/06：不同接口共享父类条件，交换新声明的初始化顺序后仍分别经过代理。
+     * @throws Exception 当有界工具调用或撤权验证失败时
+     */
+    @Test
+    @Timeout(10)
+    void inheritedConditionUsesEachProvidersProxyInterface() throws Exception {
+        for (boolean reverse : List.of(false, true)) {
+            // 反向准备使用全新声明类型，避免首轮缓存掩盖初始化顺序问题。
+            var alpha = reverse ? new AlphaInheritedCondition() { } : new AlphaInheritedCondition();
+            var beta = reverse ? new BetaInheritedCondition() { } : new BetaInheritedCondition();
+            assertInheritedPair(alpha, beta, "inherited_alpha", "inherited_beta", reverse);
+        }
+    }
+
+    /**
+     * 2026/11/06：两个独立宿主可以复用继承业务工具名，但不合并为同一注册目录。
+     * @throws Exception 当有界工具调用或撤权验证失败时
+     */
+    @Test
+    @Timeout(10)
+    void inheritedBusinessMethodUsesEachIndependentHostsProxyInterface() throws Exception {
+        for (boolean reverse : List.of(false, true)) {
+            var alpha = reverse ? new AlphaInheritedBusiness() { } : new AlphaInheritedBusiness();
+            var beta = reverse ? new BetaInheritedBusiness() { } : new BetaInheritedBusiness();
+            assertInheritedPair(alpha, beta, "inherited_value", "inherited_value", reverse);
+        }
+    }
+
+    /**
+     * 2026/11/06：核验 Bean 身份入口及注册表使用的声明入口，调用与条件均不能绕过 advice。
+     * @param alphaTarget 甲真实对象
+     * @param betaTarget 乙真实对象
+     * @param alphaName 甲工具名
+     * @param betaName 乙工具名
+     * @param reverse 是否先初始化乙
+     * @throws Exception 当有界工具执行失败时
+     */
+    private void assertInheritedPair(InheritedCondition alphaTarget, InheritedCondition betaTarget,
+            String alphaName, String betaName, boolean reverse) throws Exception {
+        var alphaCalls = new CopyOnWriteArrayList<String>();
+        var betaCalls = new CopyOnWriteArrayList<String>();
+        var alpha = inheritedProxy(alphaTarget, alphaCalls);
+        var beta = inheritedProxy(betaTarget, betaCalls);
+        assertTrue(AopUtils.isJdkDynamicProxy(alpha));
+        assertTrue(AopUtils.isJdkDynamicProxy(beta));
+        assertNotSame(alpha.getClass(), beta.getClass());
+        for (var bean : reverse ? List.of(beta, alpha) : List.of(alpha, beta)) {
+            TeaNekoAgentToolMethods.prepare(bean);
+        }
+        assertTrue(alphaCalls.isEmpty());
+        assertTrue(betaCalls.isEmpty());
+        for (boolean explicitType : List.of(false, true)) {
+            betaTarget.allowed = true;
+            alphaCalls.clear();
+            betaCalls.clear();
+            var first = explicitType
+                    ? TeaNekoAgentToolMethods.select(alphaTarget.getClass(), alpha, definition, request,
+                            null, null, mapper, Runnable::run)
+                    : TeaNekoAgentToolMethods.select(alpha, definition, request, null, null, mapper, Runnable::run);
+            var second = explicitType
+                    ? TeaNekoAgentToolMethods.select(betaTarget.getClass(), beta, definition, request,
+                            null, null, mapper, Runnable::run)
+                    : TeaNekoAgentToolMethods.select(beta, definition, request, null, null, mapper, Runnable::run);
+            assertEquals(List.of(alphaName), first.stream().map(binding -> binding.definition().getName()).toList());
+            assertEquals(List.of(betaName), second.stream().map(binding -> binding.definition().getName()).toList());
+            try (var control = ExecutionControl.create()) {
+                var firstTools = new LLMToolSet(mapper, first);
+                var secondTools = new LLMToolSet(mapper, second);
+                var a = firstTools.execute(call(alphaName, "{\"input\":\"茶\"}"), invocation(control))
+                        .toCompletableFuture().get(3, TimeUnit.SECONDS);
+                var b = secondTools.execute(call(betaName, "{\"input\":\"茶\"}"), invocation(control))
+                        .toCompletableFuture().get(3, TimeUnit.SECONDS);
+                assertEquals(ToolInvocationResult.Status.SUCCESS, a.status());
+                assertEquals(ToolInvocationResult.Status.SUCCESS, b.status());
+                assertEquals("甲:茶", a.output());
+                assertEquals("乙:茶", b.output());
+                assertEquals(List.of("available", "available", "value", "available"), alphaCalls);
+                assertEquals(List.of("available", "available", "value", "available"), betaCalls);
+
+                betaTarget.allowed = false;
+                var rejected = assertThrows(ExecutionException.class,
+                        () -> secondTools.execute(call(betaName, "{\"input\":\"茶\"}"), invocation(control))
+                                .toCompletableFuture().get(3, TimeUnit.SECONDS));
+                assertInstanceOf(LLMOperationRejectedException.class, rejected.getCause());
+                assertEquals(1, betaCalls.stream().filter("value"::equals).count());
+                assertTrue(TeaNekoAgentToolMethods.select(beta, definition, request,
+                        null, null, mapper, Runnable::run).isEmpty());
+                assertEquals(1, TeaNekoAgentToolMethods.select(alpha, definition, request,
+                        null, null, mapper, Runnable::run).size());
+            }
+        }
+    }
+
+    /**
+     * 2026/11/06：只给真实 JDK 代理添加观察 advice，不解包或替换业务实现。
+     * @param target 独立提供者
+     * @param calls 实际经过代理的方法
+     * @return 由 Spring 创建的代理
+     */
+    private static Object inheritedProxy(InheritedCondition target, List<String> calls) {
+        var factory = new ProxyFactory(target);
+        factory.addAdvice((MethodInterceptor) invocation -> {
+            calls.add(invocation.getMethod().getName());
+            return invocation.proceed();
+        });
+        return factory.getProxy();
+    }
+
+    /**
+     * 甲提供者公开的独立接口。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    public interface IAlphaInheritedContract {
+        /**
+         * @param input 业务文字
+         * @return 甲提供者的结果
+         */
+        String value(String input);
+        /**
+         * @param context 可信上下文
+         * @return 当前条件
+         */
+        boolean available(TeaNekoAgentToolContext context);
+    }
+
+    /**
+     * 与甲签名相同但不互相继承的乙接口。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    public interface IBetaInheritedContract {
+        /**
+         * @param input 业务文字
+         * @return 乙提供者的结果
+         */
+        String value(String input);
+        /**
+         * @param context 可信上下文
+         * @return 当前条件
+         */
+        boolean available(TeaNekoAgentToolContext context);
+    }
+
+    /**
+     * 所有提供者共用的继承条件，是否允许保存在各自实例中。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    public static class InheritedCondition {
+        private boolean allowed = true;
+
+        /**
+         * @param context 当前可信上下文
+         * @return 此提供者仍允许用户调用时为真
+         */
+        public boolean available(TeaNekoAgentToolContext context) {
+            return allowed && context.request().actor().origin() == AgentActorContext.Origin.USER;
+        }
+    }
+
+    /**
+     * 甲业务独立声明名称，条件继承父类，不额外覆写。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass("inherited-alpha")
+    public static class AlphaInheritedCondition extends InheritedCondition implements IAlphaInheritedContract {
+        /**
+         * @param input 业务文字
+         * @return 甲结果
+         */
+        @Override
+        @TeaNekoAgentTool(value = "inherited_alpha", condition = "available")
+        public String value(@TeaNekoAgentToolParam("input") String input) { return "甲:" + input; }
+    }
+
+    /**
+     * 乙继承相同条件，但 JDK 代理只公开自己的接口。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass("inherited-beta")
+    public static class BetaInheritedCondition extends InheritedCondition implements IBetaInheritedContract {
+        /**
+         * @param input 业务文字
+         * @return 乙结果
+         */
+        @Override
+        @TeaNekoAgentTool(value = "inherited_beta", condition = "available")
+        public String value(@TeaNekoAgentToolParam("input") String input) { return "乙:" + input; }
+    }
+
+    /**
+     * 独立宿主使用相同继承业务方法，返回值仍来自实际目标实例。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    public static class InheritedBusiness extends InheritedCondition {
+        private final String owner;
+
+        /** @param owner 真实目标的标识 */
+        protected InheritedBusiness(String owner) { this.owner = owner; }
+
+        /**
+         * @param input 业务文字
+         * @return 实际目标的结果
+         */
+        @TeaNekoAgentTool(value = "inherited_value", condition = "available")
+        public String value(@TeaNekoAgentToolParam("input") String input) { return owner + ":" + input; }
+    }
+
+    /**
+     * 甲宿主直接继承已注解的业务，不重复覆写。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass("inherited-business-alpha")
+    public static class AlphaInheritedBusiness extends InheritedBusiness implements IAlphaInheritedContract {
+        /** 初始化甲目标的独立状态。 */
+        public AlphaInheritedBusiness() { super("甲"); }
+    }
+
+    /**
+     * 乙宿主使用另一接口公开同一个继承业务方法。
+     * @author zExNocs
+     * @date 2026/11/06
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass("inherited-business-beta")
+    public static class BetaInheritedBusiness extends InheritedBusiness implements IBetaInheritedContract {
+        /** 初始化乙目标的独立状态。 */
+        public BetaInheritedBusiness() { super("乙"); }
+    }
+
+    /**
+     * 不同提供者共用的 JDK 代理接口。
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    public interface ISharedProxyTool {
+        /**
+         * 2026/11/05：让两个真实目标共享同一代理接口。
+         * @param input 用户参数
+         * @return 实际实现的结果
+         */
+        String value(String input);
+    }
+
+    /**
+     * 使用独立参数和客户端合同的甲工具。
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass(value = "proxy-alpha", client = "onebot", requires = "memory")
+    public static class AlphaProxyTool implements ISharedProxyTool {
+        /**
+         * 2026/11/05：执行具有独立必填合同的甲工具。
+         * @param input 必填参数
+         * @return 甲工具的结果
+         */
+        @Override
+        @TeaNekoAgentTool("audit_alpha")
+        public String value(@TeaNekoAgentToolParam("input") @Description("甲参数") String input) { return "甲:" + input; }
+    }
+
+    /**
+     * 与甲共享代理接口但具有不同合同的乙工具。
+     * @author zExNocs
+     * @date 2026/11/05
+     * @since 4.8.3-l
+     * @version 4.8.3-l
+     */
+    @TeaNekoAgentToolClass(value = "proxy-beta", client = {"onebot", "web"}, requires = "personality")
+    public static class BetaProxyTool implements ISharedProxyTool {
+        /**
+         * 2026/11/05：执行具有独立默认值合同的乙工具。
+         * @param input 可省略参数
+         * @return 乙工具的结果
+         */
+        @Override
+        @TeaNekoAgentTool("audit_beta")
+        public String value(@TeaNekoAgentToolParam("input") @Description("乙参数") @DefaultValue("默认") String input) {
+            return "乙:" + input;
+        }
+    }
+
+    /** 异步工具等待真实完成，图像按显式类型返回；等待期间撤销条件则停止交互。 */
+    @Test void awaitsTypedMediaAndRejectsRevokedConditions() {
+        var target = new DemoTools(); var set = new LLMToolSet(mapper, select(target));
+        try (var control = ExecutionControl.create()) {
+            var result = set.execute(call("image", "{}"), invocation(control)).toCompletableFuture();
+            assertFalse(result.isDone());
+            target.pending.complete(new LLMToolOutput("已找到图片", List.of(new ImageLLMContentPart("https://example.com/image.png"))));
+            var output = result.join(); assertEquals(1, output.images().size()); assertEquals("已找到图片", output.output());
+            target.pending = new CompletableFuture<>();
+            var revoked = set.execute(call("image", "{}"), invocation(control)).toCompletableFuture();
+            target.allowed = false; target.pending.complete(new LLMToolOutput("不得交付"));
+            assertInstanceOf(LLMOperationRejectedException.class, assertThrows(CompletionException.class, revoked::join).getCause());
+        }
+        target.allowed = true; target.pending = new CompletableFuture<>();
+        try (var control = ExecutionControl.create()) {
+            var result = set.execute(call("image", "{}"), invocation(control)).toCompletableFuture(); control.cancel();
+            assertEquals(ToolInvocationResult.Status.CANCELLED, result.join().status()); assertFalse(target.pending.isCancelled());
+        }
+    }
+
+    /**
+     * 重名注解在注册目录阶段拒绝，避免模型根据不明确工具名调用错误实现。
+     * 2026/11/05：重复声明在单例发现阶段即拒绝，不留到高频查询时检查。
+     */
+    @Test void rejectsDuplicateToolsDuringDiscovery() {
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor(); var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean("first", DemoTools.class); context.registerBean("second", DemoTools.class); context.refresh();
+            assertThrows(IllegalArgumentException.class,
+                    () -> new TeaNekoAgentToolRegistry(context.getBeanFactory(), mapper, executor));
+        }
+    }
+
+    /**
+     * 编译当前工具，显式宿主与自动注册使用同一实现。
+     * @param source 提供者或代理
+     * @return 当前工具
+     */
+    private List<LLMToolBinding> select(Object source) { TeaNekoAgentToolMethods.prepare(source); return TeaNekoAgentToolMethods.select(source, definition, request, null, null, mapper, Runnable::run); }
+
+    /**
+     * 固定实际宿主身份，控制由各用例关闭。
+     * @param control 借用控制
+     * @return 真实工具上下文
+     */
+    private ToolInvocationContext invocation(ExecutionControl control) {
+        return new ToolInvocationContext(request.requestId(), EntitySnapshot.of(EntityId.random(),
+                ComponentPatch.builder().put(AgentComponents.ACTOR, request.actor()).put(AgentComponents.REQUEST, request).build()), control);
+    }
+
+    /**
+     * 创建原始调用，保持实际调用 ID。
+     * @param name 工具名称
+     * @param arguments 业务参数
+     * @return 原始工具调用
+     */
+    private static LLMToolCall call(String name, String arguments) { return LLMToolCall.builder().id("原调用").name(name).arguments(arguments).build(); }
+
+    /**
+     * 普通 Spring 服务示例，不实现工具接口、不构造 schema 或 IAgentFeature。
+     * <br>2026/11/04：校正 @since 为首次引入版本。
+     *
+     * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     *
+     * @author zExNocs
+     * @date 2026/11/02
+     * @since 4.6.1-l
+     * @version 4.8.0-l
+     */
+    @Service @TeaNekoAgentToolClass(value = "demo", pluginId = "test.tools")
+    public static class DemoTools {
+        private boolean allowed = true;
+        private AgentRunRequest seen;
+        private CompletableFuture<LLMToolOutput> pending = new CompletableFuture<>();
+        /**
+         * 同步工具同时展示默认值、重命名及原始调用注入。
+         * @param text 业务文字
+         * @param count 重复次数
+         * @param context 宿主上下文
+         * @param call 原始调用
+         * @return 业务输出
+         */
+        @TeaNekoAgentTool @Description("重复文字。")
+        public String echo(@TeaNekoAgentToolParam("word") @Description("待重复的文字。") String text,
+                @DefaultValue("2") @Description("重复次数。") int count, TeaNekoAgentToolContext context, ILLMToolCall call) {
+            seen = context.request(); return text.repeat(count) + ":" + call.getId();
+        }
+        /** @return 只适用 OneBot 的普通 DTO 结果 */
+        @TeaNekoAgentTool(client = "onebot") @Description("仅 OneBot 可见。")
+        public Map<String, String> platform() { return Map.of("client", "onebot"); }
+        /** @return 等待实际图片读取的阶段 */
+        @TeaNekoAgentTool(condition = "canRead") @Description("读取图片。")
+        public CompletionStage<LLMToolOutput> image() { return pending; }
+        /**
+         * 由可信宿主条件决定当前可见性。
+         * @param context 固定上下文
+         * @return 当前允许时为真
+         */
+        public boolean canRead(TeaNekoAgentToolContext context) { return allowed && context.request().actor().origin() == AgentActorContext.Origin.USER; }
+    }
+}

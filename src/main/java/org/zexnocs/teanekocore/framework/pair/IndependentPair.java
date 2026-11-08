@@ -1,5 +1,7 @@
 package org.zexnocs.teanekocore.framework.pair;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.AllArgsConstructor;
 
 /**
@@ -9,7 +11,7 @@ import lombok.AllArgsConstructor;
  * @date 2026/02/11
  */
 @AllArgsConstructor
-public class IndependentPair<F, S> implements Pair<F, S> {
+public class IndependentPair<F, S> implements IPair<F, S> {
     private final F first;
     private final S second;
 

@@ -1,9 +1,12 @@
 package org.zexnocs.teanekocore.actuator.task.interfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
+import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekocore.actuator.task.TaskRetryStrategy;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.time.Duration;
 import java.util.List;
@@ -16,12 +19,14 @@ import java.util.List;
  * - 间接提交：返回 null，那么 {@link ITaskService} 将会等待异步主动提交结果；
  * 请不要在 Callable 里调用间接提交的方式，否则会抛出 {@link org.zexnocs.teanekocore.actuator.task.exception.TaskIllegalStateException}。
  * 如果没有 result，可以返回 {@link org.zexnocs.teanekocore.actuator.task.EmptyTaskResult}。
+ * <br>2026/11/07：明确手动阶段的可空与创建时冻结契约。
  *
- * <p>
- * @see ITaskResult
+ * @param <T> 任务结果类型
  * @author zExNocs
  * @date 2026/02/10
  * @since 4.0.0
+ * @version 4.9.0-l
+ * @see ITaskResult
  */
 public interface ITaskConfig<T> {
     /**
@@ -36,15 +41,14 @@ public interface ITaskConfig<T> {
      *
      * @return 任务 callable，用于生成任务实例
      */
-    MethodCallable<ITaskResult<T>> getCallable();
+    IMethodCallable<ITaskResult<T>> getCallable();
 
     /**
-     * 获取任务执行阶段列表
+     * 2026/11/07：获取显式配置时冻结的任务阶段列表，查询时不得发现归属。
      *
-     * @return 任务执行阶段列表，按照执行顺序排列
+     * @return 按执行顺序排列的阶段快照；为空时读取命名空间目录
      */
-
-    List<ITaskStage> getTaskStages();
+    @Nullable List<ITaskStage> getTaskStages();
 
     /**
      * 获取任务阶段连命名空间
@@ -91,11 +95,11 @@ public interface ITaskConfig<T> {
     Duration getExpirationDuration();
 
     /**
-     * 设置任务执行阶段列表
+     * 2026/11/07：在显式配置时冻结任务阶段归属。
      *
-     * @param taskStages 任务执行阶段列表，按照执行顺序排列
+     * @param taskStages 按执行顺序排列的阶段；为空时恢复读取命名空间目录
      */
-    void setTaskStages(List<ITaskStage> taskStages);
+    void setTaskStages(@Nullable List<ITaskStage> taskStages);
 
     /**
      * 生成了一个 task，让 counter 加 1。

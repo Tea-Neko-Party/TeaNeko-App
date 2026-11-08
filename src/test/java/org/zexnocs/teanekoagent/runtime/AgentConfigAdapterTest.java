@@ -1,14 +1,10 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionDefaults;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionSettings;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ICredentialResolver;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.configuration.AgentFoundationConfig;
 import org.zexnocs.teanekoagent.configuration.FileAgentRuntimeConfig;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentMainFileConfig;
@@ -16,6 +12,12 @@ import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeFieldChecker;
 import org.zexnocs.teanekoagent.integration.config.ConfigDataAgentScopePolicy;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionDefaults;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.runtime.access.IAgentRuntimeConfigPort;
 import org.zexnocs.teanekoagent.runtime.access.IAgentScopePolicyPort;
@@ -26,8 +28,18 @@ import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.only;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 验证 /cfg 只读适配、字段校验、全局配置懒加载及组合装配，不启动 Spring 或数据库。
@@ -52,24 +64,32 @@ class AgentConfigAdapterTest {
         assertTrue(declaration.namespaces().length > 0);
     }
 
-    /** 验证缺失记录始终未启用，不创建配置或向默认人格配置回退。 */
+    /** 2026/11/08：使用真实组件目录，验证缺失记录始终未启用，不创建配置或向默认人格配置回退。 */
     @Test void absentScopeDoesNotRegisterOrEnableAnything() {
         var configs = mock(IConfigDataService.class);
         var manager = new AgentScopeConfigManager();
         var scope = new AgentScope("client", "scope");
         when(configs.getConfigData(manager, AgentScopeConfigData.class, scope.scopeId())).thenReturn(Optional.empty());
-        var adapter = new ConfigDataAgentScopePolicy(configs, manager);
+        var adapter = new ConfigDataAgentScopePolicy(configs, manager,
+                new org.springframework.beans.factory.support.StaticListableBeanFactory(java.util.Map.of(
+                        "components", org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures.directory()))
+                        .getBeanProvider(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class),
+                new tools.jackson.databind.ObjectMapper());
         assertEquals(AgentScopePolicy.unregistered(), adapter.read(scope));
         verify(configs, only()).getConfigData(manager, AgentScopeConfigData.class, scope.scopeId());
     }
 
-    /** 验证返回策略与可变 DTO 隔离，后续读取可以观察关闭和模式变化。 */
+    /** 2026/11/08：使用真实组件目录，验证返回策略与可变 DTO 隔离，后续读取可以观察关闭和模式变化。 */
     @Test void scopeSnapshotsDoNotAliasMutableConfigData() {
         var configs = mock(IConfigDataService.class);
         var manager = new AgentScopeConfigManager();
         var data = new AgentScopeConfigData();
         when(configs.getConfigData(manager, AgentScopeConfigData.class, "scope")).thenReturn(Optional.of(data));
-        var adapter = new ConfigDataAgentScopePolicy(configs, manager);
+        var adapter = new ConfigDataAgentScopePolicy(configs, manager,
+                new org.springframework.beans.factory.support.StaticListableBeanFactory(java.util.Map.of(
+                        "components", org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures.directory()))
+                        .getBeanProvider(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class),
+                new tools.jackson.databind.ObjectMapper());
         var first = adapter.read(new AgentScope("client", "scope"));
         data.setEnabled(false); data.setMode("ACTIVE");
         var changed = adapter.read(new AgentScope("client", "scope"));

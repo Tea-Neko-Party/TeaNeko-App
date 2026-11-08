@@ -1,0 +1,79 @@
+package org.zexnocs.teanekoplugin.agent.cognition.personality.configuration.file_config;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 保留旧人格文件字段的配置 DTO，使用前由适配器冻结成基础人格，不直接写入组件。
+ * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ *
+ * <br>2026/11/06：以类型注解声明人格 JSON 编辑器。
+ *
+ * <br>2026/11/08：人格文件配置归入认知插件，持久文件路径与字段保持不变。
+ *
+ * @author zExNocs
+ * @date 2026/10/29
+ * @since 4.4.1
+ * @version 4.8.4-l
+ */
+@Getter @Setter @NoArgsConstructor
+@org.zexnocs.teanekocore.framework.config.ValueEditor("JSON")
+public class AgentPersonalityDefinition {
+    private String id = "";
+    private String displayName = "";
+    private int version = 1;
+    private Identity identity = new Identity();
+    private List<String> coreTraits = new ArrayList<>();
+    private List<String> speakingStyle = new ArrayList<>();
+    private Boundaries boundaries = new Boundaries();
+    private LearningPolicy learningPolicy = new LearningPolicy();
+
+    /**
+     * 基础身份约束，只能来自可信文件或明确的自定义人格配置。
+     * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     *
+     * @author zExNocs
+     * @date 2026/10/29
+     * @since 4.4.1
+     * @version 4.9.0-l
+     */
+    @Getter @Setter @NoArgsConstructor
+    public static class Identity {
+        private String name = "";
+        private List<String> immutable = new ArrayList<>();
+    }
+    /**
+     * 人格软硬边界，不代替实际执行权限。
+     * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     *
+     * @author zExNocs
+     * @date 2026/10/29
+     * @since 4.4.1
+     * @version 4.9.0-l
+     */
+    @Getter @Setter @NoArgsConstructor
+    public static class Boundaries {
+        private List<String> hard = new ArrayList<>();
+        private List<String> soft = new ArrayList<>();
+    }
+    /**
+     * 原有允许/禁止字段，解析后仍受代码绝对白名单限制。
+     * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     *
+     * @author zExNocs
+     * @date 2026/10/29
+     * @since 4.4.1
+     * @version 4.9.0-l
+     */
+    @Getter @Setter @NoArgsConstructor
+    public static class LearningPolicy {
+        private List<String> mutableFields = new ArrayList<>();
+        private List<String> immutableFields = new ArrayList<>();
+    }
+}

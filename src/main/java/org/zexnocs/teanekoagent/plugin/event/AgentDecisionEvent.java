@@ -1,7 +1,9 @@
 package org.zexnocs.teanekoagent.plugin.event;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.zexnocs.teanekocore.event.AbstractEvent;
-import org.zexnocs.teanekocore.plugin.PluginScopedEvent;
+import org.zexnocs.teanekocore.plugin.IPluginScopedEvent;
 
 import java.util.List;
 
@@ -15,7 +17,7 @@ import java.util.List;
  * @since 4.6.0-l
  * @version 4.6.0-l
  */
-public abstract class AgentDecisionEvent<T> extends AbstractEvent<AgentEventContext> implements PluginScopedEvent {
+public abstract class AgentDecisionEvent<T> extends AbstractEvent<AgentEventContext> implements IPluginScopedEvent {
     private List<T> values;
     private boolean frozen;
     private boolean denied;

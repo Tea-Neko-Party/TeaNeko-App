@@ -36,8 +36,8 @@
 
 | API | 说明 |
 |---|---|
-| `MethodCallable<T>` | 继承 `Callable<T>` 和 `Serializable`，用于从 lambda 或方法引用中提取方法注解。 |
-| `VoidCallable` | `void call() throws Exception`，用于数据库事务任务和缓存任务。 |
+| `IMethodCallable<T>` | 继承 `Callable<T>` 和 `Serializable`，用于从 lambda 或方法引用中提取方法注解。 |
+| `IVoidCallable` | `void call() throws Exception`，用于数据库事务任务和缓存任务。 |
 
 ## 4. lifescycle
 
@@ -45,13 +45,13 @@
 |---|---|
 | `ILivable.isAlive()` | 生命周期判断。返回 `false` 后对象可被外部移除。 |
 | `IPausable.pause()` / `resume()` / `isPaused()` | 暂停控制接口。 |
-| `LambdaPausable` | 只要求实现 `isPaused()` 的函数式接口，默认不支持主动 `pause/resume`。 |
+| `ILambdaPausable` | 只要求实现 `isPaused()` 的函数式接口，默认不支持主动 `pause/resume`。 |
 
 ## 5. pair
 
 | API | 说明 |
 |---|---|
-| `Pair<F, S>` | 基础 pair 接口。 |
+| `IPair<F, S>` | 基础 pair 接口。 |
 | `HashPair<F, S>` | record 实现，按 first/second 参与 equals 和 hashCode。 |
 | `IndependentPair<F, S>` | 普通不可变 pair，不额外定义 equals/hashCode。 |
 | `UnorderedPair<T>` | 无序 pair，`(a, b)` 与 `(b, a)` 相等且 hashCode 相同。 |

@@ -1,39 +1,41 @@
 package org.zexnocs.teanekocore.actuator.task;
 
-import jakarta.annotation.Nullable;
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
+import org.jspecify.annotations.Nullable;
 import lombok.NonNull;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.actuator.task.api.ITaskStage;
 import org.zexnocs.teanekocore.actuator.task.api.TaskStage;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.reload.AbstractScanner;
+import org.zexnocs.teanekocore.reload.api.IScanner;
 import org.zexnocs.teanekocore.utils.scanner.exception.InterfaceAndAnnotationInconsistencyException;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.ArrayList;
+import java.util.HashMap;
 
 /**
  * 扫描任务阶段和其命名空间，并注册到 scanner 的容器中。
  * <br>2026/11/02：同优先级阶段按 Bean 名稳定排序。
+ * <br>2026/11/07：初始化冻结阶段插件归属，完整重扫成功后原子发布缓存。
  *
  * @author zExNocs
  * @date 2026/02/12
  * @since 4.0.2
- * @version 4.6.0-l
+ * @version 4.9.0-l
  * @see TaskStage
  * @see ITaskStage
  */
 @Service
-public class TaskStageScanner extends AbstractScanner {
+public class TaskStageScanner implements IScanner {
 
     /// 命名空间 → 任务阶段列表。
-    private final Map<String, List<TaskStageWrapper>> taskStages = new ConcurrentHashMap<>();
+    private volatile @Nullable Map<String, List<TaskStageWrapper>> taskStages;
     private final IBeanScanner iBeanScanner;
-    private final ILogger iLogger;
 
     /**
      * 2026/11/02：补充扫描及诊断依赖合同。
@@ -42,7 +44,6 @@ public class TaskStageScanner extends AbstractScanner {
      */
     public TaskStageScanner(IBeanScanner iBeanScanner, ILogger iLogger) {
         this.iBeanScanner = iBeanScanner;
-        this.iLogger = iLogger;
     }
 
     /**
@@ -56,7 +57,11 @@ public class TaskStageScanner extends AbstractScanner {
         if (namespace == null) {
             return List.of();
         }
-        var taskStageList = taskStages.get(namespace);
+        var snapshot = taskStages;
+        if (snapshot == null) {
+            throw new IllegalStateException("任务阶段目录尚未初始化，请先完成初始化或显式重扫。");
+        }
+        var taskStageList = snapshot.get(namespace);
         // 如果不存在，返回空列表
         if (taskStageList == null) {
             return List.of();
@@ -66,44 +71,35 @@ public class TaskStageScanner extends AbstractScanner {
                 .toList();
     }
 
-    /** 2026/11/02：扫描阶段归属并生成稳定顺序，不执行阶段业务。 */
+    /** 2026/11/07：首次完整发现成功后发布目录，失败仍保持未就绪。 */
     @Override
-    protected synchronized void _scan() {
-        // 获取所有带有TaskStage注解的Bean
-        Map<String, Pair<TaskStage, ITaskStage>> taskStageBeans;
-        try {
-            taskStageBeans = iBeanScanner.getBeansWithAnnotationAndInterface(TaskStage.class, ITaskStage.class);
-        } catch (InterfaceAndAnnotationInconsistencyException e) {
-            iLogger.errorWithReport(TaskStageScanner.class.getSimpleName(),
-                    "扫描任务阶段失败，接口和注解标注的 Bean 不一", e);
-            return;
+    public synchronized void init() {
+        if (taskStages == null) {
+            reload();
         }
-        // 将所有扫描出来的任务阶段类加入到命名空间对应的列表中
-        taskStageBeans.forEach((beanName, pair) -> {
-            var annotation = pair.first();
-            var taskStage = pair.second();
-            // 获取命名空间
-            var namespaces = annotation.value();
-            int priority = annotation.priority();
-            // 将任务阶段类加入到命名空间对应的列表中
-            for (var namespace: namespaces) {
-                var taskStageList = taskStages.computeIfAbsent(namespace,
-                        k -> new CopyOnWriteArrayList<>());
-                taskStageList.add(new TaskStageWrapper(taskStage, priority, beanName));
-            }
-        });
-
-        // 根据优先级排序
-        taskStages.values().forEach(list -> list.sort(TaskStageWrapper::compareTo));
     }
 
-    /**
-     * 清理原始数据的方法。
-     *
-     */
+    /** 2026/11/07：冻结归属并原子发布完整阶段目录，失败不破坏旧快照。 */
     @Override
-    protected void _clear() {
-        taskStages.clear();
+    public synchronized void reload() {
+        Map<String, IPair<TaskStage, ITaskStage>> taskStageBeans;
+        try {
+            taskStageBeans = iBeanScanner.getBeansWithAnnotationAndInterface(TaskStage.class, ITaskStage.class);
+        } catch (InterfaceAndAnnotationInconsistencyException failure) {
+            throw new IllegalStateException("任务阶段注解与接口不一致，保留原目录。", failure);
+        }
+        var discovered = new HashMap<String, List<TaskStageWrapper>>();
+        taskStageBeans.forEach((beanName, pair) -> {
+            var annotation = pair.first();
+            var compiled = TaskStageBinding.of(pair.second());
+            for (var namespace : annotation.value()) {
+                discovered.computeIfAbsent(namespace, ignored -> new ArrayList<>())
+                        .add(new TaskStageWrapper(compiled, annotation.priority(), beanName));
+            }
+        });
+        var ready = new HashMap<String, List<TaskStageWrapper>>();
+        discovered.forEach((namespace, stages) -> ready.put(namespace, stages.stream().sorted().toList()));
+        taskStages = Map.copyOf(ready);
     }
 
     /**

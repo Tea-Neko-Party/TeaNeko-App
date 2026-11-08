@@ -13,10 +13,11 @@ import java.util.Map;
  *
  * <br>2026/11/06：聊天字段携带编辑器声明，兼容原字段构造。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 public final class ChatSettings {
     /** 禁止实例化视图命名空间。 */
@@ -96,18 +97,33 @@ public final class ChatSettings {
      * <br>2026/11/04：提供稳定分组与完整用途说明，发现不代替授权。
      * <br>2026/11/04：区分当前聊天已登记、未登记与全局目录尚未查询的状态。
      *
-     * @param id 稳定区标识
+     * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
+ * @param id 稳定区标识
      * @param name 中文名称
      * @param group 稳定分组
      * @param description 配置完整用途说明
      * @param registered 当前聊天是否已登记，全局目录未解析聊天时为空
+     * @param pluginId 所属插件 ID，宿主未声明归属时为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.4-l
+     * @version 4.9.0-l
      */
     public record Section(String id, String name, String group, String description,
-                          @org.jspecify.annotations.Nullable Boolean registered) {
+                          @org.jspecify.annotations.Nullable Boolean registered,
+                          @org.jspecify.annotations.Nullable String pluginId) {
+        /**
+         * 2026/11/07：保留没有插件归属的宿主配置构造入口。
+         * @param id 稳定区标识
+         * @param name 中文名称
+         * @param group 分组
+         * @param description 说明
+         * @param registered 登记状态
+         */
+        public Section(String id, String name, String group, String description,
+                @org.jspecify.annotations.Nullable Boolean registered) {
+            this(id, name, group, description, registered, null);
+        }
         /**
          * 2026/11/04：保留旧元数据构造，全局目录不伪装成已经查询过登记状态。
          *

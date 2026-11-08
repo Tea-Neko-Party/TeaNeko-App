@@ -37,11 +37,13 @@ import java.util.Set;
  *
  * <br>2026/11/05：模型检测及房间删除继续要求管理员会话和防伪校验。
  * <br>2026/11/05：机器入口允许内网直接 WS，沿用独立令牌校验；网页 API 继续要求 HTTPS。
+ * <br>2026/11/07：向管理员开放既有在途管理调用只读入口，Core 任务查询不再被默认拒绝阻断。
+ * <br>2026/11/07：插件管理固定路由接入原会话与防伪链，资源授权仍由本地白名单决定。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -77,6 +79,10 @@ public class WebSecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/v1/auth/session", "/api/v1/console/overview",
                                 // 2026/11/04：机器观测通过原 HTTPS 与管理会话边界。
                                 "/api/v1/console/machine",
+                                // 2026/11/07：Core 任务页并行读取此目录，仅开放已有管理员 GET 入口。
+                                "/api/v1/management-calls",
+                                // 2026/11/07：只开放插件目录、页面与原操作回执的既有读取端点。
+                                "/api/v1/plugins", "/api/v1/plugins/pages", "/api/v1/plugins/operations/*",
                                 // 2026/11/04：说明与模型样板仅允许管理员读取。
                                 "/api/v1/clients", "/api/v1/commands", "/api/v1/model-configurations",
                                 // 2026/11/04：组件与工具目录仅允许管理员访问，其余路径仍默认拒绝。
@@ -108,6 +114,8 @@ public class WebSecurityConfig {
                         // 2026/11/03：写路由仍经过原 CSRF、真实会话及事务内再次授权。
                         // 2026/11/03：实例级资源的进一步授权由原管理网关完成。
                         .requestMatchers(HttpMethod.POST, "/api/v1/management/*", "/api/v1/auth/logout", "/api/v1/clients/*/actions/discover",
+                                // 2026/11/07：预览与启停必须携带真实会话和 CSRF，不开放任意插件子路径。
+                                "/api/v1/plugins/preview", "/api/v1/plugins/actions/change",
                                 "/api/v1/clients/*/accounts/*/targets/*/settings/*",
                                 "/api/v1/clients/*/accounts/*/targets/*/console",
                                 "/api/v1/file-configs/*/actions/validate", "/api/v1/file-configs/*/actions/save",

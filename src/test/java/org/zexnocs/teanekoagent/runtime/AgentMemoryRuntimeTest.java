@@ -1,32 +1,35 @@
 package org.zexnocs.teanekoagent.runtime;
 
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.*;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptionsSnapshot;
-import org.zexnocs.teanekoagent.component.llm.framework.model.ModelCapabilities;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.response.LLMUsage;
-import org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.component.llm.framework.tool.ToolInvocationResult;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.InteractionRuntime;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
+import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
+import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
 import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
@@ -37,18 +40,38 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.AgentMemoryReferenceException;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 经真实独立 Agent/LLM 管线验证引用固定、异步守卫、预算、取消与迟到结果隔离。
@@ -72,7 +95,7 @@ class AgentMemoryRuntimeTest {
     private final MemoryNamespaceReference fixed = new MemoryNamespaceReference(scope, MemoryNamespaceId.SHARED, 0, 0);
     private final AtomicReference<MemoryNamespaceReference> current = new AtomicReference<>(fixed);
     private final AtomicReference<AgentScopePolicy> policy = new AtomicReference<>(new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE));
-    private final IAgentMemoryReferences references = mock(IAgentMemoryReferences.class);
+    private final IAgentMemoryReferences references = mock(IAgentMemoryReferences.class, org.mockito.Mockito.CALLS_REAL_METHODS);
     private final AtomicReference<Function<AgentScope, CompletionStage<MemoryNamespaceReference>>> resolve = new AtomicReference<>(ignored -> CompletableFuture.completedStage(current.get()));
     private final AtomicReference<Function<MemoryNamespaceReference, CompletionStage<Void>>> verify = new AtomicReference<>(expected ->
             expected.equals(current.get()) ? CompletableFuture.completedStage(null)
@@ -141,7 +164,9 @@ class AgentMemoryRuntimeTest {
     @Test void successfulToolTurnUsesFixedReferenceWithoutPromptAuthority() {
         var result = service.run(handle, request()).toCompletableFuture(); runtime.runAll();
         replies.getFirst().complete(response(true)); runtime.runAll(); assertEquals(1, toolCalls.get());
-        var seen = toolContext.get(); assertNotNull(seen); assertEquals(fixed, seen.require(AgentComponents.MEMORY_REFERENCE));
+        var seen = toolContext.get();
+        assertNotNull(seen);
+        assertEquals(fixed, seen.require(AgentComponents.CONTEXT_REFERENCE));
         replies.getLast().complete(response(false)); runtime.runAll(); assertEquals(AgentRunResult.Status.SUCCESS, result.join().status());
         assertEquals(fixed, result.join().memoryReference()); assertEquals(2, result.join().interaction().orElseThrow().attempts().size());
         for (var prompt : prompts) { assertTrue(prompt.getMessages().stream().allMatch(message -> message.getProviderMetadata().isEmpty())); }
@@ -268,7 +293,10 @@ class AgentMemoryRuntimeTest {
         var pending = service.prepare(handle, stamped).start().toCompletableFuture();
         runtime.runAll();
         var result = pending.join();
-        assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, result.status()); verifyNoInteractions(references, models);
+        assertEquals(AgentRunResult.Status.CONFIGURATION_ERROR, result.status());
+        verify(references, never()).resolve(any());
+        verify(references, never()).verify(any());
+        verifyNoInteractions(models);
     }
 
     /** 验证邮箱固定引用后、真实轮次启动前发生切换时拒绝，不重新解析或请求模型。 */

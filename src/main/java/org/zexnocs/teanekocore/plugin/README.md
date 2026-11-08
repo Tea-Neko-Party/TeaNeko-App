@@ -6,9 +6,11 @@ v4.6.0-l 已实现插件声明、完整依赖校验、逻辑启停及版本令�
 
 | 位置 | 职责 |
 | --- | --- |
-| PluginDescriptor / PluginModule | 元数据与模块入口 |
+| TeaNekoPlugin / PluginDeclarationScanner / PluginDescriptor | 条件装配后的静态插件声明与发现缓存 |
+| HostCapability | 独立宿主身份与能力依赖，不进入业务插件启停目录 |
+| IPluginModule | 隔离装配使用的程序化元数据入口 |
 | PluginRegistry | 依赖目录、启动禁用列表、逻辑开关及调用版本复核 |
 | PluginOwned / PluginAccess | 原扫描式扩展的归属守卫 |
-| PluginScopedEvent | 事件参与范围及异步监听资格 |
+| IPluginScopedEvent | 事件参与范围及异步监听资格 |
 | operation | 类型化异步环绕，保留原任务调用栈 |
 | management | 默认拒绝的管理授权、资源 schema、类型化用例及路由 |

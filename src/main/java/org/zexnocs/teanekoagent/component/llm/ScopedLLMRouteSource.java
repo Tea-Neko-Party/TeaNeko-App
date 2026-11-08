@@ -1,18 +1,20 @@
 package org.zexnocs.teanekoagent.component.llm;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.zexnocs.teanekoagent.component.AgentAssembly;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfigParameter;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMProviderAccess;
-import org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelOptions;
-import org.zexnocs.teanekoagent.component.llm.framework.route.ILLMRouteSource;
-import org.zexnocs.teanekoagent.component.llm.framework.route.LLMRouteSource;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfigParameter;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMProviderAccess;
+import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.route.ILLMRouteSource;
+import org.zexnocs.teanekoagent.llm.framework.route.LLMRouteSource;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekocore.database.configdata.ConfigDataRegisterService;

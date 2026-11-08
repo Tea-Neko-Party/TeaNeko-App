@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.teauser;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.stereotype.Service;
@@ -11,7 +13,7 @@ import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
 import org.zexnocs.teanekocore.database.easydata.general.GeneralEasyData;
 import org.zexnocs.teanekocore.framework.pair.HashPair;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.util.List;
@@ -34,7 +36,7 @@ public class TeaUserService implements ITeaUserService {
     private final ILogger logger;
 
     /// 构造一个根据 UUID 和 客户端获取 平台ID 的缓存
-    private final ConcurrentMapCacheContainer<Pair<String, UUID>, String> cache;
+    private final ConcurrentMapCacheContainer<IPair<String, UUID>, String> cache;
 
     public TeaUserService(ILogger logger, ICacheService iCacheService) {
         this.logger = logger;

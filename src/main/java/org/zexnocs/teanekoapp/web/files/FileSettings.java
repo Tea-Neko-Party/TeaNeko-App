@@ -14,10 +14,11 @@ import java.util.*;
  *
  * <br>2026/11/06：文件字段携带注解指定编辑器，保留原构造兼容。
  *
+ * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 public final class FileSettings {
     /** 禁止实例化契约命名空间。 */
@@ -128,15 +129,27 @@ public final class FileSettings {
      * 可发现配置区，不暴露真实文件路径。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
-     * @param id 管理标识
+     * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
+ * @param id 管理标识
      * @param name 中文名
      * @param application NEXT_USE 或 RESTART
+     * @param pluginId 所属插件 ID，宿主未声明归属时为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.9.0-l
      */
-    public record Section(String id, String name, String application) {}
+    // 2026/11/07：目录携带明确插件归属，未声明归属的宿主区为空。
+    public record Section(String id, String name, String application, @Nullable String pluginId) {
+        /**
+     * @param id 稳定区标识
+     * @param name 中文名
+     * @param application 应用方式
+     */
+        public Section(String id, String name, String application) {
+            this(id, name, application, null);
+        }
+    }
 
     /**
      * 仅包含已开放字段的原始模板值，保护字段不返回原值或展开值。
@@ -184,7 +197,8 @@ public final class FileSettings {
      * 修改记录：<br>
      * 2026/11/04：增加独立文件用途说明，保持字段和秘密投影边界。
      *
-     * @param id 管理区
+     * <br>2026/11/07：投影并缓存插件归属，保持启停与权限复核。
+ * @param id 管理区
      * @param name 中文名
      * @param description 文件用途及说明，不包含原始文件内容
      * @param revision 磁盘版本
@@ -194,15 +208,16 @@ public final class FileSettings {
      * @param fields 脱敏字段
      * @param collections 可编辑集合
      * @param collectionSizes 真实数组大小
+     * @param pluginId 所属插件 ID，宿主未声明归属时为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.6-l
+     * @version 4.9.0-l
      */
     // 2026/11/04：独立文件说明不携带原始文档正文。
     public record View(String id, String name, String description, String revision, boolean exists, String application,
             FileConfigDocument.Stamp runtime, List<Field> fields, List<CollectionRule> collections,
-            Map<String, Integer> collectionSizes) {}
+            Map<String, Integer> collectionSizes, @Nullable String pluginId) {}
 
     /**
      * 原操作事实，不表示其他模块或在途请求已经全部切换。

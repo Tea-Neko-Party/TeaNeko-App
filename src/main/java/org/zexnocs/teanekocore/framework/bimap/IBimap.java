@@ -1,7 +1,9 @@
 package org.zexnocs.teanekocore.framework.bimap;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekocore.framework.pair.Pair;
+import org.zexnocs.teanekocore.framework.pair.IPair;
 
 import java.util.Map;
 import java.util.Set;
@@ -37,7 +39,7 @@ public interface IBimap<K, V> {
      * @param value 值。
      * @return 被替换的键值对，如果没有被替换则返回 null。
      */
-    Pair<K, V> put(K key, V value);
+    IPair<K, V> put(K key, V value);
 
     /**
      * 是否包含指定的 key。

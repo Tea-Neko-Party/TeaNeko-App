@@ -1,14 +1,20 @@
 package org.zexnocs.teanekoagent.runtime.workflow;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import lombok.NonNull;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekocore.actuator.execution.BudgetKey;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 一次显式协作的只读观察，步骤诊断可能含旧答案，只有整体成功才能公开最终答案。

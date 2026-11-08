@@ -1,17 +1,21 @@
 package org.zexnocs.teanekoagent.runtime;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.LLMInteractionResult;
-import org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationCompression;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContexts;
+import org.zexnocs.teanekoagent.runtime.context.IAgentTranscriptRecorder;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -25,7 +29,13 @@ import java.time.Clock;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
@@ -45,11 +55,13 @@ import java.util.function.Function;
  * <br>2026/11/05：失败日志直接说明安全原因并关联原请求。
  * <br>2026/11/06：终态观察传递本轮临时结果，统一汇总内部模型链。
  * <br>2026/11/06：提前拒绝与正常轮次统一在完成阶段发布终态，避免漏报和重复通知。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.5-l
+ * @version 4.9.0-l
  */
 public final class AgentService implements IAgentTurnService, AutoCloseable {
     private volatile Consumer<AgentTurnReport> observer = report -> { };
@@ -83,10 +95,10 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
     private final ScheduledExecutorService scheduler;
     private final Clock clock;
     private final ILogger logger;
-    private final @Nullable IAgentMemoryReferences references;
+    private final @Nullable IAgentContextReferences references;
     private final IAgentPromptSource prompts;
-    private final @Nullable IAgentPersonalitySource personalities;
-    private final @Nullable IAgentConversationSummaries summaries;
+    private final @Nullable IAgentPromptContexts personalities;
+    private final @Nullable IAgentConversationCompression summaries;
     private final ConcurrentMap<EntityId, AgentTurn> turns = new ConcurrentHashMap<>();
     private final Object lifecycleLock = new Object();
     // 2026/11/02：仅在首次请求之前允许宿主完成插件装配。
@@ -98,7 +110,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @throws IllegalStateException 当服务已经启动或关闭时
      */
     @org.springframework.beans.factory.annotation.Autowired(required = false)
-    public void installExpressions(org.zexnocs.teanekoagent.component.expression.ExpressionRuntime runtime) {
+    public void installExpressions(org.zexnocs.teanekoagent.runtime.delivery.IAgentReplyCompiler runtime) {
         synchronized (lifecycleLock) {
             if (started || closed) { throw new IllegalStateException("Agent 服务开始后不能替换表达运行时。"); }
             executionPipeline.expressions = runtime;
@@ -152,7 +164,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
-            IAgentMemoryReferences references) {
+            IAgentContextReferences references) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger,
                 Objects.requireNonNull(references, "持久化空间引用端口不能为空。"), false, IAgentPromptSource.empty(), null, null, null);
     }
@@ -173,7 +185,7 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
-            @Nullable IAgentMemoryReferences references, IAgentPromptSource prompts) {
+            @Nullable IAgentContextReferences references, IAgentPromptSource prompts) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null,
                 Objects.requireNonNull(prompts, "Prompt 资料端口不能为空。"), null, null, null);
     }
@@ -193,8 +205,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @param personalities 可选实际人格源
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentMemoryReferences references,
-            IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities) {
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentContextReferences references,
+            IAgentPromptSource prompts, @Nullable IAgentPromptContexts personalities) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null, prompts, personalities, null, null);
     }
 
@@ -214,8 +226,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @param history 可选历史记录端口
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentMemoryReferences references,
-            IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities, @Nullable IAgentHistoryRecorder history) {
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentContextReferences references,
+            IAgentPromptSource prompts, @Nullable IAgentPromptContexts personalities, @Nullable IAgentTranscriptRecorder history) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null, prompts, personalities, history, null);
     }
 
@@ -236,9 +248,9 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      * @param summaries 可选摘要端口
      */
     public AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools, ObjectMapper mapper, Executor executor,
-            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentMemoryReferences references,
-            IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities, @Nullable IAgentHistoryRecorder history,
-            @Nullable IAgentConversationSummaries summaries) {
+            ScheduledExecutorService scheduler, Clock clock, ILogger logger, @Nullable IAgentContextReferences references,
+            IAgentPromptSource prompts, @Nullable IAgentPromptContexts personalities, @Nullable IAgentTranscriptRecorder history,
+            @Nullable IAgentConversationCompression summaries) {
         this(gate, interactions, tools, mapper, executor, scheduler, clock, logger, references, references == null, prompts, personalities, history, summaries);
     }
 
@@ -262,8 +274,8 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
      */
     private AgentService(AgentAccessGate gate, ILLMInteractionService interactions, IAgentToolSource tools,
             ObjectMapper mapper, Executor executor, ScheduledExecutorService scheduler, Clock clock, ILogger logger,
-            @Nullable IAgentMemoryReferences references, boolean detachedMemory, IAgentPromptSource prompts, @Nullable IAgentPersonalitySource personalities,
-            @Nullable IAgentHistoryRecorder history, @Nullable IAgentConversationSummaries summaries) {
+            @Nullable IAgentContextReferences references, boolean detachedMemory, IAgentPromptSource prompts, @Nullable IAgentPromptContexts personalities,
+            @Nullable IAgentTranscriptRecorder history, @Nullable IAgentConversationCompression summaries) {
         this.gate = Objects.requireNonNull(gate, "Agent 门控不能为空。");
         this.executor = Objects.requireNonNull(executor, "业务执行器不能为空。");
         this.scheduler = Objects.requireNonNull(scheduler, "计时器不能为空。");
@@ -503,10 +515,10 @@ public final class AgentService implements IAgentTurnService, AutoCloseable {
                 turn.lifetime.checkActive();
                 if (!prepared) { return CompletableFuture.completedStage(null); }
                 // 2026/11/04：只为实际安装的记忆验证邮箱固定引用，仍拒绝绕过持久边界。
-                if (references != null && turn.entity.snapshot().require(AgentComponents.DEFINITION).assembly().has("memory")
+                if (references != null && references.supports(turn.entity.snapshot().require(AgentComponents.DEFINITION).assembly())
                         && turn.request.conversation() != null && turn.request.memoryReference() == null) {
-                    return turn.rejectContext(new org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException(
-                            org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException.Reason.UNAVAILABLE));
+                    return turn.rejectContext(new org.zexnocs.teanekoagent.runtime.context.AgentContextException(
+                            org.zexnocs.teanekoagent.runtime.context.AgentContextException.Reason.UNAVAILABLE));
                 }
                 if (references == null) { return turn.control().guard(pipeline.execute(turn.entity, turn.control())); }
                 return turn.resolveMemory(references).thenComposeAsync(ignored -> {

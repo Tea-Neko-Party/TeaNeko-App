@@ -13,11 +13,12 @@ import java.util.concurrent.CompletionStage;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：由客户端声明真实目标适用的配置命名空间，未知实现默认不开放配置。
+ * <br>2026/11/07：公开客户端视图携带宿主确认的插件归属。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.7.1-l
+ * @version 4.9.0-l
  */
 public interface IClientManagementAdapter {
     /**
@@ -84,6 +85,7 @@ public interface IClientManagementAdapter {
     /**
      * 不含会话句柄、凭据、内部 scope 或消息正文的平台卡片。
      * <br>2026/11/04：校正 @since 为首次引入版本。
+     * <br>2026/11/07：增加插件归属，保留旧构造方法。
      *
      * @param clientId 稳定平台标识
      * @param name 人可理解的平台名称
@@ -92,13 +94,29 @@ public interface IClientManagementAdapter {
      * @param explanation 当前状态的中文说明
      * @param observedAt 实际观测时间
      * @param settingsAvailable 是否已有可用聊天设置适配
+     * @param pluginId 宿主确认的插件归属，官方客户端可为空
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.7.0-l
+     * @version 4.9.0-l
      */
     record View(String clientId, String name, String state, int connections,
-                String explanation, Instant observedAt, boolean settingsAvailable) {
+                String explanation, Instant observedAt, boolean settingsAvailable,
+                @org.jspecify.annotations.Nullable String pluginId) {
+        /**
+         * 2026/11/07：保留官方客户端构造，插件归属由宿主目录投影。
+         * @param clientId 稳定客户端标识
+         * @param name 中文名称
+         * @param state 当前状态
+         * @param connections 真实连接数
+         * @param explanation 状态说明
+         * @param observedAt 观察时间
+         * @param settingsAvailable 是否支持聊天配置
+         */
+        public View(String clientId, String name, String state, int connections, String explanation,
+                Instant observedAt, boolean settingsAvailable) {
+            this(clientId, name, state, connections, explanation, observedAt, settingsAvailable, null);
+        }
         /**
          * 2026/11/03：保留旧只读平台构造，不推测设置能力。
          * @param clientId 原平台

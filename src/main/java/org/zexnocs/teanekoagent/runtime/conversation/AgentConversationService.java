@@ -1,20 +1,11 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationState;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
-import org.zexnocs.teanekoagent.component.memory.AgentRequestJournal;
-import org.zexnocs.teanekoagent.component.memory.AgentSummarySnapshot;
-import org.zexnocs.teanekoagent.component.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoagent.component.memory.runtime.AgentMemoryReferenceException;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
-import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalityLearning;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentDeliveryException;
 import org.zexnocs.teanekoagent.runtime.AgentHandle;
@@ -25,6 +16,14 @@ import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.IAgentService;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.runtime.context.AgentContextException;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReference;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationAttachment;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationCompression;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationObserver;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContext;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContexts;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
@@ -82,7 +81,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 public final class AgentConversationService implements IAgentService, IAgentConversationControl, AutoCloseable {
     private final IAgentTurnService turns;
@@ -96,9 +95,9 @@ public final class AgentConversationService implements IAgentService, IAgentConv
     private final ILogger logger;
     private final @Nullable AgentMemoryBoundary memory;
     private final AgentMemoryBoundary observations;
-    private final @Nullable IAgentPersonalitySource personalities;
-    private final @Nullable IAgentConversationSummaries summaries;
-    private final @Nullable IAgentPersonalityLearning learning;
+    private final @Nullable IAgentPromptContexts personalities;
+    private final @Nullable IAgentConversationCompression summaries;
+    private final @Nullable IAgentConversationObserver learning;
     private final Object lock = new Object();
     private final Map<AgentConversationKey, Mailbox> mailboxes = new LinkedHashMap<>();
     private final ConcurrentLinkedQueue<Mailbox> retired = new ConcurrentLinkedQueue<>();
@@ -171,7 +170,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
-            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references) {
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentContextReferences references) {
         this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, null);
     }
 
@@ -191,8 +190,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
-            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
-            @Nullable IAgentPersonalitySource personalities) {
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentContextReferences references,
+            @Nullable IAgentPromptContexts personalities) {
         this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, personalities, null);
     }
     /**
@@ -212,8 +211,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
-            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
-            @Nullable IAgentPersonalitySource personalities, @Nullable IAgentConversationSummaries summaries) {
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentContextReferences references,
+            @Nullable IAgentPromptContexts personalities, @Nullable IAgentConversationCompression summaries) {
         this(turns, defaults, executor, scheduler, clock, logger, conversations, policy, mapper, references, personalities, summaries, null);
     }
     /**
@@ -234,8 +233,8 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     public AgentConversationService(IAgentTurnService turns, IAgentQueueDefaults defaults, Executor executor,
             ScheduledExecutorService scheduler, Clock clock, ILogger logger, IAgentConversationDefaults conversations,
-            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentMemoryReferences references,
-            @Nullable IAgentPersonalitySource personalities, @Nullable IAgentConversationSummaries summaries, @Nullable IAgentPersonalityLearning learning) {
+            IAgentConversationPolicy policy, ObjectMapper mapper, @Nullable IAgentContextReferences references,
+            @Nullable IAgentPromptContexts personalities, @Nullable IAgentConversationCompression summaries, @Nullable IAgentConversationObserver learning) {
         this.turns = Objects.requireNonNull(turns, "独立轮次端口不能为空。");
         this.defaults = Objects.requireNonNull(defaults, "排队策略端口不能为空。");
         this.conversations = Objects.requireNonNull(conversations, "会话保留策略端口不能为空。");
@@ -424,7 +423,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 return CompletableFuture.completedStage(restate(raw, AgentRunResult.Status.REPLAY_UNAVAILABLE));
             }
             var boundary = memory;
-            if (boundary != null && decision.scope().orElseThrow().assembly().has("memory")) {
+            if (boundary != null && boundary.references().supports(decision.scope().orElseThrow().assembly())) {
                 var reference = raw.memoryReference();
                 if (reference == null) {
                     return CompletableFuture.completedStage(restate(raw, AgentRunResult.Status.CONFIGURATION_ERROR));
@@ -443,7 +442,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @throws NullPointerException 当必需参数为空时
      * @throws UnsupportedOperationException 当没有装配引用保护时
      */
-    @Override public CompletionStage<Integer> synchronizeMemory(AgentScope scope, ExecutionControl parent) {
+    @Override public CompletionStage<Integer> synchronizeContext(AgentScope scope, ExecutionControl parent) {
         Objects.requireNonNull(scope, "同步作用域不能为空。"); Objects.requireNonNull(parent, "同步父控制不能为空。");
         var boundary = memory;
         if (boundary == null) { throw new UnsupportedOperationException("当前邮箱未装配持久化记忆引用。"); }
@@ -453,7 +452,9 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     .thenApplyAsync(reference -> {
                         control.checkActive();
                         parent.checkActive();
-                        if (!reference.scope().equals(scope)) { throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE); }
+                        if (!reference.scope().equals(scope)) {
+                            throw new AgentContextException(AgentContextException.Reason.UNAVAILABLE);
+                        }
                         return alignMemory(reference, null);
                     }, executor));
         } catch (RuntimeException failure) { return CompletableFuture.failedStage(failure); }
@@ -465,17 +466,17 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @param parent 借用管理控制
      * @return 已实际推进代次的邮箱总数
      */
-    @Override public CompletionStage<Integer> synchronizeNamespace(String namespace, ExecutionControl parent) {
+    @Override public CompletionStage<Integer> synchronizePartition(String namespace, ExecutionControl parent) {
         Objects.requireNonNull(namespace, "同步空间不能为空。"); Objects.requireNonNull(parent, "同步控制不能为空。"); parent.checkActive();
         if (memory == null) { throw new UnsupportedOperationException("当前邮箱未装配持久化记忆引用。"); }
         final List<AgentScope> scopes;
         synchronized (lock) {
-            scopes = mailboxes.values().stream().filter(box -> !box.retired && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE)
-                    .map(reference -> reference.namespaceId().value().equals(namespace)).orElse(false)).map(box -> box.key.scope()).distinct().toList();
+            scopes = mailboxes.values().stream().filter(box -> !box.retired && box.entity.snapshot().find(AgentComponents.CONTEXT_REFERENCE)
+                    .map(reference -> reference.partitionId().equals(namespace)).orElse(false)).map(box -> box.key.scope()).distinct().toList();
         }
         CompletionStage<Integer> result = CompletableFuture.completedStage(0);
         for (var scope : scopes) {
-            result = result.thenCompose(count -> synchronizeMemory(scope, parent).thenApply(changed ->
+            result = result.thenCompose(count -> synchronizeContext(scope, parent).thenApply(changed ->
                     Math.addExact(Objects.requireNonNull(count, "同步计数不能为空。"), Objects.requireNonNull(changed, "变更计数不能为空。"))));
         }
         return result;
@@ -486,10 +487,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @param reference 当前权威观察
      * @param head 可保留并转入新代次的当前队首，同步通知时为空
      * @return 实际推进代次的邮箱数
-     * @throws AgentMemoryReferenceException 当观察落后或同版本定位冲突时
+     * @throws AgentContextException 当观察落后或同版本定位冲突时
      * @throws ExecutionStoppedException 当服务已关闭时
      */
-    private int alignMemory(MemoryNamespaceReference reference, @Nullable Entry head) {
+    private int alignMemory(IAgentContextReference reference, @Nullable Entry head) {
         var cancelled = new ArrayList<Entry>();
         var running = new ArrayList<Entry>();
         var now = clock.instant();
@@ -499,17 +500,17 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             if (head != null && (head.phase != Phase.PREPARING || head.stopped != null)) { return 0; }
             var related = mailboxes.values().stream().filter(box -> !box.retired && box.key.scope().equals(reference.scope())).toList();
             for (var box : related) {
-                box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).ifPresent(previous -> validateMemoryAdvance(reference, previous));
+                box.entity.snapshot().find(AgentComponents.CONTEXT_REFERENCE).ifPresent(previous -> validateMemoryAdvance(reference, previous));
             }
             for (var box : related) {
-                var previous = box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).orElse(null);
+                var previous = box.entity.snapshot().find(AgentComponents.CONTEXT_REFERENCE).orElse(null);
                 if (reference.equals(previous)) { continue; }
-                var patch = ComponentPatch.builder().put(AgentComponents.MEMORY_REFERENCE, reference);
+                var patch = ComponentPatch.builder().put(AgentComponents.CONTEXT_REFERENCE, reference);
                 if (previous != null) {
                     changed++;
                     var stamp = new AgentConversationStamp(box.key, UUID.randomUUID());
                     patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))
-                            .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
+                            .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentComponents.CONVERSATION_ATTACHMENT)
                             .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
                     for (var entry : List.copyOf(box.requests.values())) {
                         if (entry == head) { entry.stamp = stamp; continue; }
@@ -531,16 +532,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * 区分迟到观察与同版本定位损坏，不允许回退绑定版本或同一空间的数据代次。
      * @param reference 新观察
      * @param previous 已提交观察
-     * @throws AgentMemoryReferenceException 当版本回退或同版本目标不一致时
+     * @throws AgentContextException 当版本回退或同版本目标不一致时
      */
-    private static void validateMemoryAdvance(MemoryNamespaceReference reference, MemoryNamespaceReference previous) {
-        if (reference.bindingRevision() < previous.bindingRevision()
-                || reference.namespaceId().equals(previous.namespaceId()) && reference.generation() < previous.generation()) {
-            throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
-        }
-        if (reference.bindingRevision() == previous.bindingRevision() && !reference.namespaceId().equals(previous.namespaceId())) {
-            throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE);
-        }
+    private static void validateMemoryAdvance(IAgentContextReference reference, IAgentContextReference previous) {
+        // 2026/11/07：业务版本含义由引用提供者仲裁，宿主不解析插件分区或代次。
+        reference.validateSuccessor(previous);
     }
 
     /**
@@ -757,7 +753,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @return 实际新代次
      */
     private Optional<AgentConversationStamp> invalidateMailbox(AgentConversationKey key, @Nullable String expectedIdentity,
-            @Nullable AgentPersonalitySnapshot replacement) {
+            @Nullable IAgentPromptContext replacement) {
         var stamp = new AgentConversationStamp(key, UUID.randomUUID());
         var now = clock.instant();
         var cancelled = new ArrayList<Entry>();
@@ -767,14 +763,16 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             var mailbox = mailboxes.get(key);
             if (mailbox != null && expired(mailbox, mailbox.retention, now)) { retire(mailbox); mailbox = null; }
             if (!closed && mailbox != null && !mailbox.retired && (replacement == null
-                    || Objects.equals(expectedIdentity, mailbox.entity.snapshot().find(AgentComponents.PERSONALITY_IDENTITY).orElse(null))
+                    || Objects.equals(expectedIdentity, mailbox.entity.snapshot().find(AgentComponents.CONTEXT_IDENTITY).orElse(null))
                     && !Objects.equals(expectedIdentity, replacement.identity()))) {
                 changed = true;
                 var patch = ComponentPatch.builder()
                         .put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(mailbox).lastActivity())))
-                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
+                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentComponents.CONVERSATION_ATTACHMENT)
                         .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
-                if (replacement != null) { patch.put(AgentComponents.PERSONALITY_IDENTITY, replacement.identity()).put(AgentComponents.CORRECTION_KEY, replacement.correctionKey()); }
+                if (replacement != null) {
+                    patch.put(AgentComponents.CONTEXT_IDENTITY, replacement.identity()).put(AgentComponents.CONTEXT_GROUP, replacement.groupKey());
+                }
                 mailbox.entity.commit(mailbox.entity.snapshot().revision(), patch.build());
                 mailbox.waiting.clear();
                 for (var entry : List.copyOf(mailbox.requests.values())) {
@@ -799,15 +797,15 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @param parent 借用控制
      * @return 实际换代数量
      */
-    @Override public CompletionStage<Integer> synchronizePersonality(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
+    @Override public CompletionStage<Integer> synchronizePromptContext(AgentScope scope, String correctionKey, boolean shared, ExecutionControl parent) {
         var source = personalities;
         if (source == null) { return CompletableFuture.failedStage(new IllegalStateException("当前宿主未装配人格来源。")); }
         var selected = new LinkedHashMap<AgentConversationKey, String>();
         synchronized (lock) {
             for (var box : mailboxes.values()) {
                 var snapshot = box.entity.snapshot();
-                if (shared ? snapshot.find(AgentComponents.CORRECTION_KEY).filter(correctionKey::equals).isPresent() : box.key.scope().equals(scope)) {
-                    selected.put(box.key, snapshot.find(AgentComponents.PERSONALITY_IDENTITY).orElse(null));
+                if (shared ? snapshot.find(AgentComponents.CONTEXT_GROUP).filter(correctionKey::equals).isPresent() : box.key.scope().equals(scope)) {
+                    selected.put(box.key, snapshot.find(AgentComponents.CONTEXT_IDENTITY).orElse(null));
                 }
             }
         }
@@ -1064,7 +1062,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      */
     private void prepareMemory(Entry entry) {
         var boundary = memory;
-        if (boundary == null || !entry.assembly.has("memory")) {
+        if (boundary == null || !boundary.references().supports(entry.assembly)) {
             preparePersonality(entry, null);
             return;
         }
@@ -1076,11 +1074,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                 return;
             }
             if (!reference.scope().equals(entry.key.scope())) {
-                throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.UNAVAILABLE);
+                throw new AgentContextException(AgentContextException.Reason.UNAVAILABLE);
             }
             var pinned = entry.request.memoryReference();
             if (entry.request.activity() == AgentActivity.AUTOMATIC_REPLY && pinned != null && !pinned.equals(reference)) {
-                throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
+                throw new AgentContextException(AgentContextException.Reason.CHANGED);
             }
             alignMemory(reference, entry);
             preparePersonality(entry, reference);
@@ -1096,10 +1094,10 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @param entry 当前队首
      * @param reference 可选固定记忆引用
      */
-    private void preparePersonality(Entry entry, @Nullable MemoryNamespaceReference reference) {
+    private void preparePersonality(Entry entry, @Nullable IAgentContextReference reference) {
         var source = personalities;
         // 2026/11/04：纯模型对话不访问人格；独立记忆可以使用明确的无人格分区。
-        if (source == null || !entry.assembly.has("personality") && !entry.assembly.has("memory")) {
+        if (source == null || !source.supports(entry.assembly)) {
             startPrepared(entry, reference);
             return;
         }
@@ -1108,14 +1106,15 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                     control.checkActive();
                     if (!decision.allowed()) { throw new AgentPromptException(decision.reason() == AgentAccessDecision.Reason.READINESS_UNAVAILABLE
                             || decision.reason() == AgentAccessDecision.Reason.SCOPE_CONFIG_UNAVAILABLE ? AgentPromptException.Reason.UNAVAILABLE : AgentPromptException.Reason.DISABLED); }
-                    return source.resolve(entry.key.scope(), control);
+                    return source.resolve(entry.assembly, entry.key.scope(), control);
                 }, executor)).thenAcceptAsync(snapshot -> {
                     entry.lifetime.checkActive(); entry.reservedPersonalityBytes = engine.personalityBytes(snapshot);
                     var pinned = entry.request.personalityIdentity();
                     if (entry.request.activity() == AgentActivity.AUTOMATIC_REPLY && pinned != null && !pinned.equals(snapshot.identity())) {
                         throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
                     }
-                    alignPersonality(entry, snapshot.identity(), snapshot.correctionKey()); startPrepared(entry, reference);
+                    alignPersonality(entry, snapshot.identity(), snapshot.groupKey());
+                    startPrepared(entry, reference);
                 }, executor).exceptionally(failure -> {
                     stop(entry, AgentMemoryBoundary.status(failure), false, failure);
                     return null;
@@ -1133,13 +1132,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         synchronized (lock) {
             if (head.phase != Phase.PREPARING || head.stopped != null) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
             var box = Objects.requireNonNull(head.mailbox); var current = box.entity.snapshot();
-            var previous = current.find(AgentComponents.PERSONALITY_IDENTITY).orElse(null);
+            var previous = current.find(AgentComponents.CONTEXT_IDENTITY).orElse(null);
             if (!Objects.equals(head.stamp, state(box).stamp())) { throw new AgentPromptException(AgentPromptException.Reason.CHANGED); }
-            var patch = ComponentPatch.builder().put(AgentComponents.PERSONALITY_IDENTITY, identity).put(AgentComponents.CORRECTION_KEY, correctionKey);
+            var patch = ComponentPatch.builder().put(AgentComponents.CONTEXT_IDENTITY, identity).put(AgentComponents.CONTEXT_GROUP, correctionKey);
             if (previous != null && !previous.equals(identity)) {
                 var stamp = new AgentConversationStamp(box.key, UUID.randomUUID()); head.stamp = stamp;
                 patch.put(AgentConversationState.COMPONENT, new AgentConversationState(stamp, later(now, state(box).lastActivity())))
-                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT).put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
+                        .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentComponents.CONVERSATION_ATTACHMENT).put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty());
                 for (var entry : List.copyOf(box.requests.values())) {
                     if (entry == head || entry.phase == Phase.FINISHED) { continue; }
                     entry.stopped = AgentRunResult.Status.STALE_CONVERSATION; detach(entry, now); cancelled.add(entry);
@@ -1156,24 +1155,24 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * @param entry 当前队首
      * @param reference 本轮固定引用，无记忆模式为空
      */
-    private void startPrepared(Entry entry, @Nullable MemoryNamespaceReference reference) {
+    private void startPrepared(Entry entry, @Nullable IAgentContextReference reference) {
         try {
             AgentConversationWindow window;
-            final AgentSummarySnapshot previousSummary;
+            final IAgentConversationAttachment previousSummary;
             synchronized (lock) {
                 if (entry.phase != Phase.PREPARING) {
                     return;
                 }
                 var box = Objects.requireNonNull(entry.mailbox);
                 if (!Objects.equals(entry.stamp, state(box).stamp())
-                    || reference != null && box.entity.snapshot().find(AgentComponents.MEMORY_REFERENCE).filter(reference::equals).isEmpty()) {
-                    throw new AgentMemoryReferenceException(AgentMemoryReferenceException.Reason.CHANGED);
+                    || reference != null && box.entity.snapshot().find(AgentComponents.CONTEXT_REFERENCE).filter(reference::equals).isEmpty()) {
+                    throw new AgentContextException(AgentContextException.Reason.CHANGED);
                 }
                 entry.memoryReference = reference;
                 window = box.entity.snapshot().require(AgentConversationWindow.COMPONENT);
-                previousSummary = box.entity.snapshot().find(AgentSummarySnapshot.COMPONENT).orElse(null);
+                previousSummary = box.entity.snapshot().find(AgentComponents.CONVERSATION_ATTACHMENT).orElse(null);
             }
-            if (summaries != null && entry.assembly.has("memory") && reference != null && entry.personalityIdentity != null) {
+            if (summaries != null && summaries.supports(entry.assembly) && reference != null && entry.personalityIdentity != null) {
                 try {
                     var selected = summaries.select(Objects.requireNonNull(entry.stamp), reference, entry.personalityIdentity, window, previousSummary);
                     synchronized (lock) {
@@ -1183,15 +1182,15 @@ public final class AgentConversationService implements IAgentService, IAgentConv
                             throw new AgentPromptException(AgentPromptException.Reason.CHANGED);
                         }
                         var patch = ComponentPatch.builder().put(AgentConversationWindow.COMPONENT, selected.window());
-                        if (selected.summary() == null) {
-                            patch.remove(AgentSummarySnapshot.COMPONENT);
+                        if (selected.attachment() == null) {
+                            patch.remove(AgentComponents.CONVERSATION_ATTACHMENT);
                         } else {
-                            patch.put(AgentSummarySnapshot.COMPONENT, selected.summary());
+                            patch.put(AgentComponents.CONVERSATION_ATTACHMENT, selected.attachment());
                         }
                         box.entity.commit(box.entity.snapshot().revision(), patch.build());
                     }
                     window = selected.window();
-                    entry.summary = selected.summary();
+                    entry.summary = selected.attachment();
                 } catch (RuntimeException failure) {
                     report(failure);
                     entry.summary = null;
@@ -1311,7 +1310,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         var boundary = memory;
         var expected = entry.memoryReference;
         // 2026/11/04：不对无记忆装配要求 namespace；普通版本、来源及生命周期仍继续仲裁。
-        if (boundary == null || !entry.assembly.has("memory") || raw == null || failure != null || raw.status() != AgentRunResult.Status.SUCCESS || entry.stopped != null) {
+        if (boundary == null || !boundary.references().supports(entry.assembly) || raw == null || failure != null || raw.status() != AgentRunResult.Status.SUCCESS || entry.stopped != null) {
             commitFinished(entry, raw, failure); return;
         }
         if (expected == null || !expected.equals(raw.memoryReference()) || !Objects.equals(entry.stamp, raw.conversation())) {
@@ -1370,11 +1369,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             next = detach(entry, now);
         }
         drainRetired();
-        if (summaries != null && entry.assembly.has("memory") && accepted.status() == AgentRunResult.Status.SUCCESS && summaryCandidate != null) {
+        if (summaries != null && summaries.supports(entry.assembly) && accepted.status() == AgentRunResult.Status.SUCCESS && summaryCandidate != null) {
             try { summaries.offer(entry.handle, accepted, summaryCandidate, entry.summary); } catch (RuntimeException observationFailure) { report(observationFailure); }
         }
         var learningStamp = accepted.conversation();
-        if (learning != null && entry.assembly.has("personality") && accepted.status() == AgentRunResult.Status.SUCCESS && learningStamp != null) {
+        if (learning != null && learning.supports(entry.assembly) && accepted.status() == AgentRunResult.Status.SUCCESS && learningStamp != null) {
             try { learning.offer(entry.handle, entry.request, accepted, () -> replayStatus(entry.handle, learningStamp) == null); }
             catch (RuntimeException observationFailure) { report(observationFailure); }
         }
@@ -1617,11 +1616,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * 单请求状态；FINISHED 已完成业务仲裁，交付结束前保留请求索引以阻止重复执行。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private enum Phase { NEW, WAITING, SELECTED, PREPARING, RUNNING, FINISHED }
 
@@ -1629,11 +1630,13 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * 邮箱运行拥有者；实体只保留不可变数据，控制和监听不进入组件。
      * <br>2026/11/04：校正 @since 为首次引入版本。
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private static final class Mailbox {
         final AgentConversationKey key;
@@ -1658,7 +1661,7 @@ public final class AgentConversationService implements IAgentService, IAgentConv
             this.key = key; this.retention = retention;
             entity = new Entity(EntityId.random(), ComponentPatch.builder().put(AgentConversationState.COMPONENT,
                     new AgentConversationState(new AgentConversationStamp(key, UUID.randomUUID()), now))
-                    .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentSummarySnapshot.COMPONENT)
+                    .put(AgentConversationWindow.COMPONENT, AgentConversationWindow.empty()).remove(AgentComponents.CONVERSATION_ATTACHMENT)
                     .put(AgentRequestJournal.COMPONENT, AgentRequestJournal.empty()).build());
         }
 
@@ -1688,10 +1691,12 @@ public final class AgentConversationService implements IAgentService, IAgentConv
      * <br>2026/11/04：排队上下文固定当前组件装配，按需准备记忆与人格。
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      * <br>2026/11/05：保存首次准备失败的安全诊断，不持有异常对象或配置原值。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.2-l
+     * @version 4.9.0-l
      */
     private static final class Entry {
         final AgentHandle handle;
@@ -1717,11 +1722,11 @@ public final class AgentConversationService implements IAgentService, IAgentConv
         volatile AgentConversationOptions options = AgentConversationOptions.defaults();
         volatile AgentConversationEngine.@Nullable Prepared prepared;
         volatile @Nullable String personalityIdentity;
-        volatile @Nullable AgentSummarySnapshot summary;
+        volatile @Nullable IAgentConversationAttachment summary;
         // 2026/11/04：每个排队请求独立冻结装配，不把作用域参数写入共享服务。
         volatile org.zexnocs.teanekoagent.component.AgentAssembly assembly = org.zexnocs.teanekoagent.component.AgentAssembly.legacyDefaults();
         volatile long reservedPersonalityBytes;
-        volatile @Nullable MemoryNamespaceReference memoryReference;
+        volatile @Nullable IAgentContextReference memoryReference;
         volatile @Nullable Instant startedAt;
 
         /**

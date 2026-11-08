@@ -32,14 +32,25 @@ import java.util.concurrent.CompletableFuture;
  * 用于注册任务、提交任务结果。
  * <br>2026/11/03：注册真实任务回执的有界观测，不将提交当作业务完成。
  * <br>2026/11/07：限制任务准入并将逻辑等待与实际工作收尾分开。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 @Service
 public class TaskService implements ITaskService, AutoCloseable {
+    private @org.jspecify.annotations.Nullable TaskPluginBindings pluginBindings;
+
+    /**
+     * 2026/11/07：外部异步回执同样复核排队时固定的插件代次。
+     * @param bindings 任务归属与调用代次缓存
+     */
+    @Autowired
+    public void installPluginBindings(TaskPluginBindings bindings) {
+        this.pluginBindings = bindings;
+    }
     private final java.util.Map<UUID, ITask<?>> inFlight = new java.util.HashMap<>();
     private int maxInFlight = 1024;
     private boolean closed;
@@ -203,6 +214,17 @@ public class TaskService implements ITaskService, AutoCloseable {
             task.getExecution().settled();
             return false;
         }
+        // 2026/11/07：迟到结果不恢复旧资格，已经发生的操作不重新提交。
+        if (pluginBindings != null) {
+            try {
+                pluginBindings.check(task);
+            } catch (org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException failure) {
+                task.switchState(new TaskFinishedState());
+                boolean completed = task.getFuture().completeExceptionally(failure);
+                task.getExecution().settled();
+                return completed;
+            }
+        }
         // 尝试 retry 任务，是否符合由 retry service 判断
         if (iTaskRetryService.__retryTaskWithResult(task, result)) {
             // 如果 retry 成功，则返回 false
@@ -247,6 +269,14 @@ public class TaskService implements ITaskService, AutoCloseable {
         if (task.getExecution().stopped()) {
             task.getExecution().settled();
             return false;
+        }
+        // 2026/11/07：插件换代时禁止失败路径重新取得资格并重做副作用。
+        if (pluginBindings != null) {
+            try {
+                pluginBindings.check(task);
+            } catch (org.zexnocs.teanekocore.actuator.task.exception.TaskNoRetryRuntimeException failure) {
+                exception = failure;
+            }
         }
         // 尝试 retry 任务，是否符合由 retry service 判断
         if (iTaskRetryService.__retryTaskWithException(task, exception)) {

@@ -1,5 +1,11 @@
 package org.zexnocs.teanekoagent.configuration;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.springframework.aop.support.AopUtils;
@@ -8,16 +14,15 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.zexnocs.teanekoagent.component.IAgentComponentPromptSource;
-import org.zexnocs.teanekoagent.component.llm.framework.interaction.ILLMInteractionService;
-import org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.summary.IAgentConversationSummaries;
-import org.zexnocs.teanekoagent.component.personality.IAgentPersonalitySource;
-import org.zexnocs.teanekoagent.component.skill.adapter.AgentSkills;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry;
+import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.runtime.AgentService;
 import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.context.IAgentContextReferences;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationCompression;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContexts;
+import org.zexnocs.teanekoagent.runtime.context.IAgentTranscriptRecorder;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor;
 import org.zexnocs.teanekoagent.runtime.prompt.IAgentPromptSource;
 import org.zexnocs.teanekocore.logger.ILogger;
@@ -41,7 +46,7 @@ import java.util.concurrent.ScheduledExecutorService;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 @Configuration(proxyBeanMethods = false)
 public class AgentExecutionConfig {
@@ -66,7 +71,7 @@ public class AgentExecutionConfig {
      */
     public AgentService agentTurnService(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
-            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references) {
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentContextReferences references) {
         // 2026/11/02：注解工具由插件能力统一拥有，独立宿主仍可直接传入显式工具端口。
         return new AgentService(gate, interactions, extraTools(tools), mapper,
                 executor, scheduler, Clock.systemUTC(), logger, references);
@@ -86,7 +91,6 @@ public class AgentExecutionConfig {
      * @param personalities 可选人格源，与默认邮箱共用同一实例
      * @param history 可选历史记录端口
      * @param summaries 可选摘要使用复核
-     * @param skills 可选 Skill 组合能力，与原工具及资料共同装配
      * @param monitor 可选脱敏监控，故障不改变业务结果
      * @param plugins 插件能力装配与复核入口
      * @return 拥有本轮资源、借用共享执行器的服务
@@ -94,17 +98,15 @@ public class AgentExecutionConfig {
     @Bean(name = "agentTurnService", destroyMethod = "close")
     public AgentService agentTurnServiceWithPrompt(AgentAccessGate gate, ILLMInteractionService interactions, ObjectProvider<IAgentToolSource> tools,
             ObjectMapper mapper, @Qualifier("virtualExecutor") ExecutorService executor,
-            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentMemoryReferences references,
-            ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPersonalitySource> personalities, ObjectProvider<IAgentHistoryRecorder> history,
-            ObjectProvider<IAgentConversationSummaries> summaries, ObjectProvider<AgentSkills> skills, ObjectProvider<AgentRuntimeMonitor> monitor,
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler, ILogger logger, IAgentContextReferences references,
+            ObjectProvider<IAgentPromptSource> prompts, ObjectProvider<IAgentPromptContexts> personalities, ObjectProvider<IAgentTranscriptRecorder> history,
+            ObjectProvider<IAgentConversationCompression> summaries, ObjectProvider<AgentRuntimeMonitor> monitor,
             ObjectProvider<org.zexnocs.teanekoagent.plugin.AgentPluginRuntime> plugins) {
         // 2026/11/02：过滤同时实现旧来源接口的注解提供者，避免工具和参考资料重复。
         var selectedTools = extraTools(tools); var selectedPrompts = extraPrompts(prompts);
         // 2026/11/02：旧总来源只代表宿主附加来源，不再替换内置能力。
         var pluginRuntime = plugins.getIfAvailable();
         if (pluginRuntime != null) { selectedTools = pluginRuntime.tools(selectedTools); selectedPrompts = pluginRuntime.prompts(selectedPrompts); }
-        var capability = skills.getIfAvailable();
-        if (capability != null) { selectedTools = capability.tools(selectedTools); selectedPrompts = capability.prompts(selectedPrompts); }
         var service = new AgentService(gate, interactions, selectedTools, mapper, executor, scheduler,
                 Clock.systemUTC(), logger, references, selectedPrompts, personalities.getIfAvailable(), history.getIfAvailable(), summaries.getIfAvailable());
         if (pluginRuntime != null) { service.installPlugins(pluginRuntime); }

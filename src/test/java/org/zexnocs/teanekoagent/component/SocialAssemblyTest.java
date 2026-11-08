@@ -1,21 +1,21 @@
 package org.zexnocs.teanekoagent.component;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.support.DefaultListableBeanFactory;
-import org.zexnocs.teanekoagent.component.affinity.AffinityComponent;
-import org.zexnocs.teanekoagent.component.care.CareComponent;
-import org.zexnocs.teanekoagent.component.contact.PrivateContactComponent;
-import org.zexnocs.teanekoagent.component.memory.MemoryComponent;
-import org.zexnocs.teanekoagent.component.memory.MemoryInputSystem;
-import org.zexnocs.teanekoagent.component.memory.MemoryOutputSystem;
-import org.zexnocs.teanekoagent.component.memory.history.IAgentHistoryRecorder;
-import org.zexnocs.teanekoagent.component.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoagent.component.memory.shared.SharedMemoryComponent;
-import org.zexnocs.teanekoagent.component.memory.shared.SharedMemoryPromptSource;
-import org.zexnocs.teanekoagent.component.mood.MoodComponent;
-import org.zexnocs.teanekoagent.component.proactive.ProactiveComponent;
-import org.zexnocs.teanekoagent.component.social.SocialAccess;
-import org.zexnocs.teanekoagent.component.social.SocialStateService;
+import org.zexnocs.teanekoplugin.agent.social.affinity.AffinityComponent;
+import org.zexnocs.teanekoplugin.agent.social.care.CareComponent;
+import org.zexnocs.teanekoplugin.agent.social.contact.PrivateContactComponent;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryComponent;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryInputSystem;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.MemoryOutputSystem;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentHistoryRecorder;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.social.mood.MoodComponent;
+import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveComponent;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialAccess;
+import org.zexnocs.teanekoplugin.agent.social.social.SocialStateService;
 import org.zexnocs.teanekoagent.component.tool.ToolComponent;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,7 +42,8 @@ class SocialAssemblyTest {
         var refs = services.getBeanProvider(IAgentMemoryReferences.class);
         var registry = AgentAssemblyTest.registry(new ToolComponent(), new MemoryComponent(new MemoryInputSystem(histories), new MemoryOutputSystem(histories)),
                 new AffinityComponent(states, access, refs), new MoodComponent(states, access, refs), new CareComponent(), new ProactiveComponent(),
-                new SharedMemoryComponent(services.getBeanProvider(SharedMemoryPromptSource.class)), new PrivateContactComponent());
+                new PrivateContactComponent());
+        registry.installMigrations(java.util.List.of(new org.zexnocs.teanekoplugin.agent.cognition.CognitionAssemblyMigration()));
         assertEquals(1, registry.validate(AgentAssembly.MINIMAL).parameters().size());
         String base = "\"llm\":{},\"tool\":{},\"memory\":{}";
         assertTrue(registry.validate("{\"version\":1,\"components\":{" + base + ",\"mood\":{}}}").has("mood"));
@@ -50,7 +51,8 @@ class SocialAssemblyTest {
         assertThrows(IllegalArgumentException.class, () -> registry.validate("{\"version\":1,\"components\":{" + base + ",\"affinity\":{\"positiveStep\":100}}}"));
         var full = registry.validate("{\"version\":1,\"components\":{" + base
                 + ",\"affinity\":{},\"mood\":{},\"proactive\":{},\"care\":{},\"shared-memory\":{},\"private-contact\":{}}}");
-        assertEquals(9, full.parameters().size());
+        assertEquals(8, full.parameters().size());
+        assertTrue(full.settings("memory").path("crossChatRecallEnabled").asBoolean());
         assertFalse(registry.editor("{\"enabled\":true}").contains("\"care\""));
         assertTrue(registry.describe().stream().filter(item -> item.id().equals("care")).findFirst().orElseThrow().requires().contains("affinity"));
     }

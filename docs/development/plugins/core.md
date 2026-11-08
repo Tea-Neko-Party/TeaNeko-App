@@ -2,19 +2,34 @@
 
 ## 入口与装配
 
-一个插件提供 PluginModule Bean，其 descriptor() 返回 PluginDescriptor：
+业务插件在 `org.zexnocs.teanekoplugin` 或其子包声明 `@TeaNekoPlugin`。注解自带 Spring 组件语义，`id` 是稳定插件身份，不改变 Bean 名称；提供其他 `@Bean` 时可同时使用 `@Configuration(proxyBeanMethods = false)`。
+
+```java
+package org.zexnocs.teanekoplugin.example;
+
+@TeaNekoPlugin(id = "example.tools", name = "示例工具", version = "1.0.0",
+        description = "提供示例平台操作。", category = "示例",
+        dependencies = {"teaneko.agent"}, clients = {"onebot"},
+        switchMode = PluginSwitchMode.RESTART_REQUIRED)
+public class ExampleToolsPlugin {
+}
+```
+
+静态声明统一编译为 `PluginDescriptor`，业务入口不实现元数据接口：
 
 | 字段 | 含义 |
 | --- | --- |
 | id | 全局稳定插件 ID，格式为小写字母开头的字母、数字、点或短横线，最长 64 位 |
 | version | 插件自身实现版本，不参与宿主 SPI 兼容判断 |
 | apiVersion | 当前必须为 1，不支持的版本直接拒绝 |
-| dependencies | 必需插件 ID，目录校验拒绝缺失依赖、环及重名 |
-| mandatory | 是否为宿主基础模块；普通四参数构造默认 false，基础模块不能通过逻辑开关关闭 |
+| dependencies | 必需业务插件或宿主能力 ID；缺失业务依赖保留可诊断目录并阻止启用，环及重名拒绝装配 |
+| clients | 必需已安装客户端 ID；连接在线状态由具体业务另外复核 |
+| name / description / category | 插件管理中展示的中文名称、功能边界和分类 |
+| switchMode | HOT 表示资源支持可重复热启停；RESTART_REQUIRED 保存意愿后等待重启 |
 
-Core 的身份为 `teaneko.core`，Agent 为 `teaneko.agent`。入口参考 [PluginConfiguration](../../../src/main/java/org/zexnocs/teanekocore/plugin/PluginConfiguration.java)。metadata 回调只返回声明，不连接服务或启动后台任务。
+Core 的 `teaneko.core` 和 Agent 的 `teaneko.agent` 由 `HostCapability` 单独登记，保留管理资源和能力依赖的稳定身份。宿主能力不出现在插件列表、启停操作及生命周期中；宿主只能依赖其他宿主，业务插件可以依赖宿主。LLM 与原生工具属于系统能力，不通过业务插件开关管理。入口参考 [PluginConfiguration](../../../src/main/java/org/zexnocs/teanekocore/plugin/PluginConfiguration.java)。`IPluginModule` 仅供隔离装配程序化元数据使用，生产容器从 `PluginDeclarationScanner` 取得注解目录。
 
-在工程默认扫描包 org.zexnocs 内可以使用配置类。外部依赖 JAR 必须通过显式 @Import 或 Spring Boot 自动配置导入插件配置，提供所需 Bean；仅添加 JAR 或放入任意目录不会自动发现插件。若外部包还包含供 Core 类扫描使用的事件、配置声明等类型，通过 AutoConfigurationPackages 明确登记扫描根，例如在入口配置使用 @AutoConfigurationPackage(basePackageClasses = 插件标记类型.class)。Bean 导入与类扫描范围分别配置，不能只完成其一。
+只有 `org.zexnocs.teanekoplugin` 及子包允许声明插件和 `@PluginOwned`；外部依赖 JAR 也须遵守此命名空间，并由宿主显式导入配置或扫描根。仅添加 JAR 或放入任意目录不会自动发现插件。Bean 导入与类扫描范围分别配置，不能只完成其一。`PluginDeclarationScanner` 读取通过 Spring 条件装配的 Bean 类型，不为发现元数据提前创建业务实例；条件未满足的示例不进入安装目录。运行中改变安装声明需要重启，常规启停仍依据 `switchMode`。
 
 事件监听器、命令、TaskStage 仍使用各自原注解。@EventListener 本身带组件语义，避免同时被默认组件扫描和 @Bean 重复装配；可像示例一样给配置与监听器使用相同 ConditionalOnProperty 条件，或由外部未扫描包的插件配置显式提供 Bean。
 
@@ -28,15 +43,25 @@ Core 的身份为 `teaneko.core`，Agent 为 `teaneko.agent`。入口参考 [Plu
 
 ## 归属与逻辑生命周期
 
-在命令类、事件监听类或 TaskStage 类添加 @PluginOwned("插件ID")；方法上的归属优先于类声明。模型适配器也使用该注解。归属必须在 PluginRegistry 注册，否则实际调用明确失败。未声明归属的历史 Bean 保留宿主行为，第三方不得借此绕过启停。
+在命令类、事件监听类或 TaskStage 类添加 @PluginOwned("插件ID")；方法上的归属优先于类声明。插件提供的模型适配器也使用该注解。归属必须是已登记业务插件，宿主身份不得用于 `@PluginOwned`。归属在初始化阶段编译；命令或事件目录先初始化时，后续注入端口会从已有快照补登记，业务查询不扫描或重试发现。未声明归属的原生 Bean 保留宿主行为，第三方不得借此绕过启停。
 
-PluginRegistry.list() 返回描述、包含依赖的有效 enabled 和 revision；setEnabled(id, enabled) 是供可信宿主使用的逻辑路由入口。普通开关改变只影响相应插件及依赖它的调用，不使无关插件全部失效。该入口不是直接暴露给浏览器的管理命令；未来管理适配仍须做授权、预期版本及审计。
+PluginRegistry.list() 返回静态描述、依赖计算后的有效 enabled 和 revision。`setEnabled` 是底层运行门禁，不能用来替代宿主的持久意愿、依赖预览与资源生命周期协调。Web 启停统一经过 App 的 `PluginManagementService`，固定目录版本与 operationId，经原管理网关授权后提交；相关接口与回执见[插件总管理](management.md#插件总管理与升级)。
 
-启动禁用列表使用 tea-neko.plugins.disabled，可配置为 YAML 列表或 properties 逗号分隔值。未知 ID 或尝试关闭 mandatory 模块会拒绝启动。运行期 setEnabled 只修改进程内状态，不自动写配置；重启后重新应用启动配置。
+v4.9.0-l 的权威启用意愿在 `config/plugins.yml`：`version: 1`、`migrated` 和按插件 ID 保存的 `enabled` 映射。首次启动将旧 `tea-neko.plugins.disabled` 导入尚未明确记录的条目，再持久化迁移标记；之后不再用旧列表覆盖 Web 管理决定。管理操作拒绝未知插件及宿主身份；旧配置中的宿主启用记录可以读取，关闭宿主明确拒绝。未知旧插件的配置意愿继续保留。未启用、依赖阻塞和客户端离线是不同状态，目录不把这些状态写回启用意愿。
+
+需要客户端能力的插件优先通过 `@TeaNekoPlugin(clients = {...})` 集中声明；App 的 `PluginClientDirectory` 从已发布客户端安装目录解析要求，客户端所属插件自动加入依赖计算。程序化 `PluginClientRequirement` 可用于独立装配，同一插件不能同时从两处重复声明。官方维护的实现留在 `teanekoclient`，插件可在自身分类目录贡献客户端。缺少必需客户端或其所属插件停用时拒绝业务准入；在线连接仍在具体业务调用时复核，不把“已安装客户端”当成“已连接”。
+
+拥有后台扫描、定时器或连接的插件实现 `IPluginLifecycle`，用插件内唯一 `id()` 声明资源集合。`start()` 必须完成资源建立后才结束；`stop()` 停止新增工作并等待自有资源实际结束，支持之后再次 start，不能永久关闭再次启用仍需使用的共享对象。宿主按依赖顺序启用、反向停用；先撤销新调用资格再等待清理，失败保留明确状态并由显式操作恢复。没有这些真实保证时声明 RESTART_REQUIRED，旧构造的普通插件也采用此保守模式。
 
 capture(id) 固定插件及传递依赖版本，check(token) 拒绝禁用或换代后的旧调用。禁用再启用不会使旧令牌恢复有效。invoke(id, stageFactory) 在启动及真实异步完成时检查，适合封装自己的调用端口。资源提交前仍应检查原业务控制、授权及当前版本；提交已经发生时不因随后检查失败声称回滚。
 
-事件监听器禁用后不参与新通知；命令在启动及其返回 Stage 完成时复核；TaskStage 在同步进入与退出时复核；模型服务等待实际模型 Future 后复核。禁用不会自动中断所有外部 IO，也不销毁 Bean。IO 适配器响应借用 ExecutionControl 的终止，自有连接等由 Bean 销毁回调关闭，共享执行器不由插件关闭。
+事件监听器禁用后不参与新通知；命令在启动及其返回 Stage 完成时复核；TaskStage 在同步进入与退出时复核；模型服务等待实际模型 Future 后复核。禁用不会自动撤回已经提交的外部副作用，也不销毁 Spring Bean。IO 适配器响应借用 ExecutionControl 的终止；可重复停用清理由 IPluginLifecycle 管理，应用退出时仍由资源所有者完成最终销毁，共享执行器不由插件关闭。
+
+## 向已有命令增加插件子命令
+
+插件可用 `@CommandExtension(prefix = "/agent")` 声明向已注册主命令贡献子命令，Spring 管理实际实现。`prefix` 只用于命令路由，不作为 Bean 名，因此多个插件可以扩展同一前缀。注册目录保存每个方法的真实贡献 Bean，主命令和子命令标识冲突会明确报告；帮助、目录与执行都使用该贡献者的 `@PluginOwned`。停用后子命令不可发现且无法执行，不借宿主主命令的身份绕过插件门禁。
+
+`CommandScanner` 和显式 `CommandMapData` 装配在初始化阶段通过 `CommandMethodContract.register` 编译参数、说明、来源类型及管理声明。页面查询、权限复核和发送使用已注册合同，未注册的方法明确拒绝；独立宿主或测试直接使用执行器时须先完成同样的初始化，不能在消息路径补扫描。
 
 ## 管理来源命令
 
@@ -62,7 +87,7 @@ chain.next() 返回代表同步调用结果，后置逻辑不自动等待 Callab
 
 ## 类型化异步环绕
 
-OperationPipeline<I,O> 接受 PluginRegistry、有序 Binding<I,O> 列表和 shortCircuit 开关。每个 Binding 声明 pluginId、局部 id、order 和 AsyncInterceptor；执行时传入 input、借用 ExecutionControl 与实际 AsyncOperation。
+OperationPipeline<I,O> 接受 PluginRegistry、有序 Binding<I,O> 列表和 shortCircuit 开关。每个 Binding 声明 pluginId、局部 id、order 和 IAsyncInterceptor；执行时传入 input、借用 ExecutionControl 与实际 IAsyncOperation。
 
 高 order 先进入，随后按 pluginId、id 排序；同一插件内的节点重名拒绝。节点实际语义是 intercept(input, next) → CompletionStage<O>，可以通过 thenCompose 等待异步前置，通过 thenApply/thenCompose 转换最终结果，通过明确的异常分支处理普通业务失败。
 
@@ -76,7 +101,7 @@ OperationPipeline 不自动拦截任意 Java 方法。宿主在明确操作端�
 
 ## 事件、存储及配置
 
-Core 事件监听方法继续为 public void，async=true 表示独立任务，不被 pushEventWithFuture 的主任务等待。插件提供可修改决策事件时实现 PluginScopedEvent，限定接受的插件并令 allowsAsyncListeners 返回 false。总线拒绝对此类事件使用异步监听；修改完成后由宿主冻结、读取取消决定并重新校验。
+Core 事件监听方法继续为 public void，async=true 表示独立任务，不被 pushEventWithFuture 的主任务等待。插件提供可修改决策事件时实现 IPluginScopedEvent，限定接受的插件并令 allowsAsyncListeners 返回 false。总线拒绝对此类事件使用异步监听；修改完成后由宿主冻结、读取取消决定并重新校验。
 
 普通观测事件可以异步，但不能携带凭据或借用控制，也不能通过取消来撤销已发生业务。相同优先级监听器按 Bean 名、方法签名排序。对全局监听仍需自行筛选业务目标；Agent 决策事件额外按实例已安装能力过滤插件归属。
 

@@ -10,7 +10,12 @@ import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.util.*;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.function.Function;
 
 /**
@@ -22,10 +27,12 @@ import java.util.function.Function;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：说明时区解析仅验证格式，不因校验而改写原始时区标识。
+ * <br>2026/11/07：自主候选资格由活动策略显式授予，不从活动模式推导插件权限。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 public final class AgentTriggerGate {
     private final Function<AgentScope, Settings> settings;
@@ -62,7 +69,7 @@ public final class AgentTriggerGate {
             if (state.pending != null) { return Optional.empty(); }
             boolean proactive = signal.kind() != Kind.MESSAGE;
             if (proactive) {
-                if (policy.scope().mode() != AgentScopePolicy.Mode.ACTIVE || quiet(policy, now)
+                if (!policy.autonomousEnabled() || policy.scope().mode() != AgentScopePolicy.Mode.ACTIVE || quiet(policy, now)
                         || state.lastProactive != null && now.isBefore(state.lastProactive.plusSeconds(policy.cooldownSeconds()))) { return Optional.empty(); }
             } else {
                 var user = signal.actor().userId().orElseThrow();
@@ -149,7 +156,7 @@ public final class AgentTriggerGate {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     private static final class State {
         private final Map<UUID, Instant> recent = new HashMap<>();
@@ -174,6 +181,7 @@ public final class AgentTriggerGate {
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
      *
      * @param scope 当前登记、启用与级别
+     * @param autonomousEnabled 当前活动策略是否允许自主候选
      * @param zone 静默规则的明确时区
      * @param cooldownSeconds 主动发言冷却，一秒至一天
      * @param quietStartHour 静默起点小时
@@ -181,12 +189,22 @@ public final class AgentTriggerGate {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
-    public record Settings(AgentScopePolicy scope, String zone, long cooldownSeconds, int quietStartHour, int quietEndHour) {
+    public record Settings(AgentScopePolicy scope, boolean autonomousEnabled, String zone, long cooldownSeconds, int quietStartHour, int quietEndHour) {
+        /**
+         * 2026/11/07：没有有效活动贡献时仍允许原生被动对话。
+         * @param scope 宿主聊天准入
+         * @return 明确禁止自主候选的通用策略
+         */
+        public static Settings passive(AgentScopePolicy scope) {
+            return new Settings(scope, false, "UTC", 900, 23, 7);
+        }
+
         /**
          * 非法配置拒绝，不回退服务器时区或关闭冷却。
          * @param scope 当前策略
+         * @param autonomousEnabled 当前自主候选资格
          * @param zone 时区
          * @param cooldownSeconds 冷却
          * @param quietStartHour 静默起点
@@ -220,7 +238,7 @@ public final class AgentTriggerGate {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public record Signal(AgentActorContext actor, Kind kind, boolean mentionsBot, boolean repliesToBot, boolean namesBot, boolean botAuthored, boolean privateConversation) {
         /**
@@ -261,7 +279,7 @@ public final class AgentTriggerGate {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public record Ticket(UUID id, Signal signal, Settings settings, Instant expiresAt) { }
 
@@ -274,7 +292,7 @@ public final class AgentTriggerGate {
      * @author zExNocs
      * @date 2026/11/02
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public enum Kind { MESSAGE, TIMER, INTERJECTION }
 }

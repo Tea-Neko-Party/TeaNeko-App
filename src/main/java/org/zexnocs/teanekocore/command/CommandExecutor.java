@@ -17,11 +17,12 @@ import java.util.concurrent.CompletionStage;
  * 在原任务阶段中调用命令，再非阻塞地等待命令返回的 Stage。
  * <br>2026/11/02：插件命令在实际启动与异步完成时复核插件版本。
  * <br>2026/11/03：管理来源排队后再次复核声明、会话与连接能力。
+ * <br>2026/11/07：插件调用占用跟随真实命令阶段，停用等待异步业务排空。
  *
  * @author zExNocs
  * @date 2026/11/01
  * @since 4.0.0
- * @version 4.7.0-l
+ * @version 4.9.0-l
  */
 @Service("commandExecutor")
 public class CommandExecutor implements ICommandExecutor {
@@ -94,25 +95,39 @@ public class CommandExecutor implements ICommandExecutor {
                         ManagementCommandPolicy.check(data, method);
                     }
                 }
-                // 2026/11/02：捕获实际调用时的归属版本，异步结果也必须复核。
-                var token = pluginAccess == null ? null : pluginAccess.capture(object, method);
-                final Object returned;
+                // 2026/11/07：占用覆盖真实异步命令，调用者取消结果观察不能提前释放。
+                var call = pluginAccess == null ? null : pluginAccess.open(object, method);
+                boolean tracked = false;
                 try {
-                    returned = method.invoke(object, args);
-                } catch (InvocationTargetException e) {
-                    if (e.getCause() instanceof Exception cause) throw cause;
-                    if (e.getCause() instanceof Error cause) throw cause;
-                    throw e;
+                    final Object returned;
+                    try {
+                        returned = method.invoke(object, args);
+                    } catch (InvocationTargetException e) {
+                        if (e.getCause() instanceof Exception cause) {
+                            throw cause;
+                        }
+                        if (e.getCause() instanceof Error cause) {
+                            throw cause;
+                        }
+                        throw e;
+                    }
+                    if (!(returned instanceof CompletionStage<?> stage)) {
+                        throw new IllegalStateException("命令没有返回 CompletionStage：" + method);
+                    }
+                    var guarded = stage.thenApply(value -> {
+                        if (parent != null) {
+                            parent.checkActive();
+                        }
+                        return value;
+                    });
+                    var completion = call == null ? guarded : call.track(guarded);
+                    tracked = true;
+                    return new TaskResult<>(true, new Invocation(completion));
+                } finally {
+                    if (!tracked && call != null) {
+                        call.close();
+                    }
                 }
-                if (!(returned instanceof CompletionStage<?> stage)) {
-                    throw new IllegalStateException("Command returned no CompletionStage: " + method);
-                }
-                var guarded = stage.thenApply(value -> {
-                    if (parent != null) { parent.checkActive(); }
-                    if (pluginAccess != null) { pluginAccess.check(token); }
-                    return value;
-                });
-                return new TaskResult<>(true, new Invocation(guarded));
             }, Invocation.class);
             return TaskStages.successful(task, "指令调用")
                     .thenCompose(invocation -> invocation.stage().thenApply(value -> (Object) value));

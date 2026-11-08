@@ -1,22 +1,26 @@
 package org.zexnocs.teanekocore.actuator.timer;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekocore.actuator.task.TaskConfig;
+import org.zexnocs.teanekocore.actuator.task.TaskPluginBindings;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimer;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerTaskConfig;
-import org.zexnocs.teanekocore.framework.function.MethodCallable;
+import org.zexnocs.teanekocore.framework.function.IMethodCallable;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,15 +29,28 @@ import java.util.concurrent.ConcurrentHashMap;
  * <br>2026/11/04：先验证展示声明再纳入实际调度，调度循环只读展示。
  * <br>2026/11/04：补全定时任务的详细中文介绍，原调度和控制意图保持不变。
  * <br>2026/11/07：固定间隔循环直接使用同一调度器，取消异步重复投递。
+ * <br>2026/11/07：增加插件归属与有效状态约束。
  *
  * @author zExNocs
  * @date 2026/02/14
  * @since 4.0.0
- * @version 4.8.7-l
+ * @version 4.9.0-l
  */
 @Service
 public class TimerService implements ITimerService {
     private @org.jspecify.annotations.Nullable TimerDirectory directory;
+    private @org.jspecify.annotations.Nullable TaskPluginBindings pluginBindings;
+    private final Map<ITimer<?>, TimerPresentation> metadata = new ConcurrentHashMap<>();
+
+    /**
+     * 2026/11/07：低频安装归属缓存，覆盖已经手工登记的定时器。
+     * @param bindings 插件任务门禁
+     */
+    @Autowired
+    public synchronized void installPluginBindings(TaskPluginBindings bindings) {
+        this.pluginBindings = bindings;
+        metadata.forEach((timer, declaration) -> bindings.bind(timer.getTimerTaskConfig().getTaskConfig(), declaration.pluginId()));
+    }
 
     /**
      * 2026/11/03：安装原计时器的观测及触发门禁，不启动第二套调度器。
@@ -42,7 +59,7 @@ public class TimerService implements ITimerService {
     @Autowired
     public void installDirectory(TimerDirectory directory) {
         this.directory = directory;
-        timers.forEach(directory::register);
+        metadata.forEach(directory::register);
     }
     /// 定时器集合
     private final Set<ITimer<?>> timers;
@@ -63,11 +80,26 @@ public class TimerService implements ITimerService {
      * @param timer 定时器。
      */
     @Override
-    public void register(ITimer<?> timer) {
-        // 2026/11/04：声明冲突时不能留下已执行但管理注册失败的计时器。
-        if (directory != null) {
-            directory.register(timer);
+    public synchronized void register(ITimer<?> timer) {
+        // 2026/11/07：注册时冻结来源与归属，高频调度不解析注解或方法。
+        if (timers.contains(timer)) {
+            return;
         }
+        var declaration = TimerPresentation.resolve(timer.getTimerTaskConfig());
+        if (pluginBindings != null) {
+            pluginBindings.bind(timer.getTimerTaskConfig().getTaskConfig(), declaration.pluginId());
+        }
+        try {
+            if (directory != null) {
+                directory.register(timer, declaration);
+            }
+        } catch (RuntimeException failure) {
+            if (pluginBindings != null) {
+                pluginBindings.unbind(timer.getTimerTaskConfig().getTaskConfig());
+            }
+            throw failure;
+        }
+        metadata.put(timer, declaration);
         timers.add(timer);
     }
 
@@ -97,6 +129,11 @@ public class TimerService implements ITimerService {
                     toRemove.add(timer);
                     return;
                 }
+                // 2026/11/07：发现不等于准入，停止后的排队工作另由任务代次门禁拒绝。
+                var owner = metadata.get(timer).pluginId();
+                if (owner != null && (pluginBindings == null || !pluginBindings.enabled(owner))) {
+                    return;
+                }
                 var pausable = timer.getTimerTaskConfig().getPausable();
                 if (pausable != null && pausable.isPaused() || !timer.isTime(now)) {
                     return;
@@ -113,7 +150,12 @@ public class TimerService implements ITimerService {
 
         // 删除已经销毁的定时器。
         for (var key : toRemove) {
-            timers.remove(key);
+            if (timers.remove(key)) {
+                metadata.remove(key);
+                if (pluginBindings != null) {
+                    pluginBindings.unbind(key.getTimerTaskConfig().getTaskConfig());
+                }
+            }
             if (directory != null) {
                 directory.remove(key);
             }
@@ -140,7 +182,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByRate(String taskName,
                                                   String taskStage,
-                                                  MethodCallable<ITaskResult<T>> callable,
+                                                  IMethodCallable<ITaskResult<T>> callable,
                                                   Duration rate,
                                                   Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -176,7 +218,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByDelay(String taskName,
                                                    String taskStage,
-                                                   MethodCallable<ITaskResult<T>> callable,
+                                                   IMethodCallable<ITaskResult<T>> callable,
                                                    Duration delay,
                                                    Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -212,7 +254,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerBySmartRate(String taskName,
                                                        String taskStage,
-                                                       MethodCallable<ITaskResult<T>> callable,
+                                                       IMethodCallable<ITaskResult<T>> callable,
                                                        Duration rate,
                                                        Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()
@@ -243,7 +285,7 @@ public class TimerService implements ITimerService {
     @Override
     public <T> ITimerTaskConfig<T> registerByCron(String taskName,
                                                   String taskStage,
-                                                  MethodCallable<ITaskResult<T>> callable,
+                                                  IMethodCallable<ITaskResult<T>> callable,
                                                   String cronExpression,
                                                   Class<T> resultType) {
         var taskConfig = TaskConfig.<T>builder()

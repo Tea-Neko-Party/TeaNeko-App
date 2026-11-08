@@ -1,18 +1,21 @@
 package org.zexnocs.teanekoapp.web.files;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.zexnocs.teanekoagent.component.llm.configuration.FileLLMCredentialResolver;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigService;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMFileConfigurationEpoch;
-import org.zexnocs.teanekoagent.component.llm.file_config.LLMModelFileConfig;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMConfigurationException;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelId;
-import org.zexnocs.teanekoagent.component.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.configuration.FileLLMCredentialResolver;
+import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigService;
+import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigurationEpoch;
+import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
+import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
+import org.zexnocs.teanekoagent.llm.integration.web.LLMFileSettings;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigScanner;
 import org.zexnocs.teanekocore.file_config.FileConfigService;
@@ -23,6 +26,8 @@ import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
+// 2026/11/07：用真实插件注册表验证系统模型配置与插件目录权限解耦。
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
@@ -36,6 +41,7 @@ import java.util.ConcurrentModificationException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -73,11 +79,12 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/05：配置管理复用专用类型目录，模型换代校验只使用运行缓存查询。
  * <br>2026/11/06：验证观测模板、表单保存与实际热应用事务。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
+ * <br>2026/11/07：验证插件管理未授权及业务插件停用时系统模型配置仍可编辑，并保留文件白名单拒绝。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 class FileSettingsIntegrationTest {
     /**
@@ -191,20 +198,20 @@ class FileSettingsIntegrationTest {
         var visible = result(fixture.service.read("agent.models", () -> {}));
         assertTrue(mapper.writeValueAsString(visible).contains("https://example.test"));
         assertFalse(mapper.writeValueAsString(visible).contains("new-key"));
-        var routes = new org.zexnocs.teanekoagent.component.llm.file_config.ProbeLLMRouteSource();
-        var models = mock(org.zexnocs.teanekoagent.component.llm.framework.model.interfaces.ILLMModelService.class);
+        var routes = new org.zexnocs.teanekoagent.llm.file_config.ProbeLLMRouteSource();
+        var models = mock(org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService.class);
         var recorded = new java.util.concurrent.atomic.AtomicReference<String>();
-        var response = new java.util.concurrent.CompletableFuture<org.zexnocs.teanekoagent.component.llm.framework.response.interfaces.ILLMResult>();
-        when(models.call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+        var response = new java.util.concurrent.CompletableFuture<org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult>();
+        when(models.call(any(org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt.class),
                 any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class))).thenAnswer(call -> {
-            var prompt = call.getArgument(0, org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class);
+            var prompt = call.getArgument(0, org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt.class);
             String route = java.util.Objects.requireNonNull(prompt.getOptions()).findProvider().orElseThrow();
             recorded.set(route);
             assertEquals("new-key", routes.credentials(route).apiKey());
             return org.zexnocs.teanekocore.actuator.task.TaskFuture.fromStage(mock(ILogger.class), "离线检测", response);
         });
         try (var scheduler = java.util.concurrent.Executors.newSingleThreadScheduledExecutor()) {
-            var probes = new org.zexnocs.teanekoagent.integration.web.ModelProbeService(fixture.service, models, routes, scheduler);
+            var probes = new org.zexnocs.teanekoagent.llm.integration.web.ModelProbeService(fixture.service, models, routes, scheduler);
             var pending = probes.probe("deepseek", saved.diskRevision(), () -> {});
             response.completeExceptionally(org.springframework.web.reactive.function.client.WebClientResponseException.create(
                     403, "不应公开的消息", new org.springframework.http.HttpHeaders(), "敏感响应".getBytes(java.nio.charset.StandardCharsets.UTF_8),
@@ -216,15 +223,15 @@ class FileSettingsIntegrationTest {
             assertThrows(LLMConfigurationException.class, () -> routes.credentials(recorded.get()));
             assertEquals("first-key", fixture.files.get(LLMModelFileConfig.class).getModels().getFirst().getApiKey());
             assertThrows(RuntimeException.class, () -> result(probes.probe("deepseek", view.revision(), () -> {})));
-            verify(models, times(1)).call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+            verify(models, times(1)).call(any(org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt.class),
                     any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class));
             // 2026/11/05：同一保存快照的完整响应可以成功，空响应仍明确失败。
-            var success = org.zexnocs.teanekoagent.component.llm.framework.response.LLMResult.builder().choices(List.of(
-                    org.zexnocs.teanekoagent.component.llm.framework.response.LLMChoice.builder().finishReason("stop")
-                            .message(org.zexnocs.teanekoagent.component.llm.framework.message.LLMAssistantMessage.builder()
-                                    .contents(new org.zexnocs.teanekoagent.component.llm.framework.message.content.LLMContentListBuilder()
+            var success = org.zexnocs.teanekoagent.llm.framework.response.LLMResult.builder().choices(List.of(
+                    org.zexnocs.teanekoagent.llm.framework.response.LLMChoice.builder().finishReason("stop")
+                            .message(org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage.builder()
+                                    .contents(new org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder()
                                             .addText("OK").build()).build()).build())).build();
-            when(models.call(any(org.zexnocs.teanekoagent.component.llm.framework.input.interfaces.ILLMPrompt.class),
+            when(models.call(any(org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt.class),
                     any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class)))
                     .thenReturn(org.zexnocs.teanekocore.actuator.task.TaskFuture.fromStage(mock(ILogger.class), "离线成功检测",
                             java.util.concurrent.CompletableFuture.completedStage(success)));
@@ -371,6 +378,53 @@ class FileSettingsIntegrationTest {
     }
 
     /**
+     * 2026/11/07：未开放插件目录且所有 Agent 业务插件停用时，系统模型仍按文件白名单读写。
+     * @throws Exception 当真实临时文件操作失败时
+     */
+    @Test
+    void systemModelsRemainEditableWithoutPluginManagementAndRetainFileAuthorization() throws Exception {
+        var fixture = new Fixture(root);
+        var security = fixture.files.get(WebSecurityFileConfig.class);
+        security.setManagementResources(List.of());
+        // 2026/11/07：旧配置没有模型区授权也默认开放，收紧模式在保存完成后单独验证。
+        security.setLocalAllowlistEnabled(false);
+        security.setFileSections(List.of());
+        var plugins = new PluginRegistry(List.of(
+                () -> new PluginDescriptor("teaneko.agent", "4.9.0-l", 1, Set.of(), true),
+                () -> new PluginDescriptor("agent.cognition", "4.9.0-l", 1, Set.of("teaneko.agent")),
+                () -> new PluginDescriptor("agent.expression", "4.9.0-l", 1, Set.of("teaneko.agent")),
+                () -> new PluginDescriptor("agent.social", "4.9.0-l", 1, Set.of("teaneko.agent")),
+                () -> new PluginDescriptor("agent.automation", "4.9.0-l", 1, Set.of("teaneko.agent"))));
+        for (var id : List.of("agent.cognition", "agent.expression", "agent.social", "agent.automation")) {
+            plugins.setEnabled(id, false);
+        }
+        var service = new FileSettingsService(fixture.directory, fixture.files, plugins, fixture.journal, Runnable::run);
+
+        var section = service.list(() -> {}).stream().filter(value -> value.id().equals("agent.models"))
+                .findFirst().orElseThrow();
+        assertNull(section.pluginId());
+        var view = result(service.read("agent.models", () -> {}));
+        assertNull(view.pluginId());
+        assertFalse(mapper.writeValueAsString(view).contains("first-key"));
+        var change = new FileSettings.Change(UUID.randomUUID(), view.revision(), List.of(
+                new FileSettings.Edit("/models/0/model", "SET", mapper.valueToTree("updated-model"))));
+        var saved = result(service.save("agent.models", change, () -> {}));
+        var applied = result(service.apply("agent.models",
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> {}));
+        assertEquals("APPLIED", applied.status());
+        assertEquals("updated-model", fixture.files.get(LLMModelFileConfig.class).getModels().getFirst().getModel());
+        assertEquals("first-key", fixture.files.get(LLMModelFileConfig.class).getModels().getFirst().getApiKey());
+
+        security.setFileSections(List.of("test.value"));
+        security.setLocalAllowlistEnabled(true);
+        assertTrue(service.list(() -> {}).stream().noneMatch(value -> value.id().equals("agent.models")));
+        assertThrows(SecurityException.class, () -> service.read("agent.models", () -> {}));
+        assertThrows(SecurityException.class, () -> service.save("agent.models", change, () -> {}));
+        assertThrows(SecurityException.class, () -> service.inspect("agent.models", saved.diskRevision(),
+                () -> {}, (document, snapshot) -> snapshot.revision()));
+    }
+
+    /**
      * 真实模型表单允许增删已声明条目，秘密不回显且不能通过普通设置动作覆盖。
      * @throws Exception 当临时文件操作失败时
      */
@@ -464,13 +518,15 @@ class FileSettingsIntegrationTest {
             types = new FileConfigScanner(classes);
             files = new FileConfigService(parsers, types, mock(ILogger.class), config);
             files.reload();
+            // 2026/11/07：既有精确授权用例显式选择限制模式，默认开放在模型回归单独验证。
+            files.get(WebSecurityFileConfig.class).setLocalAllowlistEnabled(true);
             files.get(WebSecurityFileConfig.class).setFileSections(List.of("test.value", "agent.models"));
-            IFileSettingsAdapter modelAdapter = new AgentFileSettings.Models(files, new LLMFileConfigService(files));
+            IFileSettingsAdapter modelAdapter = new LLMFileSettings(files, new LLMFileConfigService(files));
             when(scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class))
                     .thenReturn(Map.of("test", new IndependentPair<>(Adapter.class.getAnnotation(TeaNekoFileSettings.class), adapter),
-                            "models", new IndependentPair<>(AgentFileSettings.Models.class.getAnnotation(TeaNekoFileSettings.class), modelAdapter)));
+                            "models", new IndependentPair<>(LLMFileSettings.class.getAnnotation(TeaNekoFileSettings.class), modelAdapter)));
             doReturn(Adapter.class).when(scanner).getBeanClass(adapter);
-            doReturn(AgentFileSettings.Models.class).when(scanner).getBeanClass(modelAdapter);
+            doReturn(LLMFileSettings.class).when(scanner).getBeanClass(modelAdapter);
             journal = new FileConfigOperations(mapper, directory.resolve("journal"));
             this.directory = new FileSettingsDirectory(scanner, types, parsers);
             // 2026/11/05：显式模拟生产重载服务的目录初始化阶段。

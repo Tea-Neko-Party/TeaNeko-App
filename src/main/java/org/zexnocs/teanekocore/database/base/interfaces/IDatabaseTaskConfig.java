@@ -1,12 +1,14 @@
 package org.zexnocs.teanekocore.database.base.interfaces;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+
 import lombok.NonNull;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.actuator.task.TaskStages;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskConfig;
 import org.zexnocs.teanekocore.actuator.task.interfaces.ITaskResult;
 import org.zexnocs.teanekocore.database.base.exception.DatabaseTaskRepeatedSubmissionException;
-import org.zexnocs.teanekocore.framework.function.VoidCallable;
+import org.zexnocs.teanekocore.framework.function.IVoidCallable;
 
 import java.util.Collection;
 import java.util.concurrent.CompletionStage;
@@ -65,7 +67,7 @@ public interface IDatabaseTaskConfig {
      * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    IDatabaseTaskConfig addTransactionTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
+    IDatabaseTaskConfig addTransactionTask(@NonNull IVoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 添加缓存任务。
@@ -74,7 +76,7 @@ public interface IDatabaseTaskConfig {
      * @return 满足本方法约束的 {@code IDatabaseTaskConfig} 结果
      * @throws DatabaseTaskRepeatedSubmissionException 数据库任务重复提交异常。
      */
-    IDatabaseTaskConfig addCacheTask(@NonNull VoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
+    IDatabaseTaskConfig addCacheTask(@NonNull IVoidCallable task) throws DatabaseTaskRepeatedSubmissionException;
 
     /**
      * 合并任务。
@@ -101,14 +103,14 @@ public interface IDatabaseTaskConfig {
      *
      * @return 事务任务集合
      */
-    Collection<VoidCallable> __getTasksWithTransaction();
+    Collection<IVoidCallable> __getTasksWithTransaction();
 
     /**
      * 获取缓存任务集合。
      *
      * @return 缓存任务集合
      */
-    Collection<VoidCallable> __getTasksWithCache();
+    Collection<IVoidCallable> __getTasksWithCache();
 
     /**
      * 获取 TaskConfig。

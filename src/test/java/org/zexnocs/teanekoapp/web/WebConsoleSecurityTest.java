@@ -1,5 +1,7 @@
 package org.zexnocs.teanekoapp.web;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
@@ -38,6 +40,7 @@ import org.zexnocs.teanekoapp.web.console.ClientConsole;
 import org.zexnocs.teanekoapp.web.console.ClientConsoleService;
 import org.zexnocs.teanekoapp.web.console.WebConsoleCommandController;
 import org.zexnocs.teanekoapp.web.files.*;
+import org.zexnocs.teanekoapp.web.plugins.PluginManagementController;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsController;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsErrors;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsService;
@@ -99,12 +102,102 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/05：验证模型检测及房间删除的真实认证与防伪链。
  * <br>2026/11/05：验证文件保存的缺失环境变量经过真实错误映射返回安全、可定位的提示。
  *
+ * <br>2026/11/07：管理路由按迁后插件资源键验证原认证与类型边界。
+ * <br>2026/11/07：在途调用目录的真实安全链允许管理员读取，匿名、写请求及任意子路径仍拒绝。
+ * <br>2026/11/07：插件固定 HTTP 端点使用真实会话、CSRF 及资源桥，错误方法与未开放资源仍拒绝。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.8.2-l
+ * @version 4.9.0-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 插件管理固定路由可达原资源桥，匿名、缺少防伪、错误方法及资源撤权都不能绕过鉴权。
+     * @throws Exception 当隔离 MVC 安全链或异步请求失败时
+     */
+    @Test
+    void pluginManagementRoutesRetainSessionCsrfAndResourceAuthorization() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            when(fixture.management.invokeGlobal(anyString(), any(), any())).thenAnswer(invocation -> {
+                invocation.getArgument(2, Runnable.class).run();
+                return java.util.concurrent.CompletableFuture.completedStage(
+                        Map.of("resource", invocation.getArgument(0, String.class)));
+            });
+            var reads = Map.of("/api/v1/plugins", "catalog", "/api/v1/plugins/pages", "pages",
+                    "/api/v1/plugins/operations/00000000-0000-0000-0000-000000000001", "operation");
+            for (var path : reads.keySet()) {
+                fixture.mvc.perform(fixture.request(path, false)).andExpect(status().isUnauthorized());
+            }
+            verifyNoInteractions(fixture.management);
+            var session = fixture.authenticate();
+            for (var entry : reads.entrySet()) {
+                String resource = "teaneko.core:plugins." + entry.getValue();
+                var response = fixture.mvc.perform(fixture.request(entry.getKey(), false).session(session))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(response)).andExpect(status().isOk())
+                        .andExpect(jsonPath("$.resource").value(resource));
+                verify(fixture.management).invokeGlobal(eq(resource), any(), any());
+            }
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            var writes = Map.of("/api/v1/plugins/preview", "preview", "/api/v1/plugins/actions/change", "change");
+            for (var entry : writes.entrySet()) {
+                String resource = "teaneko.core:plugins." + entry.getValue();
+                fixture.mvc.perform(fixture.request(entry.getKey(), true).session(session)
+                        .contentType("application/json").content("{}"))
+                        .andExpect(status().isForbidden());
+                verify(fixture.management, never()).invokeGlobal(eq(resource), any(), any());
+                var response = fixture.mvc.perform(fixture.request(entry.getKey(), true).session(session)
+                        .header("X-CSRF-TOKEN", csrf).contentType("application/json").content("{}"))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(response)).andExpect(status().isOk())
+                        .andExpect(jsonPath("$.resource").value(resource));
+                verify(fixture.management).invokeGlobal(eq(resource), any(), any());
+            }
+            fixture.mvc.perform(fixture.request("/api/v1/plugins/preview", false).session(session))
+                    .andExpect(status().isForbidden());
+            fixture.mvc.perform(fixture.request("/api/v1/plugins", true).session(session)
+                    .header("X-CSRF-TOKEN", csrf)).andExpect(status().isForbidden());
+            fixture.mvc.perform(fixture.request("/api/v1/plugins/unregistered", false).session(session))
+                    .andExpect(status().isForbidden());
+            // 2026/11/07：显式限制通过真实 MVC 返回独立错误码，不把当前登录误报为失效。
+            doThrow(new org.zexnocs.teanekoapp.web.error.LocalResourceNotAllowedException())
+                    .when(fixture.management).invokeGlobal(eq("teaneko.core:plugins.catalog"), any(), any());
+            fixture.mvc.perform(fixture.request("/api/v1/plugins", false).session(session))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.code").value("LOCAL_RESOURCE_NOT_ALLOWED"));
+            fixture.mvc.perform(fixture.request("/api/v1/auth/session", false).session(session))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    /**
+     * Core 任务页所需在途调用目录只允许真实管理会话读取，不扩大写路由和子路径权限。
+     * @throws Exception 当隔离 MVC 安全链或认证失败时
+     */
+    @Test
+    void inFlightManagementCallsRequireAuthenticatedGet() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            String path = "/api/v1/management-calls";
+            when(fixture.management.inFlight()).thenReturn(List.of());
+            fixture.mvc.perform(fixture.request(path, false)).andExpect(status().isUnauthorized());
+            verify(fixture.management, never()).inFlight();
+            var session = fixture.authenticate();
+            fixture.mvc.perform(fixture.request(path, false).session(session))
+                    .andExpect(status().isOk()).andExpect(content().json("[]"));
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            fixture.mvc.perform(fixture.request(path, true).session(session))
+                    .andExpect(status().isForbidden());
+            fixture.mvc.perform(fixture.request(path, true).session(session).header("X-CSRF-TOKEN", csrf))
+                    .andExpect(status().isForbidden());
+            fixture.mvc.perform(fixture.request(path + "/extra", false).session(session))
+                    .andExpect(status().isForbidden());
+            verify(fixture.management, times(1)).inFlight();
+        }
+    }
+
     /**
      * 2026/11/05：通过真实安全链读取目标名称，匿名请求与同路径写请求仍被拒绝。
      *
@@ -172,7 +265,7 @@ class WebConsoleSecurityTest {
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(List.of()));
             when(fixture.fileSettings.read(eq("agent.models"), any()))
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
-            when(fixture.modelTemplates.describe()).thenReturn(new org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory.Catalog(List.of(), List.of()));
+            when(fixture.modelTemplates.describe()).thenReturn(new org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.Catalog(List.of(), List.of()));
             when(fixture.chat.open(eq("room"), any()))
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(null));
             for (String path : List.of("/api/v1/commands", "/api/v1/model-configurations")) {
@@ -192,10 +285,10 @@ class WebConsoleSecurityTest {
                 fixture.mvc.perform(asyncDispatch(result)).andExpect(status().isOk());
             }
             // 2026/11/05：检测及删除同样不能绕过管理员会话与 CSRF。
-            var probes = fixture.context.getBean(org.zexnocs.teanekoagent.integration.web.ModelProbeService.class);
+            var probes = fixture.context.getBean(org.zexnocs.teanekoagent.llm.integration.web.ModelProbeService.class);
             when(probes.probe(eq("deepseek"), eq("1"), any())).thenReturn(
                     java.util.concurrent.CompletableFuture.completedStage(
-                            new org.zexnocs.teanekoagent.integration.web.ModelProbeService.Result("1", "SUCCESS", "检测正常")));
+                            new org.zexnocs.teanekoagent.llm.integration.web.ModelProbeService.Result("1", "SUCCESS", "检测正常")));
             when(fixture.chat.delete(eq("room"), eq(1L), any()))
                     .thenReturn(java.util.concurrent.CompletableFuture.completedStage(true));
             String probePath = "/api/v1/model-configurations/deepseek/probe";
@@ -253,7 +346,7 @@ class WebConsoleSecurityTest {
                             new org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException(
                                     org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException.Reason.DISABLED)));
             var result = fixture.mvc.perform(fixture.request(
-                            "/api/v1/clients/web/accounts/web-bot/targets/room/management/teaneko.agent:personality", true)
+                            "/api/v1/clients/web/accounts/web-bot/targets/room/management/agent.cognition:personality", true)
                     .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
                     .content("{\"action\":\"READ\"}"))
                     .andExpect(request().asyncStarted()).andReturn();
@@ -480,7 +573,7 @@ class WebConsoleSecurityTest {
         // 2026/11/04：目录及成员权限另由核心用例验证，此处核对完整 HTTP 安全边界。
         final org.zexnocs.teanekocore.command.CommandCatalog commandCatalog = mock(org.zexnocs.teanekocore.command.CommandCatalog.class);
         final org.zexnocs.teanekoclient.web.WebCommandCatalog memberCommands = mock(org.zexnocs.teanekoclient.web.WebCommandCatalog.class);
-        final org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.component.llm.file_config.form.LLMConfigurationDirectory.class);
+        final org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.class);
 
         /**
          * @param path 本测试拥有的私有目录
@@ -522,7 +615,7 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("memberCommands", memberCommands);
                 factory.registerSingleton("modelTemplates", modelTemplates);
                 // 2026/11/05：检测仍通过真实安全链，模型端口仅使用离线替身。
-                factory.registerSingleton("modelProbes", mock(org.zexnocs.teanekoagent.integration.web.ModelProbeService.class));
+                factory.registerSingleton("modelProbes", mock(org.zexnocs.teanekoagent.llm.integration.web.ModelProbeService.class));
                 // 2026/11/04：真实目录控制器只读取无秘密元数据，夹具不加载模型或配置文件。
                 factory.registerSingleton("componentDirectory", mock(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class));
                 factory.registerSingleton("toolDirectory", mock(org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.class));
@@ -535,9 +628,10 @@ class WebConsoleSecurityTest {
             context.register(MvcConfiguration.class, WebSecurityConfig.class, WebConsoleController.class,
                     WebMachineController.class,
                     MachineEndpoint.class, ChatSettingsController.class, ChatSettingsErrors.class, WebSessionGuard.class,
-                    WebManagementController.class, WebFileSettingsController.class, WebConsoleCommandController.class,
+                    WebManagementController.class, PluginManagementController.class,
+                    WebFileSettingsController.class, WebConsoleCommandController.class,
                     WebChatController.class, MachineTokenController.class, WebCommandCatalogController.class,
-                    org.zexnocs.teanekoagent.integration.web.ModelConfigurationController.class,
+                    org.zexnocs.teanekoagent.llm.integration.web.ModelConfigurationController.class,
                     org.zexnocs.teanekoagent.integration.web.AgentComponentController.class,
                     org.zexnocs.teanekoagent.integration.web.AgentWebFailureMapper.class,
                     // 2026/11/05：缺失环境变量通过真实业务映射返回，不在测试控制器中伪造提示。
@@ -684,7 +778,7 @@ class WebConsoleSecurityTest {
                     .contentType("application/json").content(json)).andExpect(status().isForbidden());
             verifyNoInteractions(fixture.settings);
             // 2026/11/03：通用类型化管理入口同样不能绕过原会话和防伪链。
-            fixture.mvc.perform(fixture.request("/api/v1/clients/onebot/accounts/a/targets/t/management/teaneko.agent:memory", true)
+            fixture.mvc.perform(fixture.request("/api/v1/clients/onebot/accounts/a/targets/t/management/agent.cognition:memory", true)
                     .session(session).contentType("application/json").content("{\"action\":\"READ\"}"))
                     .andExpect(status().isForbidden());
             verifyNoInteractions(fixture.management);
@@ -782,14 +876,14 @@ class WebConsoleSecurityTest {
                     .contentType("application/json").content(fileJson).header("X-CSRF-TOKEN", value))
                     .andExpect(request().asyncStarted()).andReturn();
             fixture.mvc.perform(asyncDispatch(fileSave)).andExpect(status().isOk());
-            when(fixture.management.invoke(eq("onebot"), eq("a"), eq("t"), eq("teaneko.agent:memory"), any(), any()))
+            when(fixture.management.invoke(eq("onebot"), eq("a"), eq("t"), eq("agent.cognition:memory"), any(), any()))
                     .thenAnswer(call -> {
                         Runnable guard = call.getArgument(5);
                         guard.run();
                         return java.util.concurrent.CompletableFuture.completedStage(Map.of("status", "已授权"));
                     });
             var management = fixture.mvc.perform(fixture.request(
-                    "/api/v1/clients/onebot/accounts/a/targets/t/management/teaneko.agent:memory", true)
+                    "/api/v1/clients/onebot/accounts/a/targets/t/management/agent.cognition:memory", true)
                     .session(session).contentType("application/json").content("{\"action\":\"READ\"}")
                     .header("X-CSRF-TOKEN", value)).andExpect(request().asyncStarted()).andReturn();
             fixture.mvc.perform(asyncDispatch(management)).andExpect(status().isOk());

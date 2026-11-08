@@ -1,22 +1,24 @@
 package org.zexnocs.teanekoagent.runtime.conversation;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.jspecify.annotations.Nullable;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageCodec;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMMessageHistory;
-import org.zexnocs.teanekoagent.component.llm.framework.message.LLMUserMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMAssistantMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.ILLMMessage;
-import org.zexnocs.teanekoagent.component.llm.framework.message.interfaces.LLMMessageRole;
-import org.zexnocs.teanekoagent.component.memory.AgentConversationWindow;
-import org.zexnocs.teanekoagent.component.memory.AgentRequestJournal;
-import org.zexnocs.teanekoagent.component.memory.AgentSummarySnapshot;
-import org.zexnocs.teanekoagent.component.personality.AgentPersonalitySnapshot;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageCodec;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMMessageHistory;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
 import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.AgentUserText;
 import org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision;
+import org.zexnocs.teanekoagent.runtime.context.IAgentConversationAttachment;
+import org.zexnocs.teanekoagent.runtime.context.IAgentPromptContext;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import tools.jackson.databind.ObjectMapper;
 
@@ -39,11 +41,13 @@ import java.util.Map;
  * <br>2026/11/04：组件数据引用迁入 component，保持原业务流程。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ *
  *
  * @author zExNocs
  * @date 2026/10/30
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.0-l
  */
 public final class AgentConversationEngine {
     private final LLMMessageCodec codec;
@@ -126,7 +130,7 @@ public final class AgentConversationEngine {
      * @param snapshot 当前已解析人格
      * @return 完整协议字节增量，不等于模型 token
      */
-    public long personalityBytes(AgentPersonalitySnapshot snapshot) {
+    public long personalityBytes(IAgentPromptContext snapshot) {
         List<ILLMMessage> probe = List.of(LLMUserMessage.builder().contents(List.of()).build());
         return codec.signature(new AgentPromptInput(probe, List.of(), 0, snapshot).messages()).bytes()
                 - codec.signature(probe).bytes();
@@ -199,7 +203,7 @@ public final class AgentConversationEngine {
      * @param summary 当前摘要
      * @return 实际编码增量
      */
-    public long summaryBytes(AgentSummarySnapshot summary) {
+    public long summaryBytes(IAgentConversationAttachment summary) {
         List<ILLMMessage> probe = List.of(LLMUserMessage.builder().contents(List.of()).build());
         return codec.signature(new AgentPromptInput(probe, List.of(), 0, null, summary).messages()).bytes() - codec.signature(probe).bytes();
     }
@@ -214,13 +218,14 @@ public final class AgentConversationEngine {
             long bytes = add(4096, codec.serializedBytes(result.budgetUsage()));
             // 2026/11/03：重放缓存同时计入冻结计划及插件版本，未知负载按原失败策略拒绝保留。
             if (result.replyPlan() != null) {
-                bytes = add(bytes, codec.serializedBytes(result.replyPlan().steps()));
-                bytes = add(bytes, codec.serializedBytes(result.replyPlan().tokens()));
+                bytes = add(bytes, codec.serializedBytes(result.replyPlan()));
             }
             var projection = result.promptTranscript();
             if (projection != null) {
                 bytes = add(bytes, codec.serializedBytes(projection.input()));
-                if (projection.input().summary() != null) { bytes = add(bytes, codec.serializedBytes(projection.input().summary().text())); }
+                if (projection.input().summary() != null) {
+                    bytes = add(bytes, codec.signature(projection.input().summary().messages()).bytes());
+                }
                 bytes = add(bytes, codec.signature(projection.messages()).bytes());
             }
             var runtime = result.access().flatMap(AgentAccessDecision::runtime);
@@ -259,16 +264,18 @@ public final class AgentConversationEngine {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
      *
      * @param request 固定历史和新输入组成的请求
      * @param window 实际采用的完整历史窗口
      * @param options 本轮固定策略
      * @param historyMessages 历史前缀消息数
      * @param signature 实际完整输入的协议指纹
+     *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public record Prepared(AgentRunRequest request, AgentConversationWindow window, AgentConversationOptions options,
                            int historyMessages, LLMMessageCodec.Signature signature) {}
@@ -278,11 +285,13 @@ public final class AgentConversationEngine {
      * <br>2026/11/04：校正 @since 为首次引入版本。
      *
      * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+     * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+     *
      *
      * @author zExNocs
      * @date 2026/10/29
      * @since 4.5.0-l
-     * @version 4.8.0-l
+     * @version 4.9.0-l
      */
     public static final class InputTooLargeException extends RuntimeException {
         @Serial
