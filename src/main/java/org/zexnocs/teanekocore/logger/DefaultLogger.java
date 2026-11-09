@@ -6,12 +6,20 @@ import org.zexnocs.teanekocore.utils.ExceptionUtils;
 
 /**
  * 默认日志记录器实现，提供基本的日志记录功能。
+ * <br>2026/11/08：调试资格直接读取借用后端，不为关闭的级别构建正文。
  *
  * @author zExNocs
  * @date 2026/02/07
+ * @version 4.9.0-l
  */
 public class DefaultLogger implements ILogger {
     private final Logger logger;
+
+    /** @return 借用后端当前是否允许输出 DEBUG */
+    @Override
+    public boolean isDebugEnabled() {
+        return logger.isDebugEnabled();
+    }
 
     /**
      * 构造函数，初始化默认日志记录器。

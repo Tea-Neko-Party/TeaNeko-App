@@ -1,61 +1,74 @@
 package org.zexnocs.teanekoplugin.agent.cognition.memory.namespace;
 
-import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
-
-// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryConsolidator;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryPolicy;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemorySettings;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongMemories;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryLayers;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.BasePersonality;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.IPersonalityConfiguration;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.IStyleObservationStore;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalitySettings;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryProcessor;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalityService;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservationService;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.StylePatternSimilarity;
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLayeredMemoryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLongTermMemoryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryContext;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.adapter.EasyDataHistoryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.*;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.*;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.EasyDataPersonalityStore;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.EasyDataStyleObservationStore;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.StyleObservationTools;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLayeredMemoryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLongTermMemoryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryContext;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.adapter.EasyDataHistoryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryConsolidator;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryPolicy;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryProcessor;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemorySettings;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongMemories;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryLayers;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.AgentPersonalitySnapshot;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.BasePersonality;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.IPersonalityConfiguration;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.IStyleObservationStore;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalityService;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalitySettings;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservationService;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.StylePatternSimilarity;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.EasyDataPersonalityStore;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.EasyDataStyleObservationStore;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.adapter.StyleObservationTools;
+import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 复用真实事务夹具验证观察积累、渐进采用、原人格隔离与联合提交回滚。
@@ -71,6 +84,8 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/06：合并同字段同场景的近义模式和真实证据，保留原采用水位。
  *
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
+ * <br>2026/11/08：拒绝描述中伪造的字面示例，保留真实独立样本的累积。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
@@ -78,6 +93,28 @@ import static org.mockito.Mockito.*;
  */
 @Timeout(25)
 class StyleObservationIntegrationTest {
+    /** 引用合法也不能在风格描述中夹带未出现过的例句。 */
+    @Test
+    void rejectsInventedLiteralStyleExamples() {
+        try (var h = new Harness(); var control = ExecutionControl.create()) {
+            h.medium();
+            var batch = h.claim();
+            var target = Objects.requireNonNull(h.observer.prepare(batch, control).toCompletableFuture().join());
+            var original = h.candidate(batch);
+            var invented = new StyleObservations.Candidate(original.field(), "闲聊时接话，如「茶茶猫猫猫茶呢」",
+                    original.context(), original.quotes(), original.segments());
+            var failure = assertThrows(MemoryEvidenceException.class, () ->
+                    org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongMemoryEvidence.validate(batch,
+                            new StyleObservations.Analysis(List.of(), List.of(invented)), target));
+            assertEquals(MemoryEvidenceException.Code.QUOTE_MISMATCH, failure.code());
+            var grounded = new StyleObservations.Candidate(original.field(), "表达如「先讲结论」",
+                    original.context(), original.quotes(), original.segments());
+            assertDoesNotThrow(() -> org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongMemoryEvidence.validate(
+                    batch, new StyleObservations.Analysis(List.of(), List.of(grounded)), target));
+            assertTrue(h.styles.inspect(scope, target.basis(), now).toCompletableFuture().join().isEmpty());
+        }
+    }
+
     /** 2026/11/06：近义风格复用原记录并累加独立证据，否定与不同场景仍隔离。 */
     @Test
     void mergesSemanticStyleVariantsWithNewEvidence() {

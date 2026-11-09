@@ -136,20 +136,24 @@ public final class AgentFileSettings {
     // 2026/11/07：原生系统能力不作为业务插件启停。
     @TeaNekoFileSettings("agent.observability")
     public static final class Observability extends Base {
-        /** @param files 原文件配置入口 */
+        /**
+         * 2026/11/08：分别展示摘要、DEBUG 预览及独立完整诊断，不把预览开关标作所有日志的开关。
+         * @param files 原文件配置入口
+         */
         public Observability(IFileConfigService files) {
             super(files, org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig.class,
                     "Agent 观测日志", List.of(field("/llm-info", "独立 LLM 汇总", "BOOLEAN"),
                             field("/agent-info", "Agent 请求汇总", "BOOLEAN"),
-                            field("/visibility", "日志级别（INFO / DEBUG / NONE）", "TEXT"),
-                            field("/include-context", "正文总开关", "BOOLEAN"),
-                            field("/include-user", "本轮用户输入", "BOOLEAN"),
-                            field("/include-final-output", "最终回复", "BOOLEAN"),
-                            field("/include-system", "系统输入", "BOOLEAN"),
-                            field("/include-schema", "JSON Schema 与协议声明", "BOOLEAN"),
-                            field("/include-tools", "工具调用链", "BOOLEAN"),
-                            field("/include-reasoning", "记录供应商推理", "BOOLEAN"),
-                            field("/max-content-characters", "汇总正文字数上限", "NUMBER")));
+                            field("/visibility", "摘要级别（INFO / DEBUG / NONE）", "TEXT"),
+                            field("/include-context", "DEBUG 正文预览总开关", "BOOLEAN"),
+                            field("/include-user", "应用输入预览", "BOOLEAN"),
+                            field("/include-final-output", "最终回复预览", "BOOLEAN"),
+                            field("/include-system", "系统输入预览", "BOOLEAN"),
+                            field("/include-schema", "结构与工具定义预览", "BOOLEAN"),
+                            field("/include-tools", "工具调用链预览", "BOOLEAN"),
+                            field("/include-reasoning", "供应商推理预览", "BOOLEAN"),
+                            field("/max-content-characters", "DEBUG 预览字符预算（实际最大2048）", "NUMBER"),
+                            field("/diagnostic-log", "独立完整诊断日志", "BOOLEAN")));
         }
 
         /** @param candidate 已解析候选 */
@@ -162,8 +166,9 @@ public final class AgentFileSettings {
             if (settings.getVisibility() == null) {
                 throw new IllegalArgumentException("日志级别必须为 INFO、DEBUG 或 NONE。");
             }
-            if (settings.getMaxContentCharacters() < 1024 || settings.getMaxContentCharacters() > 2_000_000) {
-                throw new IllegalArgumentException("汇总正文字数上限必须为 1024–2000000。");
+            // 2026/11/08：旧上限配置仍可载入，预览入口另行限制最大2048字符。
+            if (settings.getMaxContentCharacters() < 128 || settings.getMaxContentCharacters() > 2_000_000) {
+                throw new IllegalArgumentException("DEBUG 预览字符预算必须为 128–2000000，实际输出上限为2048。");
             }
         }
     }

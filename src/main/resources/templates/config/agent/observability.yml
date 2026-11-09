@@ -1,5 +1,5 @@
 # 2026/11/06：每条请求结束后汇总一次；Agent 负责其内部 LLM，独立 LLM 单独汇总。
-# 2026/11/06：默认使用精简文字分组，诊断项分别开启；密钥、链接和非文本内容始终隐藏。
+# 2026/11/08：INFO 仅单行统计；以下正文选项只控制 DEBUG 预览，最多2048字符。
 llm-info: true
 agent-info: true
 include-context: true
@@ -11,4 +11,6 @@ include-schema: false
 include-tools: false
 include-reasoning: false
 # 正文超过限制会明确标注截断；请求状态、耗时和用量不受影响。
-max-content-characters: 16384
+max-content-characters: 1024
+# 2026/11/08：完整统一模型协议进入 logs/llm/requests.jsonl，不传播到控制台和网页日志。
+diagnostic-log: true

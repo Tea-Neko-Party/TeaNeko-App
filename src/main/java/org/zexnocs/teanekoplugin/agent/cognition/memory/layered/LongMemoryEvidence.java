@@ -3,16 +3,23 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.layered;
 // 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
 
 import org.jspecify.annotations.Nullable;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
 import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations;
-import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 
-import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.*;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.EVIDENCE_ID_INVALID;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.EVIDENCE_ROLE_INVALID;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.QUOTE_MISMATCH;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.SEGMENT_MISMATCH;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.SEGMENT_OUTSIDE_BATCH;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.STYLE_TARGET_MISMATCH;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.SUBJECT_MISMATCH;
+import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Code.TIME_HINT_MISMATCH;
 import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Domain.MEMORIES;
 import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvidenceException.Domain.STYLES;
 
@@ -20,6 +27,7 @@ import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvi
  * 生成预检与事务共用的纯证据关系校验；不查询数据库，也不修改模型候选。
  * <br>2026/11/05：统一原话、作者、片段与风格目标关系，返回待复核的权威来源定位。
  * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
+ * <br>2026/11/08：风格描述中的字面举例也必须存在于本次引用的真实原话。
  *
  *
  * @author zExNocs
@@ -28,6 +36,8 @@ import static org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryEvi
  * @version 4.9.0-l
  */
 public final class LongMemoryEvidence {
+    private static final java.util.regex.Pattern STYLE_EXAMPLE =
+            java.util.regex.Pattern.compile("[「“]([^」”]+)[」”]");
     /** 禁止实例化无状态校验器。 */
     private LongMemoryEvidence() { }
 
@@ -75,6 +85,14 @@ public final class LongMemoryEvidence {
                     throw use.failure(batch, STYLE_TARGET_MISMATCH);
                 }
                 uses.add(use);
+            }
+            // 2026/11/08：合法 quotes 不能掩护 pattern 中编造的字面示例。
+            var examples = STYLE_EXAMPLE.matcher(candidate.pattern());
+            while (examples.find()) {
+                var example = examples.group(1);
+                if (candidate.quotes().stream().noneMatch(quote -> quote.text().contains(example))) {
+                    throw location.failure(batch, QUOTE_MISMATCH);
+                }
             }
         }
         return List.copyOf(uses);

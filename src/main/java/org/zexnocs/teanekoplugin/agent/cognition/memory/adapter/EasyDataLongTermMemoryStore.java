@@ -78,6 +78,8 @@ import java.util.function.Supplier;
  * <br>2026/11/06：共享事件使用独立索引，截断前区分个人画像，并在维护时补建旧事件索引。
  * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
  *
+ * <br>2026/11/08：提示版本升级继续保留成功来源检查点，不误删独立观察样本。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
@@ -120,7 +122,7 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
          */
         private LearningCheckpoint completed(LongMemories.Batch batch) {
             var inputs = new LinkedHashSet<>(current() ? fingerprints : List.of());
-            var evidence = new LinkedHashSet<>(current() ? evidenceKeys : List.of());
+            var evidence = new LinkedHashSet<>(evidenceKeys);
             inputs.add(batch.fingerprint());
             batch.evidence().forEach(value -> evidence.add(LongMemoryLearningPolicy.evidenceKey(value)));
             return new LearningCheckpoint(LongMemoryLearningPolicy.PROMPT_VERSION, LongMemoryLearningPolicy.SCHEMA_VERSION,
@@ -287,7 +289,8 @@ public final class EasyDataLongTermMemoryStore implements ILongTermMemoryStore, 
             var checkpoint = checkpointRow == null ? LearningCheckpoint.empty() : read(checkpointRow, LearningCheckpoint.class);
             var policy = settings.get().learning();
             var pendingSegments = segments;
-            var seen = new HashSet<>(checkpoint.current() ? checkpoint.evidenceKeys() : List.of());
+            // 2026/11/08：来源键合同未改变，提示升级仍复用成功检查点，避免旧消息重新学习。
+            var seen = new HashSet<>(checkpoint.evidenceKeys());
             var evidence = new ArrayList<LongMemories.Evidence>(); int budget = settings.get().maxInputBytes() / 2;
             int includedSegments = 0;
             for (var segment : segments) {

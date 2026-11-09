@@ -3,9 +3,13 @@ package org.zexnocs.teanekoagent.runtime;
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.integration.monitor.AgentObservationService;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMRequestSnapshot;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentActivityTimeline;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentTurnReport;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptException;
@@ -17,6 +21,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import java.sql.SQLSyntaxErrorException;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -41,12 +46,50 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/06：不用真实模型或配置目录。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
+ * <br>2026/11/08：INFO 与 DEBUG 内容分离，预览受长度及后端资格限制。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.4-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 class AgentObservationTest {
+    /** INFO 只有单行统计，正文仅进入受限 DEBUG，原字段开关仍可关闭预览。 */
+    @Test
+    void infoSummaryDoesNotContainApplicationPayload() {
+        var files = mock(IFileConfigService.class);
+        var logger = mock(ILogger.class);
+        var config = new AgentObservationFileConfig();
+        config.setDiagnosticLog(false);
+        when(logger.isDebugEnabled()).thenReturn(true);
+        when(files.requireCurrent(AgentObservationFileConfig.class)).thenReturn(config);
+        var message = LLMUserMessage.builder().contents(new LLMContentListBuilder()
+                .addText("后台学习内容".repeat(10000)).build()).build();
+        var input = new LLMRequestSnapshot(List.of(message), "{}");
+        var attempt = new LLMInteractionResult.ModelAttempt(1, Optional.empty(), Optional.empty(), Optional.of(input));
+        var result = new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(message), null,
+                List.of(attempt), List.of(), Map.of());
+        var service = new AgentObservationService(files, logger);
+        service.finished(UUID.randomUUID(), 12, result);
+        var summary = ArgumentCaptor.forClass(String.class);
+        verify(logger).info(eq("LLM 请求汇总"), summary.capture());
+        assertFalse(summary.getValue().contains("后台学习内容"));
+        assertFalse(summary.getValue().contains("\n"));
+        var preview = ArgumentCaptor.forClass(String.class);
+        verify(logger).debug(eq("LLM 请求汇总预览"), preview.capture());
+        assertTrue(preview.getValue().contains("预览截断"));
+        assertTrue(preview.getValue().length() < 2200);
+        clearInvocations(logger);
+        when(logger.isDebugEnabled()).thenReturn(false);
+        service.finished(UUID.randomUUID(), 12, result);
+        verify(logger, never()).debug(eq("LLM 请求汇总预览"), anyString());
+        clearInvocations(logger);
+        when(logger.isDebugEnabled()).thenReturn(true);
+        config.setIncludeContext(false);
+        service.finished(UUID.randomUUID(), 12, result);
+        verify(logger, never()).debug(eq("LLM 请求汇总预览"), anyString());
+    }
+
     /** 2026/11/06：DEBUG 和 NONE 热更新不再产生 INFO，关闭后不构造正文。 */
     @Test
     void visibilitySelectsExactlyOneLevel() {

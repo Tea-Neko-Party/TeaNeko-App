@@ -11,13 +11,11 @@ package org.zexnocs.teanekoplugin.agent.social.proactive.adapter;
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import jakarta.annotation.PreDestroy;
-import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
-import org.zexnocs.teanekoplugin.support.PluginTaskScope;
 import org.jspecify.annotations.Nullable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
-import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan;
+import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
@@ -27,20 +25,6 @@ import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonService;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.AgentDeliveryService;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryContext;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryPage;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryQuery;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IConversationHistory;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource;
-import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveContexts;
-import org.zexnocs.teanekoagent.runtime.operation.AgentOperationReceipt;
-import org.zexnocs.teanekoagent.runtime.operation.IAgentOperationStore;
-import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveConfiguration;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.configuration.MemoryReadAccess;
-import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
@@ -51,12 +35,28 @@ import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.IAgentFactory;
 import org.zexnocs.teanekoagent.runtime.IAgentRegistry;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor.Delivery;
+import org.zexnocs.teanekoagent.runtime.operation.AgentOperationReceipt;
+import org.zexnocs.teanekoagent.runtime.operation.IAgentOperationStore;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
 import org.zexnocs.teanekocore.utils.StableDigest;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.configuration.MemoryReadAccess;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.AgentDeliveryService;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryContext;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryPage;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryQuery;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IConversationHistory;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveConfiguration;
+import org.zexnocs.teanekoplugin.agent.social.proactive.ProactiveContexts;
+import org.zexnocs.teanekoplugin.support.PluginTaskScope;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.charset.StandardCharsets;
@@ -92,6 +92,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：自主执行按插件代次启停，停用后等待实际资源收尾。
  * <br>2026/11/07：使用独立活动配置及认知读取策略，未安装记忆仍可产生候选。
+ *
+ * <br>2026/11/08：当前消息按真实身份与历史去重，历史按时间排序并保留作者。
  *
  * @author zExNocs
  * @date 2026/11/02
@@ -280,7 +282,7 @@ public final class ProactiveService implements AutoCloseable, IPluginLifecycle {
                                 if (!extra.allowed()) {
                                     return extra.finish(Delivery.ABSTAINED).thenApply(ignored -> Delivery.ABSTAINED);
                                 }
-                                return extra.verify(control).thenCompose(ignored -> context(context, policy, currentText, control)).thenCompose(original -> {
+                                return extra.verify(control).thenCompose(ignored -> context(context, policy, currentText, occurrence, control)).thenCompose(original -> {
                                     var data = original + (extra.text().isEmpty() ? "" : "\n" + extra.text());
                                     if (data.isEmpty()) { return CompletableFuture.completedFuture(Delivery.ABSTAINED); }
                                     guard.run(); var definition = instance();
@@ -356,20 +358,27 @@ public final class ProactiveService implements AutoCloseable, IPluginLifecycle {
      * @param context 固定历史边界
      * @param policy 本次固定策略
      * @param currentText 当前字面原文
+     * @param currentSourceId 原生当前消息 ID，用于排除已经采集的同一条发言
      * @param control 借用控制
      * @return 低信任资料 JSON，无可用资料时为空
      */
-    private CompletionStage<String> context(@Nullable HistoryContext context, Policy policy, String currentText, ExecutionControl control) {
+    private CompletionStage<String> context(@Nullable HistoryContext context, Policy policy, String currentText,
+            String currentSourceId, ExecutionControl control) {
         var page = policy.readHistory() && context != null ? history.search(context, new HistoryQuery(Long.MAX_VALUE, "", null, null, 8, 6000), control)
                 : CompletableFuture.completedFuture(new HistoryPage(List.of(), 0, 0, false));
         return page.thenApply(recent -> {
             control.checkActive();
             if (recent.messages().isEmpty() && currentText.isBlank()) { return ""; }
+            // 2026/11/08：按真实消息身份排除当前发言，再按时间升序呈现，不按正文误删其他发言。
+            var messages = recent.messages().reversed().stream()
+                    .filter(message -> !(message.role() == HistoryMessage.Role.USER
+                            && message.messageId().equals(currentSourceId)))
+                    .sorted(java.util.Comparator.comparing(HistoryMessage::occurredAt)).toList();
             return mapper.writeValueAsString(Map.of("current", bounded(currentText, 1000), "currentTruncated", currentText.codePointCount(0, currentText.length()) > 1000,
                     "historyReadEnabled", policy.readHistory(), "historyComplete", recent.nextBefore() == 0 && !recent.omittedCharacters()
                             && recent.messages().stream().noneMatch(message -> message.truncated() || message.text().codePointCount(0, message.text().length()) > 400),
-                    "messages", recent.messages().stream().map(message -> Map.of("role", message.role().name(), "text", bounded(message.text(), 400),
-                            "time", message.occurredAt().toString(), "truncated", message.truncated() || message.text().codePointCount(0, message.text().length()) > 400)).toList()));
+                    "messages", messages.stream().map(message -> Map.of("role", message.role().name(), "text", bounded(message.text(), 400),
+                            "time", message.occurredAt().toString(), "author", message.source().userId().map(UUID::toString).orElse(""), "truncated", message.truncated() || message.text().codePointCount(0, message.text().length()) > 400)).toList()));
         });
     }
 

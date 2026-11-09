@@ -16,10 +16,12 @@ import java.util.regex.Pattern;
  * 单次请求内共享的有界内容脱敏器；结构化内容按键处理，编码字符串逐层检查。
  * <br>2026/11/06：完整隐藏授权值及嵌套 JSON 凭据，无法确定边界的敏感内容不回退原文。
  *
+ * <br>2026/11/08：独立诊断同样隐藏供应商加密状态，保留可读文本字段。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.5-l
- * @version 4.8.5-l
+ * @version 4.9.0-l
  */
 final class ObservationContentRedactor {
     private static final String HIDDEN = "[敏感内容已隐藏]";
@@ -27,7 +29,7 @@ final class ObservationContentRedactor {
     private static final int MAX_INPUT = 2_000_000;
     private static final int MAX_ENCODED_DEPTH = 4;
     private static final String KEYS = "(?:x[-_]?)?api[-_]?key|access[-_]?token|refresh[-_]?token|token|password"
-            + "|client[-_]?secret|secret|(?:proxy[-_])?authorization|cookie|set[-_]cookie|rkey|signature";
+            + "|client[-_]?secret|secret|(?:proxy[-_])?authorization|cookie|set[-_]cookie|rkey|signature|encrypted[-_]?content|encrypted[-_]?state";
     private static final Pattern SENSITIVE_KEY = Pattern.compile("(?i)^(?:" + KEYS + ")$");
     private static final Pattern KEY_VALUE = Pattern.compile(
             "(?i)(?<![\\p{L}\\p{N}_-])([\"']?(" + KEYS + ")[\"']?\\s*[:=]\\s*)");

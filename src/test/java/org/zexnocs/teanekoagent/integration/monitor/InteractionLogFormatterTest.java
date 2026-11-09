@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMRequestSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenUsage;
@@ -19,20 +20,23 @@ import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonInstruction;
 import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
-import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 验证汇总保留实际输入和供应商字段，同时隐藏凭据、媒体与未公开状态。
  * <br>2026/11/06：覆盖有界长输入、内容开关及多次尝试的用量归属。
  * <br>2026/11/06：覆盖四条内容入口的编码 JSON、完整授权头、畸形输入与处理上限。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
+ *
+ * <br>2026/11/08：正文在 DEBUG 受限预览，完整输入与响应改由独立诊断验证。
  *
  * @author zExNocs
  * @date 2026/11/06
@@ -41,6 +45,18 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @Timeout(10)
 class InteractionLogFormatterTest {
+    /** 长输入和多项诊断配置仍遵守 DEBUG 硬上限，保留最终回复和截断提示。 */
+    @Test
+    void previewRemainsBoundedEvenWithLegacyLargeLimit() {
+        var settings = diagnostics();
+        settings.setMaxContentCharacters(2_000_000);
+        var text = InteractionLogFormatter.details(result("长输入".repeat(10000)), settings);
+        assertTrue(text.length() < 2200);
+        assertTrue(text.contains("预览截断"));
+        assertTrue(text.contains("最终答案"));
+        assertFalse(text.contains("长输入".repeat(200)));
+    }
+
     /** 显式开启诊断项以覆盖原有四条脱敏路径，默认值单独验证。 */
     private static AgentObservationFileConfig diagnostics() {
         var settings = new AgentObservationFileConfig();
@@ -48,6 +64,7 @@ class InteractionLogFormatterTest {
         settings.setIncludeSchema(true);
         settings.setIncludeSystem(true);
         settings.setIncludeTools(true);
+        settings.setMaxContentCharacters(2048);
         return settings;
     }
 
@@ -55,8 +72,8 @@ class InteractionLogFormatterTest {
     @Test
     void defaultsAreReadableAndMinimal() {
         var text = InteractionLogFormatter.details(result("本轮问题"), new AgentObservationFileConfig());
-        assertTrue(text.contains("【本轮用户输入】"));
-        assertTrue(text.contains("【最终回复】"));
+        assertTrue(text.contains("【应用输入预览】"));
+        assertTrue(text.contains("【最终回复预览】"));
         assertTrue(text.contains("最终答案"));
         assertFalse(text.contains("协议声明"));
         assertFalse(text.contains("供应商提供的思考"));

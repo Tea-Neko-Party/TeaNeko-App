@@ -22,6 +22,7 @@ import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMImageDetail;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
@@ -1186,6 +1187,13 @@ class AgentCommandIntegrationTest {
     @Test void proactiveInterjectionUsesSystemAndIsolatesMonitoring() throws Exception {
         try (var h = new Harness(false, true, true)) {
             active(h); var source = incoming(h, "alice", "讨论进行中", false); var targets = proactiveTargets(h, source);
+            // 2026/11/08：接收顺序与事件时间相反，模型仍应按时间看到历史且只收到一次当前发言。
+            var earlier = incoming(h, "bob", "更早的讨论", false);
+            earlier.setTime(source.getTime().minusSeconds(20));
+            var later = incoming(h, "bob", "较晚的讨论", false);
+            later.setTime(source.getTime().minusSeconds(10));
+            capture(h).capture(later, NativeMessageInput.from(later)).toCompletableFuture().join();
+            capture(h).capture(earlier, NativeMessageInput.from(earlier)).toCompletableFuture().join();
             var events = new DefaultListableBeanFactory(); var bus = mock(IEventService.class);
             var listener = new CompletableFuture<ITaskResult<Void>>();
             when(bus.pushEventWithFuture(any())).thenReturn(new TaskFuture<>(h.logger, "延迟监控", listener)); events.registerSingleton("事件", bus);
@@ -1205,6 +1213,15 @@ class AgentCommandIntegrationTest {
                     assertEquals(1, h.prompts.size()); assertTrue(h.prompts.getFirst().getOptions().getTools().isEmpty());
                     // 2026/11/04：主动发言使用离线模型的完整输出额度，不再限制为 384。
                     assertEquals(1000, h.prompts.getFirst().getOptions().getMaxTokens());
+                    var payload = h.prompts.getFirst().getMessages().stream().flatMap(message -> message.getContents().stream())
+                            .flatMap(content -> content.getContentPart() instanceof TextLLMContentPart text
+                                    ? java.util.stream.Stream.of(text.getText()) : java.util.stream.Stream.empty())
+                            .filter(text -> text.startsWith("{") && text.contains("\"current\""))
+                            .map(h.db.mapper::readTree).findFirst().orElseThrow();
+                    assertEquals("讨论进行中", payload.path("current").asString());
+                    assertEquals(2, payload.path("messages").size());
+                    assertEquals("更早的讨论", payload.at("/messages/0/text").asString());
+                    assertEquals("较晚的讨论", payload.at("/messages/1/text").asString());
                     var request = org.mockito.ArgumentCaptor.forClass(org.zexnocs.teanekoagent.runtime.AgentRunRequest.class);
                     verify(turns).prepare(any(), request.capture(), any());
                     assertEquals(org.zexnocs.teanekoagent.runtime.AgentActorContext.Origin.SYSTEM, request.getValue().actor().origin());

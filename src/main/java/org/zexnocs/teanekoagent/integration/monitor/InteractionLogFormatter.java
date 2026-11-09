@@ -2,12 +2,12 @@ package org.zexnocs.teanekoagent.integration.monitor;
 
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMTokenUsage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonInstruction;
-import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
 import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
@@ -19,10 +19,12 @@ import java.util.Map;
  * <br>2026/11/06：所有内容入口共用有界结构化脱敏，修复嵌套 JSON 和内联授权头遗漏。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
+ * <br>2026/11/08：正文仅作为调试预览，限制总长与单字段长度。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.5-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 final class InteractionLogFormatter {
     private static final JsonMapper JSON = new JsonMapper();
@@ -32,6 +34,7 @@ final class InteractionLogFormatter {
     private final AgentObservationFileConfig settings;
     private final int maximum;
     private boolean truncated;
+    private boolean previewTruncated;
 
     /**
      * 每次汇总使用独立缓冲区，避免不同请求的正文混入。
@@ -39,7 +42,7 @@ final class InteractionLogFormatter {
      */
     private InteractionLogFormatter(AgentObservationFileConfig settings) {
         this.settings = settings;
-        maximum = Math.clamp(settings.getMaxContentCharacters(), 1024, 2_000_000);
+        maximum = Math.clamp(settings.getMaxContentCharacters(), 128, 2048);
     }
 
     /**
@@ -76,7 +79,8 @@ final class InteractionLogFormatter {
             }
         }
         return "，模型调用=" + result.attempts().size() + "，工具调用=" + result.tools().size()
-                + "，响应模型=" + (models.isEmpty() ? "未取得" : String.join(" / ", models))
+                + "，响应模型=" + (models.isEmpty() ? "未取得" : models.stream().limit(3).collect(java.util.stream.Collectors.joining(" / ")))
+                + "，输入口径=应用模型端口，服务端上下文=未知"
                 + "，已报告总token=" + reported + "，估算token=" + estimated + "，用量未知次数=" + unknown
                 + (result.failure() == null ? "" : "，" + result.failure());
     }
@@ -94,10 +98,10 @@ final class InteractionLogFormatter {
                 result.attempts().stream().flatMap(attempt -> attempt.input().stream()).findFirst().flatMap(input -> input.messages().reversed().stream()
                         .filter(message -> message.getRole()
                                 == org.zexnocs.teanekoagent.llm.framework.message.interfaces.LLMMessageRole.USER)
-                        .findFirst()).ifPresent(message -> out.message("本轮用户输入", message));
+                        .findFirst()).ifPresent(message -> out.message("应用输入预览", message));
             }
             if (settings.isIncludeFinalOutput()) {
-                result.finalCandidate().ifPresent(message -> out.message("最终回复", message));
+                result.finalCandidate().ifPresent(message -> out.message("最终回复预览", message));
             }
             var systems = new java.util.LinkedHashSet<String>();
             var declarations = new java.util.LinkedHashSet<String>();
@@ -145,7 +149,7 @@ final class InteractionLogFormatter {
                 });
             }
         }
-        return out.body + (out.truncated ? "\n  [正文已截断，上限=" + out.maximum + " 字符]" : "");
+        return out.body + (out.truncated || out.previewTruncated ? "\n  [正文已截断，上限=" + out.maximum + " 字符]" : "");
     }
 
     /**
@@ -234,6 +238,11 @@ final class InteractionLogFormatter {
         }
         // 2026/11/06：包含 JSON 编码字符串的工具结果、参数、输入和推理使用同一脱敏入口。
         var safe = redactor.redact(value);
+        // 2026/11/08：先完整脱敏，再按码点截断字段，避免长输入挤掉回复与其他所选预览。
+        if (safe.codePointCount(0, safe.length()) > 384) {
+            safe = safe.substring(0, safe.offsetByCodePoints(0, 384)) + "…[预览截断]";
+            previewTruncated = true;
+        }
         var chunk = "\n  【" + label + "】\n    " + safe.replace("\r", "").replace("\n", "\n    ");
         int remaining = maximum - body.length();
         if (chunk.length() > remaining) {

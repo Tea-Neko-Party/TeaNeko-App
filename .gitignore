@@ -53,3 +53,5 @@ temp/
 /frontend/dist/
 /frontend/.vite/
 /data/
+# 2026/11/08：完整模型诊断包含聊天正文，仅保存在实例运行目录。
+/logs/

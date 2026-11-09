@@ -20,10 +20,12 @@ import java.util.UUID;
  * <br>2026/11/06：按已应用文件快照查询开关，不在请求中扫描配置目录。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
+ * <br>2026/11/08：分离单行摘要、有界调试预览和独立诊断，保留配置选择。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.4-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 @Service
 public final class AgentObservationService implements ILLMInteractionObserver, IAgentActivityObserver {
@@ -47,9 +49,12 @@ public final class AgentObservationService implements ILLMInteractionObserver, I
     public void finished(UUID request, long elapsedMillis, LLMInteractionResult result) {
         safely(() -> {
             var settings = settings();
+            if (settings != null && settings.isDiagnosticLog()) {
+                safely(() -> InteractionDiagnosticLog.write(request, result));
+            }
             if (settings != null && settings.isLlmInfo() && settings.getVisibility() != AgentObservationFileConfig.Visibility.NONE) {
                 emit(settings, "LLM 请求汇总", "请求=" + request + "，状态=" + result.status() + "，耗时毫秒=" + elapsedMillis
-                        + InteractionLogFormatter.metrics(result) + InteractionLogFormatter.details(result, settings));
+                        + InteractionLogFormatter.metrics(result), result);
             }
         });
     }
@@ -80,31 +85,43 @@ public final class AgentObservationService implements ILLMInteractionObserver, I
     public void finished(AgentTurnReport report, @Nullable AgentRunResult result) {
         safely(() -> {
             var settings = settings();
+            var interaction = result == null ? null : result.interaction().orElse(null);
+            if (settings != null && settings.isDiagnosticLog() && interaction != null) {
+                safely(() -> InteractionDiagnosticLog.write(report.requestId(), interaction));
+            }
             if (settings != null && settings.isAgentInfo() && settings.getVisibility() != AgentObservationFileConfig.Visibility.NONE) {
-                var interaction = result == null ? null : result.interaction().orElse(null);
                 var metrics = interaction == null ? "，模型调用=0，工具调用=0"
                         : InteractionLogFormatter.metrics(interaction);
                 var failure = result != null && result.failure() != null
                         && (interaction == null || !result.failure().equals(interaction.failure()))
                         ? "，" + result.failure() : "";
                 emit(settings, "Agent 请求汇总", "请求=" + report.requestId() + "，活动=" + report.activity()
-                        + "，状态=" + report.status() + "，耗时毫秒=" + report.elapsedMillis() + metrics + failure
-                        + (interaction == null ? "" : InteractionLogFormatter.details(interaction, settings)));
+                        + "，状态=" + report.status() + "，耗时毫秒=" + report.elapsedMillis() + metrics + failure, interaction);
             }
         });
     }
 
     /**
-     * 2026/11/06：一次请求只产生一个选定级别事件，不将长正文编码为 JSON 日志。
+     * 2026/11/08：INFO 仅输出单行统计，内容按原选择另写 DEBUG 有界预览。
      * @param settings 本次配置
      * @param title 固定事件名称
-     * @param body 人类可读正文
+     * @param body 不含消息正文的统计
+     * @param interaction 可选交互，用于生成受限预览
      */
-    private void emit(AgentObservationFileConfig settings, String title, String body) {
+    private void emit(AgentObservationFileConfig settings, String title, String body,
+            @Nullable LLMInteractionResult interaction) {
+        // 2026/11/08：控制字符转义，外部模型名等字段不能伪装成新的日志行。
+        var summary = body.replace("\r", "\\r").replace("\n", "\\n");
         switch (settings.getVisibility()) {
-            case INFO -> logger.info(title, body);
-            case DEBUG -> logger.debug(title, body);
+            case INFO -> logger.info(title, summary);
+            case DEBUG -> logger.debug(title, summary);
             case NONE -> { }
+        }
+        if (interaction != null && logger.isDebugEnabled()) {
+            var preview = InteractionLogFormatter.details(interaction, settings);
+            if (!preview.isEmpty()) {
+                logger.debug(title + "预览", "请求内容仅为应用选定字段，不代表完整提示或服务端 token 上下文。" + preview);
+            }
         }
     }
     /**

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- 2026/11/08：保留常规控制台输出；完整模型诊断独立滚动且不传播到根日志或网页采集。 -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <springProperty scope="context" name="LLM_DIAGNOSTIC_PATH"
+                    source="tea-neko.llm.diagnostics.path" defaultValue="logs/llm"/>
+    <appender name="LLM_DIAGNOSTIC" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LLM_DIAGNOSTIC_PATH}/requests.jsonl</file>
+        <encoder><pattern>%msg%n</pattern><charset>UTF-8</charset></encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LLM_DIAGNOSTIC_PATH}/requests.%d{yyyy-MM-dd}.%i.jsonl.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>100MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+    <logger name="teaneko.llm.diagnostic" level="INFO" additivity="false">
+        <appender-ref ref="LLM_DIAGNOSTIC"/>
+    </logger>
+    <root level="INFO"><appender-ref ref="CONSOLE"/></root>
+</configuration>

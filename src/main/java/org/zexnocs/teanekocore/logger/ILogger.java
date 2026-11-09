@@ -2,11 +2,21 @@ package org.zexnocs.teanekocore.logger;
 
 /**
  * 日志记录器接口。
+ * <br>2026/11/08：提供调试级别资格查询，避免为不会展示的内容构建预览。
  *
  * @author zExNocs
  * @date 2026/02/06
+ * @version 4.9.0-l
  */
 public interface ILogger {
+    /**
+     * 允许兼容日志实现保留原调试行为，实际后端可覆写为动态级别查询。
+     * @return 当前可能展示 DEBUG 内容时为真
+     */
+    default boolean isDebugEnabled() {
+        return true;
+    }
+
     /**
      * 记录一般日志。
      *

@@ -2,8 +2,8 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.layered;
 
 // 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
 
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
 import org.zexnocs.teanekocore.utils.StableDigest;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
 
 import java.text.Normalizer;
 import java.time.Duration;
@@ -22,6 +22,8 @@ import java.util.regex.Pattern;
  * @param filterLowInformation 是否过滤纯重复社交消息
  * @param urgentEvents 是否允许明确重要事件提前提取
  *
+ * <br>2026/11/08：补充低信息重复社交词，原话引用与独立样本仍保留。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
@@ -29,11 +31,11 @@ import java.util.regex.Pattern;
  */
 public record LongMemoryLearningPolicy(int batchSegments, Duration maxWait,
                                        boolean filterLowInformation, boolean urgentEvents) {
-    public static final String PROMPT_VERSION = "long-learning-2";
+    public static final String PROMPT_VERSION = "long-learning-3";
     public static final String SCHEMA_VERSION = "analysis-2";
     private static final List<String> SOCIAL = List.of("早上好", "晚上好", "hello", "你好", "您好", "哈喽",
             "早安", "晚安", "午安", "hey", "hi", "好哒", "好的", "收到", "谢谢", "感谢", "拜拜", "再见",
-            "嗨", "嘿", "早", "哈", "呵", "嗯", "哦", "噢", "喵", "啊", "呀", "呢", "哟", "啦");
+            "喵呜", "猫猫", "嗨", "嘿", "早", "哈", "呵", "嗯", "哦", "噢", "喵", "啊", "呀", "呢", "哟", "啦");
     private static final Pattern IMPORTANT = Pattern.compile(
             "^(?:请记住|记住|更正|纠正|从今天起|我决定|我(?:已|已经)?(?:毕业|结婚|离职|入职|搬家|确诊))"
                     + "|(?:今天|明天|下周|下个月).{0,24}(?:手术|面试|考试|婚礼|入职|搬家)"

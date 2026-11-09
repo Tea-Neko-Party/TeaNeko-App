@@ -7,15 +7,33 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.namespace;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
+import org.zexnocs.teanekoagent.runtime.AgentActivity;
+import org.zexnocs.teanekoagent.runtime.AgentActorContext;
+import org.zexnocs.teanekoagent.runtime.AgentDefinition;
+import org.zexnocs.teanekoagent.runtime.AgentFactory;
+import org.zexnocs.teanekoagent.runtime.AgentRegistry;
+import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.AgentUserText;
+import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
+import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
+import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
+import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLayeredMemoryStore;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLongTermMemoryStore;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.LongTermCorrectTool;
@@ -41,23 +59,6 @@ import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryLayers;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryProcessingException;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoplugin.agent.cognition.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
-import org.zexnocs.teanekoagent.runtime.AgentActivity;
-import org.zexnocs.teanekoagent.runtime.AgentActorContext;
-import org.zexnocs.teanekoagent.runtime.AgentDefinition;
-import org.zexnocs.teanekoagent.runtime.AgentFactory;
-import org.zexnocs.teanekoagent.runtime.AgentRegistry;
-import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
-import org.zexnocs.teanekoagent.runtime.AgentScope;
-import org.zexnocs.teanekoagent.runtime.AgentUserText;
-import org.zexnocs.teanekoagent.runtime.IAgentToolSource;
-import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
-import org.zexnocs.teanekoagent.runtime.access.AgentReadiness;
-import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
-import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
-import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
-import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.logger.ILogger;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -107,6 +108,8 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  *
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
+ * <br>2026/11/08：验证内容去重、提示升级后的成功检查点和紧凑学习输入。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
@@ -176,6 +179,24 @@ class LongTermMemoryIntegrationTest {
         }
     }
 
+    /** 相同内容的独立消息仍可用于风格观察，重复事实不会产生第二条长期记录。 */
+    @Test
+    void repeatedContentPreservesEvidenceAndMergesStoredFacts() {
+        try (var h = new Harness()) {
+            h.medium("我平时喜欢茶");
+            var first = h.claim();
+            assertTrue(first.evidence().size() > 1);
+            var candidate = h.candidate(first, "喜欢茶", LongMemories.Mode.ADD);
+            assertTrue(h.longs.commit(first, List.of(candidate), now.plusSeconds(1001)).toCompletableFuture().join());
+            h.medium("我平时喜欢茶");
+            var second = h.claim();
+            assertFalse(second.evidence().isEmpty());
+            assertTrue(h.longs.commit(second, List.of(h.candidate(second, "喜欢茶", LongMemories.Mode.ADD)),
+                    now.plusSeconds(1001)).toCompletableFuture().join());
+            assertEquals(1, h.longs.query(reference, user, "茶", 20).toCompletableFuture().join().items().size());
+        }
+    }
+
     /** 2026/11/06：成功后重放相同片段仍无新证据，检查点与合同版本跨 Store 重建保留。 */
     @Test
     void completedEvidenceCheckpointSurvivesReplay() {
@@ -198,6 +219,11 @@ class LongTermMemoryIntegrationTest {
                 assertTrue(checkpoint.getValue().contains(LongMemoryLearningPolicy.PROMPT_VERSION));
                 assertTrue(checkpoint.getValue().contains(LongMemoryLearningPolicy.SCHEMA_VERSION));
                 assertFalse(checkpoint.getValue().contains("喜欢茶"));
+                // 2026/11/08：提示版本升级不允许已经成功处理的真实来源重新学习。
+                var legacyCheckpoint = (tools.jackson.databind.node.ObjectNode) h.db.mapper.readTree(checkpoint.getValue());
+                legacyCheckpoint.put("promptVersion", "long-learning-2");
+                checkpoint.setValue(h.db.mapper.writeValueAsString(legacyCheckpoint));
+                data.get("learning").atomic().save(checkpoint);
                 return true;
             }).toCompletableFuture().join();
             var restored = new EasyDataLongTermMemoryStore(h.db.data, h.db.store, h.db.mapper, () -> settings);
@@ -758,6 +784,18 @@ class LongTermMemoryIntegrationTest {
                 assertTrue(Objects.requireNonNull(prompt.getOptions().getTools()).isEmpty());
                 // 2026/11/04：整理不再硬限 3072，模型配置为 4096 时保留该更小上限。
                 assertEquals(4096, prompt.getOptions().getMaxTokens());
+                // 2026/11/08：简述只作背景，逐字原话只存在于证据映射，不重复注入详细复述。
+                var payload = h.db.mapper.readTree(assertInstanceOf(TextLLMContentPart.class,
+                        prompt.getMessages().getLast().getContents().getFirst().getContentPart()).getText());
+                assertFalse(payload.at("/segments/0").has("details"));
+                assertEquals(batch.evidence().size(), payload.path("evidenceMap").size());
+                assertTrue(payload.path("texts").size() < batch.evidence().size());
+                for (var evidence : payload.path("evidenceMap")) {
+                    assertFalse(evidence.has("text"));
+                    assertEquals(batch.evidence().stream().filter(value -> value.id().equals(evidence.path("evidenceId").asString()))
+                            .findFirst().orElseThrow().message().text(),
+                            payload.path("texts").path(evidence.path("textRef").asString()).asString());
+                }
                 var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(output.get()).build()).build();
                 return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(answer), answer, List.of(), List.of(), Map.of()));
             });

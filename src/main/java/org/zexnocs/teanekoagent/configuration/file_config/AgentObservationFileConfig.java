@@ -13,10 +13,12 @@ import org.zexnocs.teanekocore.framework.description.Description;
  * <br>2026/11/06：模型调用链与 Agent 决策阶段分别控制 INFO 日志。
  * <br>2026/11/06：按独立开关和日志级别输出精简文字汇总，去重并继续脱敏。
  *
+ * <br>2026/11/08：摘要不携带正文，调试预览与独立滚动诊断分别配置。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.4-l
- * @version 4.8.6-l
+ * @version 4.9.0-l
  */
 @Getter
 @Setter
@@ -30,11 +32,11 @@ public class AgentObservationFileConfig implements IFileConfigData {
     private boolean agentInfo = true;
 
     // 2026/11/06：默认精简文字汇总；保留旧正文总开关，新增字段不自动开放敏感诊断。
-    @Description("日志级别：INFO 日常观察，DEBUG 诊断，NONE 关闭汇总；不改变业务异常级别。")
+    @Description("摘要级别：INFO 单行日常统计，DEBUG 仅调试可见，NONE 关闭摘要及预览；独立诊断另设开关。")
     private Visibility visibility = Visibility.INFO;
-    @Description("正文总开关；关闭时不输出输入、回复、Schema、system 或工具链，推理开关独立。")
+    @Description("DEBUG 正文预览总开关；不控制独立诊断文件，推理预览开关独立。")
     private boolean includeContext = true;
-    @Description("输出首轮的当前用户消息，不重复打印历史用户及助手对话。")
+    @Description("DEBUG 预览首轮应用选择的 USER 对象；后台任务对象可能不是用户原话。")
     private boolean includeUser = true;
     @Description("输出本次最终回复，工具续轮的中间正文不重复输出。")
     private boolean includeFinalOutput = true;
@@ -46,8 +48,11 @@ public class AgentObservationFileConfig implements IFileConfigData {
     private boolean includeTools;
     @Description("汇总包含供应商实际返回的推理字段或推理摘要；未返回则标明未提供。")
     private boolean includeReasoning;
-    @Description("单条汇总正文字符上限，范围 1024–2000000，默认 16384；截断会明确标注。统计字段不受截断影响。")
-    private int maxContentCharacters = 16384;
+    @Description("DEBUG 预览总字符预算，默认1024，旧配置仍可读取；实际最大2048，每个字段最多384码点。")
+    private int maxContentCharacters = 1024;
+
+    @Description("完整统一协议请求与响应写入独立滚动诊断文件，继续隐藏凭据、链接和媒体；不进入控制台或网页日志。")
+    private boolean diagnosticLog = true;
 
     /**
      * 请求汇总的可见级别，正文开关不改变错误诊断。
