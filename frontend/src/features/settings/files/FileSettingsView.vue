@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：重新读取采用统一图标，放弃修改仍明确显示动作文字。
 import RefreshButton from '../../../shared/components/RefreshButton.vue'
@@ -12,10 +14,16 @@ import type {ModelCatalog} from '../../models/ModelTemplateEditor.vue'
 import ModelTemplateEditor from '../../models/ModelTemplateEditor.vue'
 import ModelNamePicker from '../../models/ModelNamePicker.vue'
 import ModelIcon from '../../models/ModelIcon.vue'
+import {modelConfigurationApplied} from '../../models/model-configuration-state'
 import {usePageDraft} from '../../../shared/lifecycle/page-guards'
 import type {PageIntent} from '../../../app/pages/page-contracts'
 import PluginFilter from '../../../shared/plugins/PluginFilter.vue'
-import {pluginAvailability, pluginEnabled, PluginRequestSuperseded, usePluginRequests} from '../../../shared/plugins/plugin-console'
+import {
+  pluginAvailability,
+  pluginEnabled,
+  PluginRequestSuperseded,
+  usePluginRequests
+} from '../../../shared/plugins/plugin-console'
 import {usePluginDialogs} from '../../../shared/plugins/plugin-dialogs'
 
 interface Stamp { revision: string; generation: number; current: boolean }
@@ -55,7 +63,9 @@ const fieldErrors = reactive<Record<string, string>>({})
 const rootFields = computed(() => props.modelMode ? view.value?.fields.filter(field => !field.path.startsWith('/models/')) ?? [] : view.value?.fields ?? [])
 const modelGroups = computed(() => Array.from({length: view.value?.collectionSizes['/models'] ?? 0}, (_, index) => ({index,
   fields: view.value!.fields.filter(field => field.path.startsWith(`/models/${index}/`)),
-  id: modelValue(index, 'id'), adapter: modelValue(index, 'adapter') || modelValue(index, 'id')})))
+  id: modelValue(index, 'id'), adapter: modelValue(index, 'adapter') || modelValue(index, 'id')}))
+  // 2026/11/10：只调整展示顺序，编辑与删除继续使用原文件索引。
+  .sort((left, right) => Number(right.id === drafts['/default-model-id']?.text) - Number(left.id === drafts['/default-model-id']?.text)))
 const editingGroup = computed(() => modelGroups.value.find(group => group.index === editingModelIndex.value))
 function modelValue(index: number, name: string) {
   return drafts[`/models/${index}/${name}`]?.text ?? String(view.value?.fields.find(field => field.path === `/models/${index}/${name}`)?.value ?? '')
@@ -83,11 +93,11 @@ async function probeModel(id: string) {
 }
 const configuredRoutes = computed(() => modelGroups.value.map(group => group.id))
 const modelStructuralLocked = computed(() => locked.value || !!structure.value || Object.entries(drafts).some(([path, value]) => path.startsWith('/models/') && value.action !== 'KEEP'))
-const basicModelFields = new Set(['id', 'adapter', 'model', 'api-key', 'base-url', 'api-path', 'max-tokens', 'context-window-tokens', 'context-input-ratio'])
+const basicModelFields = new Set(['id', 'adapter', 'model', 'api-key', 'base-url', 'api-path', 'max-tokens', 'context-window-tokens', 'context-input-ratio', 'image-input'])
 // 2026/11/05：连接配置置于路由和模型参数之前，其余字段继续沿用原始声明顺序。
 const modelFieldOrder: Record<string, number> = {adapter: 0, 'base-url': 1, 'api-path': 2, id: 3}
 const modelHelp: Record<string, string> = {
-  'default-model-id': '自然对话与后台任务使用此默认路由。选择后仍需保存并应用。',
+  'default-model-id': '保存后自动应用；继承默认模型的聊天与后台任务从新请求开始使用此路由。',
   id: '唯一配置路由；同一类型可以添加多条，标识不能重复。',
   adapter: '该路由实际使用的协议适配器；旧条目未填写时使用同名适配器。',
   model: '供应商的具体模型名称。可使用适配器默认模型，也可填写兼容的自定义模型。',
@@ -123,7 +133,7 @@ function modelFields(fields: Field[]) {
 }
 // 2026/11/04：已保存模型也使用同一供应商目录，选择已知型号时同步真实上下文容量。
 function selectModel(index: number, value: string) {
-  const route = modelType(modelGroups.value[index]?.adapter ?? '')
+  const route = modelType(modelGroups.value.find(group => group.index === index)?.adapter ?? '')
   const capacity = route?.contextWindows?.[value]
   const field = view.value?.fields.find(item => item.path === `/models/${index}/context-window-tokens`)
   if (capacity && field) editField(field, String(capacity))
@@ -252,28 +262,44 @@ async function deliver() {
 }
 
 async function receive(result: Receipt) {
+  // 2026/11/10：自动应用只接续本页面已确认的保存操作，固定原磁盘版本；未知结果仍查询原编号。
+  const operation = pending.value?.body.operationId ?? receipt.value?.operationId
+  if (!result || result.operationId !== operation || typeof result.diskRevision !== 'string' || !result.diskRevision
+      || !['PREPARED', 'SAVED', 'APPLIED', 'RESTART_REQUIRED', 'APPLY_FAILED', 'INDETERMINATE', 'NOT_SAVED'].includes(result.status)) {
+    throw new Error('文件操作回执无效或编号不匹配，请查询原操作结果。')
+  }
+  const savedModel = props.modelMode && pending.value?.action === 'save' && result.status === 'SAVED'
   receipt.value = result
   if (['SAVED', 'APPLIED', 'RESTART_REQUIRED', 'APPLY_FAILED', 'INDETERMINATE'].includes(result.status)) {
     // 2026/11/05：保留原操作编号供后续查询，但立即释放包含敏感值的请求体。
     pending.value = undefined
+    if (props.modelMode && result.status === 'APPLY_FAILED') error.value = '模型已保存，但应用失败；LLM 仍未确认使用新配置。' + result.note
+    if (result.status === 'INDETERMINATE') error.value = '文件操作结果尚未确认，请查询原操作回执。'
+    if (result.status === 'APPLIED' && props.modelMode) modelConfigurationApplied(result.diskRevision)
+    if (savedModel) {
+      pending.value = {id: view.value!.id, action: 'apply', body: {operationId: crypto.randomUUID(), expectedRevision: result.diskRevision}}
+      await deliver()
+      return
+    }
     await load(view.value!.id)
   }
 }
 
 async function save() {
   // 2026/11/05：通用文件保存说明覆盖所有敏感字段，不把密码等字段误称为密钥。
-  if (!await confirm('只保存明确修改的字段；未修改的敏感值、环境模板和未知字段保留。YAML 会重新排版，原注释不会保留。保存完成后仍须单独应用。')) return
+  if (!await confirm('只保存明确修改的字段；未修改的敏感值、环境模板和未知字段保留。YAML 会重新排版，原注释不会保留。'
+    + (props.modelMode ? '模型保存成功后自动应用，新请求使用新配置。' : '保存完成后仍须单独应用。'))) return
   await run(commitEdits)
 }
 
-/** 2026/11/05：完成编辑即保存，失败保留弹窗和原操作；运行应用仍需显式确认。 */
+/** 2026/11/10：模型编辑完成后保存并应用；应用失败保留真实回执，不能报告运行配置已更新。 */
 async function saveModel() {
   if (!dirty.value) { modelDialogOpen.value = false; return }
   await run(async () => {
     await commitEdits()
-    if (receipt.value?.status === 'SAVED') {
+    if (receipt.value?.status === 'APPLIED') {
       modelDialogOpen.value = false
-      notice.value = '模型已保存，可直接检测；点击“应用磁盘配置”后用于新请求。'
+      notice.value = '模型已保存并应用；新模型已加入 LLM 选择，继承默认的聊天从新请求开始使用当前默认模型。'
     }
   })
 }
@@ -316,7 +342,7 @@ async function append() {
 }
 
 async function remove(collection: Collection, index: number) {
-  if (!await confirm(`删除“${collection.label}”第 ${index + 1} 项？${props.modelMode ? '确认后立即保存到磁盘。' : '还需保存后才会修改磁盘。'}`)) return
+  if (!await confirm(`删除“${collection.label}”第 ${index + 1} 项？${props.modelMode ? '确认后立即保存并应用。' : '还需保存后才会修改磁盘。'}`)) return
   structure.value = { path: `${collection.path}/${index}`, action: 'REMOVE' }
   if (props.modelMode) await saveModel()
 }
@@ -378,25 +404,26 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
     <ElAlert v-if="notice" :title="notice" type="success" :closable="false" />
     <div class="settings-columns" :class="{'model-settings-columns': modelMode}">
       <ElCard v-if="!modelMode" shadow="never" class="target-list"><h2>本地配置</h2><PluginFilter v-model="pluginId" :items="sections" />
-        <button v-for="section in visibleSections" :key="section.id" class="target-button" :class="{ selected: view?.id === section.id }" :disabled="busy" @click="select(section.id)"><strong>{{ section.name }}</strong><code v-if="section.pluginId">{{ section.pluginId }}</code><span>{{ section.application === 'RESTART' ? '保存后需重启' : '支持本进程应用' }}</span></button>
+        <button v-for="section in visibleSections" :key="section.id" class="target-button" :class="{ selected: view?.id === section.id }" :disabled="busy" @click="select(section.id)"><strong>{{ section.name }}</strong><code v-if="section.pluginId"><PluginLabel :plugin-id="section.pluginId" /></code><span>{{ section.application === 'RESTART' ? '保存后需重启' : '支持本进程应用' }}</span></button>
         <ElEmpty v-if="!visibleSections.length && !busy" description="没有已开放的配置区" />
       </ElCard>
       <div v-if="view && pluginEnabled(view.pluginId) && (!pluginId || view.pluginId === pluginId)" class="settings-editor">
-        <ElCard shadow="never"><h2>{{ view.name }}</h2><code v-if="view.pluginId">{{ view.pluginId }}</code>
+        <ElCard shadow="never"><h2>{{ view.name }}</h2><code v-if="view.pluginId"><PluginLabel :plugin-id="view.pluginId" /></code>
           <p v-if="view.description" class="config-description file-explanation">{{ view.description }}</p>
           <ElTag :type="view.runtime.current && view.runtime.revision === view.revision ? 'success' : 'warning'">{{ view.runtime.current && view.runtime.revision === view.revision ? '运行与磁盘一致' : '磁盘与运行状态不同' }}</ElTag>
           <!-- 2026/11/04：文件与字段说明直接显示，版本等技术细节仍由高级模式控制。 -->
-          <p class="config-description">保存写入磁盘后仍需单独应用。移除声明会恢复默认行为；预检不会请求远端 API。</p><p v-if="advanced" class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
+          <!-- 2026/11/10：模型页自动接续应用，普通文件页仍由用户单独应用。 -->
+          <p class="config-description">{{ modelMode ? '保存成功后自动应用，新请求使用新配置。' : '保存写入磁盘后仍需单独应用。' }}移除声明会恢复默认行为；预检不会请求远端 API。</p><p v-if="advanced" class="small revision">{{ view.exists ? '磁盘文件已存在' : '当前是未保存的模板' }} · 运行代次 {{ view.runtime.generation }}<br />磁盘版本：{{ view.revision }}<br />运行版本：{{ view.runtime.revision }}</p>
           <FileFieldEditor v-for="field in rootFields" :key="field.path" :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" />
         </ElCard>
-        <div v-if="modelMode" class="editor-heading model-directory-toolbar"><h3>已添加模型 · {{ modelGroups.length }}</h3><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /></div><p v-if="modelMode && structure" class="small muted">模型条目已加入草稿，保存后可继续编辑；模型配置不会在保存时自动应用。</p>
+        <div v-if="modelMode" class="editor-heading model-directory-toolbar"><h3>已添加模型 · {{ modelGroups.length }}</h3><ModelTemplateEditor :catalog="modelCatalog" :configured="configuredRoutes" :disabled="modelStructuralLocked || (view.collectionSizes['/models'] ?? 0) >= 64" :has-default="!!drafts['/default-model-id']?.text" @append="appendModel" /></div><p v-if="modelMode && structure" class="small muted">模型条目已加入草稿，保存成功后将自动应用。</p>
         <!-- 2026/11/04：摘要目录不挂载全部表单；仅编辑选中模型，原文件草稿与事务保持统一。 -->
         <!-- 2026/11/05：编辑与真实检测独立，卡片只显示当前文件版本的结果。 -->
         <div v-if="modelMode" class="model-config-grid"><article v-for="group in modelGroups" :key="group.index" class="model-summary-card">
           <button class="model-summary-open" :disabled="locked || !!probing" @click="editModel(group.index)"><div class="model-summary-heading"><ModelIcon :icon="modelType(group.adapter)?.icon" :name="modelType(group.adapter)?.name ?? group.adapter" /><strong>{{ group.id || '未命名路由' }}</strong><ElTag v-if="drafts['/default-model-id']?.text === group.id" size="small" type="success">默认</ElTag></div><p>{{ modelValue(group.index, 'model') || '尚未填写型号' }}</p><small class="muted">{{ modelType(group.adapter)?.name ?? group.adapter }} · 输出 {{ modelValue(group.index, 'max-tokens') }} token</small><small class="muted">上下文 {{ modelValue(group.index, 'context-window-tokens') }} token</small></button>
           <div class="model-probe-actions"><ElTag :type="probes[group.id]?.status === 'SUCCESS' ? 'success' : probes[group.id]?.status === 'FAILED' ? 'danger' : 'info'">{{ probing === group.id ? '检测中' : probes[group.id]?.status === 'SUCCESS' ? '检测成功' : probes[group.id]?.status === 'FAILED' ? '检测失败' : '未检测' }}</ElTag><ElButton :disabled="locked || dirty || !!probing" :loading="probing === group.id" @click="probeModel(group.id)">检测模型</ElButton></div>
           <p v-if="probes[group.id]?.status === 'FAILED'" class="small model-probe-error">{{ probes[group.id]?.reason }}</p></article></div>
-        <ElDialog v-model="modelDialogOpen" title="编辑模型" width="min(760px, 95vw)" :close-on-click-modal="false"><ElAlert v-if="error" :title="error" type="error" :closable="false" /><p class="small muted">点击完成编辑将立即保存。YAML 会重新排版，原注释不保留；未修改的密钥和环境模板保留。应用到运行进程仍需单独确认。</p>
+        <ElDialog v-model="modelDialogOpen" title="编辑模型" width="min(760px, 95vw)" :close-on-click-modal="false"><ElAlert v-if="error" :title="error" type="error" :closable="false" /><p class="small muted">点击完成编辑将立即保存。YAML 会重新排版，原注释不保留；未修改的密钥和环境模板保留。保存成功后自动应用，新请求使用新配置。</p>
         <ElCard v-for="group in editingGroup ? [editingGroup] : []" :key="group.index" shadow="never" class="model-config-card"><div class="editor-heading"><h3>{{ modelType(group.adapter)?.name ?? (group.id || '未命名模型') }}</h3><ElButton type="danger" text :disabled="modelStructuralLocked" @click="remove({path: '/models', label: '模型', maximum: 64}, group.index)">删除模型</ElButton></div>
           <p class="small muted">服务地址和接口路径可直接查看与修改；检测会发起一次真实模型请求。</p>
           <template v-for="field in modelFields(group.fields)" :key="field.path"><div v-if="field.path.endsWith('/model')" class="settings-field"><div><label>{{ field.label }}</label><p class="config-description">{{ displayField(field).description }}</p></div><ModelNamePicker :model-value="drafts[field.path]!.text" :names="modelType(group.adapter)?.models ?? []" :disabled="locked || fieldLocked(field.path)" :label="field.label" @update:model-value="value => editField(field, value)" @select="value => selectModel(group.index, value)" /></div><FileFieldEditor v-else :field="displayField(field)" :draft="drafts[field.path]!" :disabled="locked || fieldLocked(field.path)" :advanced="advanced" :inputs="modelCatalog.inputs" :choices="choices(field)" @action="value => drafts[field.path]!.action = value" @text="value => editField(field, value)" @error="value => fieldErrors[field.path] = value" /></template>
@@ -411,8 +438,8 @@ onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload)
         </ElCard>
         <ElCard v-if="dirty" shadow="never"><h3>本次修改</h3><ul><li v-for="line in summary" :key="line" class="small revision">{{ line }}</li></ul><p class="small muted">保存将重新排版 YAML，原注释不会保留。未修改的值、环境模板和未知配置项保留。</p></ElCard>
         <ElCard v-if="pending" shadow="never" class="pending-operation"><h3>原操作尚待确认</h3><p class="small revision">操作编号：{{ pending.body.operationId }}</p><p class="small muted">连接中断不代表写入失败。先查询原回执；如尚无记录，可使用原请求重试。</p><ElButton :disabled="busy" @click="query">查询原操作</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton></ElCard>
-        <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">{{ modelMode ? '保存其他修改' : '保存到磁盘' }}</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton v-if="dirty" :disabled="busy" @click="discard">放弃修改</ElButton><RefreshButton v-else :disabled="busy" label="重新读取配置文件" @click="discard" /></div>
-        <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>{{ statusNames[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>{{ new Date(receipt.at).toLocaleString('zh-CN') }}{{ receipt.replayed ? ' · 原结果重放' : '' }} · 历史回执不代表当前进程或磁盘仍是同一状态。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
+        <div class="editor-actions"><ElButton v-show="advanced" :disabled="locked || !dirty" @click="validate">仅预检</ElButton><ElButton type="primary" :disabled="locked || !dirty" @click="save">{{ modelMode ? '保存并应用' : '保存到磁盘' }}</ElButton><ElButton :disabled="locked || dirty || !view.exists" @click="apply">{{ view.application === 'RESTART' ? '确认重启要求' : '应用磁盘配置' }}</ElButton><ElButton v-if="dirty" :disabled="busy" @click="discard">放弃修改</ElButton><RefreshButton v-else :disabled="busy" label="重新读取配置文件" @click="discard" /></div>
+        <ElCard v-if="receipt && (advanced || receipt.status === 'INDETERMINATE')" shadow="never" class="operation-receipt"><h3>{{ statusNames[receipt.status] ?? receipt.status }}</h3><p>{{ receipt.note }}</p><p>操作编号：{{ receipt.operationId }}</p><p>{{ new Date(receipt.at).toLocaleString('zh-CN') }}{{ receipt.replayed ? ' · 原结果重放' : '' }} · 历史回执不代表当前进程或磁盘仍是同一状态。</p><ElButton :disabled="busy" @click="query">查询此回执</ElButton></ElCard>
       </div>
       <!-- 2026/11/07：系统模型配置只提示本机文件授权，不把缺失入口误导为业务插件开关。 -->
       <ElEmpty v-else-if="modelMode && !busy && !error" description="系统模型配置暂不可用，请检查本机文件配置授权是否包含 agent.models" />

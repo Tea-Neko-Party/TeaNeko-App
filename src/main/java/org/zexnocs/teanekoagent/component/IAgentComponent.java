@@ -19,11 +19,12 @@ import java.util.Set;
  * 2026/11/04：提供可由插件扩展的声明式装配接口，前后端复用同一字段目录。
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
+ * <br>2026/11/10：公开可选择模型的字段契约及安全配置投影。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 public interface IAgentComponent {
     /** @return 默认参数，只包含可公开的模板值。 */
@@ -72,11 +73,23 @@ public interface IAgentComponent {
      * @param name 序列化参数名
      * @param label 中文名称
      * @param description 用途与限制
-     * @param kind BOOLEAN、NUMBER、TEXT、LONG_TEXT、JSON 或 SECRET
+     * @param kind BOOLEAN、NUMBER、TEXT、LONG_TEXT、JSON、SECRET 或 MODEL
+     * @param probe 2026/11/10：可选的已保存模型检测端点，空字符串表示不提供检测
      * @author zExNocs
      * @date 2026/11/04
      * @since 4.8.0-l
      * @version 4.8.0-l
      */
-    record Field(String name, String label, String description, String kind) {}
+    record Field(String name, String label, String description, String kind, String probe) {
+        /**
+         * 2026/11/10：普通字段沿用无检测动作的声明。
+         * @param name 参数名
+         * @param label 中文名称
+         * @param description 用途说明
+         * @param kind 字段类型
+         */
+        public Field(String name, String label, String description, String kind) {
+            this(name, label, description, kind, "");
+        }
+    }
 }

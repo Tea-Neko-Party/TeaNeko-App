@@ -48,14 +48,15 @@ import static org.mockito.Mockito.when;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：检查就绪失败的阶段诊断，继续验证凭据脱敏与恢复。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
+ *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 class AgentReadinessServiceTest {
     private static final String SECRET = "offline-sensitive-sentinel";
@@ -74,7 +75,7 @@ class AgentReadinessServiceTest {
         when(config.read()).thenReturn(settings);
         when(models.resolveOptions(any())).thenReturn(options);
         when(models.getModel("test")).thenReturn(model);
-        when(model.getCapabilities("local-model")).thenReturn(ModelCapabilities.textOnly());
+        when(model.inputCapabilities(any())).thenReturn(ModelCapabilities.textOnly());
         when(credentials.require("test")).thenReturn(new LLMProviderAccess(SECRET, null, null));
     }
 

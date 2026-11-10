@@ -11,6 +11,8 @@ import {consolePage, consolePages} from './page-registry'
 import type {PageContext, PageEnvironment, PageIntent, PageOutletHandle} from './page-contracts'
 import {pageContextKey} from './page-contracts'
 import {pluginAvailability, PluginRequestSuperseded} from '../../shared/plugins/plugin-console'
+// 2026/11/10：插件专页标题使用统一名称标签，稳定 ID 留在悬停说明中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 
 const props = defineProps<{environment: PageEnvironment; initialPage: ConsolePageKey}>()
 const current = ref(props.initialPage)
@@ -138,7 +140,7 @@ defineExpose({navigate, current, title, changing})
 
 <template>
   <div v-show="!selected?.headingHidden.value" class="page-heading">
-    <div><h1>{{ title }}</h1><code v-if="pluginId" class="small muted">{{ pluginId }}</code></div>
+    <div><h1>{{ title }}</h1><PluginLabel v-if="pluginId" :plugin-id="pluginId" /></div>
     <RefreshButton v-if="selected?.hasRefresh.value" :loading="refreshing || environment.busy.value" @click="refresh" label="刷新" />
   </div>
   <p v-if="changing" role="status" class="small muted">正在打开页面…</p>

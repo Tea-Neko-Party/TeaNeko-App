@@ -19,10 +19,11 @@ import java.util.Map;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/05：用量告警给出请求号、报告量、估算量、阈值与模型次数，保留原冷却策略。
+ * <br>2026/11/10：日志注明整轮累计口径及阈值配置来源，与每次模型输出额度区分。
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.9.1-l
  */
 @EventListener
 public final class AgentTokenAlerts {
@@ -64,11 +65,15 @@ public final class AgentTokenAlerts {
                 if (previous == null && states.size() >= 1000) { states.remove(states.keySet().iterator().next()); }
                 states.put(key, new State(now.plusSeconds(cooldown), 0));
             }
-            logger.warn("Agent 用量告警", "单轮 token 用量达到本地阈值。请求=" + report.requestId()
+            // 2026/11/10：累计告警不修改每次模型请求的 max-tokens，也不用于拒绝本轮请求。
+            logger.warn("Agent 用量告警", "单轮累计 token 用量达到告警阈值。请求=" + report.requestId()
                     + "，供应商报告=" + report.reportedTokens() + "，估算=" + report.estimatedTokens()
                     + "，阈值=" + threshold + "，模型调用=" + report.modelCalls()
                     + "，未知用量调用=" + report.unknownUsageAttempts()
-                    + "；这是用量提醒，不代表请求失败或精确费用。冷却期间按实例和作用域合并。");
+                    + "，阈值配置=" + prefix + "alert-tokens"
+                    + "，统计口径=本轮全部模型调用的总用量（含输入及输出）"
+                    + "；仅提醒，不限制调用，也不覆盖每次模型的 max-tokens 或上下文容量。"
+                    + "不代表精确费用；冷却期间按实例和作用域合并。");
             events.pushEvent(new AgentTokenAlertEvent(new AgentTokenAlertEvent.Alert(report, threshold, suppressed)));
         } catch (RuntimeException unavailable) { /* 告警配置或监听故障不能改变原轮次结果。 */ }
     }

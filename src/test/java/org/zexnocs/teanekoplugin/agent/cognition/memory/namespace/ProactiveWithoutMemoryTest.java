@@ -1,26 +1,13 @@
 package org.zexnocs.teanekoplugin.agent.cognition.memory.namespace;
 
-import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
-
-// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
-import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
-import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
-import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IConversationHistory;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.AgentPersonalitySnapshot;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource;
-import org.zexnocs.teanekoplugin.agent.social.proactive.adapter.ProactiveService;
-import org.zexnocs.teanekoplugin.agent.social.proactive.adapter.ProactiveTargets;
-import org.zexnocs.teanekoagent.runtime.operation.EasyDataAgentOperationStore;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
 import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.integration.message.AgentAutomaticAccess;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentFactory;
 import org.zexnocs.teanekoagent.runtime.AgentRegistry;
@@ -29,6 +16,7 @@ import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.IAgentTurnService;
 import org.zexnocs.teanekoagent.runtime.monitor.AgentRuntimeMonitor;
+import org.zexnocs.teanekoagent.runtime.operation.EasyDataAgentOperationStore;
 import org.zexnocs.teanekoagent.runtime.trigger.AgentTriggerGate;
 import org.zexnocs.teanekoapp.client.TeaNekoClientScanner;
 import org.zexnocs.teanekoapp.client.api.ITeaNekoClient;
@@ -43,6 +31,13 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IConversationHistory;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.AgentPersonalitySnapshot;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.IAgentPersonalitySource;
+import org.zexnocs.teanekoplugin.agent.social.proactive.adapter.ProactiveService;
+import org.zexnocs.teanekoplugin.agent.social.proactive.adapter.ProactiveTargets;
+import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
 
 import java.time.Clock;
 import java.util.Optional;
@@ -64,17 +59,21 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 /**
  * 无记忆装配的主动活动组合验收，仅替换模型结果和平台网络，保留真实发送与持久防重。
  * <br>2026/11/06：覆盖有文本生成、平台确认、重建宿主防重及无文本弃言。
  * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
  *
  * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ * <br>2026/11/10：验证旧装配省略候选时限时采用九十秒默认值。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(15)
 class ProactiveWithoutMemoryTest {
@@ -120,6 +119,9 @@ class ProactiveWithoutMemoryTest {
             when(personality.verify(any(), any(), any())).thenReturn(CompletableFuture.completedStage(null));
             var turns = mock(IAgentTurnService.class);
             when(turns.prepare(any(), any(), any())).thenAnswer(call -> {
+                // 2026/11/10：真实旧装配省略新参数时，候选控制不再固定为三十秒。
+                org.zexnocs.teanekocore.actuator.execution.ExecutionControl candidateControl = call.getArgument(2);
+                org.junit.jupiter.api.Assertions.assertTrue(candidateControl.remainingTime().orElseThrow().toSeconds() > 60);
                 AgentRunRequest request = call.getArgument(1);
                 assertNull(request.memoryReference());
                 assertEquals(AgentActivity.PROACTIVE, request.activity());

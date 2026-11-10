@@ -43,11 +43,12 @@ import java.util.Optional;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：接收可选 image-input 配置，省略时保留原能力判断。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Getter
 @Setter
@@ -114,6 +115,11 @@ public class LLMModelFileConfigParameter {
     @Nullable
     @org.zexnocs.teanekocore.framework.description.Description("是否请求思考模式，实际能力由供应商与型号决定。")
     private Boolean thinking;
+
+    /** 2026/11/10：显式允许兼容服务的自定义型号输入图片；空值沿用协议默认。 */
+    @Nullable
+    @org.zexnocs.teanekocore.framework.description.Description("图片输入声明；true 允许、false 禁止，省略则按协议已知型号判断。")
+    private Boolean imageInput;
 
     /**
      * 模型最多生成的 token 数量。
@@ -255,6 +261,8 @@ public class LLMModelFileConfigParameter {
         var overrides = LLMModelOptions.builder()
                 .provider(modelId.map(LLMModelId::id).orElse(blankToNull(provider)))
                 .model(blankToNull(model))
+                // 2026/11/10：复制及合并保留显式图片输入声明。
+                .imageInput(imageInput)
                 .thinking(thinking)
                 .maxTokens(maxTokens)
                 .contextWindow(context)

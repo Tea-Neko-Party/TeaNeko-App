@@ -25,6 +25,7 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 
@@ -36,8 +37,10 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiFunction;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -58,13 +61,90 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
+ * <br>2026/11/10：校验错误跨异步包装保留位置及能力对照，图片、正文和未知类型不进入诊断。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class LLMImageCapabilityTest {
+    /** 2026/11/10：角色和细节不匹配必须报告实际位置及允许值，同时隐藏图片地址和消息正文。 */
+    @Test
+    void inputFailureReportsPositionAndCapabilityComparisonWithoutSensitiveContent() {
+        var first = LLMUserMessage.builder().contents(new LLMContentListBuilder().addText("private-chat").build()).build();
+        var second = LLMSystemMessage.builder().contents(new LLMContentListBuilder().addText("private-system")
+                .addImage("https://example.test/private-image?key=private-key", LLMImageDetail.ORIGINAL).build()).build();
+        var failure = assertThrows(LLMInputValidationException.class, () -> LLMInputValidator.validate(
+                List.of(first, second), ModelCapabilities.userImages(Set.of(LLMImageDetail.AUTO))));
+        var diagnostic = FailureDiagnostic.from(new java.util.concurrent.CompletionException(failure));
+        String reason = diagnostic.description();
+        assertTrue(reason.contains("messages[1].contents[1].image"));
+        assertTrue(reason.contains("要求=允许图片角色=[USER]，允许图片细节=[AUTO]"));
+        assertTrue(reason.contains("实际=图片角色=SYSTEM，图片细节=ORIGINAL"));
+        assertTrue(reason.contains("发送前"));
+        assertFalse(diagnostic.toString().contains("private-"));
+        assertFalse(reason.contains("\n"));
+        assertNull(diagnostic.httpStatus());
+    }
+
+    /** 2026/11/10：未知兼容型号明确报缺少图片声明；启用后通过同一预检且输出额度仍由模型决定。 */
+    @Test
+    void explicitImageDeclarationChangesAdmissionWithoutReducingOutputLimit() {
+        var model = new OpenAIResponsesModel(mock(IAPIResponseService.class), mock(ICredentialResolver.class));
+        var options = LLMModelOptions.builder().provider("openai").model("compatible-vision")
+                .maxTokens(163840).build();
+        var prompt = imagePrompt(options.getModel(), LLMImageDetail.AUTO);
+        var failure = assertThrows(LLMInputValidationException.class, () -> LLMInputValidator.validate(
+                prompt.getMessages(), model.inputCapabilities(options)));
+        assertTrue(FailureDiagnostic.from(failure).description().contains("当前模型未声明图片输入能力"));
+        var enabled = LLMModelOptions.merge(options, LLMModelOptions.builder().imageInput(true).build());
+        assertDoesNotThrow(() -> LLMInputValidator.validate(prompt.getMessages(), model.inputCapabilities(enabled)));
+        var request = org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesMapper
+                .toRequest(prompt, enabled, "private-key");
+        var json = new tools.jackson.databind.ObjectMapper().valueToTree(request);
+        assertEquals(163840, json.path("max_output_tokens").asInt());
+    }
+
+    /** 2026/11/10：不匹配的自定义内容只报告结构类别，未知 type 和正文不能进入公开原因。 */
+    @Test
+    void malformedContentReportDoesNotEchoUnknownTypeOrText() {
+        var content = mock(org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMContent.class);
+        when(content.getType()).thenReturn("private-type\nprivate-key");
+        when(content.getContentPart()).thenReturn(
+                new org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart("private-text"));
+        var failure = assertThrows(LLMInputValidationException.class, () -> LLMInputValidator.requirePart(content));
+        String reason = FailureDiagnostic.from(failure).description();
+        assertTrue(reason.contains("类型声明=未知类型（原值已隐藏），内容实体=文本"));
+        assertFalse(reason.contains("private-"));
+        assertFalse(reason.contains("\n"));
+    }
+
+    /** 2026/11/10：显式图片声明贯穿配置、快照和能力准入，本地声明不发送到服务端。 */
+    @Test
+    void explicitVisionDeclarationSupportsCompatibleUnknownModels() {
+        var json = tools.jackson.databind.json.JsonMapper.builder()
+                .propertyNamingStrategy(tools.jackson.databind.PropertyNamingStrategies.KEBAB_CASE).build();
+        var entry = json.readValue("{\"id\":\"compatible\",\"adapter\":\"openai\",\"model\":\"custom-vision\",\"image-input\":true,\"max-tokens\":256,\"context-window-tokens\":8192}",
+                LLMModelFileConfigParameter.class);
+        var model = new OpenAIResponsesModel(mock(IAPIResponseService.class), mock(ICredentialResolver.class));
+        var options = entry.toOptions(model.getBaseOptions());
+        assertTrue(model.inputCapabilities(options).supportsImages());
+        assertEquals(Boolean.TRUE, new LLMModelOptionsSnapshot(options).toOptions().findImageInput().orElseThrow());
+        var disabled = LLMModelOptions.merge(options, LLMModelOptions.builder().imageInput(false).build());
+        assertFalse(model.inputCapabilities(disabled).supportsImages());
+        var known = LLMModelOptions.builder().model("gpt-5.5").imageInput(true).build();
+        assertTrue(model.inputCapabilities(known).imageDetails().contains(LLMImageDetail.ORIGINAL));
+        var request = org.zexnocs.teanekoagent.llm.instance.openai.responses.OpenAIResponsesMapper.toRequest(
+                imagePrompt("custom-vision", LLMImageDetail.LOW), options, "test-secret");
+        String encoded = json.writeValueAsString(request);
+        assertTrue(encoded.contains("input_image"));
+        assertFalse(encoded.contains("image-input"));
+        assertFalse(encoded.contains("imageInput"));
+        assertFalse(encoded.contains("test-secret"));
+    }
+
     private static final List<BiFunction<IAPIResponseService, ICredentialResolver, AbstractLLMModel>> MODELS = List.of(
             DeepSeekChatModel::new, OpenAIResponsesModel::new, KimiChatModel::new, OpenAIChatCompletionsModel::new);
 

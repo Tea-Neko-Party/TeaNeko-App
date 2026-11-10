@@ -1,15 +1,13 @@
 package org.zexnocs.teanekoplugin.agent.cognition.memory.namespace;
 
-import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.http.HttpHeaders;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
@@ -22,16 +20,6 @@ import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.EasyDataStickerCatalog;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAssetStore;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.LLMStickerAnalyzer;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.WeightedStickerAdmission;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.configuration.AgentStickerConfig;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.runtime.AgentFactory;
 import org.zexnocs.teanekoagent.runtime.AgentRegistry;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
@@ -47,6 +35,15 @@ import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAssetStore;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.LLMStickerAnalyzer;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.WeightedStickerAdmission;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.configuration.AgentStickerConfig;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
+import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
 
 import javax.imageio.IIOImage;
 import javax.imageio.ImageIO;
@@ -85,6 +82,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+
 // 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
@@ -103,13 +102,14 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/06：适配真实类型化 JSON 服务，保留原领域与提交边界回归。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：注入原子移动和读取权限失败，验证安全诊断与资源保留。
- *
  * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ *
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(15)
 class StickerAssetsAndModelTest {
@@ -198,7 +198,7 @@ class StickerAssetsAndModelTest {
             // 2026/11/05：在同一真实分析流程中切换终止结果，不再创建重复装配夹具。
             var status = new AtomicReference<>(LLMInteractionResult.Status.SUCCESS);
             var diagnostic = new AtomicReference<FailureDiagnostic>();
-            when(interactions.interact(any(),any(),any(),any(),any())).thenAnswer(call->{
+            when(interactions.interactSettled(any(),any(),any(),any(),any())).thenAnswer(call->{
                 ILLMPrompt prompt=call.getArgument(0);LLMInteractionSettings limits=call.getArgument(3);
                 assertEquals(1,limits.limits().maxModelCalls());assertEquals(0,limits.limits().maxToolCalls());assertTrue(Objects.requireNonNull(Objects.requireNonNull(prompt.getOptions()).getTools()).isEmpty());
                 // 2026/11/04：视觉生成保留模型配置的完整输出额度。
@@ -210,7 +210,18 @@ class StickerAssetsAndModelTest {
                         List.of(), List.of(), Map.of()).withFailure(diagnostic.get()));
             });
             var json = LLMJsonTestSupport.create(interactions, db.mapper);
-            var beans=context.getBeanFactory();beans.registerSingleton("json", json);beans.registerSingleton("data",db.data);beans.registerSingleton("mapper",db.mapper);beans.registerSingleton("files",files);beans.registerSingleton("configs",configs);
+            // 2026/11/10：本测试固定独立模型选择，仍复用真实视觉调用及资源生命周期。
+            var selections = mock(org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelSelection.class);
+            when(selections.plan(any(), anyString())).thenReturn(
+                    new org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelSelection.Plan(
+                            "test", Optional.empty(), "fixed"));
+            var beans = context.getBeanFactory();
+            beans.registerSingleton("selections", selections);
+            beans.registerSingleton("json", json);
+            beans.registerSingleton("data", db.data);
+            beans.registerSingleton("mapper", db.mapper);
+            beans.registerSingleton("files", files);
+            beans.registerSingleton("configs", configs);
             beans.registerSingleton("manager",new AgentScopeConfigManager());beans.registerSingleton("gate",gate);beans.registerSingleton("factory",new AgentFactory(agents));beans.registerSingleton("interactions",interactions);
             beans.registerSingleton("virtualExecutor",mock(ExecutorService.class));beans.registerSingleton("taskExecutor",mock(ScheduledExecutorService.class));beans.registerSingleton("logger",mock(ILogger.class));beans.registerSingleton("scanner",new BeanScanner(context,mock(ILogger.class)));
             // 2026/11/05：采集配置已改用客户端缓存目录，局部上下文同步提供该依赖。
@@ -227,7 +238,7 @@ class StickerAssetsAndModelTest {
             assertTrue(analyzer.ready(source, file.snapshot()));
             var prepared=new IStickerAssetStore.Prepared(new Stickers.Blob("0".repeat(64),"png",1,1,1,1),List.of("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII="),"静态图片");
             // 本测试使用直接执行域，避免模拟线程池吞掉异步解码。
-            try(var direct=new LLMStickerAnalyzer(context.getBeanProvider(IAgentFactory.class), gate, json, files, AgentComponentFixtures.access(configs, context.getBean(AgentScopeConfigManager.class)), db.mapper, Runnable::run)){
+            try(var direct=new LLMStickerAnalyzer(context.getBeanProvider(IAgentFactory.class), gate, json, files, AgentComponentFixtures.access(configs, context.getBean(AgentScopeConfigManager.class)), db.mapper, selections, mock(ILogger.class), Runnable::run)){
                 direct.start().toCompletableFuture().join();
                 assertEquals(Stickers.Kind.ILLUSTRATION,direct.analyze(source,prepared,file.snapshot(),control).toCompletableFuture().join().kind());
                 text.set("{\"kind\":\"STICKER\",\"private-value\":\"private-model-output\"}");
@@ -265,7 +276,7 @@ class StickerAssetsAndModelTest {
                 assertFalse(carried.toString().contains("private-model-output"));
                 control.checkActive();
             }
-            verify(interactions, times(5)).interact(any(), any(), any(), any(), any());
+            verify(interactions, times(5)).interactSettled(any(), any(), any(), any(), any());
         }
     }
     /**

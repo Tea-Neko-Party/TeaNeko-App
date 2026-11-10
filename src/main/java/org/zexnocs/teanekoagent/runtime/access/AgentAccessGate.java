@@ -32,20 +32,19 @@ import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason
  * 新 Agent 所有活动的统一准入检查，先验证实例和 scope，再读取运行配置或凭据。
  * 管理注册、注销与诊断入口不通过本门控执行，从而允许未注册作用域开通功能。
  * <br>2026/11/03：明确拒绝管理主体直接进入聊天或模型活动。
- *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
  * <br>2026/11/04：读取聊天模型覆盖并保持共享定义不变，准入期间切换仍拒绝旧快照。
- *
  * <br>2026/11/04：模型就绪检查使用当前聊天的固定装配定义。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
- *
  * <br>2026/11/06：聊天路由覆盖仅替换身份，不重置定义中的 JSON 输出合同。
+ * <br>2026/11/10：允许活动指定独立模型路由，仍复核原聊天与组件资格。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.3-l
+ * @version 4.9.1-l
  */
 public final class AgentAccessGate {
     private final IAgentRegistry registry;
@@ -91,6 +90,20 @@ public final class AgentAccessGate {
      * @return 明确准入结果，不执行模型、工具或平台操作
      */
     public AgentAccessDecision evaluate(AgentHandle handle, AgentActorContext actor, AgentActivity activity) {
+        // 2026/11/10：普通活动保留聊天模型覆盖，独立模型活动通过具名重载选择路由。
+        return evaluate(handle, actor, activity, null);
+    }
+
+    /**
+     * 2026/11/10：允许受信宿主为独立活动选择模型，全部登记、策略和就绪校验仍执行。
+     * @param handle 宿主实例
+     * @param actor 可信活动身份
+     * @param activity 活动类别
+     * @param modelRoute 独立模型路由；null 跟随聊天，空字符串选择系统默认
+     * @return 当前活动的准入及模型快照
+     */
+    public AgentAccessDecision evaluate(AgentHandle handle, AgentActorContext actor, AgentActivity activity,
+                                        @Nullable String modelRoute) {
         Objects.requireNonNull(handle, "Agent 实例不能为空。");
         Objects.requireNonNull(actor, "请求身份不能为空。");
         Objects.requireNonNull(activity, "Agent 活动不能为空。");
@@ -118,10 +131,11 @@ public final class AgentAccessGate {
         try {
             // 2026/11/04：聊天路由优先于文件默认，定义中的其他模型选项和能力保持不变。
             var definition = handle.definition();
-            if (!policy.modelRoute().isEmpty()) {
+            if (modelRoute != null || !policy.modelRoute().isEmpty()) {
                 // 2026/11/06：只覆盖路由，避免默认 TEXT 清除原 JSON 合同。
                 var options = definition.modelOptions().toOptions();
-                options.setProvider(policy.modelRoute());
+                // 2026/11/10：独立活动路由优先，空路由让模型服务动态解析系统默认。
+                options.setProvider(modelRoute == null ? policy.modelRoute() : modelRoute.isEmpty() ? null : modelRoute);
                 definition = new org.zexnocs.teanekoagent.runtime.AgentDefinition(definition.id(),
                         new org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot(options),
                         definition.activities(), definition.features());

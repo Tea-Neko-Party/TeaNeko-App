@@ -15,6 +15,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.savedrequest.NullRequestCache;
 import tools.jackson.databind.ObjectMapper;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -39,11 +40,12 @@ import java.util.Set;
  * <br>2026/11/05：机器入口允许内网直接 WS，沿用独立令牌校验；网页 API 继续要求 HTTPS。
  * <br>2026/11/07：向管理员开放既有在途管理调用只读入口，Core 任务查询不再被默认拒绝阻断。
  * <br>2026/11/07：插件管理固定路由接入原会话与防伪链，资源授权仍由本地白名单决定。
+ * <br>2026/11/10：接入上层声明的管理员入口，宿主不维护插件业务路径清单。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Configuration(proxyBeanMethods = false)
 @EnableWebSecurity
@@ -53,10 +55,12 @@ public class WebSecurityConfig {
      * @param http 框架安全构建器
      * @param credentials 唯一本地认证提供方
      * @param mapper 安全 DTO 序列化
+     * @param routes 上层模块静态声明的管理员入口
      * @return 所有请求经过的安全链
      */
     @Bean
-    public SecurityFilterChain webSecurity(HttpSecurity http, WebCredentials credentials, ObjectMapper mapper) {
+    public SecurityFilterChain webSecurity(HttpSecurity http, WebCredentials credentials, ObjectMapper mapper,
+            List<IWebAdminRoutes> routes) {
         // 2026/11/05：只为已存在的聊天名称 GET 接口补授权，不开放任意目标子路径或写操作。
         http.authenticationProvider(credentials)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -66,7 +70,12 @@ public class WebSecurityConfig {
                         .sessionFixation(SessionManagementConfigurer.SessionFixationConfigurer::changeSessionId))
                 .csrf(csrf -> csrf.ignoringRequestMatchers("/ws/**"))
                 .addFilterBefore(new WebAccessFilter(credentials, mapper), CsrfFilter.class)
-                .authorizeHttpRequests(auth -> auth
+                .authorizeHttpRequests(auth -> {
+                    // 2026/11/10：仅初始化时汇入声明；统一要求管理员，会话与防伪过滤器保持生效。
+                    for (var route : routes) {
+                        auth.requestMatchers(route.requests()).hasRole("WEB_ADMIN");
+                    }
+                    auth
                         .requestMatchers(HttpMethod.GET, "/console/", "/console/index.html", "/console/assets/**",
                                 "/api/v1/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
@@ -131,7 +140,8 @@ public class WebSecurityConfig {
                                 return new AuthorizationDecision(false);
                             }
                         })
-                        .anyRequest().denyAll())
+                        .anyRequest().denyAll();
+                })
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, failure) -> WebResponses.json(response, mapper,
                                 401, new WebResponses.Error("LOGIN_REQUIRED", "请先登录。")))

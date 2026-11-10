@@ -9,15 +9,18 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
@@ -33,6 +36,7 @@ import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLayeredMemoryStore;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLongTermMemoryStore;
@@ -109,11 +113,12 @@ import static org.mockito.Mockito.when;
  *
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
  * <br>2026/11/08：验证内容去重、提示升级后的成功检查点和紧凑学习输入。
+ * <br>2026/11/10：生成器夹具沿用真实排空接口和预算回执，纠错不能削弱严格候选检查。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.1-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(25)
 class LongTermMemoryIntegrationTest {
@@ -769,9 +774,12 @@ class LongTermMemoryIntegrationTest {
      * 实际学习适配器保持统一门控与无工具请求，严格拒绝模型额外字段，释放自有实例。
      * 2026/11/04：验证统一预算不扩大宿主模型的输出配置。
      * 2026/11/05：联合输出形状错误明确拒绝，解析错误不携带模型原文。
+     * 2026/11/10：有限纠错通过排空接口返回完整用量，原业务输入在追加反馈后仍保持一致。
      */
     @Test void usesGuardedModelAdapterAndStrictCandidateSchema() {
-        try (var h = new Harness(); var registry = new AgentRegistry(); var control = ExecutionControl.create()) {
+        try (var h = new Harness(); var registry = new AgentRegistry();
+             var control = ExecutionControl.create(new LLMCallLimits(20, 0, 0).newBudget());
+             var timers = Executors.newSingleThreadScheduledExecutor()) {
             h.medium("我喜欢喝茶"); var batch = h.claim();
             var runtime = new AgentRuntimeSnapshot(new LLMModelOptionsSnapshot(LLMModelOptions.builder().provider("test").model("离线模型").maxTokens(4096).build()),
                     ModelCapabilities.textOnly(), LLMInteractionSettings.defaults());
@@ -779,14 +787,17 @@ class LongTermMemoryIntegrationTest {
                     ignored -> new AgentReadiness(AgentReadiness.Status.READY, Optional.of(runtime)), mock(ILogger.class));
             var interactions = mock(ILLMInteractionService.class);
             var output = new java.util.concurrent.atomic.AtomicReference<>(h.db.mapper.writeValueAsString(Map.of("memories", List.of(h.candidate(batch, "喜欢喝茶", LongMemories.Mode.ADD)), "styles", List.of())));
-            when(interactions.interact(any(), any(), any(), any(), any())).thenAnswer(call -> {
+            // 2026/11/10：传输替身遵守排空及用量合同，原证据内容从用户消息取得而非末尾纠错反馈。
+            when(interactions.interactSettled(any(), any(), any(), any(), any())).thenAnswer(call -> {
                 org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt prompt = call.getArgument(0);
                 assertTrue(Objects.requireNonNull(prompt.getOptions().getTools()).isEmpty());
                 // 2026/11/04：整理不再硬限 3072，模型配置为 4096 时保留该更小上限。
                 assertEquals(4096, prompt.getOptions().getMaxTokens());
                 // 2026/11/08：简述只作背景，逐字原话只存在于证据映射，不重复注入详细复述。
+                var source = prompt.getMessages().stream().filter(LLMUserMessage.class::isInstance)
+                        .findFirst().orElseThrow();
                 var payload = h.db.mapper.readTree(assertInstanceOf(TextLLMContentPart.class,
-                        prompt.getMessages().getLast().getContents().getFirst().getContentPart()).getText());
+                        source.getContents().getFirst().getContentPart()).getText());
                 assertFalse(payload.at("/segments/0").has("details"));
                 assertEquals(batch.evidence().size(), payload.path("evidenceMap").size());
                 assertTrue(payload.path("texts").size() < batch.evidence().size());
@@ -797,9 +808,14 @@ class LongTermMemoryIntegrationTest {
                             payload.path("texts").path(evidence.path("textRef").asString()).asString());
                 }
                 var answer = LLMAssistantMessage.builder().contents(new LLMContentListBuilder().addText(output.get()).build()).build();
-                return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS, List.of(answer), answer, List.of(), List.of(), Map.of()));
+                ToolInvocationContext context = call.getArgument(2);
+                LLMInteractionSettings limits = call.getArgument(3);
+                context.control().budget().consume(LLMCallLimits.MODEL_REQUESTS, 1);
+                return CompletableFuture.completedStage(new LLMInteractionResult(LLMInteractionResult.Status.SUCCESS,
+                        List.of(answer), answer, List.of(), List.of(), Map.of(LLMCallLimits.MODEL_REQUESTS,
+                        new ResourceBudget.Usage(limits.limits().maxModelCalls(), 1, false, false))));
             });
-            try (var generator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, h.refs, LLMJsonTestSupport.create(interactions, h.db.mapper),
+            try (var generator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, h.refs, LLMJsonTestSupport.create(interactions, h.db.mapper, timers),
                     () -> settings, ignored -> true, h.db.mapper, Runnable::run)) {
                 assertEquals(0, registry.snapshots().size());
                 generator.start().toCompletableFuture().join();

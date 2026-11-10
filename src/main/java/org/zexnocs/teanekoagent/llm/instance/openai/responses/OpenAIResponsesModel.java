@@ -29,19 +29,30 @@ import java.util.List;
  * 2026/11/03：获取凭据时核对已解析参数的配置代次。
  *
  * <br>2026/11/04：支持多个 Responses 配置路由并核对实际协议归属。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：声明 Responses 原生 Schema 输出能力。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：Responses 图片准入读取完整参数中的显式能力声明。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @LLMModel(id = OpenAIResponsesModel.PROVIDER)
 public class OpenAIResponsesModel extends AbstractLLMModel {
+    /**
+     * 2026/11/10：图片协议映射保持不变，自定义型号可显式声明本地图片输入能力。
+     * @param options 本次实际模型参数
+     * @return 当前型号及配置共同决定的能力
+     */
+    @Override public ModelCapabilities inputCapabilities(
+            ILLMModelOptions options) {
+        return OpenAIVisionCapabilities.resolve(
+                options, getCapabilities(options.getModel()));
+    }
+
     /**
      * 2026/11/06：Responses 协议以 text.format 承载原生结构约束。
      * @param model 实际模型名称

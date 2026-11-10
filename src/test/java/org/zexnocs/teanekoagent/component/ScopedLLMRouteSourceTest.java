@@ -3,11 +3,6 @@ package org.zexnocs.teanekoagent.component;
 // 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
 
 // 2026/11/07：隔离目录复用生产插件注解，不创建业务入口实例。
-import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 import org.junit.jupiter.api.Test;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -15,6 +10,10 @@ import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
 import org.zexnocs.teanekoagent.component.llm.LLMComponent;
 import org.zexnocs.teanekoagent.component.llm.ScopedLLMRouteSource;
+import org.zexnocs.teanekoagent.component.tool.ToolComponent;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
+import org.zexnocs.teanekoagent.integration.config.ConfigDataAgentScopePolicy;
 import org.zexnocs.teanekoagent.llm.configuration.FileLLMCredentialResolver;
 import org.zexnocs.teanekoagent.llm.file_config.interfaces.ILLMFileConfigService;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
@@ -27,18 +26,9 @@ import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMModel;
 import org.zexnocs.teanekoagent.llm.framework.route.ILLMRouteSource;
 import org.zexnocs.teanekoagent.llm.framework.route.LLMRouteDirectory;
 import org.zexnocs.teanekoagent.llm.framework.route.LLMRouteSource;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
-import org.zexnocs.teanekoagent.integration.config.ConfigDataAgentScopePolicy;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
-import org.zexnocs.teanekoagent.component.tool.ToolComponent;
-import org.zexnocs.teanekoplugin.agent.automation.skill.SkillComponent;
-import org.zexnocs.teanekoplugin.agent.automation.AutomationPlugin;
-import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
-import org.zexnocs.teanekocore.plugin.PluginAccess;
-import org.zexnocs.teanekocore.plugin.PluginDescriptor;
-import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.database.configdata.ConfigDataRegisterService;
+import org.zexnocs.teanekocore.database.configdata.interfaces.IConfigDataService;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataLock;
 import org.zexnocs.teanekocore.database.easydata.core.EasyDataRow;
 import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataDto;
@@ -46,17 +36,34 @@ import org.zexnocs.teanekocore.database.easydata.core.interfaces.IEasyDataTransa
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
+import org.zexnocs.teanekocore.plugin.PluginAccess;
+import org.zexnocs.teanekocore.plugin.PluginDeclarationScanner;
+import org.zexnocs.teanekocore.plugin.PluginDescriptor;
+import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
+import org.zexnocs.teanekoplugin.agent.automation.AutomationPlugin;
+import org.zexnocs.teanekoplugin.agent.automation.skill.SkillComponent;
 import tools.jackson.databind.ObjectMapper;
 
-import java.util.Map;
-import java.util.List;
-import java.util.Set;
-import java.util.Optional;
 import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 // 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
 
@@ -65,15 +72,15 @@ import static org.mockito.Mockito.*;
  *
  * <br>2026/11/04：更新分层重构后的类型引用，保持原调用与生命周期行为。
  * <br>2026/11/05：显式初始化来源目录，模型查询不触发 Bean 发现。
- *
  * <br>2026/11/05：适配模型专属 configuration 包，保留原私有路由隔离验证。
  *
  * <br>2026/11/07：经真实有效装配策略生成私有路由，插件筛选不改变凭据原文版本。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class ScopedLLMRouteSourceTest {
     /** 2026/11/07：验证完整配置读取、有效组件筛选、私有协议、独立凭据与旧版本撤销。 */
@@ -95,7 +102,9 @@ class ScopedLLMRouteSourceTest {
         when(row.getValue()).thenReturn(json.writeValueAsString(Map.of("enabled", true, "components", serialized)));
         var transactions = mock(PlatformTransactionManager.class);
         when(transactions.getTransaction(any(TransactionDefinition.class))).thenReturn(mock(TransactionStatus.class));
-        var source = new ScopedLLMRouteSource(registration, json, transactions, new LLMComponent(new YAMLFileTypeParser()));
+        var componentBeans = new org.springframework.beans.factory.support.DefaultListableBeanFactory();
+        var source = new ScopedLLMRouteSource(registration, json, transactions, new LLMComponent(new YAMLFileTypeParser()),
+                componentBeans.getBeanProvider(AgentComponentRegistry.class));
         var componentScanner = mock(IBeanScanner.class);
         var declarations = new LinkedHashMap<String, org.zexnocs.teanekocore.framework.pair.IPair<TeaNekoAgentComponent, IAgentComponent>>();
         for (var component : List.of(new LLMComponent(new YAMLFileTypeParser()), new ToolComponent(), new SkillComponent())) {
@@ -109,6 +118,7 @@ class ScopedLLMRouteSourceTest {
         var plugins = new PluginRegistry(List.of(
                 () -> new PluginDescriptor("teaneko.agent", "1", 1, Set.of(), true), PluginDeclarationScanner.declaration(AutomationPlugin.class)::descriptor));
         var components = new AgentComponentRegistry(componentScanner, new PluginAccess(plugins));
+        componentBeans.registerSingleton("components", components);
         var configs = mock(IConfigDataService.class);
         var manager = new AgentScopeConfigManager();
         when(configs.getConfigData(manager, AgentScopeConfigData.class, "private@test"))

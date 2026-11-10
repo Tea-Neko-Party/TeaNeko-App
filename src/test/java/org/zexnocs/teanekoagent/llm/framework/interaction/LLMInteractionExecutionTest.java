@@ -2,15 +2,6 @@ package org.zexnocs.teanekoagent.llm.framework.interaction;
 
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
-import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
@@ -20,7 +11,12 @@ import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
 import org.zexnocs.teanekocore.actuator.execution.BudgetExceededException;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -31,17 +27,43 @@ import org.zexnocs.teanekocore.framework.composition.ComponentKey;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.MODEL_REQUESTS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.TOOL_EXECUTIONS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.TOOL_ROUNDS;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 用真实 Core 控制和工具集验证阶段时限、局部与父共享预算、末次关闭工具和顺序等待。
@@ -52,11 +74,12 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.*
  *
  * <br>2026/11/05：显式确认必需结果的非空契约，避免直接解引用可空值。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：局部及共享模型预算拒绝公开真实额度，不发出额外请求。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class LLMInteractionExecutionTest {
     private final InteractionRuntime runtime = new InteractionRuntime();
@@ -160,7 +183,10 @@ class LLMInteractionExecutionTest {
             }
             var extra = run.callModel(prompt());
             runtime.runAll();
-            assertInstanceOf(BudgetExceededException.class, failure(extra));
+            // 2026/11/10：沿真实调用拒绝链检查公开摘要，不只检查异常类型。
+            var rejected = assertInstanceOf(BudgetExceededException.class, failure(extra));
+            assertTrue(FailureDiagnostic.from(rejected).description()
+                    .contains("维度=llm.model-requests，上限=3，已占用=3，剩余=0，本次需要=1"));
             assertEquals(3, replies.size());
             parent.checkActive();
         }
@@ -205,7 +231,10 @@ class LLMInteractionExecutionTest {
             var b = second.callModel(prompt()); runtime.runAll(); reply(); b.toCompletableFuture().join();
             assertEquals("none", Objects.requireNonNull(prompts.getLast().getOptions()).getToolChoice());
             var denied = first.callModel(prompt()); runtime.runAll();
-            assertInstanceOf(BudgetExceededException.class, failure(denied));
+            // 2026/11/10：共享上限应为父控制的 2，而不是本地交互的 3。
+            var rejected = assertInstanceOf(BudgetExceededException.class, failure(denied));
+            assertTrue(FailureDiagnostic.from(rejected).description()
+                    .contains("维度=llm.model-requests，上限=2，已占用=2，剩余=0，本次需要=1"));
             assertEquals(1, first.usage().get(MODEL_REQUESTS).used());
             assertEquals(1, second.usage().get(MODEL_REQUESTS).used());
             assertEquals(2, parent.budget().used(MODEL_REQUESTS));
@@ -346,8 +375,11 @@ class LLMInteractionExecutionTest {
              }))) {
             var model = run.callModel(prompt()); runtime.runAll(); reply(); model.toCompletableFuture().join();
             var a = new LLMToolCall("甲", "function", "work", "{}");
-            assertInstanceOf(BudgetExceededException.class, failure(run.executeTools(List.of(a,
+            // 2026/11/10：工具批量拒绝应展示整批需求，不能先执行部分副作用。
+            var rejected = assertInstanceOf(BudgetExceededException.class, failure(run.executeTools(List.of(a,
                     new LLMToolCall("乙", "function", "work", "{}")))));
+            assertTrue(FailureDiagnostic.from(rejected).description()
+                    .contains("维度=llm.tool-executions，上限=1，已占用=0，剩余=1，本次需要=2"));
             assertInstanceOf(IllegalArgumentException.class, failure(run.executeTools(List.of(a, a))));
             assertEquals(0, count.get()); assertEquals(0, run.usage().get(TOOL_ROUNDS).used());
             var valid = run.executeTools(List.of(a)); runtime.runAll(); valid.toCompletableFuture().join();

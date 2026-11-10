@@ -75,7 +75,9 @@ async function refreshName() {
   if (props.target?.client === selected.client && props.target?.account === selected.account && props.target?.target === selected.target) targetName.value = result.name
 }
 const panel = ref(props.library?.kind === 'memory' ? 'profile' : props.library?.kind ?? 'activity')
-const ElMessageBox = usePluginDialogs(() => panel.value === 'schedules' ? 'agent.automation' : panel.value === 'activity' ? 'teaneko.agent' : 'agent.cognition')
+// 2026/11/10：资源键的命名空间不等于插件归属；活动时间线属于系统原生功能。
+const resourcePlugin = (resource: string) => resource === 'activity' ? undefined : resource === 'schedules' ? 'agent.automation' : 'agent.cognition'
+const ElMessageBox = usePluginDialogs(() => resourcePlugin(panel.value))
 const busy = ref(false)
 const error = ref('')
 const notice = ref('')
@@ -150,9 +152,9 @@ useActivePolling(() => props.active && auto.value && panel.value === 'activity' 
 async function call<T>(resource: string, body: Record<string, unknown>): Promise<T> {
   const name = props.library ? ({profiles: 'profile-space', memory: 'memory-space', personality: 'personality-space', layers: 'layers-space'} as Record<string, string>)[resource] : resource
   if (!name) throw new Error('此页面不提供该管理动作。')
-  const owner = resource === 'activity' ? 'teaneko.agent' : resource === 'schedules' ? 'agent.automation' : 'agent.cognition'
+  const owner = resourcePlugin(resource)
   if (!pluginEnabled(owner)) throw new Error('该功能所属插件已关闭。')
-  return request<T>(`${endpoint()}${owner}:${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  return request<T>(`${endpoint()}${owner ?? 'teaneko.agent'}:${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 }
 
 async function run(action: () => Promise<void>) {

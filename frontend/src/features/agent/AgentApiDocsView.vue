@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：从实际注册目录读取说明，不在前端重复维护组件及工具清单。
 import {computed, ref, watch} from 'vue'
@@ -9,6 +11,7 @@ import PluginFilter from '../../shared/plugins/PluginFilter.vue'
 import {
   pluginAvailability,
   pluginEnabled,
+  pluginName,
   PluginRequestSuperseded,
   usePluginRequests
 } from '../../shared/plugins/plugin-console'
@@ -48,7 +51,7 @@ function showDetail(id: string) {
 const busy = ref(false)
 const error = ref('')
 let generation = 0
-const matches = (value: {pluginId?: string | null}) => pluginEnabled(value.pluginId) && (!pluginId.value || value.pluginId === pluginId.value) && JSON.stringify(value).toLowerCase().includes(search.value.toLowerCase())
+const matches = (value: {pluginId?: string | null}) => pluginEnabled(value.pluginId) && (!pluginId.value || value.pluginId === pluginId.value) && `${pluginName(value.pluginId)} ${JSON.stringify(value)}`.toLowerCase().includes(search.value.toLowerCase())
 const visibleComponents = computed(() => components.value.filter(matches))
 const visibleTools = computed(() => tools.value.filter(tool => matches(tool)
   && (client.value === '' || (client.value === 0 ? !tool.clients.length : tool.clients.includes(String(client.value))))))
@@ -90,7 +93,7 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
     <div v-if="mode === 'components'" class="api-docs-grid">
       <article v-for="item in visibleComponents" :key="item.id" class="api-docs-card">
         <button class="api-docs-summary component-summary" @click="showDetail(item.id)" :aria-label="'查看组件 ' + item.name">
-          <header><div><h3>{{ item.name }}</h3><code>{{ item.id }}</code><code v-if="item.pluginId">{{ item.pluginId }}</code></div><ElTag size="small">{{ item.id === 'llm' ? '必要' : '组件' }}</ElTag></header>
+          <header><div><h3>{{ item.name }}</h3><code>{{ item.id }}</code><code v-if="item.pluginId"><PluginLabel :plugin-id="item.pluginId" /></code></div><ElTag size="small">{{ item.id === 'llm' ? '必要' : '组件' }}</ElTag></header>
           <p class="api-docs-brief">{{ item.description }}</p>
           <p class="component-dependencies small"><span class="muted">依赖</span> {{ item.requires.map(id => components.find(entry => entry.id === id)?.name ?? id).join('、') || '无' }}</p>
           <footer><span>{{ item.systems.length }} 个系统 · {{ item.fields.length }} 个参数</span><span class="api-docs-link">查看详情 →</span></footer>
@@ -101,7 +104,7 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
       <article v-for="tool in visibleTools" :key="tool.name" class="api-docs-card">
         <button class="api-docs-summary" @click="showDetail(tool.name)" :aria-label="'查看工具 ' + tool.name">
           <!-- 2026/11/07：展示实际客户端标识，多客户端及长标识允许换行。 -->
-          <header class="tool-summary-heading"><h3>{{ tool.name }}</h3><code v-if="tool.pluginId">{{ tool.pluginId }}</code><div class="tool-client-tags"><ElTag v-for="id in tool.clients.length ? tool.clients : ['通用']" :key="id" size="small">{{ id }}</ElTag></div></header>
+          <header class="tool-summary-heading"><h3>{{ tool.name }}</h3><code v-if="tool.pluginId"><PluginLabel :plugin-id="tool.pluginId" /></code><div class="tool-client-tags"><ElTag v-for="id in tool.clients.length ? tool.clients : ['通用']" :key="id" size="small">{{ id }}</ElTag></div></header>
           <p class="api-docs-brief">{{ tool.description }}</p>
           <footer><span>{{ Object.keys(tool.parameters.properties ?? {}).length }} 个参数{{ tool.conditional ? ' · 有使用条件' : '' }}</span><span class="api-docs-link">查看详情 →</span></footer>
         </button>
@@ -115,7 +118,7 @@ watch(() => props.mode, () => { search.value = ''; client.value = ''; detailOpen
         <p v-if="componentDetail.requires.length" class="small muted">依赖：{{ componentDetail.requires.map(id => components.find(entry => entry.id === id)?.name ?? id).join('、') }}</p>
         <section v-if="visibleSystems.length"><h3>执行系统 <small>{{ visibleSystems.length }}</small></h3>
           <div v-for="system in visibleSystems" :key="system.id" class="api-docs-field">
-            <div class="api-detail-meta"><code>{{ system.id }}</code><code v-if="system.pluginId">{{ system.pluginId }}</code><ElTag size="small">{{ phases[system.phase] ?? system.phase }}</ElTag></div>
+            <div class="api-detail-meta"><code>{{ system.id }}</code><code v-if="system.pluginId"><PluginLabel :plugin-id="system.pluginId" /></code><ElTag size="small">{{ phases[system.phase] ?? system.phase }}</ElTag></div>
             <dl><dt>必需输入</dt><dd>{{ system.required.join('、') || '无' }}</dd><dt>写入</dt><dd>{{ system.writes.join('、') || '无' }}</dd><template v-if="system.after.length"><dt>前置系统</dt><dd>{{ system.after.join('、') }}</dd></template></dl>
             <p v-if="system.optional" class="small muted">输入缺失时允许跳过</p>
           </div>

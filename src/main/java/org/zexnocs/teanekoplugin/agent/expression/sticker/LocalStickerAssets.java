@@ -46,6 +46,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
+import static org.zexnocs.teanekoplugin.agent.expression.sticker.StickerSizeLimitException.Measurement.BASE64_CHARACTERS;
+import static org.zexnocs.teanekoplugin.agent.expression.sticker.StickerSizeLimitException.Measurement.CONTENT_LENGTH;
+import static org.zexnocs.teanekoplugin.agent.expression.sticker.StickerSizeLimitException.Measurement.DECODED_BYTES;
+import static org.zexnocs.teanekoplugin.agent.expression.sticker.StickerSizeLimitException.Measurement.STREAM_BYTES;
 
 /**
  * 可信主机下载、实际解码和内容地址存储；原动画保留，预览仅用于同次视觉任务。
@@ -61,11 +65,12 @@ import static java.nio.file.LinkOption.NOFOLLOW_LINKS;
  * <br>2026/11/07：保留安全 I/O 分类与位置，并展开文件资源的拥有和释放边界。
  * <br>2026/11/07：图片和描述共用卷身份与受控路径。
  * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
+ * <br>2026/11/10：超限下载提供带大小证据的策略拒绝，仍关闭响应流且不进入解码或模型调用。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Component @TeaNekoStickerAssets("local")
 @org.zexnocs.teanekocore.plugin.PluginOwned("agent.expression")
@@ -195,13 +200,19 @@ public final class LocalStickerAssets implements IStickerAssetStore {
      * @param settings 网络预算
      * @param control 当前控制
      * @return 有界原始字节
+     * @throws StickerSizeLimitException 当声明、编码或实际文件大小超过配置上限时
+     * @throws StickerDownloadException 当编码、来源、网络或响应不满足下载要求时
      */
     private byte[] download(String text, StickerSettings settings, ExecutionControl control) {
         if (text.startsWith("data:image/")) {
             int comma = text.indexOf(',');
-            if (comma < 0 || !text.substring(0, comma).endsWith(";base64")
-                    || text.length() > (long) settings.maxFileBytes() * 4 / 3 + 128) {
-                throw new StickerDownloadException("内联素材超过预算或编码无效。");
+            // 2026/11/10：先区分格式错误与大小拒绝，编码预检不分配超限解码数组。
+            if (comma < 0 || !text.substring(0, comma).endsWith(";base64")) {
+                throw new StickerDownloadException("内联素材编码无效，要求 Base64 图片数据。");
+            }
+            int encodedLength = text.length() - comma - 1;
+            if (encodedLength > 4 * ((settings.maxFileBytes() + 2L) / 3)) {
+                throw new StickerSizeLimitException(BASE64_CHARACTERS, encodedLength, settings.maxFileBytes());
             }
             byte[] bytes;
             try {
@@ -210,7 +221,7 @@ public final class LocalStickerAssets implements IStickerAssetStore {
                 throw new StickerDownloadException("内联素材的 Base64 编码无效。", failure);
             }
             if (bytes.length > settings.maxFileBytes()) {
-                throw new StickerDownloadException("素材文件超过 max-file-bytes 限制。");
+                throw new StickerSizeLimitException(DECODED_BYTES, bytes.length, settings.maxFileBytes());
             }
             return bytes;
         }
@@ -257,8 +268,10 @@ public final class LocalStickerAssets implements IStickerAssetStore {
                         if (response.statusCode() != 200) {
                             throw httpFailure(response.statusCode());
                         }
-                        if (response.headers().firstValueAsLong("Content-Length").orElse(0) > settings.maxFileBytes()) {
-                            throw new StickerDownloadException("素材文件超过 max-file-bytes 限制。");
+                        // 2026/11/10：响应声明和实际流均受限，报告证据来源，不记录图片地址。
+                        long declaredSize = response.headers().firstValueAsLong("Content-Length").orElse(0);
+                        if (declaredSize > settings.maxFileBytes()) {
+                            throw new StickerSizeLimitException(CONTENT_LENGTH, declaredSize, settings.maxFileBytes());
                         }
                         var output = new ByteArrayOutputStream();
                         var buffer = new byte[8192];
@@ -266,7 +279,8 @@ public final class LocalStickerAssets implements IStickerAssetStore {
                         while ((count = input.read(buffer)) != -1) {
                             control.checkActive();
                             if (output.size() + count > settings.maxFileBytes()) {
-                                throw new StickerDownloadException("素材文件超过 max-file-bytes 限制。");
+                                throw new StickerSizeLimitException(STREAM_BYTES, (long) output.size() + count,
+                                        settings.maxFileBytes());
                             }
                             output.write(buffer, 0, count);
                         }

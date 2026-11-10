@@ -22,8 +22,25 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.IntStream;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 用临时文件和受控解析器验证最新加载状态，保留兼容读法并覆盖失败后恢复。
@@ -31,11 +48,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/05：覆盖嵌套、并发文档访问只扫描一次，重载仍发布新代次且拒绝未注册类型。
  * <br>2026/11/05：验证专用类型重扫、失败保留目录和无文档运行查询。
+ * <br>2026/11/10：失效线程上下文类加载器不影响配置模板读取及首次初始化。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.2-l
+ * @version 4.9.1-l
  */
 class FileConfigCurrentReadTest {
     @TempDir Path directory;
@@ -44,6 +62,43 @@ class FileConfigCurrentReadTest {
     private final ILogger logger = mock(ILogger.class);
     private final IFileTypeParser parser = mock(IFileTypeParser.class);
     private final FileConfig annotation = mock(FileConfig.class);
+
+    /**
+     * 2026/11/10：复现 Web 容器停止后继承的线程加载器，模板仍由配置类型的应用加载器提供。
+     * @throws Exception 当模板或临时文件访问失败时
+     */
+    @Test
+    void templateReadsAndInitialLoadIgnoreStoppedContextClassLoader() throws Exception {
+        var documentParser = mock(IFileDocumentParser.class);
+        when(annotation.path()).thenReturn("");
+        when(annotation.value()).thenReturn("loader-test");
+        when(annotation.type()).thenReturn(FileConfigType.YAML);
+        when(scanner.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class))
+                .thenReturn(Map.of(Value.class, annotation));
+        when(parsers.get(FileConfigType.YAML)).thenReturn(documentParser);
+        when(documentParser.getSuffix()).thenReturn("yml");
+        var expected = new Value("模板值");
+        when(documentParser.fromFileToData(any(InputStream.class), eq(Value.class))).thenReturn(expected);
+        var service = new FileConfigService(parsers, new FileConfigScanner(scanner), logger, directory);
+        var stopped = mock(ClassLoader.class);
+        when(stopped.getResource(anyString())).thenThrow(new IllegalStateException("测试 Web 容器已停止。"));
+        var thread = Thread.currentThread();
+        var previous = thread.getContextClassLoader();
+        try {
+            thread.setContextClassLoader(stopped);
+            var preview = service.withDocument(Value.class, FileConfigDocument::read);
+            assertFalse(preview.exists());
+            assertTrue(new String(preview.content(), StandardCharsets.UTF_8).contains("value: 模板值"));
+            service.reload();
+            assertSame(expected, service.requireCurrent(Value.class));
+            assertArrayEquals(preview.content(), Files.readAllBytes(directory.resolve("loader-test.yml")));
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+        verifyNoInteractions(stopped);
+        verify(documentParser, never()).defaultDocument(any());
+        verifyNoInteractions(logger);
+    }
 
     /**
      * 只为当前临时文件装配真实服务，不扫描项目配置或连接数据库。

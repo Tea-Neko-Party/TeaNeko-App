@@ -6,16 +6,16 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.layered;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -28,8 +28,21 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.contains;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 使用受控时钟验证中长期整理的阶段计时、超时退避及在途占用，不连接数据库或模型。
@@ -37,10 +50,12 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/06：按有效新证据聚合长期提取，保留版本幂等、租约和事务校验。
  *
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
+ * <br>2026/11/10：覆盖慢于旧时限的生成以及当前默认截止时间后的禁止提交。
+ *
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.3-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(5)
 class LayeredMemoryDeadlineTest {
@@ -53,9 +68,10 @@ class LayeredMemoryDeadlineTest {
     void scanDoesNotConsumeGenerationTime(boolean longTerm) {
         try (var h = new Harness(longTerm)) {
             var work = h.processor.drain().toCompletableFuture();
-            h.now.set(h.start.plusSeconds(44));
+            // 2026/11/10：扫描耗时逼近当前默认截止时间，仍不占用后续生成时限。
+            h.now.set(h.start.plus(LayeredMemorySettings.defaults().timeout()).minusSeconds(1));
             h.scanned.complete(List.of(h.stream));
-            h.now.set(h.start.plusSeconds(50));
+            h.now.set(h.start.plus(LayeredMemorySettings.defaults().timeout()).plusSeconds(5));
             assertDoesNotThrow(h.control.get()::checkActive);
             h.finishGeneration();
             work.orTimeout(2, TimeUnit.SECONDS).join();
@@ -78,7 +94,10 @@ class LayeredMemoryDeadlineTest {
         try (var h = new Harness(longTerm)) {
             h.processor.tick();
             h.scanned.complete(List.of(h.stream));
-            h.now.set(h.start.plusSeconds(46));
+            // 2026/11/10：默认后台时限允许超过旧四十五秒，但超出九十秒仍必须取消且不得提交。
+            h.now.set(h.start.plusSeconds(50));
+            assertDoesNotThrow(h.control.get()::checkActive);
+            h.now.set(h.start.plus(LayeredMemorySettings.defaults().timeout()).plusSeconds(1));
             var stopped = assertThrows(ExecutionStoppedException.class, h.control.get()::checkActive);
             assertEquals(ExecutionControl.StopReason.DEADLINE_EXCEEDED, stopped.reason());
             h.processor.tick();

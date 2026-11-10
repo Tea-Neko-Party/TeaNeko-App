@@ -25,13 +25,13 @@ import java.util.Optional;
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
  * <br>2026/11/04：按配置读取、有效参数和能力检查阶段报告安全诊断，避免笼统模型错误。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/10：使用完整模型参数解析显式图片能力。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 public final class AgentReadinessService implements IAgentReadiness {
     private final IAgentRuntimeConfigPort config;
@@ -90,7 +90,7 @@ public final class AgentReadinessService implements IAgentReadiness {
         }
         try {
             capabilities = Objects.requireNonNull(models.getModel(options.getProvider())
-                    .getCapabilities(options.getModel()));
+                    .inputCapabilities(options));
         } catch (RuntimeException failure) {
             return unavailable(AgentReadiness.Status.MODEL_UNAVAILABLE, "读取所选模型能力", failure);
         }

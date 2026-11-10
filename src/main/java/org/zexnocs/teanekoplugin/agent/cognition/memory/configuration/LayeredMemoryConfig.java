@@ -1,26 +1,22 @@
 package org.zexnocs.teanekoplugin.agent.cognition.memory.configuration;
 
-import org.zexnocs.teanekoagent.integration.config.AgentComponentAccess;
-
-// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
-
-// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
 import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
+import org.zexnocs.teanekoagent.integration.config.AgentComponentAccess;
+import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonService;
+import org.zexnocs.teanekoagent.plugin.IAgentFeature;
+import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekoagent.runtime.IAgentFactory;
+import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
+import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
-
-// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
-
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILayeredMemoryCompressor;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILayeredMemoryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryConsolidator;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.IMemoryMaintenance;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryPolicy;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemorySettings;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongMemoryLearningPolicy;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLayeredMemoryStore;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataLongTermMemoryStore;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataMemoryNamespaceStore;
@@ -30,33 +26,22 @@ import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.LongTermForgetTo
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.LongTermMemoryPromptSource;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.LongTermMemoryTools;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.LongTermProfileTool;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentDeliveryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILayeredMemoryCompressor;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILayeredMemoryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryConsolidator;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.ILongTermMemoryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.IMemoryMaintenance;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LLMLayeredMemoryCompressor;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LLMLongTermMemoryConsolidator;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryPolicy;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemoryProcessor;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LayeredMemorySettings;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.LongTermMemoryAccess;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryMaintenanceService;
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
-import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.Environment;
-import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonService;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentDeliveryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.*;
 import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoplugin.agent.cognition.personality.IStyleObservationStore;
 import org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservationService;
-import org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolMethods;
-import org.zexnocs.teanekoagent.plugin.IAgentFeature;
-import org.zexnocs.teanekoagent.plugin.SourceAgentFeature;
-import org.zexnocs.teanekoagent.runtime.AgentScope;
-import org.zexnocs.teanekoagent.runtime.IAgentFactory;
-import org.zexnocs.teanekoagent.runtime.access.AgentAccessGate;
-import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
@@ -66,6 +51,12 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Function;
 import java.util.function.Supplier;
+
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 默认分层记忆装配，复用历史事务、插件资料和 Core 执行器，配置仅在业务域读取。
@@ -85,10 +76,12 @@ import java.util.function.Supplier;
  *
  * <br>2026/11/07：从有效组件装配读取本插件参数，不依赖宿主业务访问器。
  *
+ * <br>2026/11/10：后台时限从插件默认快照取得，显式配置继续覆盖。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Configuration(proxyBeanMethods = false)
 @org.zexnocs.teanekocore.plugin.PluginOwned("agent.cognition")
@@ -336,7 +329,9 @@ public class LayeredMemoryConfig {
                 environment.getProperty("tea-neko.agent.memory.layered.keep-messages", Integer.class, 4),
                 environment.getProperty("tea-neko.agent.memory.layered.batch-messages", Integer.class, 16),
                 environment.getProperty("tea-neko.agent.memory.layered.max-input-bytes", Integer.class, 131072),
-                Duration.ofSeconds(environment.getProperty("tea-neko.agent.memory.layered.timeout-seconds", Long.class, 45L)),
+                // 2026/11/10：与插件默认快照共用时限，显式本机配置继续优先。
+                Duration.ofSeconds(environment.getProperty("tea-neko.agent.memory.layered.timeout-seconds", Long.class,
+                        LayeredMemorySettings.defaults().timeout().toSeconds())),
                 Duration.ofDays(environment.getProperty("tea-neko.agent.memory.layered.retention-days", Long.class, 90L)),
                 environment.getProperty("tea-neko.agent.memory.layered.trigger-bytes", Integer.class, 32768),
                 // 2026/11/06：长期提取使用独立有界聚合策略，不改变短期压缩频率。

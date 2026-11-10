@@ -35,6 +35,9 @@
 | `IAPIResponseService.addTask(requestData, responseType)` | 使用缓存策略发起请求。 |
 | `IAPIResponseService.addTask(requestData, responseType, disableCache, skipCache)` | 细粒度控制缓存。`disableCache=true` 表示不写缓存；`skipCache=true` 表示不读缓存。 |
 | `IAPIResponseService.addTask(requestData, responseType, disableCache, skipCache, execution)` | 显式 `ExecutionPolicy`，限制整个请求阶段并支持取消实际订阅。 |
+| `IAPIResponseService.addStreamTask(requestData, dataType, accumulator, execution)` | 无缓存、无重试的 JSON POST / SSE；由每次订阅独占的 `IAPIResponseAccumulator` 有界聚合，正常 EOF 后验证完整性。 |
+
+默认客户端关闭 Reactor Netty 的 TCP 中断隐式重试，普通请求的重试仅来自 `@APIRequestData.retryCount`。SSE 入口要求声明零重试并返回 `text/event-stream`，沿用 `APIRequestExecution` 统一取消、阶段总时限与资源释放。接收分片不刷新总时限；断流、超时或取消不调用聚合器的 `finish()`，不能消费部分业务结果。聚合器负责容量和协议终态校验，Core 不识别上层业务协议。
 
 # 四. 使用示例
 

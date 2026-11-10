@@ -37,13 +37,42 @@ import static org.mockito.Mockito.when;
  * 验证模型切换的 OWNER 约束、已配置路由要求和版本事务，不调用数据库或模型网络。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/10：验证新增路由及默认模型变化即时反映在选择目录，且不改写声明顺序。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.7-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 class AgentModelSelectionTest {
+    /** 2026/11/10：模型目录实时读取已应用配置，继承选项与默认路由优先且不修改底层列表。 */
+    @Test
+    void refreshesAddedAndDefaultRoutesWithoutPersistingAnInheritedChoice() {
+        var files = mock(ILLMFileConfigService.class);
+        var edits = mock(ConfigEditService.class);
+        var selection = new AgentModelSelection(files, mock(ILLMModelService.class), edits);
+        var original = new LLMModelFileConfigParameter();
+        original.setId("first");
+        original.setModel("first-model");
+        var config = new LLMModelFileConfig();
+        config.setModels(List.of(original));
+        config.setDefaultModelId("first");
+        when(files.getConfig()).thenReturn(config);
+        assertEquals(List.of("", "first"), List.copyOf(selection.choices().keySet()));
+        var added = new LLMModelFileConfigParameter();
+        added.setId("second");
+        added.setModel("second-model");
+        var changed = new LLMModelFileConfig();
+        changed.setModels(List.of(original, added));
+        changed.setDefaultModelId("second");
+        when(files.getConfig()).thenReturn(changed);
+        var choices = selection.choices();
+        assertEquals(List.of("", "second", "first"), List.copyOf(choices.keySet()));
+        assertTrue(choices.get("").contains("second-model"));
+        assertEquals(List.of(original, added), changed.getModels());
+        verifyNoInteractions(edits);
+    }
+
     /** 2026/11/04：无权者和未知路由不提交，合法切换保留读取版本并在提交前复核。 */
     @Test
     void switchesOnlyConfiguredRoutesThroughAuthorizedVersionedEdit() {

@@ -28,11 +28,12 @@ import java.util.Optional;
  * <br>2026/11/06：复制与合并保留不可变输出 Schema。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：保存可选图片能力声明并纳入参数合并。
  *
  * @author zExNocs
  * @date 2026/05/15
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Getter
 @Setter
@@ -159,6 +160,15 @@ public class LLMModelOptions implements ILLMModelOptions {
     @Builder.Default
     private Map<String, Object> metadata = Map.of();
 
+    /** 2026/11/10：本地图片能力声明，不作为供应商请求参数发送。 */
+    @Nullable
+    private Boolean imageInput;
+
+    /** @return 当前显式的图片输入声明，未设置时不覆盖协议默认值 */
+    @Override public Optional<Boolean> findImageInput() {
+        return Optional.ofNullable(imageInput);
+    }
+
     /**
      * 创建一个不包含任何显式参数的 options。
      *
@@ -185,6 +195,8 @@ public class LLMModelOptions implements ILLMModelOptions {
         return builder()
                 .provider(options.findProvider().orElse(null))
                 .model(options.findModel().orElse(null))
+                // 2026/11/10：复制及合并保留显式图片输入声明。
+                .imageInput(options.findImageInput().orElse(null))
                 .thinking(options.findThinking().orElse(null))
                 .maxTokens(options.findMaxTokens().orElse(null))
                 // 2026/11/04：通用接口复制保留不可变的模型上下文声明。
@@ -242,6 +254,8 @@ public class LLMModelOptions implements ILLMModelOptions {
         return base.toBuilder()
                 .provider(overrides.findProvider().orElse(base.provider))
                 .model(overrides.findModel().orElse(base.model))
+                // 2026/11/10：复制及合并保留显式图片输入声明。
+                .imageInput(overrides.findImageInput().orElse(base.imageInput))
                 .thinking(overrides.findThinking().orElse(base.thinking))
                 .maxTokens(overrides.findMaxTokens().orElse(base.maxTokens))
                 // 2026/11/04：只有显式上下文覆盖才替换原模型策略。

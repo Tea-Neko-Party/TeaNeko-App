@@ -32,6 +32,7 @@ import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.WebSocketSession;
+import org.zexnocs.teanekoagent.llm.integration.web.ModelVisionProbe;
 import org.zexnocs.teanekoapp.client.GuardedClientWebSocketHandler;
 import org.zexnocs.teanekoapp.utils.VersionUtil;
 import org.zexnocs.teanekoapp.web.client.ChatTargets;
@@ -39,7 +40,13 @@ import org.zexnocs.teanekoapp.web.client.ClientManagementDirectory;
 import org.zexnocs.teanekoapp.web.console.ClientConsole;
 import org.zexnocs.teanekoapp.web.console.ClientConsoleService;
 import org.zexnocs.teanekoapp.web.console.WebConsoleCommandController;
-import org.zexnocs.teanekoapp.web.files.*;
+import org.zexnocs.teanekoapp.web.files.FileEnvironmentFailureMapper;
+import org.zexnocs.teanekoapp.web.files.FileSettings;
+import org.zexnocs.teanekoapp.web.files.FileSettingsService;
+import org.zexnocs.teanekoapp.web.files.MachineTokenController;
+import org.zexnocs.teanekoapp.web.files.MachineTokenService;
+import org.zexnocs.teanekoapp.web.files.MachineTokens;
+import org.zexnocs.teanekoapp.web.files.WebFileSettingsController;
 import org.zexnocs.teanekoapp.web.plugins.PluginManagementController;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsController;
 import org.zexnocs.teanekoapp.web.settings.ChatSettingsErrors;
@@ -55,6 +62,10 @@ import org.zexnocs.teanekocore.file_config.FileConfigDocument;
 import org.zexnocs.teanekocore.file_config.interfaces.IFileConfigService;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelController;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelFileConfig;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelSelection;
 import tools.jackson.databind.ObjectMapper;
 
 import java.net.URLEncoder;
@@ -64,15 +75,46 @@ import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * 使用真实 Spring Security 过滤器验证登录、全入口拒绝、会话撤销与机器凭据边界。
@@ -105,13 +147,112 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * <br>2026/11/07：管理路由按迁后插件资源键验证原认证与类型边界。
  * <br>2026/11/07：在途调用目录的真实安全链允许管理员读取，匿名、写请求及任意子路径仍拒绝。
  * <br>2026/11/07：插件固定 HTTP 端点使用真实会话、CSRF 及资源桥，错误方法与未开放资源仍拒绝。
+ * <br>2026/11/10：识图检测通过真实安全链与控制器，验证路由声明、参数绑定及下游权限拒绝。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class WebConsoleSecurityTest {
+    /**
+     * 2026/11/10：两处识图检测必须可达真实控制器，同时保留会话、防伪、插件和配置复核。
+     * @throws Exception 当隔离 MVC 或异步结果处理失败时
+     */
+    @Test
+    void stickerVisionRoutesRequireSessionCsrfAndConfigurationAccess() throws Exception {
+        try (var fixture = new Fixture(directory)) {
+            var plugins = fixture.context.getBean(org.zexnocs.teanekocore.plugin.PluginRegistry.class);
+            when(plugins.capture("agent.expression")).thenReturn(
+                    new org.zexnocs.teanekocore.plugin.PluginRegistry.Token(Map.of("agent.expression", 1L)));
+            when(plugins.invoke(eq("agent.expression"), any())).thenAnswer(invocation -> {
+                Supplier<CompletionStage<Object>> action = invocation.getArgument(1);
+                return action.get();
+            });
+            var document = mock(FileConfigDocument.class);
+            var snapshot = new FileConfigDocument.Snapshot("r1", new byte[0], true);
+            var selected = new StickerModelFileConfig();
+            selected.setFallback(fixture.mapper.readTree("{\"source\":\"system\",\"route\":\"global-route\"}"));
+            when(document.parse(any())).thenReturn(selected);
+            when(fixture.fileSettings.inspect(eq("agent.sticker-model"), eq("r1"), any(), any()))
+                    .thenAnswer(invocation -> {
+                        invocation.getArgument(2, Runnable.class).run();
+                        BiFunction<FileConfigDocument, FileConfigDocument.Snapshot, Object> reader =
+                                invocation.getArgument(3);
+                        return CompletableFuture.completedStage(reader.apply(document, snapshot));
+                    });
+            when(fixture.files.requireCurrent(AgentStickerFileConfig.class)).thenReturn(new AgentStickerFileConfig());
+            var selections = fixture.context.getBean(StickerModelSelection.class);
+            when(selections.plan(any(), anyString())).thenReturn(
+                    new StickerModelSelection.Plan("component-route", Optional.empty(), "selection1"));
+            when(fixture.settings.read(eq("web"), eq("bot"), eq("room"), eq("agent"), any()))
+                    .thenAnswer(invocation -> {
+                        invocation.getArgument(4, Runnable.class).run();
+                        return CompletableFuture.completedStage(new org.zexnocs.teanekoapp.web.settings.ChatSettings.View(
+                                "agent", "组件", "测试聊天", true, "r1", "", List.of(), null));
+                    });
+            var clients = fixture.context.getBean(ClientManagementDirectory.class);
+            when(clients.guard(eq("web"), any())).thenAnswer(invocation -> invocation.getArgument(1));
+            when(clients.invoke(eq("web"), any())).thenReturn(CompletableFuture.completedStage(
+                    new ChatTargets.Resolved("web", "bot", "room", "scope", "测试聊天", "PRIVATE", "123", false)));
+            var probe = fixture.context.getBean(ModelVisionProbe.class);
+            when(probe.probe(anyString(), any())).thenAnswer(invocation -> {
+                invocation.getArgument(1, Runnable.class).run();
+                return CompletableFuture.completedStage(new ModelVisionProbe.Result("SUCCESS", "隔离识图结果"));
+            });
+            var requests = Map.of(
+                    "/api/v1/plugins/sticker-models/probe/global", "{\"revision\":\"r1\"}",
+                    "/api/v1/plugins/sticker-models/probe/component",
+                    "{\"client\":\"web\",\"account\":\"bot\",\"target\":\"room\",\"revision\":\"r1\"}");
+            var anonymousCsrf = fixture.csrf(null);
+            var anonymous = (MockHttpSession) Objects.requireNonNull(anonymousCsrf.getRequest().getSession(false));
+            String anonymousToken = fixture.mapper.readTree(anonymousCsrf.getResponse().getContentAsString())
+                    .get("token").asString();
+            for (var entry : requests.entrySet()) {
+                fixture.mvc.perform(fixture.request(entry.getKey(), true).session(anonymous)
+                        .header("X-CSRF-TOKEN", anonymousToken).contentType("application/json").content(entry.getValue()))
+                        .andExpect(status().isUnauthorized());
+            }
+            verifyNoInteractions(probe);
+            var session = fixture.authenticate();
+            String csrf = fixture.mapper.readTree(fixture.csrf(session).getResponse().getContentAsString())
+                    .get("token").asString();
+            for (var entry : requests.entrySet()) {
+                fixture.mvc.perform(fixture.request(entry.getKey(), true).session(session)
+                        .contentType("application/json").content(entry.getValue())).andExpect(status().isForbidden());
+                var response = fixture.mvc.perform(fixture.request(entry.getKey(), true).session(session)
+                        .header("X-CSRF-TOKEN", csrf).contentType("application/json").content(entry.getValue()))
+                        .andExpect(request().asyncStarted()).andReturn();
+                fixture.mvc.perform(asyncDispatch(response)).andExpect(status().isOk())
+                        .andExpect(jsonPath("$.status").value("SUCCESS"));
+                fixture.mvc.perform(fixture.request(entry.getKey(), false).session(session))
+                        .andExpect(status().isForbidden());
+            }
+            verify(probe).probe(eq("global-route"), any());
+            verify(probe).probe(eq("component-route"), any());
+            fixture.mvc.perform(fixture.request("/api/v1/plugins/sticker-models/probe/unregistered", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf)).andExpect(status().isForbidden());
+            doThrow(new org.zexnocs.teanekoapp.web.error.LocalResourceNotAllowedException())
+                    .when(fixture.fileSettings).inspect(eq("agent.sticker-model"), eq("r1"), any(), any());
+            fixture.mvc.perform(fixture.request("/api/v1/plugins/sticker-models/probe/global", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
+                    .content("{\"revision\":\"r1\"}"))
+                    .andExpect(status().isForbidden()).andExpect(jsonPath("$.code").value("LOCAL_RESOURCE_NOT_ALLOWED"));
+            var stale = fixture.mvc.perform(fixture.request("/api/v1/plugins/sticker-models/probe/component", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
+                    .content("{\"client\":\"web\",\"account\":\"bot\",\"target\":\"room\",\"revision\":\"r0\"}"))
+                    .andExpect(request().asyncStarted()).andReturn();
+            fixture.mvc.perform(asyncDispatch(stale)).andExpect(status().isConflict())
+                    .andExpect(jsonPath("$.code").value("CONFIG_CONFLICT"));
+            when(plugins.capture("agent.expression")).thenThrow(new IllegalStateException("隔离插件已停用。"));
+            fixture.mvc.perform(fixture.request("/api/v1/plugins/sticker-models/probe/global", true)
+                    .session(session).header("X-CSRF-TOKEN", csrf).contentType("application/json")
+                    .content("{\"revision\":\"r1\"}"))
+                    .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("SETTINGS_UNAVAILABLE"));
+            verifyNoMoreInteractions(probe);
+        }
+    }
+
     /**
      * 插件管理固定路由可达原资源桥，匿名、缺少防伪、错误方法及资源撤权都不能绕过鉴权。
      * @throws Exception 当隔离 MVC 安全链或异步请求失败时
@@ -542,11 +683,12 @@ class WebConsoleSecurityTest {
      *
      * <br>2026/11/05：验证模型检测及房间删除的真实认证与防伪链。
      * <br>2026/11/05：注册文件环境错误映射，覆盖异步保存失败的实际 HTTP 响应。
+     * <br>2026/11/10：注册识图真实控制器与静态路由声明，模型和配置业务使用隔离端口。
      *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.7.0-l
-     * @version 4.8.2-l
+     * @version 4.9.1-l
      */
     private static final class Fixture implements AutoCloseable {
         final WebSecurityFileConfig file = new WebSecurityFileConfig();
@@ -576,6 +718,7 @@ class WebConsoleSecurityTest {
         final org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory modelTemplates = mock(org.zexnocs.teanekoagent.llm.file_config.form.LLMConfigurationDirectory.class);
 
         /**
+         * 2026/11/10：识图接口沿用真实登录链；依赖通过容器装配的业务替身提供。
          * @param path 本测试拥有的私有目录
          * @throws Exception 当 MVC 安全链装配失败时
          */
@@ -620,6 +763,14 @@ class WebConsoleSecurityTest {
                 factory.registerSingleton("componentDirectory", mock(org.zexnocs.teanekoagent.component.AgentComponentRegistry.class));
                 factory.registerSingleton("toolDirectory", mock(org.zexnocs.teanekoagent.component.tool.TeaNekoAgentToolRegistry.class));
                 factory.registerSingleton("pluginRegistry", mock(org.zexnocs.teanekocore.plugin.PluginRegistry.class));
+                // 2026/11/10：保留真实识图控制器；只替换其业务端口，不发送远端请求。
+                factory.registerSingleton("fileConfiguration", files);
+                factory.registerSingleton("stickerModelSelection", mock(StickerModelSelection.class));
+                factory.registerSingleton("stickerModelConfiguration", mock(
+                        org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelConfiguration.class));
+                factory.registerSingleton("probeRoutes", mock(
+                        org.zexnocs.teanekoagent.llm.file_config.ProbeLLMRouteSource.class));
+                factory.registerSingleton("visionProbe", mock(ModelVisionProbe.class));
                 factory.registerSingleton("modelSelection", mock(org.zexnocs.teanekoagent.integration.config.AgentModelSelection.class));
                 factory.registerSingleton("virtualExecutor", (java.util.concurrent.Executor) Runnable::run);
                 // 2026/11/05：业务错误映射经真实扫描发现，继续由原 MVC 链处理异步失败。
@@ -629,6 +780,8 @@ class WebConsoleSecurityTest {
                     WebMachineController.class,
                     MachineEndpoint.class, ChatSettingsController.class, ChatSettingsErrors.class, WebSessionGuard.class,
                     WebManagementController.class, PluginManagementController.class,
+                    StickerModelController.class,
+                    org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelWebRoutes.class,
                     WebFileSettingsController.class, WebConsoleCommandController.class,
                     WebChatController.class, MachineTokenController.class, WebCommandCatalogController.class,
                     org.zexnocs.teanekoagent.llm.integration.web.ModelConfigurationController.class,

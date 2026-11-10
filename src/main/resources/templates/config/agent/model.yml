@@ -37,3 +37,17 @@ models: []
 #     max-tokens: 2048
 #     context-window-tokens: "${KIMI_CONTEXT_WINDOW_TOKENS}"
 #     context-input-ratio: 0.8
+
+# 2026/11/10：Gemini 原生代理示例，api-path 是集合路径，不附模型或生成动作。
+# 分组网关可能需要 /antigravity/v1beta/models；基础地址不带 /v1。
+# models:
+#   - id: "gemini"
+#     adapter: "antigravity"
+#     model: "${GEMINI_MODEL:YOUR_DEPLOYED_MODEL}"
+#     api-key: "${GEMINI_PROXY_API_KEY:}"
+#     base-url: "${GEMINI_PROXY_BASE_URL:http://127.0.0.1:8045}"
+#     api-path: "${GEMINI_PROXY_API_PATH:/v1beta/models}"
+#     max-tokens: 2048
+#     context-window-tokens: "${GEMINI_CONTEXT_WINDOW_TOKENS}"
+#     context-input-ratio: 0.8
+#     image-input: true

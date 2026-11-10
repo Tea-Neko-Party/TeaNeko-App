@@ -68,11 +68,13 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits.T
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：分别记录逻辑结果与物理完成，供资源所有者等待调用排空。
+ * <br>2026/11/10：预算检查从同一用量快照构建差值报告，不将并发读数误作配置上限。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  * @see LLMCallLimits
  */
 public final class LLMInteractionExecution implements AutoCloseable {
@@ -92,6 +94,14 @@ public final class LLMInteractionExecution implements AutoCloseable {
     private final Set<String> toolIds = new HashSet<>();
     private final List<ToolInvocationResult> completedTools = new ArrayList<>();
     private volatile boolean toolRoundAvailable;
+    // 2026/11/10：记录阶段真实收尾，逻辑超时不能提前释放借用素材或启动备用请求。
+    private final List<CompletionStage<Void>> completions = new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /** @return 已结束逻辑交互中全部已登记阶段的真实完成信号 */
+    public CompletionStage<Void> settled() {
+        return CompletableFuture.allOf(completions.stream()
+                .map(CompletionStage::toCompletableFuture).toArray(CompletableFuture<?>[]::new));
+    }
 
     /**
      * 固定本次交互配置和工具集，建立独立整轮截止时间并继承宿主总预算。
@@ -257,7 +267,9 @@ public final class LLMInteractionExecution implements AutoCloseable {
                             }
                             var pending = Objects.requireNonNull(models.call(actualPrompt,
                                     ExecutionPolicy.controlled(settings.modelTimeout(), stage)), "模型端口返回的任务不能为空。");
-                            return pending.asStage().thenApply(result -> stage.whileActive(() -> {
+                            // 2026/11/10：保留真实结束链，外层阶段仍及时发布超时结果。
+                            return pending.physicalCompletion().thenCompose(completed -> pending.asStage())
+                                    .thenApply(result -> stage.whileActive(() -> {
                                 if (result == null) { throw new InvalidModelResponseException(); }
                                 toolRoundAvailable = allowed && !"none".equals(effective.getToolChoice());
                                 return result;
@@ -470,13 +482,14 @@ public final class LLMInteractionExecution implements AutoCloseable {
      * @throws BudgetExceededException 当局部或共享可用额度不足时
      */
     private void requireCapacity(BudgetKey key, long units) {
-        if (localBudget.remaining(key) < units) {
-            var used = localBudget.used(key);
-            throw new BudgetExceededException(key, used + localBudget.remaining(key), used, units);
+        // 2026/11/10：同一快照提供上限与占用量，避免分次读取把并发变化算成虚假的配置上限。
+        var local = localBudget.snapshot().get(key);
+        if (local.exceeded() || local.limit() - local.used() < units) {
+            throw new BudgetExceededException(key, local.limit(), local.used(), units);
         }
-        if (control.budget().remaining(key) < units) {
-            var used = control.budget().used(key);
-            throw new BudgetExceededException(key, used + control.budget().remaining(key), used, units);
+        var shared = control.budget().snapshot().get(key);
+        if (shared.exceeded() || shared.limit() - shared.used() < units) {
+            throw new BudgetExceededException(key, shared.limit(), shared.used(), units);
         }
     }
 
@@ -493,17 +506,22 @@ public final class LLMInteractionExecution implements AutoCloseable {
      */
     private <T> CompletionStage<T> phase(Duration timeout, Function<ExecutionControl, CompletionStage<T>> action) {
         var stage = control.child(timeout, scheduler);
+        var completion = new CompletableFuture<Void>();
+        completions.add(completion);
         try {
             var invocation = CompletableFuture.supplyAsync(() -> {
                 stage.checkActive();
                 return Objects.requireNonNull(action.apply(stage), "阶段回调返回的完成信号不能为空。");
             }, executor);
-            return stage.guard(invocation.thenCompose(Function.identity())).whenComplete((value, failure) -> {
+            var actual = invocation.thenCompose(Function.identity());
+            actual.whenComplete((value, failure) -> completion.complete(null));
+            return stage.guard(actual).whenComplete((value, failure) -> {
                 stage.close();
-                invocation.cancel(false);
+                // 排队工作执行时检查已停止控制；取消观察不能伪造同步工作已结束。
             });
         } catch (RuntimeException failure) {
             stage.close();
+            completion.complete(null);
             return CompletableFuture.failedStage(failure);
         }
     }

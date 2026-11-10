@@ -34,6 +34,8 @@ FileConfigService.ROOT_PATH // config
 FileConfigService.TEMPLATE_PATH // templates/config
 ```
 
+模板查找绑定已注册配置类型的类加载器；首次复制与文档预览遵守相同规则。异步请求线程继承的 Web 容器类加载器不决定模板归属，避免容器重启后仍访问已停止的资源入口。
+
 加载顺序：
 
 ```markdown

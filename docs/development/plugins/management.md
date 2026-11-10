@@ -4,6 +4,10 @@
 
 Core 提供传输无关的 IManagementResource<Q,R>、ManagementGateway、ManagementContext 和 IManagementAuthority。可信 Web 入口复用原网关，完成 token 登录后默认开放全部已注册管理资源。`local-allowlist-enabled: true` 可显式收紧为原本地白名单范围。v4.9.0-l 增加插件总管理：读取目录、预览影响、按固定操作编号启停和查询原回执；所有 HTTP 操作仍经过原授权网关。
 
+v4.9.1-l 将插件管理置于“管理”组首位。插件卡片右上角开关表示启用意愿，实际状态另行展示；变更仍先预览依赖影响再确认。配置按钮仅在启用且存在相应 `file-config` / `chat-config` 贡献时显示，操作区底部对齐并使用当前主题色。“已安装功能”打开按贡献领域分组的弹窗，左侧导航可跳到聊天命令、后台任务等领域，停用后仍可查看安装说明。
+
+“插件配置”在主侧栏右侧展开独立二级导航，窄屏放入导航抽屉右侧；按所属插件名称分组，页面仍由 `IPluginConsoleContribution` 和构建期 Vue 模块声明自动接入。插件名称优先用于页面标签和依赖说明，ID 保留在管理元数据、悬停说明和筛选选项中；菜单、插件管理及归属筛选均接受名称和 ID。实际停用仍撤除业务页面及入口，公开名称不改变归属校验或持久标识。
+
 插件实现 IManagementResource 并注册 Bean，声明 descriptor()、requestType() 与 execute(context, request)。描述包含归属身份、局部 id、schemaVersion、permission、mutation 和字段说明；资源 ID 为归属ID:局部ID。业务资源归属已登记插件；系统资源使用独立 `HostCapability`，保留 `teaneko.core`、`teaneko.agent` 等稳定 ID。重复 ID 或未知归属拒绝注册，宿主身份不进入业务插件开关。
 
 requestType 返回具体请求 DTO 的 Class，宿主按该类型解析与验证；客户端不能传任意类名、方法名、Bean 名或 SQL。execute 返回真实 CompletionStage<View>，只导出明确 DTO，不导出 Entity、整个组件对象、控制、凭据或 Throwable。字段 schema 是说明，不取代请求和业务校验；敏感字段禁止回显。
@@ -29,6 +33,8 @@ availableFeatures 是可安装目录，不代表全部启用或当前主体获�
 安装说明由 App 的 `IPluginContributionSource` SPI 汇总，各层只向下依赖中立合同 `PluginContribution(pluginId, kind, id, name, description)`。来源应从已有声明缓存读取；必要的类型/方法发现只能在贡献目录初始化或显式重扫时执行。`PluginContributionDirectory` 在全部来源成功、插件归属已注册且同插件同类别标识唯一后原子发布；失败保留旧完整快照。页面轮询只读缓存，说明不得包含配置值、凭据、业务数据或执行句柄，也不代替普通目录的实时启停、权限和白名单复核。
 
 插件可以使用 `IPluginConsoleContribution` 增加独立配置/操作页，前后端接入见[页面扩展](../web-console-pages.md)。文件/聊天配置通过 `@PluginOwned` 声明真实归属，由宿主缓存并投影 `pluginId`；适配器与原配置类型声明冲突会报错，不能借自报字段改变所属插件。客户端管理适配器继承实际客户端插件归属，显式冲突拒绝；具体调用和秘密查看继续复核插件代次。
+
+确需专用 HTTP 入口时，上层模块以独立 Spring Bean 实现 `IWebAdminRoutes`，返回初始化时构建、明确限定路径及方法的 `RequestMatcher`。宿主统一要求管理员身份，保留 HTTPS 来源、会话及 CSRF；未声明路径仍默认拒绝。声明不表示插件已启用，也不替代控制器中的 `WebSessionGuard`、插件代次和具体资源授权。不要将业务路径写入宿主安全清单，也不要开放整个插件路径前缀。`@WebManagedEndpoint` 只选择错误响应格式，不会自动开放路由。
 
 `local-allowlist-enabled` 默认 `false`，旧配置缺省该字段也采用默认开放：登录后可访问已注册管理资源、文件表单和声明管理来源的指令，无需手工添加插件总管理的五项资源。设为 `true` 后才精确匹配 `management-resources`、`file-sections`、`console-prefixes`；此时显式空列表保持拒绝。升级迁移由插件的 `IManagementResourceMigration` 贡献精确旧键到新键映射，保留原列表、其他字段与秘密原树，不通过迁移扩展收紧模式下的授权范围。版本标记 `plugin-management-version: 1` 记录迁移状态，所有更新沿用原配置类型锁、原子保存和发布。
 
@@ -146,3 +152,5 @@ v4.7.7-l 将文件条目的唯一配置路由 `id` 与实际协议 `adapter` 分
 Timer 定义、持久计划和单次 TaskRun 分开展示。底层命令调用任务可能先结束，外层业务 Stage 尚未结束，页面应跟踪业务 runId 的真实阶段。取消请求不等于已撤销副作用，INDETERMINATE 不显示为安全可重试。
 
 插件表单优先使用受限 schema、表格与动作描述。4.9.0-l 的独立控制台页面通过[构建期页面声明](../web-console-pages.md)接入，导航、标题和生命周期共用一份合同；不支持加载远端插件脚本。浏览器中的记忆、日志及插件文本按非可信内容渲染，运行状态使用只读观测快照，审计使用独立可靠记录。
+
+组件独立模型使用 `IAgentComponent.Field` 的 `MODEL` 类型。目录负责私有连接的运行脱敏、同路径密钥保留及配置版本路由，字段可提供同源 `probe` 管理端点以显示检测按钮；检测接口仍必须独立复核会话、配置、插件与真实聊天权限，字段声明不构成授权。前端共用 `ModelSelectionEditor`，无需增加宿主插件标识分支。

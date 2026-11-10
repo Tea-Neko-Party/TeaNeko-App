@@ -18,10 +18,13 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+// 2026/11/10：补齐既有完整诊断断言所需导入，恢复测试源码编译。
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 独立诊断记录保留完整统一输入与响应，并明确服务端未知边界。
  * <br>2026/11/08：验证系统提示、工具声明、长正文及敏感状态的脱敏。
+ * <br>2026/11/10：补齐断言导入，恢复诊断回归编译。
  *
  * @author zExNocs
  * @date 2026/11/08

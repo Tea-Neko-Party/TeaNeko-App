@@ -10,21 +10,21 @@ package org.zexnocs.teanekoplugin.agent.expression.sticker;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
-import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
-import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
-import org.zexnocs.teanekoplugin.support.PluginTaskScope;
-import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoContent;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.TeaNekoMessageType;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ResourceBudget;
+import org.zexnocs.teanekocore.actuator.task.EmptyTaskResult;
 import org.zexnocs.teanekocore.actuator.timer.TimerDisplay;
+import org.zexnocs.teanekocore.actuator.timer.interfaces.ITimerService;
 import org.zexnocs.teanekocore.framework.lifescycle.IPausable;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
+import org.zexnocs.teanekoplugin.support.PluginTaskScope;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -54,11 +54,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * <br>2026/11/07：低频维护恢复便携描述及复制导入，独立期限内不调用模型。
  * <br>2026/11/07：维护直接声明零额度资源预算，避免违反模型交互至少一次请求的约束。
  * <br>2026/11/07：后台任务支持重复热启停，停止等待本代实际工作收尾。
+ * <br>2026/11/10：资格撤销保留明确终态并清理资源，不再报告为未知处理故障。
+ * <br>2026/11/10：文件超限以明确拒绝收尾，释放预约并输出大小对照，不记录通用处理错误。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 // 2026/11/04：展示声明不改变原任务调度和生命周期。
 // 2026/11/04：补充任务用途、执行边界与网页控制说明。
@@ -218,8 +220,8 @@ public final class StickerCollectionService implements AutoCloseable, IPluginLif
             cleanup(config, ports, work);
             return;
         }
-        try (var control = ExecutionControl.withDeadline(new LLMCallLimits(1, 0, 0).newBudget(),
-            Instant.now().plus(config.timeout()), Clock.systemUTC(), scheduler)) {
+        // 2026/11/10：只有声明备用调用的分析器取得两次预算，每次仍独立使用原超时。
+        try (var control = control(config, ports, work)) {
             active.set(control);
             if (closed) {
                 control.cancel();
@@ -246,13 +248,49 @@ public final class StickerCollectionService implements AutoCloseable, IPluginLif
                 }
             }
         } catch (RuntimeException failure) {
-            await(ports.catalog(), library.fail(config, ports, work));
-            warn(failure);
+            // 2026/11/10：已开始工作的资格撤销仍完成终态与清理，以明确原因记录正常停止。
+            var cause = failure;
+            while (cause instanceof java.util.concurrent.CompletionException
+                    && cause.getCause() instanceof RuntimeException nested) {
+                cause = nested;
+            }
+            // 2026/11/10：大素材是下载策略拒绝，不能伪装成生命周期撤销或模型故障。
+            if (cause instanceof StickerSizeLimitException oversized) {
+                await(ports.catalog(), library.rejectOversized(config, ports, work));
+                logger.info(StickerCollectionService.class.getName(), "表情包作业=" + work.job().getId()
+                        + "，原因=FILE_TOO_LARGE，" + oversized.failureReason());
+            } else {
+                var rejected = cause instanceof StickerAccessException accessFailure ? accessFailure.access() : null;
+                await(ports.catalog(), library.fail(config, ports, work, rejected));
+                if (rejected == null) {
+                    warn(failure);
+                } else {
+                    logger.info(StickerCollectionService.class.getName(), "表情包作业已停止；作业=" + work.job().getId()
+                            + "，原因=" + rejected.name() + "（" + rejected.description() + "），将清理本次暂存与预约。");
+                }
+            }
         } finally {
             active.set(null);
         }
         cleanup(config, ports, work);
     }
+    /**
+     * 2026/11/10：预算解析位于作业异常收尾边界内，扩展不能声明无界备用请求。
+     * @param config 固定设置
+     * @param ports 已选择扩展
+     * @param work 已领取作业
+     * @return 本作业拥有的有界控制
+     */
+    private ExecutionControl control(StickerSettings config, StickerExtensionRegistry.Selected ports,
+            StickerLibrary.Work work) {
+        int calls = ports.analyzer().maxModelCalls(work.job().getSource(), config);
+        if (calls < 1 || calls > 2) {
+            throw new IllegalArgumentException("表情包模型调用次数必须在 1 至 2 之间。");
+        }
+        return ExecutionControl.withDeadline(new LLMCallLimits(calls, 0, 0).newBudget(),
+                Instant.now().plus(config.timeout().multipliedBy(calls)), Clock.systemUTC(), scheduler);
+    }
+
     /**
      * 清理先实际完成再释放预约；失败留待后续持久维护，不吞掉文件占用。
      * @param config 配置
@@ -276,7 +314,8 @@ public final class StickerCollectionService implements AutoCloseable, IPluginLif
     private Stickers.Analysis analyze(StickerExtensionRegistry.Selected ports, StickerLibrary.Work work,
                                       IStickerAssetStore.Prepared prepared, StickerSettings config,
                                       ExecutionControl control) {
-        var analysis = ports.analyzer().analyze(work.job().getSource(), prepared, config, control);
+        var analysis = ports.analyzer().analyze(work.job().getSource(), prepared, config, control,
+                () -> library.reserveAdditionalAnalysis(config, ports, work, control));
         try {
             return control.guard(analysis).toCompletableFuture().join();
         } finally {

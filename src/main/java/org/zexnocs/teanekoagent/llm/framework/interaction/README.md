@@ -8,6 +8,8 @@
 
 `LLMCallLimits` 默认是三次模型请求、两批工具、六次工具执行。模型次数必须为正，工具限额允许零以禁用工具；工具批次数会收束到 `maxModelCalls - 1`。`LLMInteractionSettings` 默认模型阶段六十秒、单工具十五秒、整轮一百二十秒，均可由调用方显式替换。传输失败不重试；下述协议纠正仍占原次数和时限。
 
+预算拒绝通过 `BudgetExceededException` 的安全原因传到日志和聊天报告，包含资源维度、上限、已占用、剩余和本次需要；已占用包含在途预留。`llm.model-requests`、`llm.tool-rounds`、`llm.tool-executions` 分别表示模型尝试数、工具批次数和工具执行数，`llm.total-tokens` 表示可选的总 token 预算。局部和父共享上限分别检查，错误报告使用实际拒绝方的数值。模型 `max-tokens` 和监控告警阈值不改变这些次数限制；大小或次数超限不会自动扩大预算。
+
 ```java
 var settings = LLMInteractionSettings.defaults();
 // 独立请求才创建总预算；同请求的前置步骤或协作应继续复用同一父控制。

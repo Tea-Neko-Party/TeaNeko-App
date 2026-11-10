@@ -180,7 +180,9 @@ models:
 
 ## 3.2 具体模型输入能力
 
-`ILLMModel.getCapabilities(model)` 返回不可变的 `ModelCapabilities`。能力针对本次合并后的具体模型名，默认没有声明图像能力；新供应商可覆盖该方法，不需要导入 App 或 Agent 类型。模型服务与 AbstractLLMModel 的直接调用均在认证/HTTP 前检查内容、角色和图像细节级别。
+`ILLMModel.inputCapabilities(options)` 按完整有效配置返回不可变的 `ModelCapabilities`，默认委托 `getCapabilities(model)`。v4.9.1-l 的兼容图片协议允许通过 `image-input` 明确允许或禁止图片；省略继续使用具体型号声明。能力针对本次合并后的具体模型名，默认没有声明图像能力；新供应商可覆盖该方法，不需要导入 App 或 Agent 类型。模型服务与 AbstractLLMModel 的直接调用均在认证/HTTP 前检查内容、角色和图像细节级别。
+
+输入校验失败使用 `LLMInputValidationException` 的安全原因合同，日志保留首个失败字段（例如 `messages[2].contents[1].image`，下标从零开始）、要求和实际结构。图片错误同时显示允许的角色/细节集合及实际枚举；空能力集合明确提示当前模型未声明图片输入。未知内容类型只显示固定类别，不回显消息、URL、内联图片、凭据或未筛选的 `type` 原值。该错误发生于发送前，不代表远端模型返回参数错误。
 
 当前已核实的支持范围见 [模型文件配置说明](../file_config/README.md#图像能力)。统一内容与构造方式见 [消息说明](message/README.md#五-content-结构)。本地配置继续选择默认模型，不因能力表而自动切换供应商或模型。
 
@@ -431,3 +433,5 @@ CompletionStage<LLMToolMessage> message = pending.thenApply(ToolInvocationResult
 | `kimi` | `kimi-k2.6` | `kimi` | 继承 Chat Completions 通用层，只实现 Kimi 差异。 |
 
 OpenAI Chat Completions 通用类没有 `@LLMModel`，不会注册。需要接入兼容供应商时，应继承其抽象模型，并在供应商实现类上声明独立的 `@LLMModel(id = "...")`。
+
+拥有借用图片或准备显式备用请求的业务，可使用 `ILLMInteractionService.interactSettled`（严格结构生成使用 `LLMJsonService.generateSettled`）。它保留逻辑超时状态，但等待所有已登记阶段及模型任务的真实结束后交付结果；超时观察不能替代资源释放信号。普通 `interact` 保留及时终态观察。

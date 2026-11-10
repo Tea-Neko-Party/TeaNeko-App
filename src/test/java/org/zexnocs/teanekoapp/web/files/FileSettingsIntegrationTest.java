@@ -6,6 +6,9 @@ package org.zexnocs.teanekoapp.web.files;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.zexnocs.teanekoagent.component.llm.LLMComponent;
+import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
+import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoagent.llm.configuration.FileLLMCredentialResolver;
 import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigService;
 import org.zexnocs.teanekoagent.llm.file_config.LLMFileConfigurationEpoch;
@@ -13,8 +16,6 @@ import org.zexnocs.teanekoagent.llm.file_config.LLMModelFileConfig;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMConfigurationException;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelId;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
-import org.zexnocs.teanekoagent.configuration.file_config.AgentObservationFileConfig;
-import org.zexnocs.teanekoagent.integration.web.AgentFileSettings;
 import org.zexnocs.teanekoagent.llm.integration.web.LLMFileSettings;
 import org.zexnocs.teanekoapp.web.WebSecurityFileConfig;
 import org.zexnocs.teanekocore.file_config.FileConfigScanner;
@@ -26,12 +27,14 @@ import org.zexnocs.teanekocore.file_config.api.IFileConfigData;
 import org.zexnocs.teanekocore.file_config.parser.YAMLFileTypeParser;
 import org.zexnocs.teanekocore.framework.pair.IndependentPair;
 import org.zexnocs.teanekocore.logger.ILogger;
-// 2026/11/07：用真实插件注册表验证系统模型配置与插件目录权限解耦。
 import org.zexnocs.teanekocore.plugin.PluginDescriptor;
 import org.zexnocs.teanekocore.plugin.PluginRegistry;
 import org.zexnocs.teanekocore.utils.StableDigest;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IBeanScanner;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelConfiguration;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelFileConfig;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelFileSettings;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
@@ -62,6 +65,8 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// 2026/11/07：用真实插件注册表验证系统模型配置与插件目录权限解耦。
+
 // 2026/11/05：跟随模型配置装配迁移更新凭据解析器引用。
 
 /**
@@ -80,13 +85,55 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/06：验证观测模板、表单保存与实际热应用事务。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：验证插件管理未授权及业务插件停用时系统模型配置仍可编辑，并保留文件白名单拒绝。
+ * <br>2026/11/10：验证模型检测成功提示明确其短文本及无工具边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class FileSettingsIntegrationTest {
+    /**
+     * 2026/11/10：备用模型复用实际文件事务、秘密掩码、显式应用及插件停用授权。
+     * @throws Exception 当临时文件准备失败时
+     */
+    @Test
+    void savesAndAppliesPrivateStickerModelWithoutExposingCredentials() throws Exception {
+        var fixture = new Fixture(root);
+        var adapter = new StickerModelFileSettings(fixture.files,
+                new StickerModelConfiguration(new LLMComponent(new YAMLFileTypeParser(fixture.environment))));
+        var declarations = new LinkedHashMap<>(fixture.scanner
+                .getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class));
+        declarations.put("sticker", new IndependentPair<>(StickerModelFileSettings.class.getAnnotation(TeaNekoFileSettings.class), adapter));
+        when(fixture.scanner.getBeansWithAnnotationAndInterface(TeaNekoFileSettings.class, IFileSettingsAdapter.class))
+                .thenReturn(declarations);
+        doReturn(StickerModelFileSettings.class).when(fixture.scanner).getBeanClass(adapter);
+        fixture.directory.reload();
+        fixture.files.get(WebSecurityFileConfig.class).setLocalAllowlistEnabled(false);
+        var plugins = new PluginRegistry(List.of(() -> new PluginDescriptor("agent.expression", "1", 1, Set.of(), false)));
+        var service = new FileSettingsService(fixture.directory, fixture.files, plugins, fixture.journal, Runnable::run);
+        var view = result(service.read("agent.sticker-model", () -> { }));
+        var values = mapper.readTree("""
+                {"source":"custom","configuration/adapter":"openai","configuration/model":"vision-test",
+                 "configuration/api-key":"${TEST_SECRET}","configuration/max-tokens":256,
+                 "configuration/context-window-tokens":4096,"configuration/image-input":true}
+                """);
+        var changes = values.properties().stream().map(entry -> new FileSettings.Edit("/fallback/" + entry.getKey(),
+                entry.getKey().equals("configuration/api-key") ? "REPLACE_SECRET" : "SET", entry.getValue())).toList();
+        var saved = result(service.save("agent.sticker-model", new FileSettings.Change(UUID.randomUUID(),
+                view.revision(), changes), () -> { }));
+        assertEquals("SAVED", saved.status());
+        var masked = result(service.read("agent.sticker-model", () -> { }));
+        assertFalse(mapper.writeValueAsString(masked).contains("测试环境秘密"));
+        assertFalse(mapper.writeValueAsString(masked).contains("TEST_SECRET"));
+        assertEquals("APPLIED", result(service.apply("agent.sticker-model",
+                new FileSettings.Application(UUID.randomUUID(), saved.diskRevision()), () -> { })).status());
+        assertTrue(fixture.files.requireCurrent(StickerModelFileConfig.class).getFallback()
+                .path("configuration").path("image-input").asBoolean());
+        plugins.setEnabled("agent.expression", false);
+        assertThrows(RuntimeException.class, () -> result(service.read("agent.sticker-model", () -> { })));
+    }
+
     /**
      * 自动表单使用真实 YAML 命名并保守要求重启；专用合同可以确认原模块的热更新。
      * @throws Exception 当临时文件操作失败时
@@ -185,6 +232,7 @@ class FileSettingsIntegrationTest {
 
     /**
      * 2026/11/05：检测读取保存版本而非旧运行缓存，失败不泄露正文，结束后释放临时凭据路由。
+     * <br>2026/11/10：成功结果须说明短文本检测范围，不能被误解为工具与完整聊天验收。
      * @throws Exception 当文件夹具创建失败时
      */
     @Test
@@ -235,7 +283,10 @@ class FileSettingsIntegrationTest {
                     any(org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy.class)))
                     .thenReturn(org.zexnocs.teanekocore.actuator.task.TaskFuture.fromStage(mock(ILogger.class), "离线成功检测",
                             java.util.concurrent.CompletableFuture.completedStage(success)));
-            assertEquals("SUCCESS", result(probes.probe("deepseek", saved.diskRevision(), () -> {})).status());
+            var tested = result(probes.probe("deepseek", saved.diskRevision(), () -> {}));
+            assertEquals("SUCCESS", tested.status());
+            assertTrue(tested.reason().contains("无工具短文本"));
+            assertTrue(tested.reason().contains("尚未验证"));
             success.setChoices(List.of());
             assertEquals("FAILED", result(probes.probe("deepseek", saved.diskRevision(), () -> {})).status());
         }
@@ -506,6 +557,7 @@ class FileSettingsIntegrationTest {
             when(classes.getClassesWithAnnotationAndInterface(FileConfig.class, IFileConfigData.class)).thenReturn(Map.of(
                     Value.class, Value.class.getAnnotation(FileConfig.class), WebSecurityFileConfig.class, WebSecurityFileConfig.class.getAnnotation(FileConfig.class),
                     LLMModelFileConfig.class, LLMModelFileConfig.class.getAnnotation(FileConfig.class),
+                    StickerModelFileConfig.class, StickerModelFileConfig.class.getAnnotation(FileConfig.class),
                     AgentObservationFileConfig.class, AgentObservationFileConfig.class.getAnnotation(FileConfig.class),
                     org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class,
                     org.zexnocs.teanekocore.actuator.runtime.RuntimeSettings.class.getAnnotation(FileConfig.class)));

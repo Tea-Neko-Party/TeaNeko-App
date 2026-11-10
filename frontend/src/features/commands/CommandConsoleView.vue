@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from '../../shared/components/RefreshButton.vue'
@@ -139,7 +141,7 @@ onBeforeUnmount(() => { generation++; original.value = undefined; window.removeE
     <ElAlert v-if="error" :title="error" type="error" :closable="false" />
     <ElCard v-if="catalog" shadow="never" class="runtime-card"><div class="editor-heading"><h3>当前目标 · {{ catalog.targetName }}</h3><ElTag :type="catalog.state.state === 'READY' ? 'success' : 'warning'">{{ states[catalog.state.state] ?? catalog.state.state }}</ElTag></div><p>{{ catalog.state.explanation }}</p><p class="small muted">目录时刻：{{ new Date(catalog.observedAt).toLocaleString('zh-CN') }}；新受理需使用五分钟内的目录。下方最多显示 100 个明确声明的管理方法，最终仍按当前权限和作用域校验。</p><RefreshButton :disabled="locked" @click="run(load)" label="刷新目录与连接" /></ElCard>
     <ElCard shadow="never" class="runtime-card"><h3>命令及用法</h3><PluginFilter v-model="pluginId" :items="catalog?.commands ?? []" /><ElEmpty v-if="catalog && !visibleCommands.length" description="没有已开放的管理命令；请检查本机 console-prefixes 与方法声明" />
-      <div v-for="command in visibleCommands" :key="command.usage" class="console-command"><strong>{{ command.usage }}</strong><ElTag v-if="command.pluginId" type="info">{{ command.pluginId }}</ElTag><ElTag v-if="command.sendsMessages" type="warning" size="small">会向真实聊天发送</ElTag><p class="evidence-text">{{ command.description }}</p><ElButton text :disabled="locked" @click="text = command.usage + ' '">填入命令</ElButton></div>
+      <div v-for="command in visibleCommands" :key="command.usage" class="console-command"><strong>{{ command.usage }}</strong><ElTag v-if="command.pluginId" type="info"><PluginLabel :plugin-id="command.pluginId" /></ElTag><ElTag v-if="command.sendsMessages" type="warning" size="small">会向真实聊天发送</ElTag><p class="evidence-text">{{ command.description }}</p><ElButton text :disabled="locked" @click="text = command.usage + ' '">填入命令</ElButton></div>
     </ElCard>
     <ElCard shadow="never" class="runtime-card"><label for="console-command-input">命令正文</label><ElInput id="console-command-input" v-model="text" type="textarea" :rows="4" maxlength="4096" :disabled="locked" placeholder="例如 /console 或 /console say 大家好；这里不执行操作系统命令或任意平台 JSON" aria-label="指令台命令正文" autocomplete="off" /><div class="editor-actions"><ElButton type="primary" :disabled="locked || catalog?.state.state !== 'READY' || !visibleCommands.length || !text.trim()" @click="submit">提交指令</ElButton></div></ElCard>
     <ElCard v-if="original" shadow="never" class="pending-operation"><h3>原请求受理结果待确认</h3><p class="small revision">操作编号：{{ original.operationId }}</p><p class="small muted">连接中断不等于未执行。原请求只保留在当前页面内存；先查询原编号，不能更换编号猜测重发。</p><ElButton :disabled="busy" @click="query">查询原回执</ElButton><ElButton :disabled="busy" @click="run(deliver)">原样重试</ElButton><RefreshButton :disabled="busy" @click="discard" label="放弃原请求并刷新" /></ElCard>

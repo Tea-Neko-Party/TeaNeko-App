@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -20,7 +21,7 @@ import java.util.function.Function;
 
 /**
  * 自动触发的有界准入与交付记账；只保存纯状态，不调用模型、Timer 或平台发送器。
- * 每个 scope 同时只借出一个六十秒票据，副作用前须 verify，结束后须 finish。
+ * 每个 scope 同时只借出一个有界票据，副作用前须 verify，结束后须 finish。
  * <br>2026/11/02：原生私聊作为直接对话信号，不依赖无法产生的提及。
  * <br>2026/11/04：校正 @since 为首次引入版本。
  *
@@ -28,11 +29,12 @@ import java.util.function.Function;
  *
  * <br>2026/11/05：说明时区解析仅验证格式，不因校验而改写原始时区标识。
  * <br>2026/11/07：自主候选资格由活动策略显式授予，不从活动模式推导插件权限。
+ * <br>2026/11/10：允许调用方提供与本次执行一致的有界票据时长，原入口仍为六十秒。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public final class AgentTriggerGate {
     private final Function<AgentScope, Settings> settings;
@@ -54,6 +56,21 @@ public final class AgentTriggerGate {
      * @return 可执行票据；未登记、禁用、旁观、静默、冷却或容量不足时为空
      */
     public Optional<Ticket> acquire(Signal signal) {
+        // 2026/11/10：普通触发保留原时长，自主调用可显式传入候选总时限。
+        return acquire(signal, Duration.ofSeconds(60));
+    }
+
+    /**
+     * 按本次执行时长授予有界票据，延长时长不会绕过实时策略和目标占用。
+     * @param signal 宿主固定的原生信号
+     * @param validity 本次执行要求的有效期，必须大于零且不超过三分钟
+     * @return 当前资格允许时的独占票据
+     * @throws IllegalArgumentException 当有效期超出允许范围时
+     */
+    public Optional<Ticket> acquire(Signal signal, Duration validity) {
+        if (validity.isNegative() || validity.isZero() || validity.compareTo(Duration.ofMinutes(3)) > 0) {
+            throw new IllegalArgumentException("触发票据有效期必须大于零且不超过三分钟。");
+        }
         var policy = settings.apply(signal.actor().scope()); var now = clock.instant();
         if (!policy.scope().registered() || !policy.scope().enabled() || signal.botAuthored()
                 || signal.kind() == Kind.MESSAGE && signal.actor().origin() != AgentActorContext.Origin.USER) { return Optional.empty(); }
@@ -79,7 +96,8 @@ public final class AgentTriggerGate {
                         && (signal.namesBot() || state.recent.containsKey(user));
                 if (!direct && !contextual || state.recent.size() >= 256 && !state.recent.containsKey(user)) { return Optional.empty(); }
             }
-            var ticket = new Ticket(UUID.randomUUID(), signal, policy, now.plusSeconds(60)); state.pending = ticket;
+            var ticket = new Ticket(UUID.randomUUID(), signal, policy, now.plus(validity));
+            state.pending = ticket;
             return Optional.of(ticket);
         }
     }

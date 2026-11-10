@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
 import RefreshButton from '../../shared/components/RefreshButton.vue'
@@ -206,7 +208,7 @@ onMounted(async () => {
     <PluginFilter v-if="availableClients.some(client => client.pluginId)" v-model="owner" :items="availableClients" />
     <ElEmpty v-if="view && !matchingClients.length" description="没有已注册的机器连接入口" />
     <ElCard v-for="client in matchingClients" :key="client.client" shadow="never" class="runtime-card">
-      <div class="editor-heading"><h3>{{ client.name }}</h3><ElTag v-if="client.pluginId" type="info">{{ client.pluginId }}</ElTag><ElTag :type="client.active === 'OPEN' ? 'warning' : client.active === 'DENIED' ? 'info' : 'success'">{{ names[client.active] }}</ElTag></div>
+      <div class="editor-heading"><h3>{{ client.name }}</h3><ElTag v-if="client.pluginId" type="info"><PluginLabel :plugin-id="client.pluginId" /></ElTag><ElTag :type="client.active === 'OPEN' ? 'warning' : client.active === 'DENIED' ? 'info' : 'success'">{{ names[client.active] }}</ElTag></div>
       <!-- 2026/11/05：同时展示公开 WSS 和服务器本机 WS，两种传输沿用同一机器令牌。 -->
       <p class="small">公开 WSS 地址</p><p class="connection-address"><code>{{ client.address }}</code></p>
       <p class="small">服务器本机 WS 地址</p><p class="connection-address"><code>ws://127.0.0.1:{{ client.backendPort }}/ws/{{ client.client }}</code></p>

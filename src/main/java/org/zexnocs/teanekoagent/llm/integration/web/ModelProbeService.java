@@ -29,6 +29,7 @@ import java.util.concurrent.Semaphore;
 /**
  * 对已保存文件快照执行一次无工具模型检测；不应用配置，不记录密钥或模型响应正文。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：成功提示明确无工具短文本的检测边界，不承诺完整 Agent 兼容性。
  *
  * @author zExNocs
  * @date 2026/11/05
@@ -107,6 +108,7 @@ public final class ModelProbeService {
 
     /**
      * 检测必须收到完整的文本回答，不把空消息、截断或拒绝视为成功。
+     * <br>2026/11/10：将实际检测范围写入结果，避免与长上下文及工具调用验收混淆。
      * @param revision 检测版本
      * @param response 协议适配器返回的响应
      * @return 不含模型正文的结果
@@ -128,7 +130,7 @@ public final class ModelProbeService {
                 content.getContentPart() instanceof org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart text
                         && !text.getText().isBlank());
         return new Result(revision, hasText ? "SUCCESS" : "FAILED",
-                hasText ? "模型连接与响应正常。" : "模型返回的文本为空。");
+                hasText ? "无工具短文本检测通过；工具调用、长上下文及聊天流程尚未验证。" : "模型返回的文本为空。");
     }
 
     /**

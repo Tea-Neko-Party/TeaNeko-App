@@ -2,13 +2,17 @@ package org.zexnocs.teanekoagent.llm.framework.structured;
 
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
+import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
+import org.zexnocs.teanekoagent.llm.framework.message.LLMSystemMessage;
+import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
 import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.message.interfaces.ILLMMessage;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
@@ -20,20 +24,25 @@ import tools.jackson.databind.ObjectMapper;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Consumer;
 
 /**
- * 按已登记 Java 类型进行一次结构化生成，复用原交互预算和动态守卫。
+ * 按已登记 Java 类型进行结构化生成，复用原交互预算和动态守卫；纠错由独立入口显式启用。
  * <br>2026/11/06：统一结构提示、原生 JSON 选项和严格解码，不隐含重试或提交业务状态。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：短指令保留 Schema 顶层字段名，减少兼容网关忽略原生约束时的别名输出。
+ * <br>2026/11/10：显式纠错入口反馈结构错误及完整合同，最多追加一次且共享原预算、总时限与准入。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Service
 public final class LLMJsonService {
@@ -43,6 +52,8 @@ public final class LLMJsonService {
     private final LLMJsonCodec codec;
     private final LLMJsonDiagnostics diagnostics;
     private final ILLMModelService models;
+    // 2026/11/10：只借用原调度器，为首次生成和纠错建立共同截止时间。
+    private final ScheduledExecutorService scheduler;
 
     /**
      * @param schemas 初始化完成的类型目录
@@ -50,15 +61,18 @@ public final class LLMJsonService {
      * @param mapper 应用转换器
      * @param diagnostics 受限本机诊断
      * @param models 原模型服务，用于固定实际结构协议而不发起请求
+     * @param scheduler 借用截止调度器，不由本服务关闭
      */
     public LLMJsonService(LLMJsonSchemas schemas, ILLMInteractionService interactions, ObjectMapper mapper,
-            LLMJsonDiagnostics diagnostics, ILLMModelService models) {
+            LLMJsonDiagnostics diagnostics, ILLMModelService models,
+            @Qualifier("taskExecutor") ScheduledExecutorService scheduler) {
         this.schemas = schemas;
         this.interactions = interactions;
         this.mapper = mapper;
         this.codec = new LLMJsonCodec(mapper);
         this.diagnostics = diagnostics;
         this.models = models;
+        this.scheduler = scheduler;
     }
 
     /**
@@ -74,6 +88,24 @@ public final class LLMJsonService {
     public <T> CompletionStage<T> generate(Class<T> type, ILLMPrompt prompt, ToolInvocationContext context,
             LLMInteractionSettings settings, ILLMInteractionGuard guard) {
         return generate(prepare(type, prompt), context, settings, guard, ignored -> { });
+    }
+
+    /**
+     * 2026/11/10：供拥有图片资源及备用请求的调用者使用，解码前等待真实模型阶段结束。
+     * @param type 已登记结果类型
+     * @param prompt 原输入
+     * @param context 原身份和控制
+     * @param settings 每次生成限制
+     * @param guard 动态准入
+     * @param <T> 结果类型
+     * @return 已排空的严格结果，失败不会提前释放资源
+     */
+    public <T> CompletionStage<T> generateSettled(Class<T> type, ILLMPrompt prompt, ToolInvocationContext context,
+            LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+        var request = prepare(type, prompt);
+        context.control().checkActive();
+        return decode(request, context, ignored -> { }, interactions.interactSettled(request.prompt(),
+                new LLMToolSet(mapper, List.of()), context, settings, guard));
     }
 
     /**
@@ -112,9 +144,11 @@ public final class LLMJsonService {
      * @return 仅输出一个 JSON 对象的系统约束
      */
     public LLMJsonInstruction instruction(LLMJsonSchemas.Definition definition) {
-        // 2026/11/06：保留类型化结构来源，实际适配时避免原生 Schema 与全文提示重复。
+        // 2026/11/10：字段名直接取自已编译 Schema，原生模式也提供短合同，不重复嵌套全文。
+        var fields = mapper.valueToTree(definition.schema().schema()).path("properties").propertyNames();
         return new LLMJsonInstruction(
                 "只输出一个完整 JSON 对象，遵循以下 JSON Schema。每个字段都必须出现；可空字段显式写 null。"
+                + "顶层字段名必须原样使用：" + mapper.writeValueAsString(fields) + "，不得替换为别名。"
                 + "不使用 Markdown 代码围栏、解释、前后缀或额外字段。输出最多 " + definition.maxCharacters()
                 + " 字符。字段描述和业务约束同样必须遵守。",
                 mapper.writeValueAsString(definition.schema().schema()), false);
@@ -133,27 +167,154 @@ public final class LLMJsonService {
     public <T> CompletionStage<T> generate(Request<T> request, ToolInvocationContext context,
             LLMInteractionSettings settings, ILLMInteractionGuard guard, Consumer<LLMInteractionResult> observer) {
         context.control().checkActive();
-        return interactions.interact(request.prompt(), new LLMToolSet(mapper, List.of()), context, settings, guard)
-                .thenApply(result -> {
+        return decode(request, context, observer, interactions.interact(request.prompt(),
+                new LLMToolSet(mapper, List.of()), context, settings, guard));
+    }
+
+    /**
+     * 2026/11/10：显式允许一次格式纠错；成功响应的结构错误才可重试，不改变业务数据或证据。
+     * 首次和纠错共用总截止时间、父预算及身份；每次输入重新预检、真实调用前仍复核动态准入。
+     * @param request 固定输入及结构合同
+     * @param context 原身份和父执行控制
+     * @param settings 两次生成合计的调用和 token 限额，以及共同总时限
+     * @param guard 每次模型阶段的动态准入
+     * @param observer 每次交互实际结束后的用量观察者
+     * @param inputCheck 每次完整输入的业务容量检查，不修改请求
+     * @param <T> 输出类型
+     * @return 等待真实调用结束后的严格结果；持续错误仍异常结束
+     */
+    public <T> CompletionStage<T> generateWithCorrection(Request<T> request, ToolInvocationContext context,
+            LLMInteractionSettings settings, ILLMInteractionGuard guard, Consumer<LLMInteractionResult> observer,
+            Consumer<ILLMPrompt> inputCheck) {
+        var control = context.control().child(settings.turnTimeout(), scheduler);
+        try {
+            return correctedAttempt(request, context.withControl(control), settings, guard, observer, inputCheck, true)
+                    .whenComplete((ignored, failure) -> control.close());
+        } catch (RuntimeException failure) {
+            control.close();
+            throw failure;
+        }
+    }
+
+    /**
+     * 2026/11/10：只捕获严格解码的安全错误；观察者、权限及传输故障不得被误作可修正的输出。
+     * @param request 当前完整请求
+     * @param context 共享总时限与父预算的上下文
+     * @param settings 剩余局部预算和原阶段时限
+     * @param guard 原准入
+     * @param observer 真实交互观察者
+     * @param inputCheck 完整输入预检
+     * @param allowCorrection 是否尚未使用唯一一次纠错
+     * @param <T> 结果类型
+     * @return 严格结果或保留真实原因的失败阶段
+     */
+    private <T> CompletionStage<T> correctedAttempt(Request<T> request, ToolInvocationContext context,
+            LLMInteractionSettings settings, ILLMInteractionGuard guard, Consumer<LLMInteractionResult> observer,
+            Consumer<ILLMPrompt> inputCheck, boolean allowCorrection) {
+        context.control().checkActive();
+        inputCheck.accept(request.prompt());
+        return interactions.interactSettled(request.prompt(), new LLMToolSet(mapper, List.of()), context, settings, guard)
+                .thenCompose(result -> {
                     observer.accept(result);
                     context.control().checkActive();
-                    if (result.status() != LLMInteractionResult.Status.SUCCESS) {
-                        throw new LLMJsonException(LLMJsonException.Code.MODEL_RESULT, result.status(), context.requestId(),
-                                result.failure() == null ? statusDescription(result.status()) : result.failure().description(),
-                                result.failure());
-                    }
-                    var message = result.finalCandidate().orElseThrow(() -> new LLMJsonException(
-                            LLMJsonException.Code.MISSING_OUTPUT, result.status(), context.requestId(), "模型未返回最终消息。", null));
-                    var text = new StringBuilder();
-                    for (var content : message.getContents()) {
-                        if (!(content.getContentPart() instanceof TextLLMContentPart part)) {
-                            throw new LLMJsonException(LLMJsonException.Code.JSON_SHAPE, result.status(), context.requestId(),
-                                    "JSON 结果包含非文本内容。", null);
+                    try {
+                        return CompletableFuture.completedStage(decodeResult(request, context.requestId(), result));
+                    } catch (LLMJsonException failure) {
+                        boolean correctable = failure.status() == LLMInteractionResult.Status.SUCCESS
+                                && switch (failure.code()) {
+                                    case JSON_SYNTAX, JSON_SHAPE, JSON_BINDING, OUTPUT_LIMIT -> true;
+                                    default -> false;
+                                };
+                        if (!allowCorrection || !correctable || result.modelAttempts() >= settings.limits().maxModelCalls()
+                                || context.control().budget().remaining(LLMCallLimits.MODEL_REQUESTS) < 1) {
+                            return CompletableFuture.failedStage(failure);
                         }
-                        text.append(part.getText());
+                        var usage = Objects.requireNonNull(result.budgetUsage().get(LLMCallLimits.MODEL_REQUESTS),
+                                "结构化纠错必须取得原交互的模型调用用量。");
+                        Long tokens = settings.limits().maxTotalTokens();
+                        if (tokens != null) {
+                            var spent = Objects.requireNonNull(result.budgetUsage().get(LLMCallLimits.TOTAL_TOKENS),
+                                    "结构化纠错必须取得已启用的局部 token 用量。");
+                            if (spent.exceeded() || spent.used() >= tokens) {
+                                return CompletableFuture.failedStage(failure);
+                            }
+                            tokens -= spent.used();
+                        }
+                        var remaining = new LLMInteractionSettings(new LLMCallLimits(
+                                Math.toIntExact(settings.limits().maxModelCalls() - usage.used()), 0, 0, tokens),
+                                settings.modelTimeout(), settings.toolTimeout(), settings.turnTimeout());
+                        return correctedAttempt(correction(request, failure), context, remaining, guard, observer,
+                                inputCheck, false);
                     }
-                    return read(request.type(), request.definition(), text.toString(), context.requestId());
                 });
+    }
+
+    /**
+     * 2026/11/10：纠错显式重发完整 Schema，兼容忽略原生结构参数的服务；不回填不可信原答案。
+     * @param request 原业务资料与固定合同
+     * @param failure 已脱敏的校验报告
+     * @param <T> 输出类型
+     * @return 追加一次反馈的独立请求，不修改来源消息和参数
+     */
+    private <T> Request<T> correction(Request<T> request, LLMJsonException failure) {
+        var messages = new ArrayList<>(request.prompt().getMessages());
+        messages.add(LLMSystemMessage.builder().contents(new LLMContentListBuilder().addText(
+                "上一次输出未通过结构校验，请根据原始资料重新生成完整 JSON 对象。校验报告："
+                        + failure.failureReason()
+                        + "\n必须逐项遵守下方完整 JSON Schema，所有必需字段和嵌套字段都要出现，不使用别名或额外字段。"
+                        + "继续遵守原业务证据约束，不为补齐结构而编造事实，也不为通过校验而删除有依据的内容。"
+                        + "不要输出解释、Markdown 或差异补丁。本次完整 JSON Schema："
+                        + mapper.writeValueAsString(request.definition().schema().schema())).build()).build());
+        var prompt = models.prepareRequest(new LLMPrompt(List.copyOf(messages),
+                LLMModelOptions.copyOf(request.prompt().getOptions()), request.prompt().getOptionsPolicy()));
+        return new Request<>(request.type(), request.definition(),
+                new LLMPrompt(prompt.getMessages(), prompt.getOptions(), prompt.getOptionsPolicy()));
+    }
+
+    /**
+     * @param request 固定结构合同
+     * @param context 原控制
+     * @param observer 原结果观察者
+     * @param pending 具有明确完成语义的交互结果
+     * @param <T> 结果类型
+     * @return 严格解码结果
+     */
+    private <T> CompletionStage<T> decode(Request<T> request, ToolInvocationContext context,
+            Consumer<LLMInteractionResult> observer, CompletionStage<LLMInteractionResult> pending) {
+        return pending.thenApply(result -> {
+            // 2026/11/10：单次与纠错共用严格解码，观察和执行资格在解码前复核。
+            observer.accept(result);
+            context.control().checkActive();
+            return decodeResult(request, context.requestId(), result);
+        });
+    }
+
+    /**
+     * 2026/11/10：仅解释实际交互结果，不自行请求模型或放宽本地合同。
+     * @param request 固定目标类型和 Schema
+     * @param requestId 原请求关联编号
+     * @param result 实际模型交互结果
+     * @param <T> 结果类型
+     * @return 严格绑定的完整对象
+     * @throws LLMJsonException 当模型终态或输出不满足结构合同时
+     */
+    private <T> T decodeResult(Request<T> request, UUID requestId, LLMInteractionResult result) {
+        if (result.status() != LLMInteractionResult.Status.SUCCESS) {
+            throw new LLMJsonException(LLMJsonException.Code.MODEL_RESULT, result.status(), requestId,
+                    result.failure() == null ? statusDescription(result.status()) : result.failure().description(),
+                    result.failure());
+        }
+        var message = result.finalCandidate().orElseThrow(() -> new LLMJsonException(
+                LLMJsonException.Code.MISSING_OUTPUT, result.status(), requestId, "模型未返回最终消息。", null));
+        var text = new StringBuilder();
+        for (var content : message.getContents()) {
+            if (!(content.getContentPart() instanceof TextLLMContentPart part)) {
+                throw new LLMJsonException(LLMJsonException.Code.JSON_SHAPE, result.status(), requestId,
+                        "JSON 结果包含非文本内容。", null);
+            }
+            text.append(part.getText());
+        }
+        return read(request.type(), request.definition(), text.toString(), requestId);
     }
 
     /**

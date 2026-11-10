@@ -1,6 +1,6 @@
 # 类型化 JSON 输出
 
-`LLMJsonService` 按 Java 类型生成结构说明、开启 JSON 选项，并异步返回该类型。它复用原模型路由、预算、动态准入和取消控制，不自动重试，不提交业务数据。
+`LLMJsonService` 按 Java 类型生成结构说明、开启 JSON 选项，并异步返回该类型。它复用原模型路由、预算、动态准入和取消控制，不提交业务数据。`generate` 和 `generateSettled` 保持单次生成，格式纠错由独立入口显式启用。
 
 ## 使用
 
@@ -20,6 +20,12 @@ CompletionStage<Summary> result = json.generate(
 
 若调用前还有本地输入预算检查，先 `prepare(Summary.class, prompt)`，对返回的 `request.prompt()` 估算，再调用 `generate(request, context, settings, guard, observer)`。观察者在解码前取得真实模型状态及用量；失败不丢失已消耗额度。
 
+需要一次格式纠错时，调用 `generateWithCorrection(request, context, settings, guard, observer, inputCheck)`。`settings` 是两次生成合计的调用/token 限制与总时限，调用额度不足两次时不会纠错；`inputCheck` 在首轮与追加反馈后都检查完整输入。借用原 `taskExecutor` 管理共同截止时间，不关闭宿主调度器。
+
+仅模型状态为 `SUCCESS` 的 JSON 语法、字段结构、领域绑定或本地输出长度错误可触发一次纠错。反馈携带已脱敏的错误路径和完整 Schema，请模型依据原资料重新生成，不回填错误答案原文。第二次仍失败就向调用方传播；不会补默认值、改字段别名、删除错误候选或更换模型。网络失败、拒答、截断、取消、权限/代次失效及业务证据错误不走此机制。
+
+每次调用等待真实资源结束后才解码、反馈或完成，观察者收到每次真实状态和用量；父预算、剩余局部预算、共同截止时间和动态准入均继续生效。纠错可能增加一次计费请求；调用者仍须在提交前执行原证据、权限与事务检查。
+
 `LLMJsonSchemas` 在初始化或显式重扫时发现类型并原子发布合同。请求只查缓存，不懒扫描。支持具名对象、具体字段、嵌套对象、数组/有元素类型的集合、枚举、UUID，以及 `@Nullable`；支持字段上的 `@JsonProperty`、`@JsonIgnore`。拒绝无界 Map、循环引用和未绑定泛型，不把它们伪装成空对象。自定义序列化方式应与字段声明一致。
 
 所有字段都须出现；可空字段写 `null`，不能省略。Schema 不替代构造约束、证据核验、权限和事务检查。
@@ -32,13 +38,15 @@ CompletionStage<Summary> result = json.generate(
 
 | 能力 | 实际请求 | 本地处理 |
 | --- | --- | --- |
-| `SCHEMA` | Chat Completions 的 `response_format.json_schema`，或 Responses 的 `text.format`，包含 `strict=true`；系统指令只保留行为要求 | 仍严格解码并校验领域类型 |
+| `SCHEMA` | Chat Completions 的 `response_format.json_schema` 或 Responses 的 `text.format` 包含 `strict=true`；Gemini 原生使用 `generationConfig.responseJsonSchema` 和 JSON MIME 类型；系统指令保留行为要求和顶层字段名 | 仍严格解码并校验领域类型 |
 | `OBJECT` | `response_format={"type":"json_object"}` | 完整 Schema 同时放入提示；本地检查字段和类型 |
 | `NONE` | 不发送原生 JSON 约束 | 实际调用时警告，保留结构提示及严格解码 |
 
-默认 DeepSeek、Kimi 适配对象模式；OpenAI Responses 适配 Schema；Chat Completions 按已知模型能力选择。自定义服务须按其实际支持声明，远端拒绝继续报告真实 HTTP 状态，不暗中换模型或重试。
+默认 DeepSeek、Kimi 适配对象模式；OpenAI Responses 和 `antigravity` 原生协议适配 Schema；Chat Completions 按已知模型能力选择。自定义服务须按其实际支持声明，远端拒绝继续报告真实 HTTP 状态，不暗中换模型或重试。某个兼容入口忽略 Schema 不代表其他原生入口也忽略，须结合实际协议及合成对照核实。
 
-结构指令有独立类型标记，只调整宿主生成的指令，不按文本匹配删除业务 system 消息。结构化调用在预算、观察快照和真实发送前共用协议准备；原生 Schema 不再同时附带一份全文 Schema 提示。OBJECT/NONE 保留完整结构说明。
+结构指令有独立类型标记，只调整宿主生成的指令，不按文本匹配删除业务 system 消息。结构化调用在预算、观察快照和真实发送前共用协议准备；首次请求的原生 Schema 不再同时附带一份全文 Schema 提示。OBJECT/NONE 保留完整结构说明；显式纠错反馈则保留完整 Schema，避免兼容服务忽略原生参数后仍不知道嵌套字段要求。
+
+所有模式都从已编译 Schema 生成简短的顶层字段名要求，减少兼容服务忽略原生约束时出现字段别名的情况。该提示不替代严格校验；例如长期记忆返回 `facts` 而非 `memories` 仍会被拒绝；只有显式纠错入口允许把校验错误反馈给模型重新生成。
 
 JSON 对象模式只约束 JSON 格式，不保证符合字段结构。Schema 模式也可能遇到拒答或截断，必须检查模型终态。[OpenAI 官方说明](https://developers.openai.com/api/docs/guides/structured-outputs)、[DeepSeek 官方说明](https://api-docs.deepseek.com/guides/json_mode/)。
 

@@ -13,3 +13,5 @@
 Agent 通过 [`component/llm`](../component/llm/README.md) 适配系统路由与当前聊天私有路由。模型文件仍为 `config/agent/model.yml`，Web 文件区仍为 `agent.models`，模型管理 HTTP 路径保持原值；移动 Java 包不迁移用户凭据或改变文件授权。
 
 内置模型实现不声明插件归属。业务插件扩展的模型、路由和输入方式仍接受既有插件准入与真实调用生命周期检查，插件的启停不会把系统模型表单变成可选功能。
+
+Gemini 原生代理接入使用 [`antigravity`](instance/antigravity/README.md)，与已有 Responses、Chat Completions 适配器并存。协议选择来自每条模型路由的 `adapter`，不按型号名称或密钥分组猜测。

@@ -1,42 +1,13 @@
 package org.zexnocs.teanekoplugin.agent.cognition.memory.namespace;
 
-import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
-
-// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
-
-// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
-
-// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.component.AgentComponents;
-import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan.Mode;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionCompileSystem;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionComponent;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionDelivery;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionFeature;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionReplyProtocol;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionRuntime;
-import org.zexnocs.teanekoplugin.agent.expression.expression.IExpressionClientAdapter;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ImageReplyHandler;
-import org.zexnocs.teanekoplugin.agent.expression.expression.JsonReplyProtocol;
-import org.zexnocs.teanekoplugin.agent.expression.expression.MediaReplySettings;
-import org.zexnocs.teanekoplugin.agent.expression.expression.NativeFaceService;
-import org.zexnocs.teanekoplugin.agent.expression.expression.PlainReplyProtocol;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ReplyCompileContext;
-import org.zexnocs.teanekoagent.runtime.delivery.ReplyCoordinator;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ReplyPlans;
-import org.zexnocs.teanekoplugin.agent.expression.expression.ReplySendContext;
-import org.zexnocs.teanekoplugin.agent.expression.expression.TeaNekoExpressionClient;
-import org.zexnocs.teanekoplugin.agent.expression.expression.TextReplyDirective;
-import org.zexnocs.teanekoplugin.agent.expression.expression.TextReplyHandler;
-import org.zexnocs.teanekoplugin.agent.expression.expression.file_config.AgentExpressionFileConfig;
-import org.zexnocs.teanekoplugin.agent.expression.expression.file_config.AgentMediaReplyFileConfig;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
+import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
+import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
@@ -57,30 +28,6 @@ import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatCompletionMapper;
 import org.zexnocs.teanekoagent.llm.instance.deepseek.DeepSeekChatCompletionResponseData;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataDeliveryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.AgentDeliveryService;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.EasyDataStickerCatalog;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.FaceReplyDirective;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.FaceReplyHandler;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAnalyzer;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerCatalog;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.MediaReplies;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.MediaReplyFeature;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerComponent;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerExtensionRegistry;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerLibrary;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyDirective;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyException;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyHandler;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyService;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyTools;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.WeightedStickerAdmission;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
-import org.zexnocs.teanekoagent.integration.message.NativeMessageSources;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigData;
-import org.zexnocs.teanekoagent.integration.config.AgentScopeConfigManager;
 import org.zexnocs.teanekoagent.plugin.AgentPluginRuntime;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
@@ -88,6 +35,8 @@ import org.zexnocs.teanekoagent.runtime.AgentRunRequest;
 import org.zexnocs.teanekoagent.runtime.AgentRunResult;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.access.AgentRuntimeSnapshot;
+import org.zexnocs.teanekoagent.runtime.delivery.AgentReplyPlan.Mode;
+import org.zexnocs.teanekoagent.runtime.delivery.ReplyCoordinator;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptFragment;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptInput;
 import org.zexnocs.teanekoagent.runtime.prompt.AgentPromptTranscript;
@@ -97,7 +46,6 @@ import org.zexnocs.teanekoapp.fake_client.FakeTeaNekoClient;
 import org.zexnocs.teanekoapp.message.api.ITeaNekoMessageData;
 import org.zexnocs.teanekoapp.message.api.content.IImageTeaNekoContentPart;
 import org.zexnocs.teanekoapp.message.api.content.IReplyTeaNekoContentPart;
-import org.zexnocs.teanekoplugin.onebot.common.agent.OnebotExpressionClient;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -109,6 +57,48 @@ import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.logger.ILogger;
 import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.adapter.EasyDataDeliveryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.AgentDeliveryService;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionCompileSystem;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionComponent;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionDelivery;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionFeature;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionReplyProtocol;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ExpressionRuntime;
+import org.zexnocs.teanekoplugin.agent.expression.expression.IExpressionClientAdapter;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ImageReplyHandler;
+import org.zexnocs.teanekoplugin.agent.expression.expression.JsonReplyProtocol;
+import org.zexnocs.teanekoplugin.agent.expression.expression.MediaReplySettings;
+import org.zexnocs.teanekoplugin.agent.expression.expression.NativeFaceService;
+import org.zexnocs.teanekoplugin.agent.expression.expression.PlainReplyProtocol;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ReplyCompileContext;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ReplyPlans;
+import org.zexnocs.teanekoplugin.agent.expression.expression.ReplySendContext;
+import org.zexnocs.teanekoplugin.agent.expression.expression.TeaNekoExpressionClient;
+import org.zexnocs.teanekoplugin.agent.expression.expression.TextReplyDirective;
+import org.zexnocs.teanekoplugin.agent.expression.expression.TextReplyHandler;
+import org.zexnocs.teanekoplugin.agent.expression.expression.file_config.AgentExpressionFileConfig;
+import org.zexnocs.teanekoplugin.agent.expression.expression.file_config.AgentMediaReplyFileConfig;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.EasyDataStickerCatalog;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.FaceReplyDirective;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.FaceReplyHandler;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAnalyzer;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerCatalog;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.MediaReplies;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.MediaReplyFeature;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerExtensionRegistry;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerLibrary;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyDirective;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyException;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyHandler;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyService;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerReplyTools;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.WeightedStickerAdmission;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
+import org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures;
+import org.zexnocs.teanekoplugin.onebot.common.agent.OnebotExpressionClient;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -153,6 +143,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+// 2026/11/07：接口统一使用 I 前缀，调用合同与持久数据保持不变。
+// 2026/11/07：认知业务契约归入插件，纯会话数据沿用运行底座。
+// 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 /**
  * 复用事务与平台夹具验证从完整目录到独立发送、回执、回避及实际文件占用的闭环。
  * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
@@ -165,13 +160,14 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/05：补充真实工具目录、供应商协议纠正、图片交付及目录失效的离线闭环。
  * <br>2026/11/07：验证事务重试、并发预算、取消、关闭和最终失败的查询合同。
- *
  * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ *
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(20)
 class MediaReplyIntegrationTest{
@@ -659,7 +655,7 @@ class MediaReplyIntegrationTest{
                             new ExpressionComponent(new ExpressionCompileSystem(beans.getBeanProvider(ExpressionRuntime.class)))),
                     new org.zexnocs.teanekoagent.component.AgentComponentFeature("teaneko.agent", "tool",
                             new org.zexnocs.teanekoagent.component.tool.ToolComponent()),
-                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("agent.expression", "sticker", new StickerComponent()),
+                    new org.zexnocs.teanekoagent.component.AgentComponentFeature("agent.expression", "sticker", org.zexnocs.teanekoplugin.contract.agent.AgentComponentFixtures.sticker()),
                     new ExpressionFeature(runtime, context.getBean(NativeFaceService.class)),
                     context.getBean(MediaReplyFeature.class),
                     new org.zexnocs.teanekoagent.plugin.SourceAgentFeature("teaneko.agent", "builtin-tools", true,

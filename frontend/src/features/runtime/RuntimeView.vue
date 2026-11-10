@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 import AccessibleTabs from '../../shared/components/AccessibleTabs.vue'
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
@@ -212,7 +214,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <DetailPanel title="定时规则说明"><p>暂停只阻止后续触发，已开始任务继续执行。Spring 与关键维护任务只读；状态只反映原调度方法，不表示后台模型或数据库事务已完成。Agent 的单条持久计划在对应聊天工作区管理。</p></DetailPanel>
       <ElAlert v-if="timers?.limited" title="已达到目录观测上限，当前列表不代表全部计时器。" type="warning" :closable="false" />
       <ElCard v-for="timer in visibleTimers" :key="timer.id" shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ timer.name }}</h3><ElTag>{{ stateNames[timer.state] ?? timer.state }}</ElTag></div>
-        <div class="timer-category-filters"><ElTag type="info">{{ timer.categoryName }}</ElTag><ElTag v-if="timer.pluginId" type="info">{{ timer.pluginId }}</ElTag><ElTag v-if="!timer.actions.length" type="info">只读</ElTag><span class="small muted">{{ timer.source === 'core' ? 'Core Timer' : timer.source === 'spring' ? 'Spring 定时任务' : '扩展调度' }}</span></div>
+        <div class="timer-category-filters"><ElTag type="info">{{ timer.categoryName }}</ElTag><ElTag v-if="timer.pluginId" type="info"><PluginLabel :plugin-id="timer.pluginId" /></ElTag><ElTag v-if="!timer.actions.length" type="info">只读</ElTag><span class="small muted">{{ timer.source === 'core' ? 'Core Timer' : timer.source === 'spring' ? 'Spring 定时任务' : '扩展调度' }}</span></div>
         <p v-if="timer.description" class="small muted">{{ timer.description }}</p>
         <p>{{ timer.rule.rule }}</p><p class="small muted">{{ timer.rule.waiting ? '等待上个原任务完成' : timer.state === 'ACTIVE' && timer.rule.nextFire ? `预计触发：${date(timer.rule.nextFire)}` : '下次触发时间未确认' }}{{ timer.rule.zone ? ` · ${timer.rule.zone}` : '' }}</p>
         <div class="editor-actions"><ElButton v-if="timer.actions.includes('PAUSE')" :disabled="busy || !!pending" @click="change(timer, true)">暂停</ElButton><ElButton v-if="timer.actions.includes('RESUME')" :disabled="busy || !!pending" @click="change(timer, false)">恢复</ElButton></div><DetailPanel><p class="small revision">计时器 {{ timer.id }}<template v-if="timer.source === 'core'"> · 门禁版本 {{ timer.revision }}</template></p></DetailPanel>
@@ -228,7 +230,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <DetailPanel title="任务状态说明"><p>这里只跟踪 Core 任务。完整模型交互与消息发送进度请查看 Agent 活动时间线。</p></DetailPanel>
       <div class="agent-toolbar"><PluginFilter v-model="runPlugin" :items="pluginOptions" /><label>任务状态<ElSelect v-model="runState" aria-label="任务状态"><ElOption label="全部状态" value="" /><ElOption v-for="state in ['QUEUED', 'RUNNING', 'WAITING_RESULT', 'SUCCESS', 'FAILED']" :key="state" :label="stateNames[state]" :value="state" /></ElSelect></label><label>任务名称<ElInput v-model="runSearch" maxlength="256" aria-label="任务名称筛选" /></label><ElButton :disabled="busy" @click="run(() => loadRuns())">筛选任务</ElButton></div>
       <p v-if="runs" class="small muted">进程窗口始于 {{ date(runs.startedAt) }} · 已淘汰 {{ runs.dropped }} 项；窗口不保存到数据库。</p>
-      <ElCard v-for="item in visibleRuns" :key="item.id" shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ item.name }}</h3><ElTag>{{ stateNames[item.state] ?? item.state }}</ElTag></div><ElTag v-if="item.pluginId" type="info">{{ item.pluginId }}</ElTag><p>{{ item.stage }}</p><p class="small muted">注册：{{ date(item.createdAt) }}<br />开始：{{ date(item.startedAt) }}<br />原回执结束：{{ date(item.finishedAt) }}</p><p class="small revision">{{ item.id }}</p></ElCard>
+      <ElCard v-for="item in visibleRuns" :key="item.id" shadow="never" class="runtime-card"><div class="editor-heading"><h3>{{ item.name }}</h3><ElTag>{{ stateNames[item.state] ?? item.state }}</ElTag></div><ElTag v-if="item.pluginId" type="info"><PluginLabel :plugin-id="item.pluginId" /></ElTag><p>{{ item.stage }}</p><p class="small muted">注册：{{ date(item.createdAt) }}<br />开始：{{ date(item.startedAt) }}<br />原回执结束：{{ date(item.finishedAt) }}</p><p class="small revision">{{ item.id }}</p></ElCard>
       <ElEmpty v-if="runs && !visibleRuns.length" description="当前窗口没有匹配任务" /><ElButton v-if="runs?.more" :disabled="busy" @click="auto = false; run(() => loadRuns(true))">读取更早任务</ElButton>
     </template>
     <template v-else>
@@ -242,7 +244,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
       <ElButton :disabled="busy" @click="applyFilters">应用日志筛选</ElButton>
       <p v-if="logs" class="small muted">当前窗口最多 {{ logs.policy.maxLogs }} 条 / {{ logs.policy.retentionMinutes }} 分钟 · 丢弃或淘汰 {{ logs.dropped }} 条。</p>
       <ElAlert v-if="logs && !logs.policy.captureMessages" title="当前只采集等级与来源。可在本地配置的“任务与日志观测”中开启日志正文采集，保存后应用；也可在本机修改 config/runtime/observability.yml 并重载。" type="info" :closable="false" />
-      <ElCard v-for="log in visibleLogs" :key="`${logs?.instance}-${log.sequence}`" shadow="never" class="runtime-card"><div class="editor-heading"><strong>{{ log.level }}</strong><time class="small muted">{{ date(log.at) }}</time></div><p class="small revision">{{ log.namespace }}</p><pre class="log-message">{{ log.message }}</pre><p v-if="log.requestId || log.scope || log.plugin" class="small revision">{{ log.requestId }} {{ log.scope }} {{ log.plugin }}</p></ElCard>
+      <ElCard v-for="log in visibleLogs" :key="`${logs?.instance}-${log.sequence}`" shadow="never" class="runtime-card"><div class="editor-heading"><strong>{{ log.level }}</strong><time class="small muted">{{ date(log.at) }}</time></div><p class="small revision">{{ log.namespace }}</p><pre class="log-message">{{ log.message }}</pre><p v-if="log.requestId || log.scope || log.plugin" class="small revision">{{ log.requestId }} {{ log.scope }} <PluginLabel v-if="log.plugin" :plugin-id="log.plugin" /></p></ElCard>
       <ElEmpty v-if="logs && !visibleLogs.length" description="当前扫描页没有匹配日志" /><ElButton v-if="logs?.more" :disabled="busy" @click="run(() => loadLogs())">继续读取日志</ElButton><RefreshButton v-else :disabled="busy" label="刷新最新日志" @click="run(() => loadLogs())" />
     </template>
     <ElCard v-if="advanced && receipt" shadow="never" class="operation-receipt"><h3>定时器门禁已确认</h3><p>{{ receipt.note }}</p><p>原操作：{{ receipt.operationId }} · 版本 {{ receipt.revision }}</p><p>原提交时间：{{ date(receipt.at) }}；历史回执不代表现在仍是同一状态。</p><ElButton :disabled="busy" @click="operation">查询此回执</ElButton></ElCard>

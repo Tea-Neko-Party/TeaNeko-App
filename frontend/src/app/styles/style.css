@@ -115,6 +115,12 @@ h3 { font-size: 15px; }
 .console-shell { display: flex; min-height: 100dvh; }
 .sidebar { width: 224px; flex-shrink: 0; position: sticky; top: 0; height: 100dvh; background: var(--surface); border-right: 1px solid var(--line); }
 .sidebar.is-collapsed { width: 76px; }
+/* 2026/11/10：插件导航在主侧栏右侧独立占列，移动抽屉复用同一二级菜单。 */
+.plugin-sidebar { width: 224px; flex-shrink: 0; position: sticky; top: 0; height: 100dvh; background: var(--surface); border-right: 1px solid var(--line); }
+.mobile-navigation { display: grid; height: 100%; grid-template-columns: minmax(0, 1fr); }
+.mobile-navigation.has-plugin-menu { grid-template-columns: minmax(140px, 0.9fr) minmax(0, 1fr); }
+.mobile-navigation.has-plugin-menu > :last-child { border-left: 1px solid var(--line); }
+.mobile-navigation.has-plugin-menu .navigation-body { padding-left: 8px; padding-right: 8px; }
 .navigation-body { display: flex; flex-direction: column; height: 100%; padding: 28px 16px 16px; overflow-y: auto; }
 .navigation-body .brand { padding: 0 8px 26px; }
 .navigation-body nav { flex: 1; }
@@ -413,7 +419,7 @@ dd { margin: 0; overflow-wrap: anywhere; }
   .editor-heading { flex-wrap: wrap; }
 }
 @media (max-width: 760px) {
-  .sidebar, .desktop-menu { display: none; }
+  .sidebar, .plugin-sidebar, .desktop-menu { display: none; }
   .mobile-menu { display: inline-flex; }
   .topbar { height: 60px; padding: 0 12px; }
   .topbar-location { gap: 6px; }

@@ -8,6 +8,7 @@ import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -25,13 +26,36 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/08：夹具通过真实插件组件契约准备参数并验证改造后的端口。
+ * <br>2026/11/10：验证执行票据时长与原实时策略、占用及过期合同组合。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 class AgentTriggerGateTest {
+    /** 延长执行票据能越过旧六十秒边界，但仍按配置变更、占用和新截止时间拒绝。 */
+    @Test
+    void explicitLifetimeKeepsCurrentPolicyAndExpiryChecks() {
+        var now = new AtomicReference<>(Instant.parse("2026-11-02T02:00:00Z"));
+        var settings = new AtomicReference<>(settings(AgentScopePolicy.Mode.ACTIVE));
+        var clock = mock(Clock.class);
+        when(clock.instant()).thenAnswer(ignored -> now.get());
+        var gate = new AgentTriggerGate(scope -> settings.get(), clock);
+        var signal = new AgentTriggerGate.Signal(actor(), AgentTriggerGate.Kind.INTERJECTION, false, false, false, false);
+        var ticket = gate.acquire(signal, Duration.ofSeconds(90)).orElseThrow();
+        now.set(now.get().plusSeconds(61));
+        gate.verify(ticket);
+        assertTrue(gate.acquire(signal).isEmpty());
+        settings.set(settings(AgentScopePolicy.Mode.PASSIVE_BASIC));
+        assertThrows(IllegalStateException.class, () -> gate.verify(ticket));
+        settings.set(settings(AgentScopePolicy.Mode.ACTIVE));
+        now.set(now.get().plusSeconds(29));
+        assertThrows(IllegalStateException.class, () -> gate.verify(ticket));
+        assertThrows(IllegalArgumentException.class, () -> gate.acquire(signal, Duration.ofSeconds(181)));
+        assertThrows(IllegalArgumentException.class, () -> gate.acquire(signal, Duration.ZERO));
+    }
+
     /** 最低被动不续聊，中级仅在同人成功交付后五分钟内续聊，旁观和失效票据不能借用。 */
     @Test void passiveLevelsUseOnlySuccessfulSameActorContinuation() {
         var now = new AtomicReference<>(Instant.parse("2026-11-02T02:00:00Z"));

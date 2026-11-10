@@ -25,13 +25,13 @@ import java.util.concurrent.CompletionStage;
  * 2026/11/04：提供聊天级模型选择和版本化配置提交。
  *
  * <br>2026/11/04：系统路由切换只替换 LLM 组件，保留其余装配。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/10：每次读取当前路由，默认模型优先展示且保留动态继承选项。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.7-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 @Service
 public final class AgentModelSelection {
@@ -51,17 +51,22 @@ public final class AgentModelSelection {
     }
 
     /**
+     * 2026/11/10：继承选项排首位，具体默认路由紧随其后，保持其他路由的原声明顺序。
      * @return 唯一路由及具体模型名，不包含秘密
      */
     public Map<String, String> choices() {
         var config = files.getConfig();
         var choices = new LinkedHashMap<String, String>();
-        choices.put("", "继承默认模型（" + config.getDefaultModelId() + "）");
         for (var entry : config.getModels()) {
             var id = entry.findModelId().orElseThrow();
             config.findModelConfig(id).orElseThrow();
             choices.put(id.id(), id.id() + " · " + entry.getModel());
         }
+        var defaultRoute = config.getDefaultModelId();
+        if (choices.containsKey(defaultRoute)) {
+            choices.putFirst(defaultRoute, choices.get(defaultRoute));
+        }
+        choices.putFirst("", "继承默认模型（" + choices.getOrDefault(defaultRoute, "尚未设置") + "）");
         return choices;
     }
 

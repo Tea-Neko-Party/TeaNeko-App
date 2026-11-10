@@ -41,6 +41,11 @@ export function pluginEnabled(pluginId?: string | null): boolean {
   return !pluginId || pluginCatalog.value.items.some(item => item.id === pluginId && item.enabled)
 }
 
+/** 2026/11/10：展示名称来自同一可信目录，ID 继续作为唯一操作键及未知插件的定位信息。 */
+export function pluginName(pluginId?: string | null): string {
+  return pluginId ? pluginCatalog.value.items.find(item => item.id === pluginId)?.name || pluginId : '系统内置'
+}
+
 /** 2026/11/07：已失效页面请求只结束当前操作，不把旧结果或错误写回新页面。 */
 export class PluginRequestSuperseded extends Error {
   constructor() { super('插件资格或当前目标已变化，请重新读取。') }

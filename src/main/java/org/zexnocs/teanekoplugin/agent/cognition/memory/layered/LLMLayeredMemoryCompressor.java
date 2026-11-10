@@ -6,17 +6,10 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.layered;
 
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
-import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
-import org.zexnocs.teanekoplugin.support.PluginModelScope;
-
-// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
-
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
 import org.zexnocs.teanekoagent.llm.framework.interaction.JsonLLMTokenEstimator;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings;
@@ -26,8 +19,6 @@ import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuil
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptionsSnapshot;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonService;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentDeliveryStore;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.runtime.AgentActivity;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentDefinition;
@@ -39,6 +30,10 @@ import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
+import org.zexnocs.teanekocore.plugin.IPluginLifecycle;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.IAgentDeliveryStore;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
+import org.zexnocs.teanekoplugin.support.PluginModelScope;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -54,6 +49,9 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
+// 2026/11/07：按插件归属迁移业务实现，保留底层契约、持久标识和事务边界。
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
+
 /**
  * 复用原交互服务生成有界中期候选，模型前后复核 SUMMARY 准入、策略和固定空间。
  * 模型不能提交覆盖序号、主体或持久化指令，业务实例到首次工作才创建。
@@ -68,11 +66,12 @@ import java.util.stream.Collectors;
  * <br>2026/11/06：统一 JSON 生成与解码，保留预算、动态准入及失败暂停分类。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
+ * <br>2026/11/10：格式失败最多纠错一次，新增输入继续受原容量、资格和总截止时间约束。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @org.zexnocs.teanekocore.plugin.PluginOwned("agent.cognition")
 public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompressor, AutoCloseable, IPluginLifecycle {
@@ -174,17 +173,25 @@ public final class LLMLayeredMemoryCompressor implements ILayeredMemoryCompresso
             // 2026/11/06：结构说明在预算预检前加入，实际发送与估算使用同一输入。
             var request = json.prepare(MemoryLayers.Digest.class,
                     new LLMPrompt(List.of(system, user), options, LLMOptionsPolicy.RESOLVED));
-            var prompt = request.prompt();
-            // 2026/11/04：与真实交互使用相同口径，计入元数据、JSON 包装和固定开销。
-            if (new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens() > settings.get().maxInputBytes()) {
-                throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
-            }
-            return check(instance, actor, batch, control).thenComposeAsync(ignored -> json.generate(request,
+            // 2026/11/10：首次与唯一一次结构纠错共用原控制，完整输入均复核容量。
+            return check(instance, actor, batch, control).thenComposeAsync(ignored -> json.generateWithCorrection(request,
                     new ToolInvocationContext(requestId, EntitySnapshot.of(EntityId.random(), ComponentPatch.empty()), control), controlSettings(),
-                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control())), ignoredResult -> { }), executor)
+                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control())),
+                    ignoredResult -> { }, this::validateInput), executor)
                     .thenComposeAsync(result -> check(instance, actor, batch, control).thenApply(ignored -> result), executor)
                     .exceptionally(failure -> { throw MemoryProcessingException.structured(failure); });
         }, executor).thenCompose(stage -> stage);
+    }
+
+    /**
+     * 2026/11/10：首次与纠错的 JSON 包装、元数据和结构提示使用同一完整输入预算。
+     * @param prompt 即将发送的完整输入
+     * @throws MemoryProcessingException 当完整输入超过本地工作量限制时
+     */
+    private void validateInput(ILLMPrompt prompt) {
+        if (new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens() > settings.get().maxInputBytes()) {
+            throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
+        }
     }
     /**
      * 2026/11/03：旧来源标识不猜测成发送请求 UUID。

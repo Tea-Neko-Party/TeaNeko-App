@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：说明页面读取实际命令目录，查看说明不执行命令或取得其他成员权限。
 import {computed, onMounted, ref, watch} from 'vue'
@@ -10,6 +12,7 @@ import PluginFilter from '../../shared/plugins/PluginFilter.vue'
 import {
   pluginAvailability,
   pluginEnabled,
+  pluginName,
   PluginRequestSuperseded,
   usePluginRequests
 } from '../../shared/plugins/plugin-console'
@@ -34,7 +37,7 @@ function matchesRules(scope: string, permission: string, supported: string[]) {
     && (!memberFilter.value || (levels[permission] ?? 0) >= (levels[memberFilter.value] ?? 5))
     && (!clientFilter.value || supported.includes('ICommandClient') || supported.includes(clientFilter.value))
 }
-const matching = computed(() => entries.value.filter(item => pluginEnabled(item.pluginId) && (!pluginId.value || item.pluginId === pluginId.value) && `${item.command} ${item.displayName} ${item.aliases.join(' ')} ${item.usage} ${item.description} ${item.introduction}`.toLowerCase().includes(query.value.toLowerCase())
+const matching = computed(() => entries.value.filter(item => pluginEnabled(item.pluginId) && (!pluginId.value || item.pluginId === pluginId.value) && `${item.command} ${item.displayName} ${item.aliases.join(' ')} ${item.usage} ${item.description} ${item.introduction} ${pluginName(item.pluginId)} ${item.pluginId ?? ''}`.toLowerCase().includes(query.value.toLowerCase())
   && matchesRules(item.scope, item.permission, item.clients)))
 const commands = computed(() => [...new Set(matching.value.map(item => item.command))])
 const current = computed(() => matching.value.filter(item => item.command === (commands.value.includes(selected.value) ? selected.value : commands.value[0])))
@@ -78,7 +81,7 @@ onMounted(load)
         <section v-for="group in [{title: '默认指令', items: current.filter(item => !item.subcommand)}, {title: '子指令', items: current.filter(item => item.subcommand)}]" v-show="group.items.length" :key="group.title" class="command-section">
           <h2>{{ group.title }}</h2>
           <ElCard v-for="(item, index) in group.items" :key="item.usage" shadow="never" class="command-detail" :class="{alternate: index % 2 === 1}">
-            <h3>{{ item.subcommand || '直接调用' }}</h3><code v-if="item.pluginId">{{ item.pluginId }}</code><code>{{ item.usage }}</code>
+            <h3>{{ item.subcommand || '直接调用' }}</h3><code v-if="item.pluginId"><PluginLabel :plugin-id="item.pluginId" /></code><code>{{ item.usage }}</code>
             <CommandRules :scope="item.scope !== item.defaultScope ? item.scope : undefined" :permission="item.permission !== item.defaultPermission ? item.permission : undefined" :clients="differentClients(item) ? item.clients : undefined" />
             <div v-if="differentPackages(item)" class="command-packages"><small>特殊权限组</small><ElTag v-for="value in item.permissionPackages" :key="value" type="warning">{{ value }}</ElTag></div>
             <p class="command-introduction">{{ item.description || '该方法未提供额外说明。' }}</p>

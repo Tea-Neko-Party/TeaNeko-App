@@ -5,11 +5,13 @@ package org.zexnocs.teanekoagent.llm.instance.openai.completions;
 import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.model.AbstractLLMModel;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
+import org.zexnocs.teanekoagent.llm.framework.model.ModelCapabilities;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ICredentialResolver;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonSupport;
+import org.zexnocs.teanekoagent.llm.instance.openai.OpenAIVisionCapabilities;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
@@ -24,18 +26,29 @@ import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
  * 2026/11/03：获取凭据时核对已解析参数的配置代次。
  *
  * <br>2026/11/04：允许显式归属当前协议的配置别名，认证仍保留原路由。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：兼容协议默认声明原生 JSON 对象能力。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：兼容 Chat Completions 型号可通过模型参数明确声明图片能力。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.1
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public abstract class AbstractOpenAIChatCompletionModel extends AbstractLLMModel {
+    /**
+     * 2026/11/10：图片协议映射保持不变，自定义型号可显式声明本地图片输入能力。
+     * @param options 本次实际模型参数
+     * @return 当前型号及配置共同决定的能力
+     */
+    @Override public ModelCapabilities inputCapabilities(
+            ILLMModelOptions options) {
+        return OpenAIVisionCapabilities.resolve(
+                options, getCapabilities(options.getModel()));
+    }
+
     /**
      * 2026/11/06：兼容协议仅声明 JSON 对象，子适配器可按实际模型收紧或扩展。
      * @param model 实际模型名称

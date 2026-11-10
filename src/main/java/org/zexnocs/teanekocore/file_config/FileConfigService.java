@@ -47,11 +47,12 @@ import java.util.function.Supplier;
  * <br>2026/11/05：类型发现交给可重扫的专用目录，运行版本查询只访问缓存和原类型锁。
  *
  * <br>2026/11/06：保留失败阶段及安全根因，避免配置或异步边界丢失诊断。
+ * <br>2026/11/10：模板绑定声明配置的类加载器，避免异步线程继承已停止的 Web 容器资源入口。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.2.0
- * @version 4.8.4-l
+ * @version 4.9.1-l
  */
 @Service
 public class FileConfigService implements IFileConfigService {
@@ -125,8 +126,10 @@ public class FileConfigService implements IFileConfigService {
                 throw new IllegalArgumentException("配置路径越过固定根目录。");
             }
             byte[] fallback;
+            // 2026/11/10：模板与配置类型同属应用代次，不依赖请求线程继承的 Web 类加载器。
             var resource = new ClassPathResource(TEMPLATE_PATH.resolve(annotation.path())
-                    .resolve(annotation.value() + "." + parser.getSuffix()).toString().replace('\\', '/'));
+                    .resolve(annotation.value() + "." + parser.getSuffix()).toString().replace('\\', '/'),
+                    type.getClassLoader());
             try {
                 if (resource.exists()) {
                     try (var input = resource.getInputStream()) {
@@ -413,7 +416,8 @@ public class FileConfigService implements IFileConfigService {
                                                            IFileTypeParser parser) throws IOException {
         // 获取到 template 的 classpath 路径
         String resourcePath = buildResourcePath(file);
-        ClassPathResource resource = new ClassPathResource(resourcePath);
+        // 2026/11/10：首次生成与文档读取使用相同的配置归属，不借用线程上下文中的旧容器。
+        var resource = new ClassPathResource(resourcePath, clazz.getClassLoader());
         Files.createDirectories(file.getParent());
         if (resource.exists()) {
             // 如果存在模板，则直接复制。

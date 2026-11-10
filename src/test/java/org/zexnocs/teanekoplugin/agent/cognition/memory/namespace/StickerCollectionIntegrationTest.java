@@ -11,14 +11,20 @@ import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMCallLimits;
+import org.zexnocs.teanekoagent.runtime.AgentScope;
+import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
+import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.EasyDataStickerCatalog;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAnalyzer;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerAssetStore;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerCatalog;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerCatalogTransaction;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerLifecycle;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerAccess;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerAccessException;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerAnalysisSampling;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.IStickerCatalogTransaction;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerCollectionService;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerExtensionRegistry;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerLibrary;
@@ -27,10 +33,6 @@ import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.TeaNekoStickerAnalyzer;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.WeightedStickerAdmission;
 import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
-import org.zexnocs.teanekoagent.runtime.AgentScope;
-import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
-import org.zexnocs.teanekocore.logger.ILogger;
-import org.zexnocs.teanekocore.utils.scanner.BeanScanner;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -72,14 +74,41 @@ import static org.mockito.Mockito.mock;
  * <br>2026/11/05：补充组件审查修复的离线回归及初始化夹具。
  * <br>2026/11/07：原采集合同使用固定全量概率，概率边界另行验证。
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
+ * <br>2026/11/10：覆盖来源撤销、客户端等待恢复及迟到结果的原因与资源释放。
+ * <br>2026/11/10：超限素材正常拒绝，验证持久终态、清理预约且不调用模型。
+ *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(20)
 class StickerCollectionIntegrationTest {
     @TempDir Path directory;
+
+    /** 2026/11/10：大图保留明确回执，清理完成后不重试，也不占用视觉额度或报告采集故障。 */
+    @Test
+    void oversizedCandidateIsRejectedAndCleanedWithoutModelCall() {
+        try (var h = new Harness(directory)) {
+            h.file.setMaxFileBytes(1024);
+            String image = "data:image/png;base64," + Base64.getEncoder().encodeToString(new byte[1025]);
+            var job = h.collect(source("超限素材", image));
+            assertEquals(Stickers.JobStatus.REJECTED, job.getStatus());
+            assertEquals("FILE_TOO_LARGE", job.getReason());
+            assertTrue(job.isCleanup());
+            assertEquals(0, job.getReserved());
+            assertTrue(h.state().getEntries().isEmpty());
+            assertTrue(h.state().getQuotas().values().stream().allMatch(quota -> quota.getAnalyses() == 0));
+            assertEquals(0, h.analyzer.calls.get());
+            var receipt = h.library.status(job.getId(), job.getSource().scope(), job.getSource().requester())
+                    .toCompletableFuture().join();
+            assertEquals("FILE_TOO_LARGE", receipt.reason());
+            org.mockito.Mockito.verify(h.logger).info(org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.contains("max-file-bytes=1024"));
+            org.mockito.Mockito.verifyNoMoreInteractions(h.logger);
+        }
+    }
+
     /**
      * 仅替换视觉网络请求，文件及数据库走真实默认实现。
      * <br>2026/11/03：将本实现版本归属调整为 4.6.2-l。
@@ -131,16 +160,21 @@ class StickerCollectionIntegrationTest {
      * <br>2026/11/07：认知业务与宿主生命周期解耦，保留原身份、事务及异步完成边界。
      *
      *
+     * <br>2026/11/10：独立控制来源资格和连接就绪，观察原任务与诊断结果。
+     *
      * @author zExNocs
      * @date 2026/11/03
      * @since 4.6.2-l
-     * @version 4.9.0-l
+     * @version 4.9.1-l
      */
     static final class Harness implements AutoCloseable {
         final NamespaceDatabaseFixture db=new NamespaceDatabaseFixture();
         final AnnotationConfigApplicationContext context=new AnnotationConfigApplicationContext();
         final AgentStickerFileConfig file=new AgentStickerFileConfig();
         final AtomicBoolean allowed=new AtomicBoolean(true);
+        // 2026/11/10：客户端就绪与组件资格独立变化，覆盖启动恢复及撤销边界。
+        final AtomicBoolean connected = new AtomicBoolean(true);
+        final ILogger logger = mock(ILogger.class);
         final ExecutorService executor=Executors.newVirtualThreadPerTaskExecutor();
         final ScheduledExecutorService scheduler=Executors.newSingleThreadScheduledExecutor();
         final Analyzer analyzer;
@@ -168,8 +202,15 @@ class StickerCollectionIntegrationTest {
                     new org.zexnocs.teanekocore.plugin.PluginDescriptor("agent.expression", "4.9.0-l", 1, Set.of())));
             registry = new StickerExtensionRegistry(new BeanScanner(context, mock(ILogger.class)), plugins);
             // 2026/11/03：事件仅替换宿主边界，基础存储和文件仍是真实实现。
-            catalog=context.getBean(IStickerCatalog.class);library=new StickerLibrary(registry,file::snapshot,s->allowed.get(),Clock.systemUTC(),lifecycle);
-            service=new StickerCollectionService(library,registry,executor,scheduler,mock(ILogger.class));
+            // 2026/11/10：复用真实事务和文件端口，只替换宿主的来源就绪查询。
+            catalog = context.getBean(IStickerCatalog.class);
+            library = new StickerLibrary(registry, file::snapshot, source -> {
+                if (!allowed.get()) {
+                    return StickerAccess.SOURCE_DISABLED;
+                }
+                return connected.get() ? StickerAccess.ALLOWED : StickerAccess.CLIENT_UNAVAILABLE;
+            }, Clock.systemUTC(), lifecycle);
+            service = new StickerCollectionService(library, registry, executor, scheduler, logger);
             // 2026/11/07：独立测试宿主显式启用本代后台任务。
             service.start().toCompletableFuture().join();
         }
@@ -186,6 +227,98 @@ class StickerCollectionIntegrationTest {
         }
         /** 释放本测试拥有的资源，随后关闭事务夹具。 */
         @Override public void close(){service.close();executor.close();scheduler.shutdownNow();context.close();db.close();}
+    }
+    /**
+     * 2026/11/10：备用请求在原持久配额内追加计次，达到限额不继续预约。
+     * @throws Exception 当合成图片准备失败时
+     */
+    @Test
+    void fallbackConsumesOriginalGlobalAndScopeQuotas() throws Exception {
+        try (var h = new Harness(directory); var control = ExecutionControl.create()) {
+            h.file.setAnalysesPerHour(2);
+            h.file.setScopeAnalysesPerHour(2);
+            var config = h.file.snapshot();
+            var ports = h.registry.select(config);
+            h.library.offer(source("备用配额", png(2))).toCompletableFuture().join();
+            var work = h.library.claim(config, ports, ports.assets().identity(config))
+                    .toCompletableFuture().join().orElseThrow();
+            var prepared = ports.assets().prepare(work.job(), config, control);
+            work.job().setBlob(prepared.blob());
+            assertEquals("ANALYZE", h.library.attach(config, ports, work, prepared.blob(), control)
+                    .toCompletableFuture().join());
+            assertTrue(h.library.reserveAdditionalAnalysis(config, ports, work, control).toCompletableFuture().join());
+            assertFalse(h.library.reserveAdditionalAnalysis(config, ports, work, control).toCompletableFuture().join());
+            assertTrue(h.state().getQuotas().values().stream().allMatch(value -> value.getAnalyses() == 2));
+            h.library.fail(config, ports, work, null).toCompletableFuture().join();
+            ports.assets().discard(work.job(), config);
+            h.library.cleaned(config, ports, work).toCompletableFuture().join();
+        }
+    }
+
+    /**
+     * 2026/11/10：已排队的旧作业等待客户端，不调用视觉；恢复后只处理一次并释放全部预约。
+     * @throws Exception 当合成图像编码失败时
+     */
+    @Test
+    void waitsForClientBeforeStartingQueuedCollection() throws Exception {
+        try (var h = new Harness(directory)) {
+            var receipt = h.library.offer(source("等待连接", png(3))).toCompletableFuture().join();
+            h.connected.set(false);
+            await().atMost(Duration.ofSeconds(5)).until(() -> {
+                h.service.tick();
+                return "CLIENT_UNAVAILABLE".equals(h.state().getJobs().get(receipt.jobId()).getReason());
+            });
+            var queued = h.state().getJobs().get(receipt.jobId());
+            assertEquals(Stickers.JobStatus.QUEUED, queued.getStatus());
+            assertTrue(queued.getReserved() > 0);
+            assertEquals(0, h.analyzer.calls.get());
+            h.connected.set(true);
+            h.catalog.change(h.file.snapshot(), state -> {
+                state.getJobs().get(receipt.jobId()).setNextAttempt(Instant.EPOCH);
+                return true;
+            }).toCompletableFuture().join();
+            await().atMost(Duration.ofSeconds(5)).until(() -> {
+                h.service.tick();
+                return h.state().getJobs().get(receipt.jobId()).getReserved() == 0;
+            });
+            assertEquals(Stickers.JobStatus.SAVED, h.state().getJobs().get(receipt.jobId()).getStatus());
+            assertEquals(1, h.analyzer.calls.get());
+            org.mockito.Mockito.verifyNoInteractions(h.logger);
+        }
+    }
+
+    /**
+     * 2026/11/10：关闭来源后排队项明确拒绝并释放预约；新候选不入队，配置变更可安全诊断。
+     * @throws Exception 当合成图像编码失败时
+     */
+    @Test
+    void rejectsRevokedSourcesWithoutPretendingProcessingFailure() throws Exception {
+        try (var h = new Harness(directory)) {
+            var candidate = source("关闭来源", png(4));
+            var receipt = h.library.offer(candidate).toCompletableFuture().join();
+            h.allowed.set(false);
+            await().atMost(Duration.ofSeconds(5)).until(() -> {
+                h.service.tick();
+                return h.state().getJobs().get(receipt.jobId()).getReserved() == 0;
+            });
+            var rejected = h.state().getJobs().get(receipt.jobId());
+            assertEquals(Stickers.JobStatus.REJECTED, rejected.getStatus());
+            assertEquals("SOURCE_DISABLED", rejected.getReason());
+            var newReceipt = h.library.offer(source("关闭来源", png(5))).toCompletableFuture().join();
+            assertEquals(Stickers.JobStatus.REJECTED, newReceipt.status());
+            assertEquals("SOURCE_DISABLED", newReceipt.reason());
+            assertEquals(1, h.state().getJobs().size());
+            assertEquals(0, h.analyzer.calls.get());
+            h.allowed.set(true);
+            var config = h.file.snapshot();
+            var ports = h.registry.select(config);
+            h.file.setPassiveEnabled(false);
+            var failure = assertThrows(StickerAccessException.class,
+                    () -> h.library.check(config, ports, candidate, null));
+            assertEquals(StickerAccess.CONFIG_CHANGED, failure.access());
+            assertEquals(StickerAccess.CONFIG_CHANGED.description(),
+                    org.zexnocs.teanekocore.logger.FailureDiagnostic.from(failure).description());
+        }
     }
     /**
      * 2026/11/05：已回收文件的删除决定不挤占新缓存，同图再次出现仍不得复活。
@@ -253,6 +386,10 @@ class StickerCollectionIntegrationTest {
             var queued=h.library.offer(source("群乙",png(10))).toCompletableFuture().join();
             h.allowed.set(false);pending.complete(analysis(Stickers.Kind.STICKER));
             await().atMost(Duration.ofSeconds(5)).until(()->h.state().getJobs().get(receipt.jobId()).getReserved()==0);
+            // 2026/11/10：迟到结果只记录资格撤销，不能变成未知处理失败或被再次请求。
+            assertEquals("SOURCE_DISABLED", h.state().getJobs().get(receipt.jobId()).getReason());
+            org.mockito.Mockito.verify(h.logger, org.mockito.Mockito.never())
+                    .error(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
             assertEquals(Stickers.JobStatus.FAILED,h.state().getJobs().get(receipt.jobId()).getStatus());assertTrue(h.state().getEntries().values().stream().noneMatch(e->(e.getState()==Stickers.EntryStatus.ACTIVE)));
             h.file.setEnabled(false);
             await().atMost(Duration.ofSeconds(5)).until(()->{h.service.tick();return h.state().getJobs().get(queued.jobId()).getReserved()==0;});

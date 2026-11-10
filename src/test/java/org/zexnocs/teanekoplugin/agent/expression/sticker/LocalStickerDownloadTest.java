@@ -1,17 +1,13 @@
 package org.zexnocs.teanekoplugin.agent.expression.sticker;
 
-import org.zexnocs.teanekoplugin.agent.expression.sticker.LocalStickerAssets;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.StickerDownloadException;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
 import org.zexnocs.teanekoagent.runtime.AgentScope;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionStoppedException;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.file_config.AgentStickerFileConfig;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -26,23 +22,34 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.RETURNS_SELF;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 /**
  * 离线验证平台图片下载、逐跳信任限制和不泄露签名的失败诊断。
  * <br>2026/11/06：核对声明大小和实际流超限时均拒绝，并释放响应流。
+ * <br>2026/11/10：验证超限策略分类、数值对照、内联解码边界及安全日志。
  *
  * @author zExNocs
  * @date 2026/11/05
  * @since 4.8.3-l
- * @version 4.8.3-l
+ * @version 4.9.1-l
  */
 @Timeout(15)
 class LocalStickerDownloadTest {
@@ -131,12 +138,39 @@ class LocalStickerDownloadTest {
                 when(response.body()).thenReturn(body);
                 when(response.headers()).thenReturn(HttpHeaders.of(declared
                         ? Map.of("Content-Length", List.of("1025")) : Map.of(), (name, value) -> true));
-                var failure = assertThrows(StickerDownloadException.class, () -> assets.prepare(
+                // 2026/11/10：正常大小拒绝携带声明值或实际读取下界，资源仍实际关闭。
+                var failure = assertThrows(StickerSizeLimitException.class, () -> assets.prepare(
                         job("https://multimedia.nt.qq.com.cn/download?rkey=private-signature"), config.snapshot(), control));
-                assertTrue(FailureDiagnostic.from(failure).description().contains("max-file-bytes"));
+                var description = FailureDiagnostic.from(failure).description();
+                assertTrue(description.contains(declared ? "响应声明字节数=1025" : "已读取字节数（至少）=1025"));
+                assertTrue(description.contains("允许上限=1024"));
+                assertTrue(description.contains("max-file-bytes=1024"));
                 assertFalse(FailureDiagnostic.from(failure).toString().contains("private-signature"));
                 verify(body).close();
             }
+        }
+    }
+
+    /** 2026/11/10：编码长度预检和填充边界解码超限使用同一拒绝类型，不混淆非法编码。 */
+    @Test
+    void inlineSizeChecksDistinguishDecodedBytesFromEncodedCharacters() {
+        var config = new AgentStickerFileConfig();
+        config.setStorageRoot(directory.toString());
+        config.setMaxFileBytes(1024);
+        var assets = new LocalStickerAssets();
+        try (var control = ExecutionControl.create()) {
+            for (int size : List.of(1025, 1027)) {
+                var inline = "data:image/png;base64," + Base64.getEncoder().encodeToString(new byte[size]);
+                var failure = assertThrows(StickerSizeLimitException.class,
+                        () -> assets.prepare(job(inline), config.snapshot(), control));
+                var description = FailureDiagnostic.from(failure).description();
+                assertTrue(description.contains(size == 1025 ? "解码字节数=1025" : "Base64 字符数=1372"));
+                assertTrue(description.contains("max-file-bytes=1024"));
+                assertFalse(description.contains("data:image"));
+            }
+            var invalid = assertThrows(StickerDownloadException.class,
+                    () -> assets.prepare(job("data:image/png;base64,%%%"), config.snapshot(), control));
+            assertTrue(FailureDiagnostic.from(invalid).description().contains("编码无效"));
         }
     }
 

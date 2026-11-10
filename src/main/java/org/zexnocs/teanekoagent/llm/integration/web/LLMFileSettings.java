@@ -27,11 +27,12 @@ import java.util.Objects;
  * <br>2026/11/05：模型连接地址及路径按普通字段显示，密钥继续隐藏。
  * <br>2026/11/07：模型表单属于系统内置配置，只沿用文件授权，不依赖插件目录或业务插件启停。
  * <br>2026/11/07：表单随独立 LLM 子模块装配，不依赖 Agent 组件或配置类型。
+ * <br>2026/11/10：为模型配置表单声明可选图片输入能力字段。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.7.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Component
 // 2026/11/07：模型协议与凭据由独立 LLM 提供，不投影为可选插件配置。
@@ -54,6 +55,7 @@ public final class LLMFileSettings implements IFileSettingsAdapter {
                 field("/models/*/provider", "兼容供应商标识", "TEXT"), field("/models/*/model", "实际模型名称", "TEXT"),
                 // 2026/11/05：管理员可读原始地址与路径模板，只有真实凭据继续脱敏。
                 secret("/models/*/api-key", "API 密钥", "TEXT"), field("/models/*/base-url", "服务地址", "TEXT"),
+                field("/models/*/image-input", "允许图片输入", "BOOLEAN"),
                 field("/models/*/api-path", "接口路径", "TEXT"), field("/models/*/api", "旧接口路径别名", "TEXT"),
                 field("/models/*/thinking", "启用思考", "BOOLEAN"), field("/models/*/max-tokens", "最大输出 token", "NUMBER"),
                 // 2026/11/04：模型容量与默认输入比例和其他模型参数共同保存、应用。

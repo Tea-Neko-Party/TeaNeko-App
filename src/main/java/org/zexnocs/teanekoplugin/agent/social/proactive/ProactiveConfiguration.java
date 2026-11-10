@@ -15,11 +15,12 @@ import java.util.Optional;
 /**
  * 解释主动活动组件的参数，供候选调度与通用触发门控复用同一配置语义。
  * <br>2026/11/07：配置缺失、停用或依赖失效时明确关闭，不向宿主增加业务访问器。
+ * <br>2026/11/10：读取候选总时限，旧装配未填写时使用九十秒。
  *
  * @author zExNocs
  * @date 2026/11/07
  * @since 4.9.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Service
 public final class ProactiveConfiguration implements IAgentTriggerPolicy {
@@ -56,7 +57,9 @@ public final class ProactiveConfiguration implements IAgentTriggerPolicy {
                         value.path("proactiveIntervalSeconds").asInt(900),
                         value.path("proactiveAttemptCooldownSeconds").asInt(60),
                         value.path("proactiveQuietStartHour").asInt(23),
-                        value.path("proactiveQuietEndHour").asInt(7)));
+                        value.path("proactiveQuietEndHour").asInt(7),
+                        // 2026/11/10：旧配置不需要写回即可获得新的默认总时限。
+                        value.path("proactiveTimeoutSeconds").asInt(90)));
     }
 
     /**
@@ -74,6 +77,7 @@ public final class ProactiveConfiguration implements IAgentTriggerPolicy {
 
     /**
      * 主动活动组件的一次不可变参数读取，不携带宿主或其他插件配置。
+     * <br>2026/11/10：纳入独立候选总时限。
      * @param timed 定时候选开关
      * @param interjection 接话候选开关
      * @param zone 静默时区
@@ -82,12 +86,14 @@ public final class ProactiveConfiguration implements IAgentTriggerPolicy {
      * @param attemptCooldownSeconds 失败尝试退避
      * @param quietStartHour 静默起点
      * @param quietEndHour 静默终点
+     * @param timeoutSeconds 候选总时限
      * @author zExNocs
      * @date 2026/11/07
      * @since 4.9.0-l
-     * @version 4.9.0-l
+     * @version 4.9.1-l
      */
     public record Settings(boolean timed, boolean interjection, String zone, int cooldownSeconds,
-                           int intervalSeconds, int attemptCooldownSeconds, int quietStartHour, int quietEndHour) {
+                           int intervalSeconds, int attemptCooldownSeconds, int quietStartHour, int quietEndHour,
+                           int timeoutSeconds) {
     }
 }

@@ -3,7 +3,12 @@ package org.zexnocs.teanekocore.logger;
 import lombok.NonNull;
 import org.jspecify.annotations.Nullable;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import java.util.*;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Objects;
 
 /**
  * 可安全记录的异常结构，不读取异常消息、请求、响应正文、请求头或抑制异常。
@@ -12,6 +17,7 @@ import java.util.*;
  * <br>2026/11/05：继承业务异常携带的安全诊断，不将已有 HTTP 状态和原始位置丢失为未知异常。
  *
  * <br>2026/11/06：补充网络、数据解析及数据库分类，保留安全错误码。
+ * <br>2026/11/10：区分连接建立失败与传输中断，保留远端处理结果未知的语义。
  *
  * @param types 有界原因链中的异常类型，按外层到内层排列
  * @param location 最深可观察异常的代码位置
@@ -20,7 +26,7 @@ import java.util.*;
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.0-l
- * @version 4.8.4-l
+ * @version 4.9.0-l
  */
 public record FailureDiagnostic(List<String> types, String location, @Nullable Integer httpStatus,
                                 @Nullable String reason) {
@@ -122,6 +128,7 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
 
     /**
      * 2026/11/05：统一模型检测、聊天回执和日志的可读原因，不把 403 错称为确定的密钥无效。
+     * <br>2026/11/10：套接字中断不冒充连接建立失败，也不推断远端请求已经成功或失败。
      * @return 固定提示或未知异常的代码位置
      */
     public String description() {
@@ -150,8 +157,15 @@ public record FailureDiagnostic(List<String> types, String location, @Nullable I
         if (types.stream().anyMatch(type -> type.endsWith("SSLHandshakeException") || type.endsWith("SSLException"))) {
             return "HTTPS 握手失败，请检查证书和协议。";
         }
-        if (types.stream().anyMatch(type -> type.endsWith("ConnectException") || type.endsWith("WebClientRequestException"))) {
+        if (types.stream().anyMatch(type -> type.endsWith("ConnectException"))) {
             return "无法连接远端服务，请检查地址、端口、网络和代理。";
+        }
+        if (types.stream().anyMatch(type -> type.endsWith("SocketException")
+                || type.endsWith("PrematureCloseException"))) {
+            return "请求传输中断，未取得完整响应；远端处理结果未知，请检查网络和上游网关日志。";
+        }
+        if (types.stream().anyMatch(type -> type.endsWith("WebClientRequestException"))) {
+            return "远端请求未取得完整响应，请检查服务地址、网络和上游服务。";
         }
         // 2026/11/06：基础故障按标准异常类型归类；不读取可能含原文的异常消息。
         if (types.stream().anyMatch(type -> type.startsWith("tools.jackson.") || type.startsWith("com.fasterxml.jackson."))) {

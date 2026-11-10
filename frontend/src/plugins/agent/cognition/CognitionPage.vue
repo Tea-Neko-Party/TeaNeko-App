@@ -7,6 +7,7 @@ defineProps<{active: boolean}>()
 </script>
 
 <template>
-  <p class="small muted">统一管理聊天记忆、跨聊天回忆、用户画像与人格。插件 ID：<code>agent.cognition</code></p>
+  <!-- 2026/11/10：插件归属由宿主页标题统一展示，页面介绍只描述功能。 -->
+  <p class="small muted">统一管理聊天记忆、跨聊天回忆、用户画像与人格。</p>
   <AgentPage :active="active" cognition-only />
 </template>

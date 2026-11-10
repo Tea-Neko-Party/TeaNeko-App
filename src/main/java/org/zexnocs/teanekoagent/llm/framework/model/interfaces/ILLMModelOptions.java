@@ -21,13 +21,19 @@ import java.util.Optional;
  * <br>2026/11/06：统一携带 JSON 输出结构，不借助供应商私有 metadata。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：声明可选图片输入参数，区分自动判断、允许和禁止。
  *
  * @author zExNocs
  * @date 2026/03/23
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public interface ILLMModelOptions {
+    /** @return 2026/11/10：显式图片输入声明，未声明时使用协议维护的型号能力。 */
+    default Optional<Boolean> findImageInput() {
+        return Optional.empty();
+    }
+
     /** @return 初始化预编译的不可变输出结构，未要求结构时为空 */
     default Optional<LLMJsonSchema> findResponseSchema() {
         return Optional.empty();

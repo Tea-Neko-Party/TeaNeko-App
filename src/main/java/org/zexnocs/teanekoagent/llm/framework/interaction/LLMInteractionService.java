@@ -33,10 +33,34 @@ import org.zexnocs.teanekocore.api_response.exception.APIRequestTimeoutException
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.logger.ILogger;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
-import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.*;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.BUDGET_EXCEEDED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.CANCELLED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.CONFIGURATION_ERROR;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.EMPTY_OUTPUT;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.FAILED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.INVALID_INPUT;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.INVALID_RESPONSE;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.REFUSED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.SUCCESS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.TIMED_OUT;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.TRUNCATED;
 
 /**
  * 以独立请求状态编排有限模型/工具往返，复用阶段执行、共享预算和固定工具绑定。
@@ -55,11 +79,12 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * <br>2026/11/06：接入安全交互节点观察器，观测故障不改变执行与资源终态。
  * <br>2026/11/06：交互只在终态通知一次观察器，由 Agent 汇总时不重复报告。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：提供等待模型与工具实际结束的交互入口。
  *
  * @author zExNocs
  * @date 2026/10/29
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  * @see LLMInteractionExecution
  */
 public final class LLMInteractionService implements ILLMInteractionService {
@@ -188,9 +213,38 @@ public final class LLMInteractionService implements ILLMInteractionService {
     @Override
     public CompletionStage<LLMInteractionResult> interact(ILLMPrompt prompt, LLMToolSet tools,
             ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+        return observe(prompt, tools, context, settings, guard, false);
+    }
+
+    /**
+     * 2026/11/10：显式资源拥有者等待真实排空，普通交互仍保留及时终态观察。
+     * @param prompt 原输入
+     * @param tools 可信工具
+     * @param context 原控制
+     * @param settings 交互限制
+     * @param guard 动态准入
+     * @return 全部已启动阶段结束后的原终态
+     */
+    @Override
+    public CompletionStage<LLMInteractionResult> interactSettled(ILLMPrompt prompt, LLMToolSet tools,
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+        return observe(prompt, tools, context, settings, guard, true);
+    }
+
+    /**
+     * @param prompt 原输入
+     * @param tools 可信工具
+     * @param context 原控制
+     * @param settings 交互限制
+     * @param guard 动态准入
+     * @param settled 是否等待实际资源结束
+     * @return 保留统一观察的交互终态
+     */
+    private CompletionStage<LLMInteractionResult> observe(ILLMPrompt prompt, LLMToolSet tools,
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard, boolean settled) {
         // 2026/11/06：统一前置拒绝、正常、取消及异常终态；异步切线程不影响汇总归属。
         long started = System.nanoTime();
-        return execute(prompt, tools, context, settings, guard).thenApply(result -> {
+        return execute(prompt, tools, context, settings, guard, settled).thenApply(result -> {
             if (context != null && !context.externallyObserved()) {
                 observer.finished(context.requestId(), TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), result);
             }
@@ -205,10 +259,11 @@ public final class LLMInteractionService implements ILLMInteractionService {
      * @param context 借用控制及可信身份
      * @param settings 交互配置
      * @param guard 动态准入
+     * @param settled 是否在终态后等待实际资源排空
      * @return 明确终态
      */
     private CompletionStage<LLMInteractionResult> execute(ILLMPrompt prompt, LLMToolSet tools,
-            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard) {
+            ToolInvocationContext context, LLMInteractionSettings settings, ILLMInteractionGuard guard, boolean settled) {
         final LLMInteractionSettings selected;
         try {
             selected = Objects.requireNonNull(settings == null ? defaults.resolve() : settings, "交互配置不能为空。");
@@ -253,7 +308,8 @@ public final class LLMInteractionService implements ILLMInteractionService {
             } finally {
                 run.execution.close();
             }
-        });
+        }).thenCompose(result -> settled ? run.execution.settled().thenApply(ignored -> result)
+                : CompletableFuture.completedStage(result));
     }
 
     /**

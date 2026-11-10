@@ -15,17 +15,17 @@ import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 /**
  * 大语言模型适配器的抽象基类。
  * <br>封装供应商级 ID、基础模型名称和 base options 的合并逻辑，具体供应商只需要实现实际调用方法。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  *
  * <br>2026/11/06：身份固定保留 JSON 合同，直调遵循适配器原生输出能力。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：输入验证读取完整模型参数声明的能力。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public abstract class AbstractLLMModel implements ILLMModel {
     /**
@@ -156,7 +156,7 @@ public abstract class AbstractLLMModel implements ILLMModel {
         if (!supports(options)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + provider);
         }
-        LLMInputValidator.validate(messages, getCapabilities(options.getModel()));
+        LLMInputValidator.validate(messages, inputCapabilities(options));
         var actual = new org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt(
                 messages, options, prompt.getOptionsPolicy());
         return execution == null ? doCall(actual, options) : doCall(actual, options, execution);

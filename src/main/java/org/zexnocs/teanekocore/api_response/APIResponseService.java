@@ -3,6 +3,7 @@ package org.zexnocs.teanekocore.api_response;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -16,7 +17,9 @@ import org.zexnocs.teanekocore.api_response.api.APIRequestParam;
 import org.zexnocs.teanekocore.api_response.api.IAPIRequestData;
 import org.zexnocs.teanekocore.api_response.api.IAPIResponseData;
 import org.zexnocs.teanekocore.api_response.exception.APIRequestAnnotationNotFoundException;
+import org.zexnocs.teanekocore.api_response.exception.APIStreamProtocolException;
 import org.zexnocs.teanekocore.api_response.exception.APIURLErrorException;
+import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseAccumulator;
 import org.zexnocs.teanekocore.api_response.interfaces.IAPIResponseService;
 import org.zexnocs.teanekocore.cache.ConcurrentMapCacheContainer;
 import org.zexnocs.teanekocore.cache.interfaces.ICacheService;
@@ -24,6 +27,7 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
+import reactor.netty.http.client.HttpClient;
 import reactor.util.retry.Retry;
 
 import java.lang.reflect.Field;
@@ -35,15 +39,17 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import java.util.function.Supplier;
 
 /**
  * APIResponseService 是一个用于处理 API 请求和响应的服务类。
  * 它使用 Spring WebClient 来发送 HTTP 请求，并使用 Reactor 来处理异步响应。
+ * <br>2026/11/10：关闭传输层隐式重发，增加受同一取消和时限控制的 SSE 聚合入口。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.9.1-l
  */
 @Service
 public class APIResponseService implements IAPIResponseService {
@@ -68,8 +74,87 @@ public class APIResponseService implements IAPIResponseService {
      */
     @Autowired
     public APIResponseService(Scheduler apiScheduler, ICacheService iCacheService, ILogger logger) {
-        this(apiScheduler, Schedulers.parallel(), iCacheService, logger, url -> WebClient.builder()
-                .baseUrl(url).defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).build());
+        // 2026/11/10：连接中断时远端执行结果未知，重试只允许来自请求的显式声明。
+        this(apiScheduler, Schedulers.parallel(), iCacheService, logger, APIResponseService::createClient);
+    }
+
+    /**
+     * 建立共享连接池客户端，不允许底层绕过请求声明自动重发。
+     * @param url 可信基础地址
+     * @return 禁用隐式重试的客户端
+     */
+    static WebClient createClient(String url) {
+        return WebClient.builder().baseUrl(url)
+                .clientConnector(new ReactorClientHttpConnector(HttpClient.create().disableRetry(true)))
+                .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE).build();
+    }
+
+    /**
+     * 2026/11/10：复用原请求仲裁和资源释放；不缓存分片、不重试已开始的流。
+     * @param requestData JSON POST 请求
+     * @param dataType SSE 数据类型
+     * @param accumulator 每订阅独占的有界聚合器
+     * @param policy 整个阶段的时限和取消策略
+     * @param <REQ> 请求类型
+     * @param <DATA> 事件类型
+     * @param <RES> 聚合结果类型
+     * @return 正常 EOF 后通过校验的完整结果
+     * @throws IllegalArgumentException 当请求声明不是无重试的 JSON POST 时
+     */
+    @Override
+    public <REQ extends IAPIRequestData, DATA extends IAPIResponseData, RES extends IAPIResponseData>
+            TaskFuture<RES> addStreamTask(REQ requestData, Class<DATA> dataType,
+            Supplier<? extends IAPIResponseAccumulator<DATA, RES>> accumulator, ExecutionPolicy policy) {
+        var declaration = requestData.getClass().getAnnotation(APIRequestData.class);
+        if (declaration == null) {
+            throw new APIRequestAnnotationNotFoundException("流式请求缺少 APIRequestData 注解。");
+        }
+        var method = _firstNotBlank(requestData.getMethodOverride(), declaration.method());
+        if (!"POST".equalsIgnoreCase(method) || !declaration.isJson() || declaration.retryCount() != 0) {
+            throw new IllegalArgumentException("流式接收只接受无自动重试的 JSON POST 声明。");
+        }
+        var url = _firstNotBlank(requestData.getBaseUrlOverride(), declaration.baseUrl());
+        var path = _firstNotBlank(requestData.getPathOverride(), declaration.path());
+        if (url == null || url.isBlank()) {
+            throw new APIURLErrorException("流式请求的基础地址不能为空。");
+        }
+        var completion = new CompletableFuture<RES>();
+        var future = new TaskFuture<>(logger, "接收 API 响应流", completion);
+        Duration timeout;
+        try {
+            timeout = policy.effectiveTimeout(Duration.ofMillis(declaration.timeoutInMillis()));
+        } catch (RuntimeException stopped) {
+            completion.completeExceptionally(stopped);
+            return future;
+        }
+        var execution = new APIRequestExecution<>(policy, timeout, timerScheduler, completion, true,
+                failure -> logger.error(APIRequestExecution.class.getName(), "响应流结束后释放资源失败。", failure));
+        execution.subscribe(Mono.defer(() -> {
+            policy.checkActive();
+            return _getWebClient(url).post().uri(path == null ? "" : path)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .headers(headers -> requestData.headers().forEach(headers::add))
+                    .accept(MediaType.TEXT_EVENT_STREAM).bodyValue(requestData)
+                    .exchangeToFlux(response -> {
+                        if (response.statusCode().isError()) {
+                            return response.createException().flatMapMany(reactor.core.publisher.Flux::error);
+                        }
+                        var type = response.headers().contentType().orElse(MediaType.APPLICATION_OCTET_STREAM);
+                        if (!MediaType.TEXT_EVENT_STREAM.isCompatibleWith(type)) {
+                            return response.releaseBody().thenMany(reactor.core.publisher.Flux.error(
+                                    new APIStreamProtocolException()));
+                        }
+                        return response.bodyToFlux(dataType);
+                    })
+                    .collect(accumulator, (state, data) -> {
+                        policy.checkActive();
+                        state.accept(data);
+                    }).map(state -> {
+                        policy.checkActive();
+                        return state.finish();
+                    });
+        }), scheduler, ignored -> { });
+        return future;
     }
 
     // 测试/内部装配可借用独立时钟与传输，既有 Spring 构造入口保持不变。

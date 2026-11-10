@@ -19,11 +19,12 @@ import java.util.Map;
  * <br>2026/11/06：缓存组件静态声明及排序信息，显式重扫原子发布，运行资格仍实时检查。
  * <br>2026/11/07：接入插件归属与独立贡献，保留原权限及执行契约。
  * <br>2026/11/07：原生组件不声明插件归属，运行桥接仍复用独立宿主能力身份。
+ * <br>2026/11/10：公开可选择模型的字段契约及安全配置投影。
  *
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.8.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Service
 public final class AgentComponentRegistry implements org.zexnocs.teanekocore.reload.api.IScanner {
@@ -207,6 +208,11 @@ public final class AgentComponentRegistry implements org.zexnocs.teanekocore.rel
             var parameters = (tools.jackson.databind.node.ObjectNode) publicAssembly.settings(entry.getKey());
             current.metadata().get(entry.getKey()).fields().stream().filter(field -> field.kind().equals("SECRET"))
                     .forEach(field -> parameters.remove(field.name()));
+            // 2026/11/10：模型配置及 metadata 整体留在受保护入口，不进入实体参数。
+            current.metadata().get(entry.getKey()).fields().stream().filter(field -> field.kind().equals("MODEL"))
+                    .map(field -> parameters.path(field.name()))
+                    .filter(tools.jackson.databind.node.ObjectNode.class::isInstance)
+                    .forEach(node -> ((tools.jackson.databind.node.ObjectNode) node).remove("configuration"));
             safe.put(entry.getKey(), parameters.toString());
         }
         return new AgentAssembly(publicAssembly.version(), safe, publicAssembly.revision(), false);
@@ -462,6 +468,11 @@ public final class AgentComponentRegistry implements org.zexnocs.teanekocore.rel
             var parameters = (tools.jackson.databind.node.ObjectNode) entry.getValue();
             current.metadata().get(entry.getKey()).fields().stream().filter(field -> field.kind().equals("SECRET"))
                     .forEach(field -> action.accept(parameters, field.name()));
+            // 2026/11/10：模型字段按原路径保留密钥，扩展组件无需增加宿主业务标识分支。
+            current.metadata().get(entry.getKey()).fields().stream().filter(field -> field.kind().equals("MODEL"))
+                    .map(field -> parameters.path(field.name()).path("configuration"))
+                    .filter(tools.jackson.databind.node.ObjectNode.class::isInstance)
+                    .forEach(node -> action.accept((tools.jackson.databind.node.ObjectNode) node, "api-key"));
             if (entry.getKey().equals("llm") && parameters.path("configuration").isObject()) {
                 action.accept((tools.jackson.databind.node.ObjectNode) parameters.path("configuration"), "api-key");
             }

@@ -9,6 +9,7 @@ package org.zexnocs.teanekoplugin.agent.cognition.memory.layered;
 import org.jspecify.annotations.Nullable;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMOptionsPolicy;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
+import org.zexnocs.teanekoagent.llm.framework.input.interfaces.ILLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
 import org.zexnocs.teanekoagent.llm.framework.interaction.JsonLLMTokenEstimator;
 import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult;
@@ -67,11 +68,12 @@ import java.util.function.Supplier;
  * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
  *
  * <br>2026/11/08：片段仅携带简述，逐字证据作为唯一原话来源，避免重复详述膨胀输入。
+ * <br>2026/11/10：结构错误反馈模型并最多纠错一次，每次复核完整输入、原预算与学习资格。
  *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @org.zexnocs.teanekocore.plugin.PluginOwned("agent.cognition")
 public final class LLMLongTermMemoryConsolidator implements ILongTermMemoryConsolidator, AutoCloseable, IPluginLifecycle {
@@ -165,20 +167,28 @@ public final class LLMLongTermMemoryConsolidator implements ILongTermMemoryConso
             // 2026/11/06：完整结构提示先参与输入预检，再进行一次受控生成。
             var request = json.prepare(StyleObservations.Analysis.class,
                     new LLMPrompt(List.of(system, user), options, LLMOptionsPolicy.RESOLVED));
-            var prompt = request.prompt();
-            // 2026/11/04：预检与真实交互使用相同完整输入口径，拒绝时不发起模型请求。
-            if (new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens() > settings.get().maxInputBytes()) {
-                throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
-            }
+            // 2026/11/10：首次和含纠错反馈的完整输入均执行同一容量检查。
             var timeout = settings.get().timeout();
-            return check(instance, actor, batch, control).thenComposeAsync(ignored -> json.generate(request,
+            return check(instance, actor, batch, control).thenComposeAsync(ignored -> json.generateWithCorrection(request,
                     new ToolInvocationContext(requestId, EntitySnapshot.of(EntityId.random(), ComponentPatch.empty()), control),
                     new LLMInteractionSettings(settings.get().modelCallLimits(), timeout, timeout, timeout),
-                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control())), ignoredResult -> { }), executor)
+                    ILLMInteractionGuard.asynchronous(context -> check(instance, actor, batch, context.control())),
+                    ignoredResult -> { }, this::validateInput), executor)
                     .thenComposeAsync(result -> check(instance, actor, batch, control)
                             .thenApply(ignored -> validated(result, batch, target)), executor)
                     .exceptionally(failure -> { throw MemoryProcessingException.structured(failure); });
         }, executor).thenCompose(stage -> stage);
+    }
+
+    /**
+     * 2026/11/10：纠错新增的结构提示同样计入完整输入，不绕过本插件的工作量上限。
+     * @param prompt 即将发送的完整输入
+     * @throws MemoryProcessingException 当完整输入超过本地工作量限制时
+     */
+    private void validateInput(ILLMPrompt prompt) {
+        if (new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens() > settings.get().maxInputBytes()) {
+            throw new MemoryProcessingException(MemoryProcessingException.Reason.INPUT_LIMIT);
+        }
     }
     /**
      * 2026/11/05：结构解析后检查固定输入关系，已取得的模型状态仅在此处附加。

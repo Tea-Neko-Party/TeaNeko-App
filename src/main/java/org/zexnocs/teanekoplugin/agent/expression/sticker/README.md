@@ -4,11 +4,11 @@ v4.9.0-l 起由 `agent.expression` 插件提供；组件 ID 为 `sticker`。插�
 
 初始功能归属 4.6.2-l，见[功能日志](../../../../../../../../../docs/changelog/4.6.2-l.md)；本次采集与诊断修正见 [v4.8.3-l](../../../../../../../../../docs/changelog/4.8.3-l.md)。
 
-已实现主动/被动采集、受限下载、内容去重、一次视觉分析、持久作业、容量维护、类别查询、STICKER/FACE 独立发送，以及全局管理 SPI 和受限事件。机器人只从本轮实际提供的资源中选择，不保证每次收藏后立即使用该图。进度见[实施入口](../../../../../../../../../docs/plan/old/agent-expression-stickers.md)。
+已实现主动/被动采集、受限下载、内容去重、有界视觉分析、持久作业、容量维护、类别查询、STICKER/FACE 独立发送，以及全局管理 SPI 和受限事件。机器人只从本轮实际提供的资源中选择，不保证每次收藏后立即使用该图。进度见[实施入口](../../../../../../../../../docs/plan/old/agent-expression-stickers.md)。
 
 ## 启用与配置
 
-本地文件为 config/agent/stickers.yml，字段和注释见[模板](../../../../../../../resources/templates/config/agent/stickers.yml)。已有部署只补缺少的文件，避免覆盖已有模型凭据。模型、连接和密钥仍统一放在 model.yml；model-id 填写已有适配器 ID，空值沿用默认路由。该模型必须明确声明 USER 图片能力；缺少视觉路由时作业每五分钟检查一次，最长保留一天，不启动普通聊天或额外工具循环。
+本地文件为 config/agent/stickers.yml，字段和注释见[模板](../../../../../../../resources/templates/config/agent/stickers.yml)。已有部署只补缺少的文件，避免覆盖已有模型凭据。v4.9.1-l 起，识图默认跟随当前聊天 LLM 组件，独立选择与备用模型见下一节。模型必须明确声明 USER 图片能力；缺少视觉路由时作业每五分钟检查一次，最长保留一天，不启动普通聊天或额外工具循环。
 
 已登记且 enabled=true 的 Agent scope 默认 stickerCollectEnabled=true。收到真实人类普通图片即可入队，无须先提及机器人，不依赖 memoryLearningEnabled、historyCaptureEnabled 或 expressionEnabled。每条入站最多观察前四张图片，排除机器人自身与 OTHER 消息；客户端原生表情不会仅因带有 URL 而混入图库。
 
@@ -26,12 +26,24 @@ v4.9.0-l 起由 `agent.expression` 插件提供；组件 ID 为 `sticker`。插�
 | max-storage-bytes / max-file-bytes | 共 512MiB / 单图 6MiB；预约、有效与待删文件共同占用预算，短时保守重复计数 |
 | downloads-per-hour / scope-downloads-per-hour | 实例每小时 120 次、单 scope 30 次；主动请求不绕过额度 |
 | analyses-per-hour / scope-analyses-per-hour | 实例每小时 20 次、单 scope 5 次；已有同图结果复用，不占第二次分析额度 |
-| timeout-seconds / maintenance-seconds | 作业 60 秒；无后台作业时每 60 秒回收及轮转校验，单轮各最多八项 |
+| timeout-seconds / maintenance-seconds | 每次模型请求 60 秒；配置备用时总作业最多两倍时限；无后台作业时每 60 秒回收及轮转校验，单轮各最多八项 |
 | min-confidence / min-quality | 0.85 / 0.65；质量是一次模型给出的综合分数，不是客观测量 |
 | probation-days / replacement-margin | 入库后三天保护期，新项竞争分数至少高出旧项 0.08 才替换 |
 | score-weights | 质量 0.40、独立人类 0.20、衰减频率 0.20、近期使用 0.10、类别稀缺 0.10；五项非负且总和为一 |
 
 categories 可配置至多 32 个稳定 ID 到中文说明的映射；缺省为开心、伤心、生气、疑惑、惊讶、赞同、拒绝、安慰、感谢、尴尬、调侃、等待。每图只有一个主类别和至多四个次级标签。
+
+## 独立识图模型与检测
+
+聊天配置 → Agent 组件 → 表情包 → 采集识图模型，可以跟随 LLM 组件、选择已记录模型路由，或单独填写私有模型。继承完整保留聊天 LLM 的路由及私有参数；选择独立模型不修改聊天使用的模型。私有凭据只留在原聊天配置中，页面只显示保留标记，运行实体不携带私有连接和 metadata。
+
+插件配置 → 表情包识图模型提供全实例备用模型，对应 `config/agent/sticker-model.yml`，文件配置区为 `agent.sticker-model`。保存并应用后，新作业读取该选择。`fallback.source` 支持 `none`、`system`、`custom`，后两项分别使用 `route` 或 `configuration`，字段与 LLM 组件一致。未设置新备用时兼容旧 `stickers.yml` 的非空 `model-id`；若要完全关闭旧备用，请同时清空旧字段。旧字段不再覆盖组件首选模型。
+
+主模型路由、凭据或图片能力不可用时可直接使用备用；已经发起的主请求失败后，等待请求资源实际结束，再最多发起一次备用请求。第二次请求重新预约全局及聊天分析额度，并占用共享模型预算；备用也失败时不会继续重试。主备实际解析为相同路由不重复调用。取消、插件停用、聊天资格撤销及配置变更均停止当前作业，不触发备用。正常模型结果判为非表情包不属于调用失败。
+
+两处“检测已保存模型识图”只检测本处选定模型，不调用备用。先保存设置，再点击检测：发送随程序打包的 `src/main/resources/llm/vision-test.png`（96×64、红方块与蓝圆）及固定问题，零工具、一次请求、60 秒时限，实例最多两个并发。只有完整回答正确识别颜色、形状及左右顺序才显示成功；普通 OK、错误识别、拒绝与截断均失败。检测不发送聊天记录，也不生成图库素材；资源实际结束后才释放临时凭据和并发槽。
+
+OpenAI Responses 及兼容 Chat Completions 的自定义视觉型号，可在模型配置或私有模型表单设置 `image-input: true`；`false` 禁止图片，省略按已知型号判断。检测可对尚未声明的兼容型号临时试送图片，成功后仍需明确保存“允许图片输入”，不自动改写模型文件。此字段只在本地准入使用，不作为未知 API 字段传给服务端。实际协议仍须支持图片输入，识图通过也不证明复杂业务输出和工具调用已通过验收。
 
 ## 自动解析概率
 
@@ -85,6 +97,8 @@ Spring 自动扫描 `StickerCollectionTools` 和 `StickerCollectionStatusTool`�
 
 已有 `config/agent/stickers.yml` 不会因更新模板自动覆盖；若白名单缺少 `multimedia.nt.qq.com.cn` 或 `gxh.vip.qq.com`，须补入 `allowed-hosts` 并重新加载配置。下载失败会区分主机拒绝、DNS、连接、HTTPS、超时、HTTP 状态和大小限制，不记录图片签名参数或响应正文。
 
+`max-file-bytes` 默认 6291456 字节（6 MiB），允许配置到 8 MiB。响应声明、实际读取和内联解码均检查此上限；超限采集以 `REJECTED / FILE_TOO_LARGE` 正常跳过，记录 INFO 大小对照，不调用视觉模型，也不自动重试或增加上限。清理实际完成后释放容量预约。报告区分响应声明值、流式读取下界和内联编码长度，不将未完整下载的大小冒充完整文件大小。
+
 按实际解码确定 PNG/JPEG/GIF/WebP，缺少解码器则拒绝。画布像素上限 4194304、帧数上限 600、累计实际子帧解码像素上限 33554432；读取每个子帧前也校验尺寸。GIF 处理画布偏移、背景恢复和前帧恢复，最多四幅合成采样帧在同次视觉请求中发送，并带采样时间。原动画字节保持原样；APNG 及不能可靠合成的其他动画首期明确跳过。
 
 视觉端口通过统一 STICKER_ANALYSIS 活动、SYSTEM 身份、一次模型调用、零工具和原执行控制工作，不创建普通会话或记忆。严格 JSON 同时给出类型、置信度、收藏建议、画面/用途、主类别、标签、综合质量与简短依据。宿主再次要求 STICKER、可信阈值、质量阈值及受控类别；插画、照片、截图、其他或不确定结果不会激活。
@@ -101,6 +115,8 @@ Spring 自动扫描 `StickerCollectionTools` 和 `StickerCollectionStatusTool`�
 
 文件与数据库不是同一原子事务：先登记作业并预约，下载暂存、提交内容元数据、原子发布，最后事务激活。失败或重启留下的已知暂存和发布文件由持久作业收敛；后台租约五分钟过期后将原在途任务标为不确定，不重复启动其视觉任务。清理确认前不释放容量预约；不递归删除目录，不接管未知文件。
 
+领取旧队列项前复核来源资格：客户端账号尚未就绪或与原作业不匹配时，保留 `QUEUED` 和容量预约，以 `CLIENT_UNAVAILABLE` 记录原因并在 30 秒后复核，仍受原 24 小时过期限制。聊天组件、采集开关明确关闭时终止并清理；不满足资格的新候选直接拒绝。已开始工作后资格失效，保留具体失败原因并清理暂存与预约，不自动重发可能已经计费的视觉请求。配置或数据库读取故障仍报告真实异常。
+
 ## 扩展开发
 
 已有 Spring Bean 实现下列接口并添加对应注解，通过 Core scanner 和注册目录发现；同类重复标识、错误接口和不支持的版本明确失败。目前契约版本为 1，文件配置明确选择标识，不依赖扫描顺序覆盖。
@@ -113,6 +129,8 @@ Spring 自动扫描 `StickerCollectionTools` 和 `StickerCollectionStatusTool`�
 | IStickerCatalog | @TeaNekoStickerCatalog | EasyDataStickerCatalog，catalog: easydata |
 
 实现继续遵守 @PluginOwned 及原插件启停代次。端口与控制仅在宿主任务上下文中持有，不进入组件或模型。目录事务回调只操作有界状态，文件/网络/模型动作在事务外执行；后端替换必须保留原子仲裁、容量预约、持久身份、租约及提交后才公开结果的合同。文件后端须让相同 catalog-id 的副本看到同一身份和内容，删除必须幂等。
+
+自定义 `StickerLibrary` 装配的来源回调返回 `StickerAccess`，区分允许、明确撤销和客户端未就绪；不再以单个布尔值合并这些状态。
 
 文件后端同时实现 preview：只对已有受控 Blob 返回有界合成 PNG，不重新下载来源、不发布文件。管理刷新复用该能力及原一次视觉分析合同。当前 readers 由实际发送、预览和刷新取得/释放；robotShows 与 lastRobot 仅在真实平台确认后更新，独立于人类评分。
 

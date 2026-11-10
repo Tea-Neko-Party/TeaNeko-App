@@ -1,26 +1,38 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/04：组件目录驱动装配表单，所有更改仅进入父页面草稿，由原配置事务提交。
-import {computed, onMounted, ref, watch} from 'vue'
-import {ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElOption, ElSelect, ElSwitch, ElTag} from 'element-plus'
-import {ApiError, request} from '../../shared/api/client'
-import ModelNamePicker from '../models/ModelNamePicker.vue'
-import ModelIcon from '../models/ModelIcon.vue'
+import {computed, onMounted, onScopeDispose, ref, watch} from 'vue'
+import {ElAlert, ElButton, ElDialog, ElInput, ElInputNumber, ElSwitch, ElTag} from 'element-plus'
+import {ApiError} from '../../shared/api/client'
+import ModelSelectionEditor from '../models/ModelSelectionEditor.vue'
+import ModelVisionProbeButton from '../models/ModelVisionProbeButton.vue'
 import ValueEditor from '../../shared/editors/ValueEditor.vue'
 import FieldFrame from '../../shared/components/FieldFrame.vue'
 import type {ModelCatalog} from '../models/ModelTemplateEditor.vue'
 import {useConsolePreferences} from '../../shared/state/console-preferences'
 import PluginFilter from '../../shared/plugins/PluginFilter.vue'
-import {pluginAvailability, pluginEnabled} from '../../shared/plugins/plugin-console'
+import {
+  pluginAvailability,
+  pluginEnabled,
+  PluginRequestSuperseded,
+  usePluginRequests
+} from '../../shared/plugins/plugin-console'
+import {appliedModelRevision} from '../models/model-configuration-state'
+import {useActivePolling} from '../../shared/lifecycle/active-polling'
 
-interface Field {name: string; label: string; description: string; kind: string}
+interface Field {name: string; label: string; description: string; kind: string; probe?: string}
 interface Component {pluginId?: string | null; id: string; name: string; description: string; version: number; requires: string[]; defaults: Record<string, unknown>; fields: Field[]}
 interface Catalog {components: Component[]; models: ModelCatalog; systemRoutes: Record<string, string>; modelError: string}
 interface Assembly {version: number; components: Record<string, Record<string, unknown>>}
-const props = defineProps<{modelValue: string; disabled: boolean}>()
+const props = defineProps<{modelValue: string; disabled: boolean; probeContext?: Record<string, string>; unsaved?: boolean}>()
 const emit = defineEmits<{'update:modelValue': [value: string]; expired: []; validity: [valid: boolean]}>()
 const {advanced} = useConsolePreferences()
 const catalog = ref<Catalog>()
+// 2026/11/10：刷新只替换目录，不改装配草稿；迟到结果不得跨越插件启停或组件销毁。
+const {request} = usePluginRequests()
+let loading = 0
 const selected = ref('')
 const pluginId = ref('')
 const visibleComponents = computed(() => catalog.value?.components.filter(item => pluginEnabled(item.pluginId) && (!pluginId.value || item.pluginId === pluginId.value)) ?? [])
@@ -32,12 +44,6 @@ const current = computed(() => catalog.value?.components.find(item => item.id ==
 watch(pluginAvailability, () => { if (!current.value) selected.value = '' })
 const parameters = computed(() => assembly.value.components[selected.value] ?? {})
 const llm = computed(() => assembly.value.components.llm!)
-const privateModel = computed(() => (llm.value.configuration ?? {}) as Record<string, unknown>)
-const adapter = computed(() => catalog.value?.models.routes.find(item => item.id === privateModel.value.adapter))
-const secret = computed(() => privateModel.value['api-key'])
-const keepSecret = computed(() => typeof secret.value === 'object' && secret.value !== null)
-const environment = computed(() => typeof secret.value === 'string' && secret.value.startsWith('${'))
-const secretText = computed(() => keepSecret.value ? '' : environment.value ? String(secret.value).slice(2, -1) : String(secret.value ?? ''))
 // 2026/11/04：高级预览也不回显本次新输入的秘密。
 const safePreview = computed(() => {
   const value = structuredClone(assembly.value)
@@ -47,7 +53,13 @@ const safePreview = computed(() => {
   for (const item of catalog.value?.components ?? []) {
     const parameters = value.components[item.id]
     if (!parameters) continue
-    for (const field of item.fields) if (field.kind === 'SECRET' && field.name in parameters) parameters[field.name] = '（已隐藏）'
+    for (const field of item.fields) {
+      if (field.kind === 'SECRET' && field.name in parameters) parameters[field.name] = '（已隐藏）'
+      if (field.kind === 'MODEL') {
+        const model = parameters[field.name] as {configuration?: Record<string, unknown>} | undefined
+        if (model?.configuration && 'api-key' in model.configuration) model.configuration['api-key'] = '（已隐藏）'
+      }
+    }
   }
   const configuration = value.components.llm?.configuration as Record<string, unknown> | undefined
   if (configuration && 'api-key' in configuration) configuration['api-key'] = '（已隐藏）'
@@ -55,13 +67,28 @@ const safePreview = computed(() => {
 })
 
 async function load() {
-  try { catalog.value = await request<Catalog>('agent/catalog/components') }
+  const generation = ++loading
+  try {
+    const value = await request<Catalog>('agent/catalog/components')
+    if (generation === loading) {
+      catalog.value = value
+      error.value = ''
+    }
+  }
   catch (failure) {
+    if (failure instanceof PluginRequestSuperseded || generation !== loading) return
     if (failure instanceof ApiError && failure.status === 401) emit('expired')
     error.value = failure instanceof Error ? failure.message : '无法读取组件目录。'
   }
 }
 onMounted(load)
+watch(appliedModelRevision, () => { void load() })
+watch(pluginAvailability, () => { void load() })
+// 2026/11/10：弹窗内轮询及重新聚焦同步其他会话的模型更新，始终保留未保存的用户参数。
+useActivePolling(() => !!selected.value, () => { void load() }, 10000)
+const refreshOnFocus = () => { if (!!selected.value && !document.hidden) void load() }
+onMounted(() => window.addEventListener('focus', refreshOnFocus))
+onScopeDispose(() => window.removeEventListener('focus', refreshOnFocus))
 
 function publish(value: Assembly) {
   if (props.disabled) return
@@ -92,32 +119,11 @@ function parameter(name: string, value: unknown) {
   document.components[selected.value]![name] = value
   publish(document)
 }
-function source(value: string) {
-  const document = structuredClone(assembly.value)
-  document.components.llm = value === 'system' ? {source: 'system', route: ''} : {source: 'custom', configuration: {}}
-  publish(document)
-}
-function modelField(name: string, value: unknown) {
-  parameter('configuration', {...privateModel.value, [name]: value})
-}
-function selectModel(value: string) {
-  // 2026/11/04：型号和容量在同一草稿更新中提交，避免同帧双事件覆盖刚选中的型号。
-  const capacity = adapter.value?.contextWindows?.[value]
-  parameter('configuration', {...privateModel.value, model: value,
-    ...(capacity ? {'context-window-tokens': capacity} : {})})
-}
-function chooseAdapter(id: string) {
-  const template = catalog.value!.models.routes.find(item => item.id === id)!
-  const configuration = JSON.parse(JSON.stringify(template.defaults)) as Record<string, unknown>
-  delete configuration.id
-  delete configuration.provider
-  parameter('configuration', {...configuration, adapter: id, 'api-key': ''})
-}
-function jsonField(name: string, text: string, model = false) {
+function jsonField(name: string, text: string) {
   editingJSON.value[name] = text
   try {
     const value: unknown = JSON.parse(text)
-    if (model) modelField(name, value); else parameter(name, value)
+    parameter(name, value)
     invalidJSON.value.delete(name)
   } catch {
     invalidJSON.value.add(name)
@@ -131,6 +137,8 @@ function open(id: string) {
   invalidJSON.value.clear()
   error.value = ''
   emit('validity', true)
+  // 2026/11/10：再次打开时读取当前路由，避免保留页面继续使用首次挂载的旧目录。
+  void load()
 }
 </script>
 
@@ -140,7 +148,7 @@ function open(id: string) {
     <div v-if="catalog" class="assembly-grid">
       <PluginFilter v-model="pluginId" :items="catalog.components" /><article v-for="item in visibleComponents" :key="item.id" class="assembly-card" :class="{'is-installed': !!assembly.components[item.id]}">
         <div class="assembly-card-heading"><strong>{{ item.name }}</strong><ElSwitch :model-value="!!assembly.components[item.id]" :disabled="disabled || item.id === 'llm'" :aria-label="'安装' + item.name" @change="value => toggle(item.id, !!value)" /></div>
-        <code v-if="item.pluginId">{{ item.pluginId }}</code><p class="small muted">{{ item.description }}</p>
+        <code v-if="item.pluginId"><PluginLabel :plugin-id="item.pluginId" /></code><p class="small muted">{{ item.description }}</p>
         <p class="component-dependencies small"><span class="muted">依赖</span> {{ item.requires.map(id => catalog?.components.find(entry => entry.id === id)?.name ?? id).join('、') || '无' }}</p>
         <!-- 2026/11/05：安装状态由开关表达，仅保留必要标识；参数入口统一靠卡片底部右侧。 -->
         <div class="assembly-card-actions">
@@ -152,31 +160,18 @@ function open(id: string) {
     </div>
     <ElDialog :model-value="!!selected" :title="current?.name + ' · 组件参数'" width="min(690px, 94vw)" @close="selected = ''">
       <div v-if="current" class="assembly-parameters">
-        <code v-if="current.pluginId">{{ current.pluginId }}</code><p class="config-description">{{ current.description }}</p>
-        <template v-if="selected === 'llm'">
-          <label>模型来源<ElSelect :model-value="String(llm.source ?? 'system')" :disabled="disabled" @change="value => source(String(value))"><ElOption value="system" label="系统模型" /><ElOption value="custom" label="当前聊天私有模型" /></ElSelect></label>
-          <template v-if="llm.source !== 'custom'">
-            <ElAlert v-if="catalog?.modelError" :title="catalog.modelError" type="warning" :closable="false" />
-            <label>模型路由<ElSelect :model-value="String(llm.route ?? '')" :disabled="disabled" @change="value => parameter('route', value)"><ElOption v-for="(label, value) in catalog?.systemRoutes" :key="value" :value="value" :label="label" /></ElSelect></label>
-          </template>
-          <template v-else>
-            <p class="small muted">只保存到当前聊天配置，不修改系统模型文件。密钥不回显。</p>
-            <label>协议适配器<ElSelect :model-value="String(privateModel.adapter ?? '')" :disabled="disabled" @change="value => chooseAdapter(String(value))"><ElOption class="model-adapter-option" v-for="item in catalog?.models.routes" :key="item.id" :value="item.id" :label="item.name"><ModelIcon :icon="item.icon" :name="item.name" /> {{ item.name }}</ElOption></ElSelect></label>
-            <template v-if="privateModel.adapter">
-              <div><label>模型名称</label><ModelNamePicker :model-value="String(privateModel.model ?? '')" :names="adapter?.models ?? []" :disabled="disabled" label="私有模型名称" @update:model-value="value => modelField('model', value)" @select="selectModel" /></div>
-              <label>服务地址<ElInput :model-value="String(privateModel['base-url'] ?? '')" :disabled="disabled" @update:model-value="value => modelField('base-url', value)" /></label>
-              <label>接口路径<ElInput :model-value="String(privateModel['api-path'] ?? '')" :disabled="disabled" @update:model-value="value => modelField('api-path', value)" /></label>
-              <div class="assembly-number-row"><label>最大输出 token<ElInputNumber :model-value="Number(privateModel['max-tokens'])" :min="1" :disabled="disabled" @change="value => modelField('max-tokens', value)" /></label><label>上下文总容量<ElInputNumber :model-value="Number(privateModel['context-window-tokens'])" :min="1" :disabled="disabled" @change="value => modelField('context-window-tokens', value)" /></label></div>
-              <label>输入上下文占比<ElInputNumber :model-value="Number(privateModel['context-input-ratio'] ?? 0.8)" :min="0.01" :max="1" :step="0.05" :disabled="disabled" @change="value => modelField('context-input-ratio', value)" /></label>
-              <div v-if="keepSecret" class="assembly-card-heading"><span>API key 已保存</span><ElButton :disabled="disabled" @click="modelField('api-key', '')">替换密钥</ElButton></div>
-              <template v-else><label>从环境变量读取<ElSwitch :model-value="environment" :disabled="disabled" @change="value => modelField('api-key', value ? '${}' : '')" /></label><label>{{ environment ? '环境变量名' : 'API key' }}<ElInput :model-value="secretText" :type="environment ? 'text' : 'password'" :disabled="disabled" autocomplete="off" @update:model-value="value => modelField('api-key', environment ? '${' + value + '}' : value)" /></label></template>
-              <template v-if="advanced"><label>扩展 metadata（JSON）<ValueEditor kind="JSON" label="扩展 metadata" :model-value="editingJSON.metadata ?? JSON.stringify(privateModel.metadata ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField('metadata', value, true)" /></label><label>温度<ElInputNumber :model-value="Number(privateModel.temperature ?? 1)" :disabled="disabled" :step="0.1" @change="value => modelField('temperature', value)" /></label><label>思考模式<ElSwitch :model-value="privateModel.thinking === true" :disabled="disabled" @change="value => modelField('thinking', value)" /></label></template>
-            </template>
-          </template>
+        <code v-if="current.pluginId"><PluginLabel :plugin-id="current.pluginId" /></code><p class="config-description">{{ current.description }}</p>
+        <template v-if="selected === 'llm' && catalog">
+          <ElAlert v-if="catalog.modelError" :title="catalog.modelError" type="warning" :closable="false" />
+          <ModelSelectionEditor :model-value="llm" :catalog="catalog.models" :routes="catalog.systemRoutes" :disabled="disabled" @update:model-value="value => publish({...assembly, components: {...assembly.components, llm: {...value}}})" @validity="value => emit('validity', value)" />
         </template>
         <template v-else>
           <FieldFrame v-for="field in current.fields" :key="field.name" :label="field.label" :description="field.description" :error="invalidJSON.has(field.name) ? 'JSON 格式尚未完成' : ''" v-slot="{attributes}">
-            <ElSwitch v-bind="attributes" v-if="field.kind === 'BOOLEAN'" :model-value="Boolean(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
+            <template v-if="field.kind === 'MODEL' && catalog">
+              <ModelSelectionEditor :model-value="(parameters[field.name] ?? current.defaults[field.name] ?? {}) as Record<string, unknown>" :catalog="catalog.models" :routes="catalog.systemRoutes" :disabled="disabled" default-source="inherit" @update:model-value="value => parameter(field.name, value)" @validity="value => emit('validity', value)" />
+              <ModelVisionProbeButton v-if="field.probe" :endpoint="field.probe" :context="probeContext" :disabled="disabled || !!unsaved" @expired="emit('expired')" />
+            </template>
+            <ElSwitch v-bind="attributes" v-else-if="field.kind === 'BOOLEAN'" :model-value="Boolean(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
             <ElInputNumber v-bind="attributes" v-else-if="field.kind === 'NUMBER'" :model-value="Number(parameters[field.name] ?? current.defaults[field.name])" :disabled="disabled" @change="value => parameter(field.name, value)" />
             <ValueEditor v-else-if="field.kind === 'JSON'" kind="JSON" :label="field.label" :model-value="editingJSON[field.name] ?? JSON.stringify(parameters[field.name] ?? current.defaults[field.name] ?? {}, null, 2)" :disabled="disabled" @update:model-value="value => jsonField(field.name, value)" />
             <ValueEditor v-else-if="field.kind === 'LONG_TEXT'" :label="field.label" :model-value="String(parameters[field.name] ?? current.defaults[field.name] ?? '')" :disabled="disabled" @update:model-value="value => parameter(field.name, value)" />

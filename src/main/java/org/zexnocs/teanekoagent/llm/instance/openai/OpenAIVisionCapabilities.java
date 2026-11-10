@@ -13,14 +13,14 @@ import java.util.Set;
  * 已核对的精确模型名；不通过 gpt-* 前缀推断未知模型的视觉能力。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：支持自定义型号显式启用或禁用图片，并保留已知型号的细节级别。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public final class OpenAIVisionCapabilities {
     /**
@@ -32,6 +32,21 @@ public final class OpenAIVisionCapabilities {
             "gpt-5.4-mini", "gpt-5.4-nano");
     private static final Set<String> STANDARD = Set.of("gpt-5.2", "gpt-5.1", "gpt-4.1", "gpt-4.1-mini",
             "gpt-4o", "gpt-4o-mini");
+
+    /**
+     * 2026/11/10：兼容协议允许配置明确声明图片能力，未知型号仍不按名称推测。
+     * @param options 本次完整参数
+     * @param known 协议已经维护的具体型号能力
+     * @return 显式声明优先的本地能力，不代表远端已经实测
+     */
+    public static ModelCapabilities resolve(
+            org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelOptions options,
+            ModelCapabilities known) {
+        return options.findImageInput().map(enabled -> enabled
+                ? known.supportsImages() ? known
+                    : ModelCapabilities.userImages(Set.of(LLMImageDetail.AUTO, LLMImageDetail.LOW, LLMImageDetail.HIGH))
+                : ModelCapabilities.textOnly()).orElse(known);
+    }
 
     /**
      * 按已验证的精确模型名声明图片细节能力；未知名称不按前缀推断支持。

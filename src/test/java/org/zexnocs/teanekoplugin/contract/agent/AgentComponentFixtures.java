@@ -55,15 +55,22 @@ import static org.mockito.Mockito.when;
 /**
  * 业务集成测试共用真实组件声明与迁移器，避免在夹具中复制宿主的旧业务字段表。
  * <br>2026/11/08：扫描只发生在夹具初始化，业务查询使用同一已发布目录。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/11/08
  * @since 4.9.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public final class AgentComponentFixtures {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final AgentComponentRegistry DIRECTORY = directory();
+
+    /** @return 2026/11/10：具有真实模型配置校验的表情包组件。 */
+    public static StickerComponent sticker() {
+        return new StickerComponent(new org.zexnocs.teanekoplugin.agent.expression.sticker.model.StickerModelConfiguration(
+                new LLMComponent(new YAMLFileTypeParser())));
+    }
 
     /** 禁止创建无状态测试装配入口。 */
     private AgentComponentFixtures() {
@@ -96,7 +103,7 @@ public final class AgentComponentFixtures {
         doReturn(List.of()).when(expression).systems();
         var personality = new PersonalityComponent();
         var declarations = List.of(new LLMComponent(new YAMLFileTypeParser()), new ToolComponent(),
-                memory, personality, expression, new StickerComponent(), new SkillComponent(),
+                memory, personality, expression, sticker(), new SkillComponent(),
                 new ScheduleComponent(), new CommandComponent(), new ProactiveComponent());
         var scanner = mock(IBeanScanner.class);
         var beans = new LinkedHashMap<String, IPair<TeaNekoAgentComponent, IAgentComponent>>();

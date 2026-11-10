@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 // 2026/11/06：外壳仅管理认证与布局，页面声明、业务跳转和草稿生命周期交给页面宿主。
-import {computed, onBeforeUnmount, onMounted, ref} from 'vue'
+import {computed, onBeforeUnmount, onMounted, ref, watch} from 'vue'
 import {ElAlert, ElConfigProvider, ElDrawer} from 'element-plus'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 import LoginView from '../features/auth/LoginView.vue'
@@ -11,6 +11,7 @@ import {rememberLoginToken, takeLoginToken} from '../features/auth/login-token'
 import AppearanceControls from '../shared/components/AppearanceControls.vue'
 import ConsoleIcon from '../shared/components/ConsoleIcon.vue'
 import ConsoleNavigation from './ConsoleNavigation.vue'
+import PluginNavigation from './PluginNavigation.vue'
 import {provideConsolePreferences} from '../shared/state/console-preferences'
 import ConsolePageHost from './pages/ConsolePageHost.vue'
 import type {PageEnvironment} from './pages/page-contracts'
@@ -26,6 +27,8 @@ import {useActivePolling} from '../shared/lifecycle/active-polling'
 
 const {collapsed, toggleSidebar} = provideConsolePreferences()
 const mobileOpen = ref(false)
+// 2026/11/10：主导航与插件二级栏共享展开状态，页面跳转仍经过原草稿保护。
+const pluginMenuOpen = ref(false)
 const mobileQuery = window.matchMedia('(max-width: 760px)')
 function closeMobileOnDesktop(event: MediaQueryListEvent) {
   if (!event.matches) mobileOpen.value = false
@@ -44,13 +47,18 @@ const busy = ref(false)
 const error = ref('')
 const initialPage = ref<ConsolePageKey>('overview')
 const pages = ref<InstanceType<typeof ConsolePageHost>>()
+// 2026/11/10：插件卡片等页面内部跳转也同步右侧导航；单纯收起菜单不改变当前页面。
+watch(() => pages.value?.current, key => { pluginMenuOpen.value = !!key?.startsWith('plugin:') })
 const sessionEpoch = ref(0)
 const environment: PageEnvironment = {
   session, overview, platforms: availablePlatforms, busy, refresh, expired: clearSession, tokensApplied: machineTokensApplied, signOut,
 }
 
 async function navigate(key: ConsolePageKey) {
-  if (await pages.value?.navigate(key)) mobileOpen.value = false
+  if (await pages.value?.navigate(key)) {
+    mobileOpen.value = false
+    pluginMenuOpen.value = key.startsWith('plugin:')
+  }
 }
 
 function clearSession() {
@@ -60,6 +68,7 @@ function clearSession() {
   overview.value = undefined
   platforms.value = []
   mobileOpen.value = false
+  pluginMenuOpen.value = false
   initialPage.value = 'overview'
 }
 
@@ -140,11 +149,19 @@ useActivePolling(() => !!session.value && !pluginCatalogPollingPaused.value,
       <a class="skip-link" href="#main-content">跳到主要内容</a>
       <aside class="sidebar" :class="{'is-collapsed': collapsed}">
         <ConsoleNavigation :page="pages?.current ?? initialPage" :collapsed="collapsed" :version="overview?.version"
-          :environment="environment" :disabled="pages?.changing" @select="navigate" />
+          :environment="environment" :disabled="pages?.changing" :plugin-menu-open="pluginMenuOpen" submenu-id="desktop-plugin-menu"
+          @toggle-plugins="pluginMenuOpen = !pluginMenuOpen" @select="navigate" />
       </aside>
-      <ElDrawer v-model="mobileOpen" direction="ltr" :size="260" :with-header="false" title="控制台导航" class="navigation-drawer">
-        <ConsoleNavigation :page="pages?.current ?? initialPage" :version="overview?.version"
-          :environment="environment" :disabled="pages?.changing" @select="navigate" />
+      <aside v-if="pluginMenuOpen" id="desktop-plugin-menu" class="plugin-sidebar" aria-label="插件配置菜单">
+        <PluginNavigation :page="pages?.current ?? initialPage" :disabled="pages?.changing" @select="navigate" @close="pluginMenuOpen = false" />
+      </aside>
+      <ElDrawer v-model="mobileOpen" direction="ltr" :size="pluginMenuOpen ? 'min(540px, 96vw)' : '260px'" :with-header="false" title="控制台导航" class="navigation-drawer">
+        <div class="mobile-navigation" :class="{'has-plugin-menu': pluginMenuOpen}">
+          <ConsoleNavigation :page="pages?.current ?? initialPage" :version="overview?.version"
+            :environment="environment" :disabled="pages?.changing" :plugin-menu-open="pluginMenuOpen" submenu-id="mobile-plugin-menu"
+            @toggle-plugins="pluginMenuOpen = !pluginMenuOpen" @select="navigate" />
+          <PluginNavigation v-if="pluginMenuOpen" id="mobile-plugin-menu" :page="pages?.current ?? initialPage" :disabled="pages?.changing" @select="navigate" @close="pluginMenuOpen = false" />
+        </div>
       </ElDrawer>
       <div class="workspace">
         <header class="topbar">

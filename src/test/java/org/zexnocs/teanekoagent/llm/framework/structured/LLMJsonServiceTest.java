@@ -8,7 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.zexnocs.teanekoplugin.agent.expression.expression.LegacyReplyOutput;
 import org.zexnocs.teanekoagent.llm.framework.input.LLMPrompt;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionGuard;
 import org.zexnocs.teanekoagent.llm.framework.interaction.ILLMInteractionService;
@@ -17,18 +16,20 @@ import org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionSettings
 import org.zexnocs.teanekoagent.llm.framework.message.LLMAssistantMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.LLMUserMessage;
 import org.zexnocs.teanekoagent.llm.framework.message.content.LLMContentListBuilder;
+import org.zexnocs.teanekoagent.llm.framework.message.content.TextLLMContentPart;
 import org.zexnocs.teanekoagent.llm.framework.model.LLMModelOptions;
 import org.zexnocs.teanekoagent.llm.framework.model.interfaces.LLMResponseFormat;
 import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryLayers;
-import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalityLearningOutput;
-import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
 import org.zexnocs.teanekocore.framework.composition.ComponentPatch;
 import org.zexnocs.teanekocore.framework.composition.EntityId;
 import org.zexnocs.teanekocore.framework.composition.EntitySnapshot;
 import org.zexnocs.teanekocore.logger.FailureDiagnostic;
 import org.zexnocs.teanekocore.utils.scanner.inerfaces.IClassScanner;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.layered.MemoryLayers;
+import org.zexnocs.teanekoplugin.agent.cognition.personality.PersonalityLearningOutput;
+import org.zexnocs.teanekoplugin.agent.expression.expression.LegacyReplyOutput;
+import org.zexnocs.teanekoplugin.agent.expression.sticker.Stickers;
 import tools.jackson.databind.ObjectMapper;
 
 import java.nio.file.Files;
@@ -43,9 +44,22 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.same;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 /**
  * 结构化输出合同、异步返回和安全诊断的离线回归。
@@ -53,12 +67,43 @@ import static org.mockito.Mockito.*;
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
  *
+ * <br>2026/11/10：核对原生结构提示保留字段名，仍拒绝模型返回的错误别名。
+ *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.3-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class LLMJsonServiceTest {
+    /** 2026/11/10：原生模式仍提示真实顶层键；错误别名不能变成空成功或推进记忆水位。 */
+    @Test
+    void nativeSchemaKeepsRootNamesAndRejectsInventedAliases() {
+        var type = org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations.Analysis.class;
+        var schemas = LLMJsonTestSupport.schemas(type);
+        var service = new LLMJsonService(schemas, mock(ILLMInteractionService.class), mapper,
+                new LLMJsonDiagnostics(false, "未启用"),
+                mock(org.zexnocs.teanekoagent.llm.framework.model.interfaces.ILLMModelService.class),
+                // 2026/11/10：此用例仅检查提示，不启动截止任务。
+                mock(java.util.concurrent.ScheduledExecutorService.class));
+        var definition = schemas.require(type);
+        var options = LLMModelOptions.builder().responseFormat(LLMResponseFormat.JSON)
+                .responseSchema(definition.schema()).build();
+        var instruction = LLMJsonSupport.SCHEMA.messages(List.of(service.instruction(definition)), options).getFirst();
+        var text = assertInstanceOf(TextLLMContentPart.class,
+                instruction.getContents().getFirst().getContentPart()).getText();
+        assertTrue(text.contains("memories"));
+        assertTrue(text.contains("styles"));
+        assertFalse(text.contains("subjectId"));
+        assertFalse(text.contains("facts"));
+        assertTrue(text.length() < 500);
+        var invalid = assertThrows(LLMJsonException.class,
+                () -> service.read(type, "{\"facts\":[],\"styles\":[]}", UUID.randomUUID()));
+        assertEquals(LLMJsonException.Code.JSON_SHAPE, invalid.code());
+        var empty = service.read(type, "{\"memories\":[],\"styles\":[]}", UUID.randomUUID());
+        assertTrue(empty.memories().isEmpty());
+        assertTrue(empty.styles().isEmpty());
+    }
+
     /** 2026/11/06：标准约束进入协议且在 Java 解码前执行，不能仅靠自然语言说明。 */
     @Test
     void enforcesDeclaredLengthsCountsAndStringEnums() {

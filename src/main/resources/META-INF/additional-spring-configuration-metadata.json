@@ -91,8 +91,8 @@
     {
       "name": "tea-neko.agent.memory.layered.timeout-seconds",
       "type": "java.lang.Long",
-      "defaultValue": 45,
-      "description": "后台生成及提交观察的总时限，最多一百二十秒。"
+      "defaultValue": 90,
+      "description": "目录扫描与领取后的整理分别计时，默认九十秒，最多一百二十秒；已发起的持久提交和退避等待实际结果。"
     },
     {
       "name": "tea-neko.agent.memory.layered.retention-days",
@@ -157,7 +157,7 @@
       "name": "tea-neko.agent.monitor.alert-tokens",
       "type": "java.lang.Long",
       "defaultValue": 16384,
-      "description": "单轮报告与估算 token 合计达到此正整数阈值时触发告警，不代表精确费用或模型上下文窗口。"
+      "description": "整轮全部模型调用的报告与估算总 token（含输入及输出）达到此正整数阈值时仅提醒，不限制调用，不覆盖模型 max-tokens 或上下文容量，也不代表精确费用。"
     },
     {
       "name": "tea-neko.agent.monitor.alert-cooldown-seconds",

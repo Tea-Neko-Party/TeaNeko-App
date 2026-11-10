@@ -19,15 +19,15 @@ import java.util.List;
 /**
  * 大语言模型的客户端接口。
  * <br>新的模型供应商需要实现该接口并使用 {@link LLMModel} 标注，才能注册到 TeaNeko Agent。
- *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
  * <br>2026/11/06：由适配器显式声明原生 JSON 输出能力，未知实现不假定支持。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：增加按完整模型参数解析输入能力的扩展契约。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public interface ILLMModel {
     /**
@@ -76,6 +76,15 @@ public interface ILLMModel {
      */
     default boolean supports(ILLMModelOptions options) {
         return true;
+    }
+
+    /**
+     * 2026/11/10：按完整配置读取本地输入能力，默认实现不放宽第三方协议声明。
+     * @param options 已解析的模型参数
+     * @return 本次模型输入能力
+     */
+    default ModelCapabilities inputCapabilities(ILLMModelOptions options) {
+        return getCapabilities(options.getModel());
     }
 
     /**

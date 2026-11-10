@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 2026/11/07：按功能目录引用共享能力与页面契约。
-// 2026/11/04：模型样板来自已注册供应商适配器，新增在确认后直接保存，保存与应用仍分开。
+// 2026/11/10：模型样板来自已注册供应商适配器，新增后由模型页面接续保存与应用。
 import {computed, ref} from 'vue'
 import {ElAlert, ElButton, ElDialog, ElInput, ElOption, ElSelect, ElSwitch} from 'element-plus'
 import type {CredentialInput} from '../settings/files/FileFieldEditor.vue'
@@ -94,7 +94,7 @@ function add() {
         <label>输入上下文占比<ElInput v-model="form.ratio" type="number" aria-label="新增模型输入比例" /></label>
         <!-- 2026/11/05：新增模型与编辑表单统一使用 API 密钥名称。 -->
         <label>API 密钥输入方式<ElSelect v-model="inputId" aria-label="新增模型密钥输入方式" @change="secret = ''"><ElOption v-for="mode in catalog.inputs" :key="mode.id" :value="mode.id" :label="mode.name" /></ElSelect></label>
-        <label>API 密钥<ElInput v-model="secret" :type="input?.secret ? 'password' : 'text'" :placeholder="input?.placeholder" aria-label="新增模型密钥" autocomplete="off" /></label><p class="small muted">{{ input?.description }} 留空可先保存样板，配置有效密钥后才能调用。保存会重新排版 YAML、不保留原注释；运行应用仍需单独确认。</p>
+        <label>API 密钥<ElInput v-model="secret" :type="input?.secret ? 'password' : 'text'" :placeholder="input?.placeholder" aria-label="新增模型密钥" autocomplete="off" /></label><p class="small muted">{{ input?.description }} 留空可先保存样板，配置有效密钥后才能调用。保存会重新排版 YAML、不保留原注释；保存成功后自动应用，新请求使用新配置。</p>
         <label class="model-default-toggle">设为默认模型<ElSwitch v-model="makeDefault" aria-label="新增后设为默认模型" /></label>
         <ElAlert v-if="error" :title="error" type="error" :closable="false" />
         <div class="editor-actions"><ElButton @click="secret = ''; picking = true">返回</ElButton><ElButton @click="open = false">取消</ElButton><ElButton type="primary" @click="add">保存模型</ElButton></div>

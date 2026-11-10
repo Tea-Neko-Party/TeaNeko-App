@@ -29,10 +29,13 @@ import java.time.Duration;
  *
  *
  *
+ * <br>2026/11/10：默认后台整理时限改为九十秒，保留两分钟配置上限。
+ * <br>2026/11/10：为格式校验失败保留一次纠错调用，原总时限与无工具约束不变。
+ *
  * @author zExNocs
  * @date 2026/11/02
  * @since 4.6.1-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public record LayeredMemorySettings(boolean enabled, int triggerMessages, int keepMessages, int batchMessages,
                                     int maxInputBytes, Duration timeout, Duration retention, int triggerBytes,
@@ -54,12 +57,12 @@ public record LayeredMemorySettings(boolean enabled, int triggerMessages, int ke
                 triggerBytes, LongMemoryLearningPolicy.defaults());
     }
     /**
-     * 2026/11/04：保留一次无工具请求约束，输入及输出 token 容量由实际模型配置决定。
+     * 2026/11/10：允许首次生成及一次格式纠错，输入及输出 token 容量由实际模型配置决定。
      *
-     * @return 不含隐式 token 配额的单次模型调用预算
+     * @return 不含隐式 token 配额、最多两次且无工具的总预算
      */
     public LLMCallLimits modelCallLimits() {
-        return new LLMCallLimits(1, 0, 0);
+        return new LLMCallLimits(2, 0, 0);
     }
 
     /**
@@ -97,8 +100,8 @@ public record LayeredMemorySettings(boolean enabled, int triggerMessages, int ke
             throw new IllegalArgumentException("分层记忆工作预算或保留期无效。");
         }
     }
-    /** @return 默认十二条触发、保留四条、单批十六条的有界策略 */
+    /** @return 2026/11/10：默认十二条触发、保留四条、单批十六条、九十秒时限的有界策略 */
     public static LayeredMemorySettings defaults() {
-        return new LayeredMemorySettings(true, 12, 4, 16, 131072, Duration.ofSeconds(45), Duration.ofDays(90));
+        return new LayeredMemorySettings(true, 12, 4, 16, 131072, Duration.ofSeconds(90), Duration.ofDays(90));
     }
 }

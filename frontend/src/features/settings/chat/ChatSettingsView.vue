@@ -1,4 +1,6 @@
 <script setup lang="ts">
+// 2026/11/10：插件归属统一优先展示名称，稳定 ID 保留在悬停说明及筛选中。
+import PluginLabel from '../../../shared/plugins/PluginLabel.vue'
 // 2026/11/07：按功能目录引用共享能力与页面契约。
 import AccessibleTabs from '../../../shared/components/AccessibleTabs.vue'
 // 2026/11/04：刷新类操作统一使用带完整动作提示的图标按钮。
@@ -495,7 +497,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
         <!-- 2026/11/05：每个配置独立成卡，操作只使用该卡的版本与字段，不提供跨卡批量保存。 -->
         <ElCard v-for="item in selected ? sectionOptions : []" :key="item.id" shadow="never" class="config-section-card">
           <button class="config-section-heading" :aria-expanded="section === item.id && cardOpen" :disabled="busy" @click="chooseSection(item.id)">
-            <span><span v-if="item.registered === true" class="config-registered-dot" role="img" aria-label="已登记"></span><strong>{{ item.name }}</strong><code v-if="item.pluginId" class="small"> · {{ item.pluginId }}</code><span v-if="drafts.has(JSON.stringify([client, account, selected?.ref, item.id]))" class="small muted"> · 有草稿</span></span>
+            <span><span v-if="item.registered === true" class="config-registered-dot" role="img" aria-label="已登记"></span><strong>{{ item.name }}</strong><code v-if="item.pluginId" class="small"> · <PluginLabel :plugin-id="item.pluginId" /></code><span v-if="drafts.has(JSON.stringify([client, account, selected?.ref, item.id]))" class="small muted"> · 有草稿</span></span>
             <ConsoleIcon :name="section === item.id && cardOpen ? 'collapse' : 'expand'" />
           </button>
           <div v-if="section === item.id && cardOpen" class="config-section-content">
@@ -516,7 +518,8 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
                 <p class="config-description">{{ field.description }}</p><span v-if="field.kind !== 'ASSEMBLY'" class="field-source">{{ field.source }} · 默认：{{ defaultLabel(field) }}</span></div>
               <div class="config-field-input">
               <ElCheckbox v-if="field.jsonValue && field.nullable && field.kind !== 'JSON'" :model-value="values[field.name] === 'null'" :disabled="busy || !view.registered || !field.editable || !!pending" @update:model-value="value => setNull(field, !!value)">不设置（null）</ElCheckbox>
-              <AgentAssemblyEditor v-if="field.kind === 'ASSEMBLY'" :model-value="values[field.name] ?? field.value" :disabled="busy || !!pending" @update:model-value="value => updateValue(field, value)" @expired="emit('expired')" @validity="value => assemblyValid = value" />
+              <!-- 2026/11/10：模型检测固定当前已保存目标和版本，存在草稿时先保存。 -->
+              <AgentAssemblyEditor v-if="field.kind === 'ASSEMBLY'" :probe-context="view && selected ? {client, account, target: selected.ref, revision: view.revision} : undefined" :unsaved="dirty" :model-value="values[field.name] ?? field.value" :disabled="busy || !!pending" @update:model-value="value => updateValue(field, value)" @expired="emit('expired')" @validity="value => assemblyValid = value" />
               <ElSwitch v-else-if="field.kind === 'BOOLEAN'" :id="'field-' + field.name" :model-value="values[field.name] === 'true'"
                 @update:model-value="value => updateValue(field, !!value)" :disabled="busy || !view.registered || !field.editable || !!pending || field.jsonValue && values[field.name] === 'null'" />
               <ElSelect v-else-if="field.kind === 'SELECT'" :id="'field-' + field.name" :model-value="displayValue(field)" @update:model-value="value => updateValue(field, String(value))"

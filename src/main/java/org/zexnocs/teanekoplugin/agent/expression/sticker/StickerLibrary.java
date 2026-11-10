@@ -22,7 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.function.Predicate;
+import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
@@ -39,42 +39,77 @@ import java.util.function.Supplier;
  * <br>2026/11/07：展开采集、租约与清理事务的控制流，保留原状态顺序。
  * <br>2026/11/07：新视觉调用按作业抽样，已分析缓存和显式请求保持原行为。
  * <br>2026/11/07：按插件归属迁移业务实现，保留原配置与持久化契约。
+ * <br>2026/11/10：区分来源撤销与客户端未就绪，领取前复核资格并保留明确终止原因。
+ * <br>2026/11/10：超限素材保存独立拒绝终态，保持原租约和后续清理约束。
  *
  * @author zExNocs
  * @date 2026/11/03
  * @since 4.6.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @org.zexnocs.teanekocore.plugin.PluginOwned("agent.expression")
 public final class StickerLibrary {
     private final StickerExtensionRegistry registry;
     private final Supplier<StickerSettings> settings;
-    private final Predicate<Stickers.Source> allowed;
+    // 2026/11/10：来源复核显式报告未就绪，不能用同一个布尔值永久失败暂时离线的作业。
+    private final Function<Stickers.Source, StickerAccess> access;
     private final Clock clock;
     private final @Nullable IStickerLifecycle lifecycle;
     /**
+     * 2026/11/10：使用可区分暂时未就绪的来源资格端口。
      * @param registry 原扩展目录
      * @param settings 本地快照
-     * @param allowed 真实来源复核
+     * @param access 真实来源资格及客户端就绪状态
      * @param clock 时间来源
      */
-    public StickerLibrary(StickerExtensionRegistry registry,Supplier<StickerSettings> settings,Predicate<Stickers.Source> allowed,Clock clock){this(registry,settings,allowed,clock,null);}
+    public StickerLibrary(StickerExtensionRegistry registry, Supplier<StickerSettings> settings,
+                          Function<Stickers.Source, StickerAccess> access, Clock clock) {
+        this(registry, settings, access, clock, null);
+    }
     /**
-     * 2026/11/03：默认宿主接入生命周期，独立旧宿主保留原构造。
+     * 2026/11/03：支持可选接入受限采集生命周期。
+     * 2026/11/10：固定来源资格查询端口，不将暂时离线等同撤销。
      * @param registry 原扩展
      * @param settings 配置
-     * @param allowed 真实来源
+     * @param access 真实来源资格及客户端就绪状态
      * @param clock 时钟
      * @param lifecycle 可选受限事件
      */
-    public StickerLibrary(StickerExtensionRegistry registry,Supplier<StickerSettings> settings,Predicate<Stickers.Source> allowed,Clock clock,@Nullable IStickerLifecycle lifecycle){this.registry=registry;this.settings=settings;this.allowed=allowed;this.clock=clock;this.lifecycle=lifecycle;}
+    public StickerLibrary(StickerExtensionRegistry registry, Supplier<StickerSettings> settings,
+                          Function<Stickers.Source, StickerAccess> access, Clock clock,
+                          @Nullable IStickerLifecycle lifecycle) {
+        this.registry = registry;
+        this.settings = settings;
+        this.access = access;
+        this.clock = clock;
+        this.lifecycle = lifecycle;
+    }
     /** @return 当前不可变配置 */
     public StickerSettings settings(){return settings.get();}
     /**
+     * 2026/11/10：配置或目录读取故障继续传播，不伪装成没有采集权限。
      * @param source 原来源
      * @return 当前可采集时为真
      */
-    public boolean allows(Stickers.Source source){try{var config=settings.get();return config.enabled()&&config.collectEnabled()&&(source.manual()||config.passiveEnabled())&&allowed.test(source);}catch(RuntimeException invalid){return false;}}
+    public boolean allows(Stickers.Source source) {
+        return access(settings(), source) == StickerAccess.ALLOWED;
+    }
+
+    /**
+     * 2026/11/10：本地开关和宿主来源资格使用同一判定，客户端短暂不可用由队列等待。
+     * @param config 固定本地设置
+     * @param source 可信来源
+     * @return 允许、已关闭或临时未就绪的明确状态
+     */
+    private StickerAccess access(StickerSettings config, Stickers.Source source) {
+        if (!config.enabled() || !config.collectEnabled()) {
+            return StickerAccess.COLLECTION_DISABLED;
+        }
+        if (!source.manual() && !config.passiveEnabled()) {
+            return StickerAccess.PASSIVE_DISABLED;
+        }
+        return access.apply(source);
+    }
     /**
      * 只登记有界短期引用并预留最坏文件容量，普通聊天不等待下载或视觉任务。
      * @param source 宿主固定消息
@@ -85,6 +120,12 @@ public final class StickerLibrary {
         var ports = registry.select(config);
         var now = clock.instant();
         validateSource(source, now);
+        // 2026/11/10：未获资格的新候选返回明确拒绝回执，不创建持久作业或预留容量。
+        var eligibility = access(config, source);
+        if (eligibility != StickerAccess.ALLOWED) {
+            return CompletableFuture.completedStage(new Stickers.Receipt(null, Stickers.JobStatus.REJECTED,
+                    eligibility.name(), ""));
+        }
         check(config, ports, source, null);
         // 2026/11/03：没有锁跨事件等待；监听结果不能替代当前来源、预算和事务检查。
         var deciding = lifecycle == null ? CompletableFuture.completedStage(new IStickerLifecycle.Decision(true, "")) : lifecycle.before(source, config);
@@ -159,6 +200,16 @@ public final class StickerLibrary {
                 if (pending(job) && job.getCreated().plus(Duration.ofHours(24)).isBefore(now)) {
                     terminal(job, Stickers.JobStatus.FAILED, "EXPIRED", now);
                 }
+                // 2026/11/10：仅未执行的队列项等待客户端；已运行任务仍按原不确定结果处理。
+                if (job.getStatus() == Stickers.JobStatus.QUEUED && !job.getNextAttempt().isAfter(now)) {
+                    var eligibility = access(config, job.getSource());
+                    if (eligibility == StickerAccess.CLIENT_UNAVAILABLE) {
+                        job.setNextAttempt(now.plusSeconds(30));
+                        job.setReason(eligibility.name());
+                    } else if (eligibility != StickerAccess.ALLOWED) {
+                        terminal(job, Stickers.JobStatus.REJECTED, eligibility.name(), now);
+                    }
+                }
             }
             prune(state, now);
             var jobs = state.getJobs().values();
@@ -195,6 +246,32 @@ public final class StickerLibrary {
             j.setStatus(Stickers.JobStatus.QUEUED);
             j.setNextAttempt(clock.instant().plus(delay));
             release(s);
+            return true;
+        });
+    }
+
+    /**
+     * 2026/11/10：备用识图请求重新占用原全局及聊天额度，不以一次作业绕过调用次数限制。
+     * @param config 固定配置
+     * @param ports 原扩展
+     * @param work 原运行作业
+     * @param control 当前控制
+     * @return 两级额度均允许并已预约时为真
+     */
+    public CompletionStage<Boolean> reserveAdditionalAnalysis(StickerSettings config,
+            StickerExtensionRegistry.Selected ports, Work work, ExecutionControl control) {
+        return ports.catalog().change(config, state -> {
+            check(config, ports, work.job().getSource(), control);
+            running(state, work);
+            var now = clock.instant();
+            var global = quota(state, "global", now);
+            var scope = quota(state, scopeKey(work.job().getSource()), now);
+            if (global.getAnalyses() >= config.analysesPerHour()
+                    || scope.getAnalyses() >= config.scopeAnalysesPerHour()) {
+                return false;
+            }
+            global.setAnalyses(global.getAnalyses() + 1);
+            scope.setAnalyses(scope.getAnalyses() + 1);
             return true;
         });
     }
@@ -328,9 +405,49 @@ public final class StickerLibrary {
      * @param config 配置
      * @param ports 扩展
      * @param work 原工作
-     * @return 已记录固定失败原因的阶段
+     * @return 2026/11/10：普通处理故障继续使用原终态；资格失效由具名重载记录
      */
-    public CompletionStage<Boolean> fail(StickerSettings config,StickerExtensionRegistry.Selected ports,Work work){return ports.catalog().change(config,s->{var job=owned(s,work);if(pending(job)){terminal(job,Stickers.JobStatus.FAILED,"PROCESSING_FAILED",clock.instant());}return true;});}
+    public CompletionStage<Boolean> fail(StickerSettings config, StickerExtensionRegistry.Selected ports, Work work) {
+        return fail(config, ports, work, null);
+    }
+
+    /**
+     * 2026/11/10：超限素材记录为策略拒绝，仍由原清理流程释放暂存、文件占用和预约。
+     * @param config 固定设置
+     * @param ports 已选端口
+     * @param work 已领取工作
+     * @return 拒绝终态持久化结果
+     */
+    public CompletionStage<Boolean> rejectOversized(StickerSettings config, StickerExtensionRegistry.Selected ports,
+                                                   Work work) {
+        return ports.catalog().change(config, state -> {
+            var job = owned(state, work);
+            if (pending(job)) {
+                terminal(job, Stickers.JobStatus.REJECTED, "FILE_TOO_LARGE", clock.instant());
+            }
+            return true;
+        });
+    }
+
+    /**
+     * 2026/11/10：记录已开始任务的真实失效原因，保留清理责任，不重新执行视觉请求。
+     * @param config 固定设置
+     * @param ports 已选端口
+     * @param work 已领取工作
+     * @param rejected 已确认的资格原因；普通处理故障为空
+     * @return 失败终态持久化结果
+     */
+    public CompletionStage<Boolean> fail(StickerSettings config, StickerExtensionRegistry.Selected ports,
+                                         Work work, @Nullable StickerAccess rejected) {
+        return ports.catalog().change(config, state -> {
+            var job = owned(state, work);
+            if (pending(job)) {
+                terminal(job, Stickers.JobStatus.FAILED,
+                        rejected == null ? "PROCESSING_FAILED" : rejected.name(), clock.instant());
+            }
+            return true;
+        });
+    }
     /**
      * 暂存已回收后释放预约；发布但未激活的文件进入独立待删状态。
      * @param config 配置
@@ -432,8 +549,23 @@ public final class StickerLibrary {
      * @param ports 固定端口
      * @param source 真实来源
      * @param control 可选控制
+     * @throws StickerAccessException 当配置或来源资格失效时
      */
-    public void check(StickerSettings config,StickerExtensionRegistry.Selected ports,Stickers.Source source,@Nullable ExecutionControl control){if(control!=null){control.checkActive();}registry.verify(ports);if(!config.equals(settings())||!allows(source)){throw new IllegalStateException("素材采集配置或来源资格已失效。");}}
+    public void check(StickerSettings config, StickerExtensionRegistry.Selected ports, Stickers.Source source,
+                      @Nullable ExecutionControl control) {
+        // 2026/11/10：资格分类可以公开诊断，其他端口或配置读取错误仍按真实异常传播。
+        if (control != null) {
+            control.checkActive();
+        }
+        registry.verify(ports);
+        if (!config.equals(settings())) {
+            throw new StickerAccessException(StickerAccess.CONFIG_CHANGED);
+        }
+        var eligibility = access(config, source);
+        if (eligibility != StickerAccess.ALLOWED) {
+            throw new StickerAccessException(eligibility);
+        }
+    }
     /**
      * @param source 固定来源
      * @param now 接收时间

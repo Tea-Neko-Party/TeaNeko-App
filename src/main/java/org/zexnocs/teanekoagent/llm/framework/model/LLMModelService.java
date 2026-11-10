@@ -40,14 +40,14 @@ import java.util.Map;
  * <br>2026/11/06：按适配器 JSON 能力发送请求，路由覆盖不重置输出格式。
  * <br>2026/11/06：按原生能力去除重复结构提示，保持输入预检、观察与实际发送一致。
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
- *
  * <br>2026/11/07：在模型目录发布前编译归属，请求时只读取已注册方法。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：模型预检使用包含图片声明的有效参数。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.4.0
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Service
 public class LLMModelService extends AbstractScanner implements ILLMModelService {
@@ -320,7 +320,7 @@ public class LLMModelService extends AbstractScanner implements ILLMModelService
         if (!model.supports(checked)) {
             throw new IllegalArgumentException("模型不支持当前输入参数：" + modelId);
         }
-        LLMInputValidator.validate(prompt.getMessages(), model.getCapabilities(options.getModel()));
+        LLMInputValidator.validate(prompt.getMessages(), model.inputCapabilities(options));
         // 2026/11/04：直调与工具循环均检查完整输入，额度不足不改变 max-tokens。
         options.findContextWindow().ifPresent(context -> {
             // 2026/11/06：容量预检使用实际协议结构，避免重复计算 Schema 提示。

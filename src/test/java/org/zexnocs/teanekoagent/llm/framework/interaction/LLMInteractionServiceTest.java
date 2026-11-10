@@ -2,15 +2,6 @@ package org.zexnocs.teanekoagent.llm.framework.interaction;
 
 // 2026/11/07：模型能力迁入独立 LLM 子模块，保留业务协议和配置标识。
 
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
-import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
-import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
-import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
-
-// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -30,7 +21,12 @@ import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMUsage;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
-import org.zexnocs.teanekoagent.llm.framework.tool.*;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMTool;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolBinding;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolCall;
+import org.zexnocs.teanekoagent.llm.framework.tool.LLMToolSet;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationContext;
+import org.zexnocs.teanekoagent.llm.framework.tool.ToolInvocationResult;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.IContextualToolExecutor;
 import org.zexnocs.teanekoagent.llm.framework.tool.interfaces.ILLMToolCall;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionControl;
@@ -43,15 +39,49 @@ import org.zexnocs.teanekocore.logger.ILogger;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Duration;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyLong;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.BUDGET_EXCEEDED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.CANCELLED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.EMPTY_OUTPUT;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.FAILED;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.INVALID_INPUT;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.INVALID_RESPONSE;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.SUCCESS;
+import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionResult.Status.TIMED_OUT;
+
+// 2026/11/04：按依赖方向整理类型引用，业务标识和序列化数据不变。
 
 /**
  * 用真实阶段执行器验证自动往返、协议配对、深层快照和所有主要终止路径。
@@ -68,13 +98,41 @@ import static org.zexnocs.teanekoagent.llm.framework.interaction.LLMInteractionR
  * <br>2026/11/06：验证观察器异常不改变结果或泄漏执行资源。
  * <br>2026/11/06：验证多次模型往返的单次汇总、真实输入和外层观察归属。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class LLMInteractionServiceTest {
+    /** 2026/11/10：主请求超时的逻辑结果不能冒充真实结束，备用请求须等待原资源收尾。 */
+    @Test
+    void settledInteractionWaitsForModelResourceAfterTimeout() {
+        var logical = new CompletableFuture<ILLMResult>();
+        var physical = new CompletableFuture<Void>();
+        var task = spy(new TaskFuture<ILLMResult>(logger, "排空模型", logical));
+        when(task.physicalCompletion()).thenReturn(physical);
+        doReturn(task).when(models).call(any(ILLMPrompt.class), any(ExecutionPolicy.class));
+        try (var parent = runtime.parent(LLMCallLimits.defaults())) {
+            var prompt = new LLMPrompt(LLMUserMessage.builder()
+                    .contents(new LLMContentListBuilder().addText("合成输入").build()).build());
+            var result = service.interactSettled(prompt, new LLMToolSet(new ObjectMapper(), List.of()),
+                    context(parent), settings, ignored -> { }).toCompletableFuture();
+            runtime.runAll();
+            runtime.advance(settings.modelTimeout());
+            runtime.runAll();
+            assertFalse(result.isDone());
+            logical.completeExceptionally(new IllegalStateException("合成失败"));
+            assertFalse(result.isDone());
+            physical.complete(null);
+            runtime.runAll();
+            assertEquals(TIMED_OUT, result.join().status());
+            parent.checkActive();
+        }
+        assertEquals(0, runtime.pendingTimers());
+    }
+
     private final InteractionRuntime runtime = new InteractionRuntime();
     private final ILLMModelService models = mock(ILLMModelService.class);
     // 2026/11/02：复用原失败用例验证真实诊断入口。

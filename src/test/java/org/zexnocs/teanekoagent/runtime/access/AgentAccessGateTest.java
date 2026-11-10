@@ -53,15 +53,15 @@ import static org.zexnocs.teanekoagent.runtime.access.AgentAccessDecision.Reason
  * 验证每类活动都遵守统一登记边界，前置拒绝不读取配置或凭据，也不执行任何业务。
  *
  * <br>2026/11/04：校正 @since 为首次引入版本。
- *
  * <br>2026/11/04：验证聊天模型覆盖、共享定义不变及准入期间切换仲裁。
  *
  * <br>2026/11/04：按依赖方向与组件职责迁移包位置，保留原协议、持久标识和业务行为。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.8.0-l
+ * @version 4.9.1-l
  */
 class AgentAccessGateTest {
     /** 2026/11/04：聊天选择覆盖文件默认，不改变共享定义，读取期间切换仍被策略仲裁拒绝。 */
@@ -78,6 +78,23 @@ class AgentAccessGateTest {
                 new AgentScopePolicy(true, true, AgentScopePolicy.Mode.ACTIVE, "kimi-chat"));
         assertEquals(SCOPE_POLICY_CHANGED, gate.evaluate(handle, actor(AgentActivity.COMMAND), AgentActivity.COMMAND).reason());
     }
+    /** 2026/11/10：独立模型优先于聊天选择，但聊天停用仍先于模型准入。 */
+    @Test
+    void explicitModelStillRequiresEnabledChat() {
+        when(scopes.read(any())).thenReturn(new AgentScopePolicy(true, true,
+                AgentScopePolicy.Mode.ACTIVE, "chat-model"));
+        assertTrue(gate.evaluate(handle, actor(AgentActivity.STICKER_ANALYSIS),
+                AgentActivity.STICKER_ANALYSIS, "vision-model").allowed());
+        var capture = org.mockito.ArgumentCaptor.forClass(AgentDefinition.class);
+        verify(readiness).inspect(capture.capture());
+        assertEquals("vision-model", capture.getValue().modelOptions().toOptions().getProvider());
+        when(scopes.read(any())).thenReturn(new AgentScopePolicy(true, false,
+                AgentScopePolicy.Mode.ACTIVE, "chat-model"));
+        assertEquals(SCOPE_DISABLED, gate.evaluate(handle, actor(AgentActivity.STICKER_ANALYSIS),
+                AgentActivity.STICKER_ANALYSIS, "vision-model").reason());
+        verify(readiness, times(1)).inspect(any());
+    }
+
     private final AgentRegistry registry = new AgentRegistry();
     private final IAgentScopePolicyPort scopes = mock(IAgentScopePolicyPort.class);
     private final IAgentReadiness readiness = mock(IAgentReadiness.class);

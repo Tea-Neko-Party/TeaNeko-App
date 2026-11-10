@@ -49,11 +49,12 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/07：根据原提交职责恢复编码损坏的历史注释。
  * <br>2026/11/07：测试替身沿用模型接口的默认 JSON 能力，覆盖真实协议准备入口。
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：验证视觉模型选择、配置隔离与资源结束边界。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.5.0-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 class LLMModelServiceBoundaryTest {
     /**
@@ -104,7 +105,7 @@ class LLMModelServiceBoundaryTest {
                 invocation.getArgument(1), LLMModelOptions.builder().model("file-model").maxTokens(2048)
                         .metadata(Map.of("vendor.extension", "from-file")).build()));
         when(model.supports(any())).thenReturn(true);
-        when(model.getCapabilities(anyString())).thenReturn(ModelCapabilities.textOnly());
+        when(model.inputCapabilities(any())).thenReturn(ModelCapabilities.textOnly());
         // 2026/11/07：默认方法必须执行，不能让 Mockito 的 null 代替合法能力声明。
         when(model.getJsonOutputSupport(anyString())).thenCallRealMethod();
         when(model.call(any(ILLMPrompt.class))).thenReturn(new TaskFuture<>(mock(ILogger.class), "fake-model", pending));

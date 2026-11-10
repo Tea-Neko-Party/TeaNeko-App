@@ -10,6 +10,8 @@
 
 离线集成验证覆盖慢监听不阻塞发送、监听失败计数与观察器异常隔离；真实平台回执、生产事件监听器吞吐和长时间内存表现仍需实机验收。
 
-AgentTokenAlerts 在原异步报告事件链消费脱敏快照，按 scope/Agent 实例聚合冷却，最多保存一千个状态。application 的 `tea-neko.agent.monitor.alerts-enabled=true`、`alert-tokens=16384`、`alert-cooldown-seconds=300` 控制单轮 token 阈值及冷却；阈值必须为正，冷却允许 1–86400 秒，非法配置停止本次告警而不阻断业务。报告与估算相加仅用于阈值判定，未知用量仍独立显示，不把单轮总量当模型上下文窗口或精确费用。
+AgentTokenAlerts 在原异步报告事件链消费脱敏快照，按 scope/Agent 实例聚合冷却，最多保存一千个状态。application 的 `tea-neko.agent.monitor.alerts-enabled`、`alert-tokens`、`alert-cooldown-seconds` 控制单轮累计 token 提醒及冷却。未配置时分别回退为 `true`、`16384`、`300`，显式应用配置优先；阈值必须为正，冷却允许 1–86400 秒，非法配置停止本次告警而不阻断业务。
+
+告警累计一轮内所有模型调用返回的总用量（包含输入与输出），再加上缺少报告时采用的估算；未知用量仍独立显示。模型的 `max-tokens` 是每次请求的最大输出额度，`context-window-tokens` 是上下文容量，均不控制这个提醒阈值。达到告警阈值不会终止调用、缩小输出额度或宣称超出模型上下文，也不表示精确费用。v4.9.1-l 日志同时输出统计口径和完整配置键 `tea-neko.agent.monitor.alert-tokens`，需要调整提醒时修改该项，不通过修改模型输出额度间接控制提醒。
 
 达到阈值发布 AgentTokenAlertEvent 并写固定脱敏日志；冷却期间只合并次数，下次告警携带合并计数，不保留正文或原始 Prompt 快照。默认不自动通知真实聊天接收者；外部监听器若需要通知须由宿主明确配置接收方式。旧 token-monitor.yml 模板已移除，当前不通过它控制新监控。阈值与冷却的离线用例复用原监控隔离测试。

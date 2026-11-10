@@ -7,15 +7,36 @@ import org.zexnocs.teanekocore.api_response.api.IAPIResponseData;
 import org.zexnocs.teanekocore.api_response.exception.APIRequestAnnotationNotFoundException;
 import org.zexnocs.teanekocore.api_response.exception.APIURLErrorException;
 
+import java.util.function.Supplier;
+
 /**
  * API 响应服务接口
+ * <br>2026/11/10：增加复用执行控制的 SSE 完整聚合入口。
  *
  * @author zExNocs
  * @date 2026/10/28
  * @since 4.0.0
- * @version 4.5.0-l
+ * @version 4.9.1-l
  */
 public interface IAPIResponseService {
+    /**
+     * 发送 JSON POST 并接收 SSE 数据；无缓存、无自动重试，只有正常 EOF 且聚合校验通过才返回结果。
+     * @param requestData 可信连接与请求体
+     * @param dataType 单个 SSE 事件的数据类型
+     * @param accumulator 每次订阅独占的有界聚合器工厂
+     * @param execution 覆盖整个接收阶段的时限及取消控制
+     * @param <REQ> 请求类型
+     * @param <DATA> 事件类型
+     * @param <RES> 聚合结果类型
+     * @return 完整响应任务
+     * @throws UnsupportedOperationException 当实现尚未支持流式接收时
+     */
+    default <REQ extends IAPIRequestData, DATA extends IAPIResponseData, RES extends IAPIResponseData>
+            TaskFuture<RES> addStreamTask(REQ requestData, Class<DATA> dataType,
+            Supplier<? extends IAPIResponseAccumulator<DATA, RES>> accumulator, ExecutionPolicy execution) {
+        throw new UnsupportedOperationException("HTTP 服务尚未支持流式响应聚合。");
+    }
+
     /**
      * 显式运行时策略：阶段时限覆盖注解默认值，再受执行剩余时间限制。
      * 实现必须释放被取消的实际订阅；旧实现未适配时明确拒绝，不静默忽略策略。

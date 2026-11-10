@@ -19,11 +19,12 @@ import java.util.Objects;
  * @param schema 固定的完整 Schema
  * @param nativeSchema 是否已由协议携带 Schema
  * <br>2026/11/07：迁入独立 LLM 子模块，保留公开协议与原配置语义。
+ * <br>2026/11/10：原生提示使用协议无关描述，避免将 Responses 的结构字段误称为 response_format。
  *
  * @author zExNocs
  * @date 2026/11/06
  * @since 4.8.6-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 public record LLMJsonInstruction(@JsonIgnore String guidance, @JsonIgnore String schema,
                                  @JsonIgnore boolean nativeSchema) implements ILLMSystemMessage {
@@ -42,6 +43,7 @@ public record LLMJsonInstruction(@JsonIgnore String guidance, @JsonIgnore String
     @Override
     public List<ILLMContent> getContents() {
         return new LLMContentListBuilder().addText(guidance
-                + (nativeSchema ? "字段结构遵循协议 response_format 中的 JSON Schema。" : "JSON Schema：" + schema)).build();
+                // 2026/11/10：具体协议字段由适配器决定，不在通用指令里误指向另一个 API。
+                + (nativeSchema ? "字段结构遵循本次请求携带的 JSON Schema。" : "JSON Schema：" + schema)).build();
     }
 }

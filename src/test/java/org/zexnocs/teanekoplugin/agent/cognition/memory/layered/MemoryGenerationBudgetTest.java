@@ -22,10 +22,6 @@ import org.zexnocs.teanekoagent.llm.framework.response.LLMChoice;
 import org.zexnocs.teanekoagent.llm.framework.response.LLMResult;
 import org.zexnocs.teanekoagent.llm.framework.response.interfaces.ILLMResult;
 import org.zexnocs.teanekoagent.llm.framework.structured.LLMJsonTestSupport;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
-import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import org.zexnocs.teanekoagent.runtime.AgentActorContext;
 import org.zexnocs.teanekoagent.runtime.AgentFactory;
 import org.zexnocs.teanekoagent.runtime.AgentRegistry;
@@ -37,6 +33,10 @@ import org.zexnocs.teanekoagent.runtime.access.AgentScopePolicy;
 import org.zexnocs.teanekocore.actuator.execution.ExecutionPolicy;
 import org.zexnocs.teanekocore.actuator.task.TaskFuture;
 import org.zexnocs.teanekocore.logger.ILogger;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.history.HistoryMessage;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceId;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.namespace.MemoryNamespaceReference;
+import org.zexnocs.teanekoplugin.agent.cognition.memory.runtime.IAgentMemoryReferences;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Clock;
@@ -47,6 +47,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -73,10 +74,11 @@ import static org.mockito.Mockito.when;
  * <br>2026/11/07：预算夹具保留模型接口的默认请求准备行为，不跳过 JSON 输入预检。
  *
  * <br>2026/11/07：测试宿主显式管理插件后台生命周期。
+ * <br>2026/11/10：经过真实生成器纠错，成功只提交一次，持续结构错误保留水位并退避。
  * @author zExNocs
  * @date 2026/11/04
  * @since 4.7.2-l
- * @version 4.9.0-l
+ * @version 4.9.1-l
  */
 @Timeout(15)
 class MemoryGenerationBudgetTest {
@@ -87,11 +89,15 @@ class MemoryGenerationBudgetTest {
      * @param longTerm 是否运行长期整理
      * @param configuredOutput 模型配置的输出上限
      * @param oversized 是否超过完整输入容量
+     * @param invalidResponses 先返回的结构错误次数，最多执行一次纠错
      */
     @ParameterizedTest
-    @CsvSource({"false,16384,false", "true,16384,false", "false,2048,false", "true,2048,false",
-            "false,16384,true", "true,16384,true"})
-    void processesLargeInputsWithinBoundedBudget(boolean longTerm, int configuredOutput, boolean oversized) {
+    // 2026/11/10：首错后成功与连续两次失败都经过原处理器的提交、退避边界。
+    @CsvSource({"false,16384,false,0", "true,16384,false,0", "false,2048,false,0", "true,2048,false,0",
+            "false,16384,true,0", "true,16384,true,0", "false,2048,false,1", "true,2048,false,1",
+            "false,2048,false,2", "true,2048,false,2"})
+    void processesLargeInputsWithinBoundedBudget(boolean longTerm, int configuredOutput, boolean oversized,
+            int invalidResponses) {
         var mapper = new ObjectMapper();
         var settings = LayeredMemorySettings.defaults();
         var now = Instant.now();
@@ -129,6 +135,8 @@ class MemoryGenerationBudgetTest {
             ILLMPrompt prompt = call.getArgument(0);
             return prompt.getOptions();
         });
+        // 2026/11/10：只替换传输响应，结构解码、纠错输入、预算及业务处理器均使用真实实现。
+        var attempts = new AtomicInteger();
         when(models.call(any(ILLMPrompt.class), any(ExecutionPolicy.class))).thenAnswer(call -> {
             ILLMPrompt prompt = call.getArgument(0);
             var input = new JsonLLMTokenEstimator(mapper).estimate(prompt).inputTokens();
@@ -136,6 +144,10 @@ class MemoryGenerationBudgetTest {
             // 2026/11/04：业务生成器必须完整继承模型输出额度，不额外限制为 8192。
             assertEquals(configuredOutput, Objects.requireNonNull(prompt.getOptions()).getMaxTokens(), "输出额度必须与模型配置一致。");
             var text = longTerm ? "{\"memories\":[],\"styles\":[]}" : mapper.writeValueAsString(digest);
+            if (attempts.incrementAndGet() <= invalidResponses) {
+                text = longTerm ? "{\"memories\":[],\"styles\":[{\"field\":\"speakingStyle\",\"pattern\":\"简短\"}]}"
+                        : "{\"brief\":\"项目进展\"}";
+            }
             ILLMResult result = LLMResult.builder().model("受控模型").choices(List.of(LLMChoice.builder()
                     .index(0).finishReason("stop").message(LLMAssistantMessage.builder()
                             .contents(new LLMContentListBuilder().addText(text).build()).build()).build())).build();
@@ -149,9 +161,9 @@ class MemoryGenerationBudgetTest {
             var interactions = new LLMInteractionService(models, LLMInteractionSettings::defaults, Runnable::run,
                     timers, new JsonLLMTokenEstimator(mapper));
             try (var compressor = new LLMLayeredMemoryCompressor(() -> new AgentFactory(registry), gate, references,
-                    LLMJsonTestSupport.create(interactions, mapper), () -> settings, ignored -> new LayeredMemoryPolicy(true, true, true), mapper, Runnable::run);
+                    LLMJsonTestSupport.create(interactions, mapper, timers), () -> settings, ignored -> new LayeredMemoryPolicy(true, true, true), mapper, Runnable::run);
                  var consolidator = new LLMLongTermMemoryConsolidator(() -> new AgentFactory(registry), gate, references,
-                         LLMJsonTestSupport.create(interactions, mapper), () -> settings, ignored -> true, mapper, Runnable::run);
+                         LLMJsonTestSupport.create(interactions, mapper, timers), () -> settings, ignored -> true, mapper, Runnable::run);
                  var processor = new LayeredMemoryProcessor(layers, compressor, references, () -> settings,
                          ignored -> new LayeredMemoryPolicy(true, true, true), Runnable::run, timers, Clock.systemUTC(),
                          mock(ILogger.class), longTerm ? longs : null, longTerm ? consolidator : null, ignored -> true)) {
@@ -160,14 +172,17 @@ class MemoryGenerationBudgetTest {
                 consolidator.start().toCompletableFuture().join();
                 processor.start().toCompletableFuture().join();
                 processor.drain().toCompletableFuture().join();
-                verify(models, times(oversized ? 0 : 1)).call(any(ILLMPrompt.class), any(ExecutionPolicy.class));
+                // 2026/11/10：纠错仍处于同一批次；成功只推进一次，持续失败完全不提交。
+                verify(models, times(oversized ? 0 : 1 + Math.min(invalidResponses, 1)))
+                        .call(any(ILLMPrompt.class), any(ExecutionPolicy.class));
+                boolean committed = !oversized && invalidResponses < 2;
                 if (longTerm) {
-                    verify(longs, times(oversized ? 0 : 1)).commit(eq(longBatch),
+                    verify(longs, times(committed ? 1 : 0)).commit(eq(longBatch),
                             any(org.zexnocs.teanekoplugin.agent.cognition.personality.StyleObservations.Analysis.class), isNull(), any(), any());
-                    verify(longs, times(oversized ? 1 : 0)).retry(eq(longBatch), any(), any());
+                    verify(longs, times(committed ? 0 : 1)).retry(eq(longBatch), any(), any());
                 } else {
-                    verify(layers, times(oversized ? 0 : 1)).commit(eq(batch), any(), any());
-                    verify(layers, times(oversized ? 1 : 0)).retry(eq(batch), any());
+                    verify(layers, times(committed ? 1 : 0)).commit(eq(batch), any(), any());
+                    verify(layers, times(committed ? 0 : 1)).retry(eq(batch), any());
                 }
             }
         }

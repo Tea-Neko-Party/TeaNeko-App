@@ -9,11 +9,12 @@ const definitions = [
   {key: 'overview', title: '运行概览', group: '日常', icon: 'overview', retention: 'active', load: () => import('../../features/runtime/OverviewPage.vue')},
   {key: 'platforms', title: '客户端', group: '日常', icon: 'platforms', load: () => import('../../features/platforms/PlatformsPage.vue'), props: (_, active) => ({active})},
   {key: 'chat', title: '网页聊天', group: '日常', icon: 'chat', load: () => import('../../features/chat/WebChatView.vue'), props: (context, active) => ({clients: context.platforms.value, active})},
+  // 2026/11/10：插件管理位于管理组首位，与独立插件配置导航分开。
+  {key: 'plugins', title: '插件管理', group: '管理', icon: 'components', load: () => import('../../features/plugins/PluginsView.vue'), props: (_, active) => ({active})},
   {key: 'settings', title: '聊天配置', group: '管理', icon: 'settings', load: () => import('../../features/settings/chat/SettingsPage.vue'), visible: context => context.platforms.value.some(item => item.settingsAvailable)},
   {key: 'agent', title: 'Agent 工作区', group: '管理', icon: 'agent', load: () => import('../../features/agent/AgentPage.vue'), props: (_, active) => ({active})},
   {key: 'models', title: '模型配置', group: '管理', icon: 'models', load: () => import('../../features/settings/files/FileSettingsView.vue'), props: () => ({modelMode: true})},
   {key: 'files', title: '本地配置', group: '管理', icon: 'files', load: () => import('../../features/settings/files/FileSettingsView.vue')},
-  {key: 'plugins', title: '插件管理', group: '管理', icon: 'components', load: () => import('../../features/plugins/PluginsView.vue'), props: (_, active) => ({active})},
   {key: 'runtime', title: '任务与日志', group: '管理', icon: 'runtime', load: () => import('../../features/runtime/RuntimeView.vue'), props: (_, active) => ({active})},
   {key: 'console', title: '指令台', group: '管理', icon: 'console', load: () => import('../../features/commands/CommandPage.vue'), props: (_, active) => ({active})},
   {key: 'commands', title: '指令一览', group: 'API 文档', icon: 'commands', load: () => import('../../features/commands/CommandsView.vue')},

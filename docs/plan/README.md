@@ -2,18 +2,25 @@
 
 进行中的实施计划放在本目录；完成其约定的实现与验收范围后，主计划及配套需求、规格和历史记录一并移入 old。归档只调整必要的定位链接，保留原始答复、进度证据及当时的验收结论。
 
-最新完成内容见 [LLM 日志与记忆输入整理](old/4.9.0-llm-observation.md)、[4.9.0-l 扩展声明与目录整理](old/4.9.0-extension-layout.md)及[模块化与插件化重构](old/4.9.0-plugin-refactor.md)，配置与升级见[发布说明](../changelog/4.9.0-l.md)。审查发现按版本维护在[审查索引](../review/README.md)；历史复核及尚未执行的实机验收不等同于当前代码待办。
+最新完成内容见 [v4.9.1-l 自主时限与模型传输](old/4.9.1-model-transport.md)，此前为[Gemini 原生代理适配](old/4.9.1-antigravity.md)、[结构化输出核对与纠错](old/4.9.1-json-correction.md)、[配置资源与图片处理边界](old/4.9.1-runtime-boundaries.md)、[表情包独立视觉模型](old/4.9.1-sticker-models.md)、[后台采集与记忆整理修复](old/4.9.1-background-fixes.md)及[插件控制台与模型同步](old/4.9.1-console-polish.md)。前版记录见 [LLM 日志与记忆输入整理](old/4.9.0-llm-observation.md)、[扩展声明与目录整理](old/4.9.0-extension-layout.md)及[模块化与插件化重构](old/4.9.0-plugin-refactor.md)。配置与升级见[发布说明](../changelog/4.9.1-l.md)。审查发现按版本维护在[审查索引](../review/README.md)；历史复核及尚未执行的实机验收不等同于当前代码待办。
 
-生产边界沿用 [评估标准](../review/4.8.6-l/assessment-standard.md)。当前未执行的环境验收维护在 [4.9.0-l 后续环境验收](../review/4.9.0-l/next-steps.md)，前版条件性改进仍保留在原版本入口。
+生产边界沿用 [评估标准](../review/4.8.6-l/assessment-standard.md)。当前未执行的环境验收维护在 [4.9.1-l 后续环境验收](../review/4.9.1-l/next-steps.md)，前版条件性改进仍保留在原版本入口。
 
 ## 进行中
 
-当前无进行中的实施计划；未运行的真实环境验收见上方版本入口。
+当前无进行中的实现计划。最新完成[自主时限与模型传输](old/4.9.1-model-transport.md)，未执行的真实环境检查见上方环境验收入口。
 
 ## 已完成
 
 | 计划 | 完成范围 | 发布说明 |
 | --- | --- | --- |
+| [v4.9.1-l 自主时限与模型传输](old/4.9.1-model-transport.md) | 候选时限与票据、SSE 完整聚合、明确重试边界；202 项定向回归、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l Gemini 原生代理适配](old/4.9.1-antigravity.md) | 原生图片/工具/签名与 Schema、实际配置和分组专用路径、合成对照；74 项定向回归、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l 结构化输出核对与纠错](old/4.9.1-json-correction.md) | 严格请求合同、一次纠错与共享预算/时限、记忆水位保留；93 项定向回归、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l 配置资源与图片处理边界](old/4.9.1-runtime-boundaries.md) | 配置模板加载器、超限素材正常拒绝及预算差值诊断；96 项定向回归、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l 表情包独立视觉模型](old/4.9.1-sticker-models.md) | 组件独立模型、全局备用、显式图片能力及两处检测；269 项定向回归、7 组浏览器、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l 后台采集与记忆整理修复](old/4.9.1-background-fixes.md) | 图库资格分类与等待、结构化字段提示、记忆时限及 IDE 原生访问；89 项定向回归、JavaDoc 与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
+| [v4.9.1-l 插件控制台与模型同步](old/4.9.1-console-polish.md) | 插件二级导航、管理交互、活动时间线及默认模型刷新；49 项 Java 回归、6 项前端测试、12 组浏览器与实际产物核对，3/3 | [v4.9.1-l（待发布）](../changelog/4.9.1-l.md) |
 | [v4.9.0-l LLM 日志与记忆输入整理](old/4.9.0-llm-observation.md) | 单行摘要、受限预览、独立诊断、原话字典与成功来源去重；1443项隔离回归、正式日志配置实测及实际产物核对，3/3 | [v4.9.0-l（待发布）](../changelog/4.9.0-l.md) |
 | [v4.9.0-l 扩展声明与目录整理](old/4.9.0-extension-layout.md) | 注解插件、原生 LLM、配置职责拆分、类型化运行端口、前端分类与默认开放；1436 项隔离回归、18 组浏览器及实际产物核对，5/5 | [v4.9.0-l（待发布）](../changelog/4.9.0-l.md) |
 | [v4.9.0-l 模块化与插件化重构](old/4.9.0-plugin-refactor.md) | 分类插件、热启停与真实排空、Web 总管理/独立页面、配置保留与迁移；1417 项隔离回归、13 组浏览器检查及实际产物核对，5/5 | [v4.9.0-l（待发布）](../changelog/4.9.0-l.md) |
